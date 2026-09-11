@@ -49,7 +49,7 @@ node --test tests/current-behavior.test.js
 - Meong-bak
 - Go-bak
 - Nagari carry
-- Gukjin scoring optimization
+- explicit Gukjin Picture / Double-Pi choice
 
 ## Shuffle
 

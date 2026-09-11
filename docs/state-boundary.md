@@ -58,7 +58,7 @@ The temporary `human`/`ai` player-storage keys remain a compatibility concern, b
 
 Persistence is exact at stable engine turn boundaries and at Shake, Bomb, and Go/Stop decision boundaries. The current asynchronous controller still keeps animation continuations and unextracted dialog promises in local call-stack/presentation state, so snapshots in the middle of those browser-only flows cannot resume at the exact await point without later event replay support.
 
-Shake and Bomb decisions are authoritative and player-private. `projectStateForViewer` exposes either record only to its player; the opponent receives neither the decision nor hidden month/card data, and receives only `handCount` and `deckCount` rather than opponent-hand or deck identities. `shakeDeclared` and `bombDeclared` are public only after acceptance. KEEP SECRET and Bomb decline emit nothing public. Bomb capture, multiplier count, Pi transfer, and its two optional blank opportunities are engine-owned; a blank creates an `awaitingDraw` turn without consuming a hand card.
+Shake and Bomb decisions are authoritative and player-private. `projectStateForViewer` exposes either record only to its player; the opponent receives neither the decision nor hidden month/card data, and receives only `handCount` and `deckCount` rather than opponent-hand or deck identities. `shakeDeclared` and `bombDeclared` are public only after acceptance. KEEP SECRET and Bomb decline emit nothing public. Bomb capture, declaration count, Pi transfer, and its two optional blank opportunities are engine-owned; Bomb is not a settlement multiplier, and a blank creates an `awaitingDraw` turn without consuming a hand card.
 
 Opening Chongtong resolution is also authority-owned. `resolveOpeningState` initializes hidden-triple eligibility in the established order and then records `openingResolved`; a four-of-a-month sets neutral `winner` and `specialWinner`, records the public ten-point `openingOutcome`, consumes any prior Nagari carry into a structured `terminalResult`, and emits `chongtongDeclared` before any normal turn interaction. The projected terminal state exposes that public result and no legal actions, while continuing to redact the opponent's unrelated hand. Fanfare and result-dialog work remain presentation-only.
 
@@ -98,3 +98,5 @@ Three-Ppeok is authority-owned as part of Ppeok/Ssa-da resolution. After stack c
 | AI policy | Solo browser controller | Browser pacing/cues |
 | Animations and audio | — | Browser |
 | Secure shuffle/deal/new-hand construction | Solo session/controller boundary | Browser deal presentation |
+
+Authoritative player records additionally carry `resolvedOpeningTripleMonths`, `turnsTaken`, `firstPpeokPoints`, and explicit `gukjinMode`. These fields make opening decisions, first-turn Ppeok rewards, and Gukjin scoring reproducible after serialization. Session wins and accrued awarded points remain neutral-ID-keyed browser-session metadata, not in-hand authority.

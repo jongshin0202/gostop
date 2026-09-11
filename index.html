@@ -25,7 +25,7 @@
       <section class="opponent-zone" aria-label="Computer player">
         <div class="player-chip cpu-chip">
           <div class="avatar cpu-avatar">AI</div>
-          <div><strong>Computer</strong><span id="aiThinking"></span></div>
+          <div><strong>Computer</strong><span id="aiSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="aiThinking"></span></div>
           <div class="score-pill"><b id="aiScore">0</b><small>pts</small></div><span id="aiMultiplier" class="multiplier-chip"></span>
         </div>
         <div id="aiHand" class="opponent-hand" aria-label="Computer cards"></div>
@@ -59,7 +59,7 @@
         <div class="player-row">
           <div class="player-chip human-chip">
             <div class="avatar human-avatar">YOU</div>
-            <div><strong>You</strong><span id="turnLabel"></span></div>
+            <div><strong>You</strong><span id="playerSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="turnLabel"></span></div>
             <div class="score-pill"><b id="playerScore">0</b><small>pts</small></div><span id="playerMultiplier" class="multiplier-chip"></span>
           </div>
 
@@ -119,6 +119,16 @@
       <h2 id="captureTitle">Gwang</h2>
       <div id="captureMagnified" class="capture-magnified" aria-label="Magnified captured cards"></div>
       <p id="captureSummary" class="muted"></p>
+      <button id="gukjinModeBtn" class="glass-btn gukjin-mode-btn" type="button" hidden></button>
+    </form>
+  </dialog>
+
+  <dialog id="firstPpeokDialog">
+    <form method="dialog" class="dialog-card special-rule-card">
+      <div class="eyebrow">첫뻑 · FIRST PPEOK!</div>
+      <h2>First-turn Ppeok reward</h2>
+      <p>First-turn Ppeok reward: +7 points</p>
+      <button class="go-btn" type="submit">CONTINUE</button>
     </form>
   </dialog>
 
@@ -141,7 +151,7 @@
       <h2>Play all three?</h2>
       <p id="bombText"></p>
       <div class="decision-actions">
-        <button id="bombBtn" class="go-btn" type="button">BOMB ×2</button>
+        <button id="bombBtn" class="go-btn" type="button">BOMB!</button>
         <button id="playOneBtn" class="stop-btn" type="button">PLAY ONE</button>
       </div>
     </div>

@@ -161,10 +161,10 @@ test('settlement applies Go bonuses and all current doubling multipliers',()=>{
   api.setNagariCarryPower(1);
   const settled=api.calculateFinalScore('human');
   assert.equal(settled.baseTotal,11);
-  assert.equal(settled.goBonus,2);
-  assert.equal(settled.total,1664);
+  assert.equal(settled.goBonus,0);
+  assert.equal(settled.total,704);
   assert.deepEqual([...settled.formulaSteps],[
-    'Base 11','Go bonus +2','3 Go ×2','Shake ×2','Bomb ×2',
+    'Base 11','3 Go ×2','Shake ×2',
     'Meong-bak ×2','Gwang-bak ×2','Go-bak ×2','Nagari carry ×2'
   ]);
   api.setNagariCarryPower(0);
@@ -180,7 +180,7 @@ test('extracted settlement preserves each current bonus and bak multiplier',()=>
 
   assert.equal(settle(player(threeBright,{go:2})).total,5);
   assert.equal(settle(player(threeBright,{shakes:1})).total,6);
-  assert.equal(settle(player(threeBright,{bombs:1})).total,6);
+  assert.equal(settle(player(threeBright,{bombs:1})).total,3);
   assert.equal(settle(player(threeBright),player([])).total,6);
   assert.equal(settle(player(threeBright),player([],{go:1,lastGoScore:0})).total,12);
   assert.equal(settle(player(threeBright),player(defendingBright),1).total,6);
@@ -497,6 +497,7 @@ test('normal unmatched play/draw engine actions match the legacy outcome and eve
   });
   const legacy=await legacyNormalOutcome(initial,'m2-1');
   const actual=engineNormalOutcome(initial,'m2-1');
+  legacy.human.turnsTaken=1;
   assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
   assert.deepEqual(actual.events.map(event=>event.type),[
     'cardPlayed','deckCardRevealed','cardLanded','cardLanded','turnCompleted'
@@ -513,6 +514,7 @@ test('normal single captures engine actions match the legacy outcome',async()=>{
   });
   const legacy=await legacyNormalOutcome(initial,'m2-1');
   const actual=engineNormalOutcome(initial,'m2-1');
+  legacy.human.turnsTaken=1;
   assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
   assert.deepEqual(actual.events.map(event=>event.type),[
     'cardPlayed','deckCardRevealed','cardsCaptured','cardsCaptured','turnCompleted'
@@ -527,6 +529,7 @@ test('normal engine preserves a pre-reserved unmatched slot when the played capt
   });
   const legacy=await legacyNormalOutcome(initial,'m2-1');
   const actual=engineNormalOutcome(initial,'m2-1');
+  legacy.human.turnsTaken=1;
   assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
   assert.equal(actual.state.floorSlotByCard['m3-1'],2);
 });
@@ -539,6 +542,7 @@ test('normal chosen-target action matches the legacy two-target outcome',async()
   });
   const legacy=await legacyNormalOutcome(initial,'m2-1','m2-3');
   const actual=engineNormalOutcome(initial,'m2-1','m2-3');
+  legacy.human.turnsTaken=1;
   assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
   assert.equal(actual.state.human.captured.some(item=>item.id==='m2-3'),true);
   assert.equal(actual.state.floor.some(item=>item.id==='m2-2'),true);
@@ -838,7 +842,7 @@ test('engine forms Ppeok/Ssa-da stacks for both neutral players with legacy orde
     assert.equal(stack.owner,actorId);
     assert.equal(result.state[side].ppeoks,1);
     assert.equal(new Set(stack.cardIds.map(id=>result.state.floorSlotByCard[id])).size,1);
-    assert.deepEqual(result.events.map(event=>event.type),['ppeokFormed','specialResolved']);
+    assert.deepEqual(result.events.map(event=>event.type),['ppeokFormed','firstPpeokAwarded','specialResolved']);
     assertSpecialWireSafe(result,actorId);
   }
 });
@@ -1206,7 +1210,8 @@ test('opening without Chongtong remains non-terminal and initializes hidden trip
   assert.equal(result.state.openingResolved,true);
   assert.equal(result.state.openingOutcome,null);
   assert.deepEqual(result.state.human.hiddenTripleMonths,[5]);
-  assert.equal(result.state.pendingDecision,undefined);
+  assert.equal(result.state.pendingDecision.type,'openingTripleDecision');
+  assert.deepEqual(result.state.pendingDecision.choices,['shake','keepSecret']);
   assertBombWireSafe(result.state);
 });
 
@@ -1319,7 +1324,7 @@ test('STOP owns the neutral terminal result and exact settlement formula',()=>{
   const captured=[...sevenPointPi(),...cards('m1-1','m3-1','m8-1','m2-1','m4-1','m5-1','m6-1','m7-1','m8-2','m9-1','m10-1')];
   const state=goStopState('playerA',captured,{shakes:1,bombs:1});
   state.matchContext.nagariCarryPower=1;
-  state.ai=api.makePlayer({captured:[],go:1,lastGoScore:3});
+  state.ai=api.makePlayer({captured:[card('m11-3')],go:1,lastGoScore:3});
   const pending=extractedEngine.evaluateGoStop(state,{actorId:'playerA'}).state;
   const expected=extractedEngine.calculateSettlement({winner:pending.human,loser:pending.ai,nagariCarryPower:1});
   const result=extractedEngine.applyGoStopAction(pending,{type:'declareStop',actorId:'playerA'});
@@ -1330,7 +1335,7 @@ test('STOP owns the neutral terminal result and exact settlement formula',()=>{
   assert.deepEqual(result.events[1].settlement,expected);
   assert.deepEqual(result.state.terminalResult.settlement.formulaSteps,expected.formulaSteps);
   assert.equal(expected.reasons.includes('Shake ×2'),true);
-  assert.equal(expected.reasons.includes('Bomb ×2'),true);
+  assert.equal(expected.reasons.includes('Bomb ×2'),false);
   assert.equal(expected.reasons.includes('Meong-bak ×2'),true);
   assert.equal(expected.reasons.includes('Pi-bak ×2'),true);
   assert.equal(expected.reasons.includes('Gwang-bak ×2'),true);
@@ -1384,10 +1389,9 @@ test('exhausted turns defer Nagari but Bomb-blank completion can earn Go/Stop',(
 
   const exhausted=goStopState('playerA'); exhausted.deck=[]; exhausted.human.hand=[];
   const eligible=extractedEngine.evaluateGoStop(exhausted,{actorId:'playerA'});
-  assert.equal(eligible.pendingDecision.type,'goStopDecision');
-  const go=extractedEngine.applyGoStopAction(eligible.state,{type:'declareGo',actorId:'playerA'});
-  assert.equal(go.requiresNagari,true);
-  assert.equal(go.state.turn,'playerA');
+  assert.equal(eligible.pendingDecision,null);
+  assert.equal(eligible.autoStop,true);
+  assert.equal(eligible.state.winner,'playerA');
 
   const below=goStopState('playerA',sevenPointPi().slice(0,15)); below.deck=[]; below.human.hand=[];
   assert.equal(extractedEngine.evaluateGoStop(below,{actorId:'playerA'}).requiresNagari,true);
@@ -1476,23 +1480,14 @@ test('Nagari rejects premature, unresolved, wrong-player, and duplicate resoluti
   assert.throws(()=>extractedEngine.resolveNagari(pending,{actorId:'playerA'}),/decision must be resolved/);
 });
 
-test('Go/Stop remains before Nagari on final turns',()=>{
+test('qualifying zero-hand final turns auto-STOP before Nagari',()=>{
   let final=exhaustedState('playerA',1,{captured:sevenPointPi()});
   let evaluated=extractedEngine.evaluateGoStop(final,{actorId:'playerA'});
-  assert.equal(evaluated.pendingDecision.type,'goStopDecision');
-  const stopped=extractedEngine.applyGoStopAction(evaluated.state,{type:'declareStop',actorId:'playerA'});
-  assert.equal(stopped.state.winner,'playerA');
-  assert.equal(stopped.state.terminalResult.settlement.reasons.includes('Nagari carry ×2'),true);
-  assert.equal(stopped.state.matchContext.nagariCarryPower,0);
-  assert.throws(()=>extractedEngine.resolveNagari(stopped.state,{actorId:'playerA'}),/already complete/);
-
-  final=exhaustedState('playerA',0,{captured:sevenPointPi()});
-  evaluated=extractedEngine.evaluateGoStop(final,{actorId:'playerA'});
-  const went=extractedEngine.applyGoStopAction(evaluated.state,{type:'declareGo',actorId:'playerA'});
-  assert.equal(went.requiresNagari,true);
-  const nagari=extractedEngine.resolveNagari(went.state,{actorId:'playerA'});
-  assert.equal(nagari.state.human.go,1);
-  assert.equal(nagari.state.winner,'nagari');
+  assert.equal(evaluated.autoStop,true);
+  assert.equal(evaluated.state.winner,'playerA');
+  assert.equal(evaluated.state.terminalResult.settlement.reasons.includes('Nagari carry ×2'),true);
+  assert.equal(evaluated.state.matchContext.nagariCarryPower,0);
+  assert.throws(()=>extractedEngine.resolveNagari(evaluated.state,{actorId:'playerA'}),/already complete/);
 });
 
 test('equal or lower post-GO exhausted scores become Nagari without another decision',()=>{
@@ -1586,8 +1581,8 @@ test('Three-Ppeok terminal result consumes carry for both neutral players',()=>{
         multiplier:2**carryPower,finalPoints,reason:'Three ppeoks in one hand'
       });
       assert.equal(result.state.matchContext.nagariCarryPower,0);
-      assert.deepEqual(result.events.map(event=>event.type),['ppeokFormed','specialResolved','threePpeokDeclared','handEnded']);
-      assert.deepEqual(result.events[2],{type:'threePpeokDeclared',audience:'public',actorId,ppeokCount:3,basePoints:7,finalPoints});
+      assert.deepEqual(result.events.map(event=>event.type),['ppeokFormed','firstPpeokAwarded','specialResolved','threePpeokDeclared','handEnded']);
+      assert.deepEqual(result.events[3],{type:'threePpeokDeclared',audience:'public',actorId,ppeokCount:3,basePoints:7,finalPoints});
       assert.deepEqual(wireRoundTrip(result.state),result.state);
     }
   }
@@ -1714,4 +1709,101 @@ test('production app has no reachable in-hand authority mutation fallback',()=>{
   assert.equal(productionTurn.includes('state.deck.shift('),false);
   assert.equal(productionTurn.includes("throw new Error(`Unhandled authoritative turn classification"),true);
   assert.equal(source.includes('bottomPlayer.hand.sort('),false);
+});
+
+test('opening triple decisions distinguish KEEP SECRET from immediate BOMB for both players',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const side=actorId==='playerA'?'human':'ai';
+    const month=actorId==='playerA'?5:6;
+    let state=stateWith({turn:actorId,[side]:api.makePlayer({hand:cards(`m${month}-1`,`m${month}-2`,`m${month}-3`)})});
+    let opened=extractedEngine.resolveOpeningState(state);
+    assert.deepEqual(opened.pendingDecision.choices,['shake','keepSecret']);
+    assert.equal(opened.pendingDecision.playerId,actorId);
+    assert.equal(extractedEngine.projectStateForViewer(opened.state,actorId==='playerA'?'playerB':'playerA').pendingDecision,undefined);
+    const kept=extractedEngine.applyNormalTurnAction(opened.state,{type:'keepShakeSecret',actorId});
+    const attempted=extractedEngine.applyNormalTurnAction(kept.state,{type:'attemptPlayCard',actorId,cardId:`m${month}-1`});
+    assert.equal(attempted.pendingDecision,null,'the resolved opening choice must not prompt for Shake again');
+
+    state=stateWith({floor:[card(`m${month}-4`)],[side]:api.makePlayer({hand:cards(`m${month}-1`,`m${month}-2`,`m${month}-3`)})});
+    api.initFloorSlots(state);
+    opened=extractedEngine.resolveOpeningState(state);
+    assert.deepEqual(opened.pendingDecision.choices,['shake','bomb']);
+    assert.equal(opened.pendingDecision.floorCardId,`m${month}-4`);
+    assert.equal(opened.pendingDecision.choices.includes('keepSecret'),false);
+    assert.deepEqual(wireRoundTrip(opened.state),opened.state);
+  }
+});
+
+test('opening Bomb executes in one choice while opening Shake suppresses Bomb',()=>{
+  let state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')}),ai:api.makePlayer({captured:[card('m7-3')]})});
+  api.initFloorSlots(state); state=extractedEngine.resolveOpeningState(state).state;
+  const bomb=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerA'});
+  assert.deepEqual(bomb.events.map(event=>event.type),['bombDeclared','bombCardsPlayed','cardsCaptured','piTransferred','bombBlankTurnsGranted','specialResolved']);
+  assert.equal(bomb.state.human.hand.length,0); assert.equal(bomb.state.human.bombFreeTurns,2);
+  assert.equal(bomb.state.ai.captured.length,0); assert.equal(bomb.state.human.captured.length,5);
+
+  state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')})});
+  api.initFloorSlots(state); state=extractedEngine.resolveOpeningState(state).state;
+  const shaken=extractedEngine.applyNormalTurnAction(state,{type:'declareShake',actorId:'playerA'});
+  assert.equal(shaken.state.human.shakes,1);
+  assert.equal(shaken.events.some(event=>event.type==='bombDeclared'),false);
+  assert.equal(shaken.state.human.hand.length,3);
+});
+
+test('settlement excludes Bomb, preserves Shake, doubles 3 Go, and bounds Pi-bak',()=>{
+  const winner=api.makePlayer({captured:sevenPointPi()});
+  const safeLoser=api.makePlayer({captured:[card('m12-1')]});
+  assert.equal(extractedEngine.calculateSettlement({winner:{...winner,bombs:1},loser:safeLoser}).total,7);
+  assert.equal(extractedEngine.calculateSettlement({winner:{...winner,shakes:1},loser:safeLoser}).total,14);
+  const threeGo=extractedEngine.calculateSettlement({winner:{...winner,go:3},loser:safeLoser});
+  assert.equal(threeGo.total,14); assert.equal(threeGo.goBonus,0); assert.equal(threeGo.formulaSteps.includes('3 Go ×2'),true);
+  const zeroPi=extractedEngine.calculateSettlement({winner,loser:api.makePlayer()});
+  const onePi=extractedEngine.calculateSettlement({winner,loser:api.makePlayer({captured:[card('m9-3')]})});
+  assert.equal(zeroPi.reasons.includes('Pi-bak ×2'),false); assert.equal(zeroPi.total,7);
+  assert.equal(onePi.reasons.includes('Pi-bak ×2'),true); assert.equal(onePi.total,14);
+  assert.equal(extractedEngine.calculateSettlement({winner:{...winner,bombs:1},loser:safeLoser}).formulaSteps.some(step=>step.includes('Bomb')),false);
+});
+
+test('first-turn Ppeok awards seven points and continues without breaking Three-Ppeok',()=>{
+  const first=threePpeokFixture({existingPpeoks:0}).result;
+  assert.equal(first.state.human.firstPpeokPoints,7);
+  assert.equal(first.state.winner,null);
+  assert.equal(extractedEngine.scorePlayer(first.state.human).bonusPoints,7);
+  assert.equal(first.events.find(event=>event.type==='firstPpeokAwarded').points,7);
+  const later=threePpeokFixture({existingPpeoks:0}).before;
+  later.human.turnsTaken=1;
+  const resolved=extractedEngine.applySpecialTurnAction(later,{type:'resolveSpecialTurn',actorId:'playerA'});
+  assert.equal(resolved.state.human.firstPpeokPoints,0);
+  assert.equal(resolved.events.some(event=>event.type==='firstPpeokAwarded'),false);
+  assert.equal(threePpeokFixture({existingPpeoks:2}).result.state.terminalResult.type,'threePpeok');
+});
+
+test('Gukjin mode is explicit, authoritative, score-changing, and serializable',()=>{
+  const captured=[card('m9-1'),...sevenPointPi().slice(0,9)];
+  let state=stateWith({human:api.makePlayer({captured,gukjinMode:'animal'})});
+  const animal=extractedEngine.scorePlayer(state.human);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'setGukjinMode',actorId:'playerA',mode:'pi'}).state;
+  const pi=extractedEngine.scorePlayer(state.human);
+  assert.equal(animal.gukjinAsPi,false); assert.equal(pi.gukjinAsPi,true);
+  assert.equal(animal.animals,1); assert.equal(pi.animals,0);
+  assert.equal(pi.piCount,11); assert.equal(pi.total>animal.total,true);
+  assert.equal(wireRoundTrip(state).human.gukjinMode,'pi');
+  const settlement=extractedEngine.calculateSettlement({winner:state.human,loser:api.makePlayer({captured:[card('m1-3')]})});
+  assert.equal(settlement.reasons.includes('Pi-bak ×2'),true);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'setGukjinMode',actorId:'playerA',mode:'animal'}).state;
+  assert.equal(extractedEngine.scorePlayer(state.human).gukjinAsPi,false);
+});
+
+test('presentation regressions are wired without browser-side rule mutation',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.equal(source.includes('preloadCardFaces()'),true);
+  assert.equal(source.includes('await preloadCardFace(card)'),true);
+  assert.equal(source.includes('document.querySelectorAll(`[data-card-id="${card.id}"]`)'),true);
+  assert.equal(source.includes("classification.kind==='ttadakCandidate')playTtadakHappySound()"),true);
+  assert.equal(source.includes("utterance.lang='ko-KR'"),true);
+  assert.equal(source.includes("classList.toggle('active-turn'"),true);
+  assert.equal(source.includes('sessionStats:{playerA:'),true);
+  assert.equal(css.includes('object-fit:cover!important'),true);
+  assert.equal(css.includes('.player-chip.active-turn'),true);
 });

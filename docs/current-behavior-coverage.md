@@ -8,10 +8,10 @@ This is Migration Step 1 only. The tests execute the existing `app.js` rules thr
 
 - the 48 unique-card deck and four-cards-per-month integrity checks, including duplicate rejection;
 - month matching, ordinary multiple matches, and the effective top target/expansion behavior of a three-card floor stack;
-- Bright scoring with and without Rain, Godori, ribbon sets, Singles, double Pi, and Gukjin's current best-of-Picture-or-double-Single optimization;
+- Bright scoring with and without Rain, Godori, ribbon sets, Singles, double Pi, and the authoritative Gukjin Picture/Double-Pi mode;
 - the current settlement order for Go bonuses, third-and-later Go multiplication, Shake, Bomb, Meong-bak, Gwang-bak, Go-bak, and Nagari carry;
 - hidden-triple gating for Shake and accumulated Shake settlement multiplication;
-- Bomb capture, one-Pi transfer, multiplier count, two visible blank turns, and non-negative blank-turn consumption;
+- Bomb capture, one-Pi transfer, declaration count without a score multiplier, two visible blank turns, and non-negative blank-turn consumption;
 - Ppeok/Ssa-da stack creation, Ppeok counting, shared stack slots, and Self-Ppeok's current full-stack capture/two-Pi transfer;
 - the current Ttadak and Jjok same-month combined-turn branches;
 - Sweep's one-Pi transfer after the floor becomes empty while play remains;
@@ -156,3 +156,9 @@ Fixtures cover first/second/third and restored-above-threshold counts, both neut
 All production turn paths now use engine actions. Initial and opponent Ppeok floor-stack captures are engine-owned with ordered full-stack capture, canonical slot cleanup, and one-Pi transfer. Deck-only stack capture uses the same route. The browser no longer calls its combined-turn, single-card, floor/capture, or Pi mutation helpers outside `TEST_MODE`; unknown `legacySpecial` classifications fail loudly.
 
 The mutation audit permits only secure shuffle/deal and new-hand construction, assignments of complete engine-returned states, local `presentation` changes, and guarded characterization fixtures. Tests cover both-player stack parity, deck-only stack capture, invalid missing-stack metadata, projection completeness/privacy, JSON round trips, and source-level production fallback guards. All emitted decisions/events remain JSON-safe and viewer projection keeps own hands, public floor/captures/slots/results, opponent hand counts, and deck counts while removing opponent hand IDs and deck order.
+
+## Consolidated browser-regression corrections
+
+Initial triples now create player-private opening decisions before normal play: SHAKE/KEEP SECRET when the fourth card is absent and SHAKE/BOMB when it is on the floor. Opening Bomb executes from that single decision. Settlement no longer treats Bomb as a multiplier, retains Shake multiplication, applies the third-Go multiplier without additive Go points, and requires the loser to hold at least one Pi for Pi-bak. Qualifying players with no real hand cards auto-STOP in authority.
+
+Player state now serializes `turnsTaken`, `firstPpeokPoints`, explicit `gukjinMode`, and resolved opening-triple months. First-turn Ppeok awards a separately labeled seven points while play continues; Three-Ppeok remains its distinct immediate terminal rule. Gukjin mode can be switched between Picture/Yeol and Double Pi and affects category rendering, score, settlement, and Pi-bak inputs. Presentation preloads face artwork, hides source cards before flight, uses edge-to-edge face styling, adds Ttadak-only celebration audio, highlights the neutral active seat, and tracks neutral session wins/awarded points without entering authoritative hand state.
