@@ -66,9 +66,11 @@ Post-turn Go/Stop eligibility is authority-owned and runs only after capture, Pi
 
 Nagari/deck exhaustion is authority-owned through `resolveNagari`. Continuation is impossible when the actor's real hand plus Bomb blanks is zero or the deck is empty. The engine preserves Go/Stop-first ordering, then records the existing `winner: "nagari"` no-winner sentinel, increments carry by one up to three, stores the ×2/×4/×8 next-hand result, and emits public terminal events. The terminal hand owns that carry; the session passes it into the next freshly shuffled hand's `matchContext`. Secure shuffle/deal remains controller-owned and outside deterministic transitions.
 
+Three-Ppeok is authority-owned as part of Ppeok/Ssa-da resolution. After stack creation and count increment, the existing `ppeoks >= 3` threshold creates a seven-point `threePpeok` terminal result, consumes accumulated Nagari carry, sets the neutral winner, and deliberately leaves `specialWinner` unchanged. Public terminal events follow `ppeokFormed` and `specialResolved`; the browser retains only Ppeok sound, the existing delay, and WIN-result presentation.
+
 ## Remaining mixed boundaries and risks
 
-- Unextracted fallback stack handling still exists in `app.js`; Ppeok/Ssa-da stack creation and its canonical floor-slot commitment are engine-owned. Opening Chongtong detection and terminal mutation no longer occur in the browser controller.
+- Unextracted fallback stack handling still exists in `app.js`; its Three-Ppeok conclusion is routed through the same engine terminal API. Ppeok/Ssa-da stack creation and its canonical floor-slot commitment are engine-owned in the classified production path. Opening Chongtong detection and terminal mutation no longer occur in the browser controller.
 - Controller functions may still use local `human`/`ai` aliases to select the compatibility storage objects and existing DOM paths. Explicit adapters translate those aliases at every authoritative identity boundary.
 - Sweep detection and Pi mutation are authoritative engine operations. Presentation consumes `sweepTriggered` and reason-tagged `piTransferred` events; the browser does not infer an empty-floor bonus or edit captured piles.
 - Canonical floor slots are presentation-motivated but intentionally authoritative and public. Treating them as local would allow the two future clients to disagree about persistent positions.

@@ -37,6 +37,8 @@ After all capture, Pi-transfer, and Sweep mutations are complete, `evaluateGoSto
 
 `resolveNagari` owns the exhausted no-winner terminal transition after that Go/Stop-first check. It validates that no decision or turn remains unresolved and that the hand-plus-Bomb-blank count is zero or the deck is empty, then increments `nagariCarryPower` to its cap of three and emits public `nagariDeclared`/`handEnded` events. The browser presents the returned ×2/×4/×8 result. A new browser-created shuffled hand receives the terminal state's carry; deterministic engine code still does not shuffle or deal.
 
+Ppeok/Ssa-da resolution now also performs the immediate Three-Ppeok terminal check after the stack and `ppeoks` count mutation. The threshold remains `>= 3`, the base remains seven points, accumulated Nagari carry is consumed in authority, and `specialWinner` remains unchanged. Event order is `ppeokFormed`, `specialResolved`, `threePpeokDeclared`, then `handEnded`; the browser plays the established Ppeok sound, waits the existing interval, and presents the structured result.
+
 `classifyTurnOutcome(state, { actorId, cardId? })` now owns the deterministic normal-versus-special routing decision. Before play, it can identify `bombEligible`; during a pending turn it returns `awaitingDraw`, `floorTargetDecision`, `normal`, `jjokCandidate`, `ppeokSsaDaCandidate`, `ttadakCandidate`, `selfPpeokCandidate`, `floorStackInteraction`, `awaitingTurnCompletion`, or the conservative `legacySpecial` fallback. Normal results include per-card `unmatchedLanding`, `singleMatchCapture`, or `chosenMatchCapture` details. All results are JSON-safe and use neutral actor IDs.
 
 The established browser animation order remains hand slap, deck lift/flip/slap, played-card resolution, drawn-card resolution, Sweep check, then `concludeTurn`. Durations, sleeps, hit-sound call sites, rendering, and Go/Stop flow are unchanged.
@@ -48,7 +50,7 @@ The established browser animation order remains hand slap, deck lift/flip/slap, 
 The browser still calls `deferSpecialTurn` and uses the legacy `resolveCombinedTurn`/`resolveSingleCard` fallback for unextracted cases. The duplicate implementations of the four extracted outcomes remain reachable only as conservative fallback/test characterization paths, not the classified production route. This retains:
 
 - Other unextracted Pi transfers;
-- three-Ppeok and other retained special-win conclusion paths; and
+- other retained legacy special-resolution fallbacks; and
 - all special scoring and settlement behavior.
 
 Bomb and `useBombBlank` are engine-owned. Each blank decrements the public remaining count once, removes no hand card, and enters the same authoritative draw/target/resolution/completion lifecycle; ordinary card play remains legal while blanks remain. Sweep detection and mutation are engine-owned: extracted specials evaluate it in the same transaction, normal and Bomb-draw turns evaluate it during completion, and an engine `resolveSweep` bridge supports unextracted legacy resolution without allowing `app.js` to mutate Pi.

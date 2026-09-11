@@ -1546,3 +1546,81 @@ test('browser Nagari and Chongtong presentation contain no authoritative carry m
   assert.equal(chongtong.includes('terminal.finalPoints'),true);
   assert.equal(chongtong.includes('nagariCarryPower=0'),false);
 });
+
+function threePpeokFixture({actorId='playerA',existingPpeoks=2,carryPower=0}={}){
+  const side=actorId==='playerA'?'human':'ai';
+  const other=side==='human'?'ai':'human';
+  const hiddenOpponent=card('m10-2');
+  let state=stateWith({
+    turn:actorId,deck:cards('m4-3','m12-1'),floor:[card('m4-1')],
+    [side]:api.makePlayer({hand:[card('m4-2'),card('m11-3')],ppeoks:existingPpeoks}),
+    [other]:api.makePlayer({hand:[hiddenOpponent]}),
+    matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:carryPower}
+  });
+  api.initFloorSlots(state);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId,cardId:'m4-2',targetId:'m4-1'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId}).state;
+  return {before:wireRoundTrip(state),result:extractedEngine.applySpecialTurnAction(state,{type:'resolveSpecialTurn',actorId}),side,hiddenOpponent};
+}
+
+test('first and second Ppeok remain nonterminal while third and later terminate',()=>{
+  for(const [existingPpeoks,expectedCount,terminal] of [[0,1,false],[1,2,false],[2,3,true],[3,4,true]]){
+    const {before,result,side}=threePpeokFixture({existingPpeoks});
+    assert.deepEqual(wireRoundTrip(before),before);
+    assert.equal(result.state[side].ppeoks,expectedCount);
+    assert.equal(Boolean(result.state.terminalResult),terminal);
+    assert.equal(result.state.winner,terminal?'playerA':null);
+    assert.equal(result.events.some(event=>event.type==='threePpeokDeclared'),terminal);
+  }
+});
+
+test('Three-Ppeok terminal result consumes carry for both neutral players',()=>{
+  for(const actorId of ['playerA','playerB']){
+    for(const [carryPower,finalPoints] of [[0,7],[1,14],[2,28],[3,56]]){
+      const {result,side}=threePpeokFixture({actorId,carryPower});
+      assert.equal(result.state.winner,actorId);
+      assert.equal(result.state.specialWinner,null);
+      assert.equal(result.state[side].ppeoks,3);
+      assert.deepEqual(result.state.terminalResult,{
+        type:'threePpeok',winnerId:actorId,basePoints:7,nagariCarryPower:carryPower,
+        multiplier:2**carryPower,finalPoints,reason:'Three ppeoks in one hand'
+      });
+      assert.equal(result.state.matchContext.nagariCarryPower,0);
+      assert.deepEqual(result.events.map(event=>event.type),['ppeokFormed','specialResolved','threePpeokDeclared','handEnded']);
+      assert.deepEqual(result.events[2],{type:'threePpeokDeclared',audience:'public',actorId,ppeokCount:3,basePoints:7,finalPoints});
+      assert.deepEqual(wireRoundTrip(result.state),result.state);
+    }
+  }
+});
+
+test('Three-Ppeok terminal projection is public but preserves hidden-card privacy',()=>{
+  const {result,hiddenOpponent}=threePpeokFixture();
+  assert.equal(result.events.some(event=>Object.hasOwn(event,'hand')),false);
+  assert.equal(JSON.stringify(result.events).includes(hiddenOpponent.id),false);
+  for(const viewerId of ['playerA','playerB']){
+    const view=extractedEngine.projectStateForViewer(result.state,viewerId);
+    assert.deepEqual(view.terminalResult,result.state.terminalResult);
+    assert.deepEqual(view.legalActions,[]);
+    assert.equal(Object.hasOwn(view,'deck'),false);
+    if(viewerId==='playerA')assert.equal(JSON.stringify(view).includes(hiddenOpponent.id),false);
+  }
+  assert.equal(result.state.pendingDecision,undefined);
+  assert.throws(()=>extractedEngine.evaluateGoStop(result.state,{actorId:'playerA'}),/already complete/);
+  assert.throws(()=>extractedEngine.resolveNagari(result.state,{actorId:'playerA'}),/already complete/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(result.state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m11-3'}),/already complete/);
+});
+
+test('browser presents Three-Ppeok only from authoritative terminal events',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.equal(source.includes('ppeoks>=3'),false);
+  assert.equal(source.includes('ppeoks >= 3'),false);
+  assert.equal(source.includes('function finishSpecial'),false);
+  const presenter=source.slice(source.indexOf('function presentThreePpeok'),source.indexOf('function finishByScore'));
+  assert.equal(presenter.includes("item.type==='threePpeokDeclared'"),true);
+  assert.equal(presenter.includes('terminal.finalPoints'),true);
+  assert.equal(presenter.includes('state.winner='),false);
+  assert.equal(presenter.includes('nagariCarryPower=0'),false);
+  const extracted=source.slice(source.indexOf('async function resolveExtractedSpecialTurn'),source.indexOf('async function playFullTurn'));
+  assert.equal(extracted.indexOf('playPpeokSound()')<extracted.indexOf('await sleep(450)'),true);
+  assert.equal(extracted.indexOf('await sleep(450)')<extracted.indexOf('presentThreePpeok(result)'),true);
+});

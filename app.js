@@ -10,7 +10,7 @@
   if(!engine)throw new Error('GoStopEngine must load before app.js.');
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
-    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
     evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   }=engine;
   const MASTER_DECK = engine.masterDeck;
@@ -696,7 +696,9 @@
     if(classification.kind==='ppeokSsaDaCandidate'){
       removeStage(play.card.id); if(draw)removeStage(draw.card.id);
       playPpeokSound(); render();
-      if(state[side].ppeoks>=3){ await sleep(450); finishSpecial(side,7,'Three ppeoks in one hand'); }
+      if(result.events.some(event=>event.type==='threePpeokDeclared')){
+        await sleep(450); presentThreePpeok(result);
+      }
     }else{
       let laughed=false;
       for(const event of result.events){
@@ -869,9 +871,9 @@
         makePpeokStack(side,three);
         playPpeokSound();
         render();
-        if(state[side].ppeoks>=3){
-          await sleep(450);
-          finishSpecial(side,7,'Three ppeoks in one hand');
+        const terminal=resolveThreePpeok(state,{actorId:playerIdForLegacySide(side)}); state=terminal.state;
+        if(terminal.events.some(event=>event.type==='threePpeokDeclared')){
+          await sleep(450); presentThreePpeok(terminal);
         }
         return;
       }
@@ -1450,13 +1452,13 @@
     els.resultDialog.showModal(); render();
   }
 
-  function finishSpecial(winner,points,reason){
-    if(state.winner)return;
-    state.winner=playerIdForLegacySide(winner); presentation.locked=true;
-    const final=points*(2**state.matchContext.nagariCarryPower);
-    const specialCall=reason.startsWith('총통!')?'CHONGTONG!':'WIN!';
-    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${state.matchContext.nagariCarryPower?` · Nagari ×${2**state.matchContext.nagariCarryPower}`:''}`,'special');
-    state.matchContext.nagariCarryPower=0;
+  function presentThreePpeok(result){
+    const event=result.events.find(item=>item.type==='threePpeokDeclared');
+    if(!event)return;
+    const terminal=state.terminalResult;
+    const side=legacySideForPlayerId(event.actorId);
+    presentation.locked=true;
+    setGrandResult('WIN!',side==='human'?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`${terminal.reason}${terminal.nagariCarryPower?` · Nagari ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1557,7 +1559,7 @@
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
-      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,
+      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
       card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
       makePlayer:makeTestPlayer,

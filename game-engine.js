@@ -310,6 +310,34 @@
     return {state,events,terminalResult:serializeGameState(terminalResult)};
   }
 
+  function applyThreePpeokTerminal(state,actorId,side,events){
+    if(state[side].ppeoks<3)return null;
+    const basePoints=7;
+    const nagariCarryPower=state.matchContext.nagariCarryPower;
+    const multiplier=2**nagariCarryPower;
+    const terminalResult={
+      type:'threePpeok',winnerId:actorId,basePoints,nagariCarryPower,multiplier,
+      finalPoints:basePoints*multiplier,reason:'Three ppeoks in one hand'
+    };
+    state.winner=actorId;
+    state.terminalResult=terminalResult;
+    state.matchContext.nagariCarryPower=0;
+    delete state.pendingTurn;
+    delete state.pendingDecision;
+    events.push({type:'threePpeokDeclared',audience:'public',actorId,ppeokCount:state[side].ppeoks,basePoints,finalPoints:terminalResult.finalPoints});
+    events.push({type:'handEnded',audience:'public',winnerId:actorId,reason:'threePpeok',terminalResult:serializeGameState(terminalResult)});
+    return terminalResult;
+  }
+
+  function resolveThreePpeok(currentState,{actorId}={}){
+    const state=deserializeGameState(currentState);
+    const side=validateActor(state,{actorId});
+    if(state.pendingDecision)throw new Error('A private decision must be resolved before Three-Ppeok.');
+    const events=[];
+    const terminalResult=applyThreePpeokTerminal(state,actorId,side,events);
+    return {state,events,terminalResult:terminalResult?serializeGameState(terminalResult):null};
+  }
+
   function evaluateGoStop(currentState,{actorId}={}){
     const state=deserializeGameState(currentState);
     const side=validateActor(state,{actorId});
@@ -511,7 +539,9 @@
       state.floorStacks[target.month]={month:target.month,cardIds:cards.map(card=>card.id),source:'ppeok',owner:actorId};
       actor.ppeoks++;
       events.push({type:'ppeokFormed',audience:'public',actorId,rule:'ppeokSsaDa',cardIds:cards.map(card=>card.id),month:target.month,slot,ppeokCount:actor.ppeoks});
-      return finish('ppeokSsaDa');
+      const result=finish('ppeokSsaDa');
+      result.terminalResult=applyThreePpeokTerminal(state,actorId,side,events);
+      return result;
     }
 
     if(outcome.kind==='jjokCandidate'){
@@ -755,7 +785,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,resolveNagari,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   });
 
   globalThis.GoStopEngine=api;
