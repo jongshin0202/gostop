@@ -9,9 +9,9 @@ The current per-hand `state` remains authoritative for rules and outcomes:
 - `deck` and its ordered card identities;
 - `floor` and its public card identities;
 - `human` and `ai` player records (temporary compatibility names), each containing `hand`, `captured`, `go`, `shakes`, `bombs`, `bombFreeTurns`, `ppeoks`, array-backed `hiddenTripleMonths`, array-backed `shakenMonths`, and `lastGoScore`;
-- `floorStacks`, whose entries contain `month`, ordered `cardIds`, rule-relevant `source`, and owning legacy side;
-- `turn`, `winner`, and the retained `specialWinner` compatibility field;
-- `matchContext.lastScoreBySide`, used by current Go/Stop score-increase gating, and `matchContext.nagariCarryPower`, used by Nagari and settlement; and
+- `floorStacks`, whose entries contain `month`, ordered `cardIds`, rule-relevant `source`, and a neutral `playerA`/`playerB` owner (or `null` for an opening stack);
+- neutral `turn` and player-valued `winner`/`specialWinner` fields, plus the non-player terminal sentinels currently used by the game;
+- neutral-keyed `matchContext.lastScoreBySide`, used by current Go/Stop score-increase gating, and `matchContext.nagariCarryPower`, used by Nagari and settlement; and
 - canonical `floorSlotCount` and `floorSlotByCard` occupancy. Slots are public synchronized gameplay-presentation state: they do not change scoring, but they must be authoritative so both future viewers preserve identical holes, stack placement, and unmatched-card landings.
 
 Triple-month array access is encapsulated by membership, unique-add, and delete helpers so rules do not depend on array operations directly. New hands reset score history while carrying forward Nagari power exactly as before.
@@ -54,14 +54,14 @@ Authoritative state contains no DOM references, callbacks, `Set`/`Map` objects, 
 
 The complete match now round-trips losslessly through JSON, including deck order, hands, captures, floor and slots, stacks, turn/result fields, player rule counters, hidden and shaken months, Go history, and Nagari carry.
 
-The temporary `human`/`ai` keys and legacy stack-owner values remain schema compatibility concerns, but they are JSON-safe and do not prevent exact persistence/restoration.
+The temporary `human`/`ai` player-storage keys remain a compatibility concern, but they are aliases for `playerA`/`playerB`, not authoritative identity values. New serialization strictly rejects legacy values in `turn`, stack `owner`, winner fields, and score-history identity keys rather than silently normalizing ambiguous snapshots.
 
 Persistence is exact at stable turn/decision boundaries. The current asynchronous controller still keeps an in-progress turn's continuation, selected action objects, and open dialog promise in local call-stack/presentation state. A snapshot taken in the middle of an animation or unresolved dialog cannot resume at that exact await point from authoritative data alone. Making turn phase and pending authoritative decisions explicit belongs to the later action/turn-engine migration; until then, persistence must snapshot or restore at a stable boundary.
 
 ## Remaining mixed boundaries and risks
 
 - Stack creation and floor-slot commitment still happen inside mutable turn resolution in `app.js`; extracting them now would begin the prohibited action/turn-engine migration.
-- `matchContext` is authoritative and serializable but still uses legacy `human`/`ai` score-history keys until the authoritative player schema is migrated.
+- Controller functions may still use local `human`/`ai` aliases to select the compatibility storage objects and existing DOM paths. Explicit adapters translate those aliases at every authoritative identity boundary.
 - Canonical floor slots are presentation-motivated but intentionally authoritative and public. Treating them as local would allow the two future clients to disagree about persistent positions.
 - In-flight reservation cleanup is coupled to animation completion. Cancellation/reconciliation will need explicit handling when a future event queue exists; Step 4 preserves the existing awaited animation pipeline.
 - Deterministic angles preserve the established angle ranges but replace per-stack randomness with stable decoration, so a given public stack now looks identical on repeated renders and on both viewers.

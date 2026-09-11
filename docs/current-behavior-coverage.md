@@ -98,3 +98,9 @@ Serializable `state.pendingTurn` phases make target choice, deck draw, ordered p
 The pure `classifyTurnOutcome` API now distinguishes Bomb eligibility, pending floor-target decisions, normal unmatched/single/chosen captures, Jjok, Ppeok/Ssa-da, Ttadak, Self-Ppeok, other floor-stack interactions, completion, and conservative legacy-special fallback. The browser no longer maintains its own normal-versus-special predicate or same-month special test; it routes using the engine result while retaining every special mutation in `app.js`.
 
 Fixtures cover both neutral actors, JSON round-trip stability, neutral-only classifier output, and parity between a classified Ppeok/Ssa-da candidate and the existing legacy resolver's resulting stack. Sweep is documented as post-resolution because its applicability depends on the floor after capture mutation.
+
+## Migration Step 5D identity coverage
+
+Authoritative `turn`, floor-stack `owner`, player-valued result fields, and score-history keys now use `playerA`/`playerB`. Deserialization strictly rejects legacy identity values rather than guessing how an old snapshot should map. The `state.human`/`state.ai` storage keys and browser-side aliases remain as the intentional Solo compatibility boundary.
+
+Tests exercise both neutral turns, wrong-player rejection, neutral Ppeok ownership and Self-Ppeok classification, lossless identity round trips, strict legacy rejection, and a recursive known-identity-field scan.

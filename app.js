@@ -123,8 +123,8 @@
       human:makePlayer(human),
       ai:makePlayer(ai),
       floorStacks:{},
-      turn:'human', winner:null, specialWinner:null,
-      matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower}
+      turn:PLAYER_A, winner:null, specialWinner:null,
+      matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower}
     };
     markInitialFloorStacks(next);
     initFloorSlots(next);
@@ -290,7 +290,7 @@
       : firstFreeFloorSlot(state);
     cards.forEach(c=>addFloorCard(c,stackSlot));
     cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; presentation.floorSlotReservations.delete(c.id); });
-    state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',side);
+    state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',playerIdForLegacySide(side));
     state[side].ppeoks++;
   }
   function effectiveFloorMatchCards(card){
@@ -312,7 +312,7 @@
     const st=floorStackForMonth(targetCard.month);
     if(!st || !st.cardIds.includes(targetCard.id)) return 0;
     if(st.source==='initial') return 1;
-    if(st.source==='ppeok') return st.owner===side ? 2 : 1;
+    if(st.source==='ppeok') return st.owner===playerIdForLegacySide(side) ? 2 : 1;
     return 0;
   }
 
@@ -347,7 +347,7 @@
     els.playerHand.innerHTML='';
     bottomPlayer.hand.sort(sortCards).forEach(card=>{
       const el=createCardEl(card,'card hand-card');
-      el.disabled = presentation.locked || state.turn!=='human';
+      el.disabled = presentation.locked || state.turn!==PLAYER_A;
       if(card.id===presentation.hintCardId) el.classList.add('matchable');
       el.addEventListener('click',()=>humanPlay(card.id, el));
       els.playerHand.appendChild(el);
@@ -357,7 +357,7 @@
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
-      blank.disabled=presentation.locked || state.turn!=='human';
+      blank.disabled=presentation.locked || state.turn!==PLAYER_A;
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
       els.playerHand.appendChild(blank);
@@ -518,13 +518,13 @@
   function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
-    if(presentation.locked || state.turn!=='human' || state.winner || state.human.bombFreeTurns<=0)return;
+    if(presentation.locked || state.turn!==PLAYER_A || state.winner || state.human.bombFreeTurns<=0)return;
     presentation.locked=true; presentation.hintCardId=null; render();
     await executeDeckOnlyTurn('human');
   }
 
   async function humanPlay(cardId, clickedEl){
-    if(state.turn!=='human' || state.winner)return;
+    if(state.turn!==PLAYER_A || state.winner)return;
 
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
@@ -594,7 +594,7 @@
   }
 
   async function aiTurn(){
-    if(state.turn!=='ai'||state.winner||presentation.aiTurnInProgress)return;
+    if(state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
     presentation.aiTurnInProgress=true;
     presentation.locked=true;
     try {
@@ -913,8 +913,9 @@
     render();
     const actor=state[side];
     const sc=score(actor.captured);
-    const previous=side==='human'?state.matchContext.lastScoreBySide.human:state.matchContext.lastScoreBySide.ai;
-    if(side==='human')state.matchContext.lastScoreBySide.human=sc.total;else state.matchContext.lastScoreBySide.ai=sc.total;
+    const actorId=playerIdForLegacySide(side);
+    const previous=state.matchContext.lastScoreBySide[actorId];
+    state.matchContext.lastScoreBySide[actorId]=sc.total;
 
     if(reachedNewFinishScore(sc.total,previous)){
       if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
@@ -931,7 +932,7 @@
     }
 
     await sleep(760);
-    state.turn=side==='human'?'ai':'human';
+    state.turn=otherPlayerId(playerIdForLegacySide(side));
     render();
     scheduleTurnStart();
   }
@@ -939,7 +940,7 @@
   function scheduleTurnStart(){
     if(TEST_MODE)return;
     if(state.winner)return;
-    const side=state.turn, actor=state[side];
+    const side=legacySideForPlayerId(state.turn), actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
       presentation.locked=true;
       setTimeout(()=>executeDeckOnlyTurn(side),760);
@@ -1382,7 +1383,7 @@
 
   function finishSpecial(winner,points,reason){
     if(state.winner)return;
-    state.winner=winner; presentation.locked=true;
+    state.winner=playerIdForLegacySide(winner); presentation.locked=true;
     const final=points*(2**state.matchContext.nagariCarryPower);
     const specialCall=reason.startsWith('총통!')?'CHONGTONG!':'WIN!';
     setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${state.matchContext.nagariCarryPower?` · Nagari ×${2**state.matchContext.nagariCarryPower}`:''}`,'special');
@@ -1394,7 +1395,7 @@
 
   function finishGame(winner,sc,reason){
     if(winner==='draw'){ finishNagari(); return; }
-    state.winner=winner;presentation.locked=true;hideActionCue();
+    state.winner=playerIdForLegacySide(winner);presentation.locked=true;hideActionCue();
     const settled=calculateFinalScore(winner);
     const breakdown=formatScoreFormula(settled);
     setGrandResult('STOP!',winner==='human'?'Player Wins!':'Computer Wins!',`${settled.total} Points`,breakdown,'stop');
@@ -1404,7 +1405,7 @@
 
 
   function recommendHumanCard(){
-    if(!state||state.turn!=='human'||presentation.locked)return;
+    if(!state||state.turn!==PLAYER_A||presentation.locked)return;
     let best=state.human.hand[0],val=-Infinity;
     state.human.hand.forEach(c=>{
       const matches=matchesFor(c),cv=matches.length?captureValue(c)+Math.max(...matches.map(captureValue)):0;
@@ -1435,7 +1436,7 @@
   els.newGameBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
   els.playAgainBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
   els.hintBtn.addEventListener('click',recommendHumanCard);
-  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!=='human')return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');presentation.locked=true;state.turn='ai';render();setTimeout(aiTurn,1150);});
+  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!==PLAYER_A)return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');presentation.locked=true;state.turn=PLAYER_B;render();setTimeout(aiTurn,1150);});
   els.stopBtn.addEventListener('click',()=>{if(!state)return;els.decisionDialog.close();finishGame('human',score(state.human.captured),'You chose STOP.');});
 
 
@@ -1476,8 +1477,8 @@
     const makeTestState=(overrides={})=>{
       const next={
         deck:[],floor:[],human:makeTestPlayer(),ai:makeTestPlayer(),
-        floorStacks:{},turn:'human',winner:null,specialWinner:null,
-        matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower:0},
+        floorStacks:{},turn:PLAYER_A,winner:null,specialWinner:null,
+        matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0},
         ...overrides
       };
       if(!next.floorSlotByCard)initFloorSlots(next);
@@ -1497,7 +1498,7 @@
       getState(){return state;},
       setNagariCarryPower(value){state.matchContext.nagariCarryPower=value;},
       getNagariCarryPower(){return state.matchContext.nagariCarryPower;},
-      setPreviousScores(human,ai){state.matchContext.lastScoreBySide.human=human;state.matchContext.lastScoreBySide.ai=ai;},
+      setPreviousScores(human,ai){state.matchContext.lastScoreBySide.playerA=human;state.matchContext.lastScoreBySide.playerB=ai;},
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,

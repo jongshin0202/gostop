@@ -300,7 +300,7 @@ test('Chongtong recognizes four of a month and awards the current opening win',a
   api.setNagariCarryPower(0);
   assert.deepEqual([...api.fourMonths(state.human.hand)],[11]);
   await api.processOpeningSpecials();
-  assert.equal(state.winner,'human');
+  assert.equal(state.winner,'playerA');
   assert.equal(elements.get('resultScore').textContent,'10 Points');
 });
 
@@ -326,7 +326,7 @@ test('Nagari increments and caps carry power at three',async()=>{
   await api.finishNagari();
   assert.equal(state.winner,'nagari');
   assert.equal(api.getNagariCarryPower(),3);
-  state=useState(stateWith({matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower:3}}));
+  state=useState(stateWith({matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:3}}));
   await api.finishNagari();
   assert.equal(api.getNagariCarryPower(),3);
   api.setNagariCarryPower(0);
@@ -413,11 +413,11 @@ test('authoritative match state survives a lossless serialize/JSON/deserialize r
       hand:cards('m9-1','m10-1'),captured:cards('m12-1','m6-3'),go:1,
       hiddenTripleMonths:[10,11],shakenMonths:[2],lastGoScore:3
     }),
-    floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'human'}},
+    floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'playerA'}},
     floorSlotCount:12,
     floorSlotByCard:{'m4-1':2,'m4-2':2,'m4-3':2,'m8-1':7},
-    turn:'ai',winner:null,specialWinner:null,
-    matchContext:{lastScoreBySide:{human:6,ai:4},nagariCarryPower:2}
+    turn:'playerB',winner:null,specialWinner:null,
+    matchContext:{lastScoreBySide:{playerA:6,playerB:4},nagariCarryPower:2}
   });
   const beforeSettlement=extractedEngine.calculateSettlement({
     winner:state.human,loser:state.ai,nagariCarryPower:state.matchContext.nagariCarryPower
@@ -444,8 +444,9 @@ test('authoritative match state survives a lossless serialize/JSON/deserialize r
 
 async function legacyNormalOutcome(initial,playedId,playTargetId=null){
   const legacy=api.deserializeGameState(JSON.parse(JSON.stringify(initial)));
-  const played=legacy[legacy.turn].hand.find(item=>item.id===playedId);
-  legacy[legacy.turn].hand=legacy[legacy.turn].hand.filter(item=>item.id!==playedId);
+  const legacySide=legacy.turn==='playerA'?'human':'ai';
+  const played=legacy[legacySide].hand.find(item=>item.id===playedId);
+  legacy[legacySide].hand=legacy[legacySide].hand.filter(item=>item.id!==playedId);
   const drawn=legacy.deck.shift()||null;
   useState(legacy);
   const playMatches=api.effectiveFloorMatchCards(played);
@@ -455,26 +456,26 @@ async function legacyNormalOutcome(initial,playedId,playTargetId=null){
   if(playMatches.length===0)api.reserveFloorSlot(played);
   if(drawn&&drawMatches.length===0)api.reserveFloorSlot(drawn);
   await api.resolveCombinedTurn(
-    legacy.turn,{card:played,target:playTarget,matchCount:playMatches.length},
+    legacySide,{card:played,target:playTarget,matchCount:playMatches.length},
     drawn?{card:drawn,target:drawTarget,matchCount:drawMatches.length}:null
   );
   return legacy;
 }
 
 function engineNormalOutcome(initial,playedId,playTargetId=null,drawTargetId=null){
-  let result=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:initial.turn==='human'?'playerA':'playerB',cardId:playedId,targetId:playTargetId});
+  let result=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:initial.turn,cardId:playedId,targetId:playTargetId});
   const events=[...result.events];
   let state=result.state;
   if(state.deck.length){
-    result=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:initial.turn==='human'?'playerA':'playerB',targetId:drawTargetId});
+    result=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:initial.turn,targetId:drawTargetId});
     state=result.state; events.push(...result.events);
   }
   for(const source of ['played','drawn']){
     if(source==='drawn'&&!state.pendingTurn.drawn)continue;
-    result=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:initial.turn==='human'?'playerA':'playerB',source});
+    result=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:initial.turn,source});
     state=result.state; events.push(...result.events);
   }
-  result=extractedEngine.applyNormalTurnAction(state,{type:'completeTurn',actorId:initial.turn==='human'?'playerA':'playerB'});
+  result=extractedEngine.applyNormalTurnAction(state,{type:'completeTurn',actorId:initial.turn});
   return {state:result.state,events:events.concat(result.events)};
 }
 
@@ -562,7 +563,7 @@ test('normal engine rejects same-month and floor-stack special resolution',()=>{
   state=stateWith({
     floor:cards('m4-1','m4-2','m4-3'),
     human:api.makePlayer({hand:[card('m4-4')]}),
-    floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'ai'}},
+    floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'playerB'}},
     floorSlotCount:12,floorSlotByCard:{'m4-1':0,'m4-2':0,'m4-3':0}
   });
   state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m4-4',targetId:'m4-3'}).state;
@@ -580,7 +581,7 @@ test('public normal-turn actions reject legacy actor identities',()=>{
 
 test('playerB performs the AI-side normal action sequence with neutral event identities',()=>{
   const initial=stateWith({
-    turn:'ai',deck:[card('m3-1')],floor:[card('m1-1')],
+    turn:'playerB',deck:[card('m3-1')],floor:[card('m1-1')],
     ai:api.makePlayer({hand:[card('m2-1')]}),floorSlotCount:12,floorSlotByCard:{'m1-1':0}
   });
   const actual=engineNormalOutcome(initial,'m2-1');
@@ -681,7 +682,7 @@ test('classifier distinguishes Jjok, Ppeok/Ssa-da, and Ttadak candidates',()=>{
 });
 
 test('classifier distinguishes self-Ppeok and other floor-stack interactions',()=>{
-  for(const [owner,kind] of [['human','selfPpeokCandidate'],['ai','floorStackInteraction']]){
+  for(const [owner,kind] of [['playerA','selfPpeokCandidate'],['playerB','floorStackInteraction']]){
     const stack=cards('m2-1','m2-2','m2-3');
     const result=classifyPlayedAndDrawn(stateWith({
       deck:[card('m8-1')],floor:stack,human:api.makePlayer({hand:[card('m2-4')]}),
@@ -720,7 +721,76 @@ test('playerA and playerB receive equivalent neutral classifications',()=>{
     deck:[card('m3-1')],floor:[card('m1-1')],human:api.makePlayer({hand:[card('m2-1')]})
   }),'playerA','m2-1').outcome;
   const playerB=classifyPlayedAndDrawn(stateWith({
-    turn:'ai',deck:[card('m3-1')],floor:[card('m1-1')],ai:api.makePlayer({hand:[card('m2-1')]})
+    turn:'playerB',deck:[card('m3-1')],floor:[card('m1-1')],ai:api.makePlayer({hand:[card('m2-1')]})
   }),'playerB','m2-1').outcome;
   assert.deepEqual({...playerA,actorId:'neutral'},{...playerB,actorId:'neutral'});
+});
+
+test('fresh authoritative turn and action validation use neutral player IDs',()=>{
+  const playerAState=stateWith({human:api.makePlayer({hand:[card('m2-1')]})});
+  assert.equal(playerAState.turn,'playerA');
+  assert.doesNotThrow(()=>extractedEngine.applyNormalTurnAction(playerAState,{type:'playCard',actorId:'playerA',cardId:'m2-1'}));
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(playerAState,{type:'playCard',actorId:'playerB',cardId:'m2-1'}),/not playerB's turn/);
+
+  const playerBState=stateWith({turn:'playerB',ai:api.makePlayer({hand:[card('m3-1')]})});
+  assert.doesNotThrow(()=>extractedEngine.applyNormalTurnAction(playerBState,{type:'playCard',actorId:'playerB',cardId:'m3-1'}));
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(playerBState,{type:'playCard',actorId:'playerA',cardId:'m3-1'}),/not playerA's turn/);
+});
+
+test('new Ppeok stacks store a neutral owner and preserve Self-Ppeok ownership',()=>{
+  const stackCards=cards('m4-1','m4-2','m4-3');
+  const state=useState(stateWith({floor:[stackCards[0]]}));
+  api.initFloorSlots(state);
+  api.makePpeokStack('human',stackCards);
+  assert.equal(state.floorStacks[4].owner,'playerA');
+
+  const pending=classifyPlayedAndDrawn(stateWith({
+    deck:[card('m8-1')],floor:stackCards,human:api.makePlayer({hand:[card('m4-4')]}),
+    floorStacks:state.floorStacks
+  }),'playerA','m4-4','m4-3');
+  assert.equal(pending.outcome.kind,'selfPpeokCandidate');
+});
+
+test('neutral turn and stack owner survive serialization exactly',()=>{
+  const state=stateWith({
+    turn:'playerB',floor:cards('m7-1','m7-2','m7-3'),
+    floorStacks:{7:{month:7,cardIds:['m7-1','m7-2','m7-3'],source:'ppeok',owner:'playerB'}}
+  });
+  const restored=extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(extractedEngine.serializeGameState(state))));
+  assert.equal(restored.turn,'playerB');
+  assert.equal(restored.floorStacks[7].owner,'playerB');
+  assert.equal(JSON.stringify(restored),JSON.stringify(state));
+});
+
+test('deserialization strictly rejects legacy authoritative identity values',()=>{
+  assert.throws(()=>extractedEngine.deserializeGameState({...stateWith(),turn:'human'}),/state.turn must be playerA or playerB/);
+  assert.throws(()=>extractedEngine.deserializeGameState({
+    ...stateWith(),floorStacks:{2:{month:2,cardIds:[],source:'ppeok',owner:'ai'}}
+  }),/Floor stack owner must be a neutral player ID/);
+  assert.throws(()=>extractedEngine.deserializeGameState({
+    ...stateWith(),matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower:0}
+  }),/lastScoreBySide.*neutral player IDs/);
+});
+
+test('authoritative identity-bearing fields contain no human or ai values',()=>{
+  const state=stateWith({
+    turn:'playerA',winner:'playerB',specialWinner:'playerB',
+    floorStacks:{5:{month:5,cardIds:['m5-1','m5-2','m5-3'],source:'ppeok',owner:'playerA'}},
+    pendingTurn:{phase:'awaitingDraw',actorId:'playerA',nextResolution:null,played:{card:card('m2-1'),matchIds:[],targetId:null,landingSlot:0,resolved:false},drawn:null}
+  });
+  const legacyIdentityPaths=[];
+  function scan(value,path='state'){
+    if(!value||typeof value!=='object')return;
+    for(const [key,item] of Object.entries(value)){
+      const itemPath=`${path}.${key}`;
+      if(['turn','winner','specialWinner','owner','actorId','playerId'].includes(key)&&(item==='human'||item==='ai'))legacyIdentityPaths.push(itemPath);
+      if(key==='lastScoreBySide'){
+        for(const playerId of Object.keys(item))if(playerId==='human'||playerId==='ai')legacyIdentityPaths.push(`${itemPath}.${playerId}`);
+      }
+      scan(item,itemPath);
+    }
+  }
+  scan(state);
+  assert.deepEqual(legacyIdentityPaths,[]);
+  assert.deepEqual(Object.keys(state.matchContext.lastScoreBySide).sort(),['playerA','playerB']);
 });

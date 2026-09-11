@@ -16,7 +16,7 @@ All events currently emitted by this narrow path are explicitly `public`. The re
 
 ## Neutral action protocol and resumable phases
 
-The public action field is `actorId`, whose only valid values are `playerA` and `playerB`. In Solo, the compatibility mapping remains `playerA` to `state.human` and `playerB` to `state.ai`; legacy `human` or `ai` actor values are rejected at the engine boundary. The internal `state.turn` and player storage remain legacy-shaped for this narrow migration.
+The public action field is `actorId`, whose only valid values are `playerA` and `playerB`. In Solo, the compatibility mapping remains `playerA` to `state.human` and `playerB` to `state.ai`; legacy `human` or `ai` actor values are rejected at the engine boundary. Authoritative `state.turn`, stack owners, player-valued result fields, pending decisions, and score-history keys are neutral. Only the player storage keys and controller-side aliases remain legacy-shaped.
 
 While an extracted turn is active, serializable `state.pendingTurn` records its neutral `actorId`, played/drawn card data, legal matching card IDs, chosen target, reserved landing slot, and one of these phases:
 
@@ -55,4 +55,4 @@ Bomb blank/deck-only turns also remain on the legacy path in this step.
 - The reducer records unmatched landing slots at play/draw time so a capture resolved earlier in the same turn cannot move a later unmatched card into a newly opened hole. This preserves the existing in-flight reservation behavior.
 - The engine now determines normal-versus-special routing, but mutations for classified special outcomes remain deliberately delegated to the legacy controller.
 - Sweep remains a post-resolution condition because it depends on whether capture mutation actually empties the floor; normal classification marks it `postResolution` rather than predicting it prematurely.
-- Player storage and `state.turn` still use legacy `human`/`ai` compatibility values because wholesale player-schema migration is outside Step 5B; public actions, events, decisions, and pending progress do not expose those identities.
+- Player storage still uses `state.human`/`state.ai`, and browser functions retain matching local aliases because wholesale storage and DOM renaming is outside Step 5D. Explicit adapters prevent those aliases from becoming authoritative identity values.

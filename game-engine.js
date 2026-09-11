@@ -177,6 +177,19 @@
     if(!state.matchContext.lastScoreBySide||typeof state.matchContext.lastScoreBySide!=='object'){
       throw new Error('state.matchContext.lastScoreBySide is required.');
     }
+    if(state.turn!=='playerA'&&state.turn!=='playerB')throw new Error('state.turn must be playerA or playerB.');
+    if(Object.hasOwn(state.matchContext.lastScoreBySide,'human')||Object.hasOwn(state.matchContext.lastScoreBySide,'ai')){
+      throw new Error('state.matchContext.lastScoreBySide must use neutral player IDs.');
+    }
+    ['playerA','playerB'].forEach(playerId=>{
+      if(!Number.isFinite(state.matchContext.lastScoreBySide[playerId]))throw new Error(`Missing score history for ${playerId}.`);
+    });
+    Object.values(state.floorStacks||{}).forEach(stack=>{
+      if(stack.owner!==null&&stack.owner!=='playerA'&&stack.owner!=='playerB')throw new Error('Floor stack owner must be a neutral player ID or null.');
+    });
+    if(state.winner==='human'||state.winner==='ai'||state.specialWinner==='human'||state.specialWinner==='ai'){
+      throw new Error('Winner identity must use a neutral player ID.');
+    }
     return state;
   }
 
@@ -198,7 +211,7 @@
   function validateActor(state,action){
     if(Object.prototype.hasOwnProperty.call(action,'actor'))throw new Error('Use neutral actorId, not actor.');
     const side=legacySideForPlayerId(action.actorId);
-    if(state.turn!==side)throw new Error(`It is not ${action.actorId}'s turn.`);
+    if(state.turn!==action.actorId)throw new Error(`It is not ${action.actorId}'s turn.`);
     return side;
   }
 
@@ -252,7 +265,7 @@
     const stack=state.floorStacks[played.card.month]||(drawn&&state.floorStacks[drawn.card.month]);
     if(stack){
       const entry=state.floorStacks[played.card.month]?played:drawn;
-      const selfPpeok=stack.source==='ppeok'&&stack.owner===side;
+      const selfPpeok=stack.source==='ppeok'&&stack.owner===actorId;
       return classification(selfPpeok?'selfPpeokCandidate':'floorStackInteraction',actorId,{...base,targetIds:[...entry.matchIds],stackMonth:stack.month});
     }
     const entries=[played,drawn].filter(Boolean);
