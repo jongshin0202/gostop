@@ -60,9 +60,11 @@ Persistence is exact at stable engine turn boundaries and at Shake/Bomb decision
 
 Shake and Bomb decisions are authoritative and player-private. `projectStateForViewer` exposes either record only to its player; the opponent receives neither the decision nor hidden month/card data, and receives only `handCount` and `deckCount` rather than opponent-hand or deck identities. `shakeDeclared` and `bombDeclared` are public only after acceptance. KEEP SECRET and Bomb decline emit nothing public. Bomb capture, multiplier count, Pi transfer, and its two optional blank opportunities are engine-owned; a blank creates an `awaitingDraw` turn without consuming a hand card.
 
+Opening Chongtong resolution is also authority-owned. `resolveOpeningState` initializes hidden-triple eligibility in the established order and then records `openingResolved`; a four-of-a-month sets neutral `winner` and `specialWinner`, records the public ten-point `openingOutcome`, and emits `chongtongDeclared` before any normal turn interaction. The projected terminal state exposes that public result and no legal actions, while continuing to redact the opponent's unrelated hand. Fanfare and result-dialog work remain presentation-only. Go/Stop, Nagari, and ordinary end-of-hand settlement remain deferred.
+
 ## Remaining mixed boundaries and risks
 
-- Opening and unextracted fallback stack handling still exists in `app.js`; Ppeok/Ssa-da stack creation and its canonical floor-slot commitment are engine-owned.
+- Unextracted fallback stack handling still exists in `app.js`; Ppeok/Ssa-da stack creation and its canonical floor-slot commitment are engine-owned. Opening Chongtong detection and terminal mutation no longer occur in the browser controller.
 - Controller functions may still use local `human`/`ai` aliases to select the compatibility storage objects and existing DOM paths. Explicit adapters translate those aliases at every authoritative identity boundary.
 - Sweep detection and Pi mutation are authoritative engine operations. Presentation consumes `sweepTriggered` and reason-tagged `piTransferred` events; the browser does not infer an empty-floor bonus or edit captured piles.
 - Canonical floor slots are presentation-motivated but intentionally authoritative and public. Treating them as local would allow the two future clients to disagree about persistent positions.

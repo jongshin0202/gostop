@@ -10,7 +10,7 @@
   if(!engine)throw new Error('GoStopEngine must load before app.js.');
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
-    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,
     applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   }=engine;
   const MASTER_DECK = engine.masterDeck;
@@ -1048,23 +1048,29 @@
 
   async function processOpeningSpecials(){
     if(state.winner)return;
-    const hFour=fourMonths(state.human.hand);
-    const aFour=fourMonths(state.ai.hand);
-    if(hFour.length){
-      playChongtongFanfare();
-      finishSpecial('human',10,`총통! You won because you were dealt all 4 cards from the same month (${monthNames[hFour[0]-1]}).`);
-      return;
-    }
-    if(aFour.length){
-      finishSpecial('ai',10,`총통! Computer won by holding all 4 cards from the same month (${monthNames[aFour[0]-1]}).`);
-      return;
-    }
+    const opening=resolveOpeningState(state); state=opening.state;
+    const chongtong=opening.events.find(event=>event.type==='chongtongDeclared');
+    if(chongtong){ presentChongtong(chongtong); return; }
 
     // Do not interrupt the opening deal with a Shake prompt. A three-of-a-month
     // stays hidden until that player actually tries to use one of those cards.
     // This is both less intrusive and closer to table play: the declaration is
     // made at the moment the triple becomes relevant, not as a startup modal.
     presentation.locked=false; render(); scheduleTurnStart();
+  }
+
+  function presentChongtong(event){
+    // Preserve the established Solo presentation: only the local-player branch
+    // played the Chongtong fanfare before authority extraction.
+    if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
+    const playerWon=event.actorId===PLAYER_A;
+    const reason=playerWon
+      ? `총통! You won because you were dealt all 4 cards from the same month (${monthNames[event.month-1]}).`
+      : `총통! Computer won by holding all 4 cards from the same month (${monthNames[event.month-1]}).`;
+    const final=event.points*(2**state.matchContext.nagariCarryPower);
+    setGrandResult('CHONGTONG!',playerWon?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${state.matchContext.nagariCarryPower?` · Nagari ×${2**state.matchContext.nagariCarryPower}`:''}`,'special');
+    state.matchContext.nagariCarryPower=0;
+    els.resultDialog.showModal(); render();
   }
 
   async function revealAiShake(month){
@@ -1540,7 +1546,7 @@
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
-      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,
+      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
       card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
       makePlayer:makeTestPlayer,

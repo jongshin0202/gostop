@@ -126,3 +126,9 @@ Viewer-projection tests prove only the acting viewer receives the decision, whil
 KEEP SECRET now creates a private Bomb decision when the established three-in-hand/fourth-on-floor condition holds. `declareBomb` atomically removes and publicly reveals the three cards, captures the ordered four-card month, frees the floor slot, increments Bomb state, grants exactly two optional blanks, transfers ordinary Pi before double-Pi fallback, and enters `awaitingDraw`; decline is silent and resumes the selected card.
 
 Tests cover both neutral actors, decision and event privacy, stale/wrong/duplicate responses, exact event order, accepted-event-driven sound, no-Pi fallback, serialization at decision/mutation/blank boundaries, optional real-card play, two blank consumptions, third-use rejection, hand preservation, direct deck draw, and Shake preventing later Bomb eligibility.
+
+## Migration Step 6E Chongtong coverage
+
+`resolveOpeningState` now owns initial Chongtong detection and terminal mutation. It first preserves the established hidden-triple initialization order, records an opening resolution, and either continues without an event or sets neutral `winner`/`specialWinner`, records the ten-point Chongtong result, and emits one public `chongtongDeclared` event. The browser no longer checks four-card months or writes the winner; it presents the accepted event and retains the established Solo fanfare behavior.
+
+Fixtures cover no-win openings, Player A and Player B wins, exact month and ten-point metadata, JSON round trips before and after resolution, viewer-safe terminal projection, absence of Shake/Bomb/normal legal actions after a win, and event payload privacy. A deliberately representable simultaneous fixture locks in the current Player A-first precedence rather than inventing a new tie rule. Go/Stop, Nagari, and ordinary end-of-hand settlement remain outside this extraction.

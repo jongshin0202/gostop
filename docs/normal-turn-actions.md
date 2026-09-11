@@ -29,6 +29,8 @@ A player-private target decision includes its neutral addressee, card ID, source
 
 ## Browser boundary
 
+Before normal turn interaction, `resolveOpeningState` performs authoritative Chongtong resolution. It preserves the established Player A-first precedence when both hands in a representable fixture contain a four-card month, emits one public neutral `chongtongDeclared` event for the ten-point result, and leaves a terminal state with no legal normal action. The browser only presents that event; its existing fanfare remains local presentation. A non-Chongtong opening continues into the same delayed Shake/Bomb and normal-turn flow.
+
 The existing human/AI controllers still select cards and targets, display Shake/Bomb prompts, and preserve AI pacing. The engine initializes hidden triple eligibility and `attemptPlayCard` pauses an intended play with a serializable private `shakeDecision` only when that triple card is attempted. `declareShake` publicly increments Shake state and emits `shakeDeclared`; `keepShakeSecret` emits nothing public and creates a private `bombDecision` when the fourth card is on the floor. Declining Bomb remains private and resumes the intended card; declaring Bomb atomically reveals/captures the four cards, transfers Pi, records the multiplier, grants two optional blanks, and enters deck draw.
 
 `classifyTurnOutcome(state, { actorId, cardId? })` now owns the deterministic normal-versus-special routing decision. Before play, it can identify `bombEligible`; during a pending turn it returns `awaitingDraw`, `floorTargetDecision`, `normal`, `jjokCandidate`, `ppeokSsaDaCandidate`, `ttadakCandidate`, `selfPpeokCandidate`, `floorStackInteraction`, `awaitingTurnCompletion`, or the conservative `legacySpecial` fallback. Normal results include per-card `unmatchedLanding`, `singleMatchCapture`, or `chosenMatchCapture` details. All results are JSON-safe and use neutral actor IDs.
@@ -42,7 +44,6 @@ The established browser animation order remains hand slap, deck lift/flip/slap, 
 The browser still calls `deferSpecialTurn` and uses the legacy `resolveCombinedTurn`/`resolveSingleCard` fallback for unextracted cases. The duplicate implementations of the four extracted outcomes remain reachable only as conservative fallback/test characterization paths, not the classified production route. This retains:
 
 - Other unextracted Pi transfers;
-- Chongtong;
 - Go/Stop and Nagari; and
 - all special scoring and settlement behavior.
 

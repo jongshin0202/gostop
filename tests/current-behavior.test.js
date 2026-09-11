@@ -307,7 +307,9 @@ test('Chongtong recognizes four of a month and awards the current opening win',a
   api.setNagariCarryPower(0);
   assert.deepEqual([...api.fourMonths(state.human.hand)],[11]);
   await api.processOpeningSpecials();
-  assert.equal(state.winner,'playerA');
+  const opened=api.getState();
+  assert.equal(opened.winner,'playerA');
+  assert.equal(opened.specialWinner,'playerA');
   assert.equal(elements.get('resultScore').textContent,'10 Points');
 });
 
@@ -1187,4 +1189,79 @@ test('Bomb sound can run only after an accepted public bombDeclared event',()=>{
   const wrapper=source.slice(source.indexOf('async function executeBombTurn'),source.indexOf('async function resolveCombinedTurn'));
   assert.equal(wrapper.indexOf("type:'declareBomb'")<wrapper.indexOf('animateBombSlap'),true);
   assert.equal(source.slice(source.indexOf('if(els.bombBtn)'),source.indexOf('if(els.playOneBtn)')).includes('playBombSound'),false);
+});
+
+function openingState({humanHand=[],aiHand=[]}={}){
+  return stateWith({human:api.makePlayer({hand:humanHand}),ai:api.makePlayer({hand:aiHand})});
+}
+
+test('opening without Chongtong remains non-terminal and initializes hidden triples',()=>{
+  const initial=openingState({humanHand:cards('m5-1','m5-2','m5-3','m8-1')});
+  const before=assertBombWireSafe(initial);
+  const result=extractedEngine.resolveOpeningState(before);
+  assert.deepEqual(result.events,[]);
+  assert.equal(result.state.winner,null);
+  assert.equal(result.state.specialWinner,null);
+  assert.equal(result.state.openingResolved,true);
+  assert.equal(result.state.openingOutcome,null);
+  assert.deepEqual(result.state.human.hiddenTripleMonths,[5]);
+  assert.equal(result.state.pendingDecision,undefined);
+  assertBombWireSafe(result.state);
+});
+
+test('Chongtong gives Player A an immediate neutral 10-point terminal result',()=>{
+  const unrelated=card('m9-1');
+  const result=extractedEngine.resolveOpeningState(openingState({
+    humanHand:cards('m6-1','m6-2','m6-3','m6-4'),aiHand:[unrelated]
+  }));
+  assert.equal(result.state.winner,'playerA');
+  assert.equal(result.state.specialWinner,'playerA');
+  assert.deepEqual(result.state.openingOutcome,{type:'chongtong',actorId:'playerA',month:6,points:10});
+  assert.deepEqual(result.events,[{type:'chongtongDeclared',audience:'public',actorId:'playerA',month:6,points:10}]);
+  assert.equal(JSON.stringify(result.events).includes(unrelated.id),false);
+  assertBombWireSafe(result.state);
+});
+
+test('Chongtong gives Player B the equivalent immediate terminal result',()=>{
+  const result=extractedEngine.resolveOpeningState(openingState({
+    humanHand:[card('m9-1')],aiHand:cards('m7-1','m7-2','m7-3','m7-4')
+  }));
+  assert.equal(result.state.winner,'playerB');
+  assert.equal(result.state.specialWinner,'playerB');
+  assert.deepEqual(result.events,[{type:'chongtongDeclared',audience:'public',actorId:'playerB',month:7,points:10}]);
+});
+
+test('simultaneous representable Chongtong preserves current Player A precedence',()=>{
+  const result=extractedEngine.resolveOpeningState(openingState({
+    humanHand:cards('m6-1','m6-2','m6-3','m6-4'),aiHand:cards('m7-1','m7-2','m7-3','m7-4')
+  }));
+  assert.equal(result.state.winner,'playerA');
+  assert.equal(result.state.openingOutcome.month,6);
+  assert.equal(result.events[0].actorId,'playerA');
+});
+
+test('terminal Chongtong exposes no normal, Shake, or Bomb actions',()=>{
+  const result=extractedEngine.resolveOpeningState(openingState({humanHand:cards('m6-1','m6-2','m6-3','m6-4')}));
+  for(const viewerId of ['playerA','playerB']){
+    const view=extractedEngine.projectStateForViewer(result.state,viewerId);
+    assert.equal(view.winner,'playerA');
+    assert.equal(view.specialWinner,'playerA');
+    assert.deepEqual(view.openingOutcome,{type:'chongtong',actorId:'playerA',month:6,points:10});
+    assert.deepEqual(view.legalActions,[]);
+    if(viewerId==='playerB')for(const id of ['m6-1','m6-2','m6-3','m6-4'])assert.equal(JSON.stringify(view).includes(id),false);
+  }
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(result.state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-1'}),/already complete/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(result.state,{type:'requestBombDecision',actorId:'playerA',cardId:'m6-1'}),/already complete/);
+});
+
+test('Chongtong fanfare and result presentation require the authoritative event',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const opening=source.slice(source.indexOf('async function processOpeningSpecials'),source.indexOf('async function revealAiShake'));
+  assert.equal(opening.includes('fourMonths('),false);
+  assert.equal(opening.includes("event=>event.type==='chongtongDeclared'"),true);
+  assert.equal(opening.indexOf('presentChongtong(chongtong)')<opening.indexOf('function presentChongtong'),true);
+  const presenter=opening.slice(opening.indexOf('function presentChongtong'));
+  assert.equal(presenter.includes('playChongtongFanfare()'),true);
+  assert.equal(presenter.includes('if(event.actorId===PLAYER_A)playChongtongFanfare()'),true);
+  assert.equal(presenter.includes('state.winner='),false);
 });

@@ -217,7 +217,7 @@
     projected.legalActions=[];
     if(projected.pendingDecision?.type==='shakeDecision')projected.legalActions.push('declareShake','keepShakeSecret');
     else if(projected.pendingDecision?.type==='bombDecision')projected.legalActions.push('declareBomb','declineBomb');
-    else if(state.turn===viewerId&&!state.pendingTurn&&!state.pendingDecision){
+    else if(!state.winner&&state.turn===viewerId&&!state.pendingTurn&&!state.pendingDecision){
       if(state[viewerSide].hand.length)projected.legalActions.push('attemptPlayCard');
       if(state[viewerSide].bombFreeTurns>0)projected.legalActions.push('useBombBlank');
     }
@@ -260,8 +260,26 @@
   function validateActor(state,action){
     if(Object.prototype.hasOwnProperty.call(action,'actor'))throw new Error('Use neutral actorId, not actor.');
     const side=legacySideForPlayerId(action.actorId);
+    if(state.winner)throw new Error('The hand is already complete.');
     if(state.turn!==action.actorId)throw new Error(`It is not ${action.actorId}'s turn.`);
     return side;
+  }
+
+  function resolveOpeningState(currentState){
+    let state=initializeShakeEligibility(currentState);
+    if(state.openingResolved)return {state,events:[]};
+    state.openingResolved=true;
+    const candidates=[
+      {actorId:PLAYER_A,side:'human',months:fourMonths(state.human.hand)},
+      {actorId:PLAYER_B,side:'ai',months:fourMonths(state.ai.hand)}
+    ];
+    const winner=candidates.find(candidate=>candidate.months.length);
+    if(!winner){ state.openingOutcome=null; return {state,events:[]}; }
+    const month=winner.months[0],points=10;
+    state.winner=winner.actorId;
+    state.specialWinner=winner.actorId;
+    state.openingOutcome={type:'chongtong',actorId:winner.actorId,month,points};
+    return {state,events:[{type:'chongtongDeclared',audience:'public',actorId:winner.actorId,month,points}]};
   }
 
   function selectTarget(matchIds,targetId){
@@ -657,7 +675,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   });
 
   globalThis.GoStopEngine=api;
