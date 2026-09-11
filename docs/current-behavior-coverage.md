@@ -92,3 +92,9 @@ Validation tests cover actor/turn, card ownership, target legality, player-priva
 The extracted action boundary now accepts only neutral `actorId` values (`playerA` or `playerB`); events and private decisions use the same IDs. Solo adapts its local human to `playerA` and AI to `playerB`, while the authoritative player keys and `state.turn` remain legacy-shaped behind that compatibility boundary.
 
 Serializable `state.pendingTurn` phases make target choice, deck draw, ordered played/drawn resolution, and completion explicit. Tests round-trip both awaiting-target and awaiting-draw states through JSON, verify the preserved legal continuation, exercise a complete `playerB` turn, reject legacy and wrong-player actors, and verify neutral actor IDs on all normal-turn events.
+
+## Migration Step 5C classification coverage
+
+The pure `classifyTurnOutcome` API now distinguishes Bomb eligibility, pending floor-target decisions, normal unmatched/single/chosen captures, Jjok, Ppeok/Ssa-da, Ttadak, Self-Ppeok, other floor-stack interactions, completion, and conservative legacy-special fallback. The browser no longer maintains its own normal-versus-special predicate or same-month special test; it routes using the engine result while retaining every special mutation in `app.js`.
+
+Fixtures cover both neutral actors, JSON round-trip stability, neutral-only classifier output, and parity between a classified Ppeok/Ssa-da candidate and the existing legacy resolver's resulting stack. Sweep is documented as post-resolution because its applicability depends on the floor after capture mutation.

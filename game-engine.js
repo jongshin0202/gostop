@@ -216,6 +216,59 @@
     return targetId;
   }
 
+  function classifyTurnOutcome(currentState,{actorId,cardId}={}){
+    const state=deserializeGameState(currentState);
+    const side=validateActor(state,{actorId});
+    const pending=state.pendingTurn;
+    if(!pending){
+      const card=state[side].hand.find(item=>item.id===cardId);
+      if(!card)throw new Error('A pending turn or owned cardId is required for classification.');
+      const sameMonth=state[side].hand.filter(item=>item.month===card.month);
+      const floorMatches=matchingCards(state.floor,card);
+      const bombEligible=sameMonth.length===3&&state[side].hiddenTripleMonths.includes(card.month)&&floorMatches.length===1&&!state.floorStacks[card.month];
+      return classification(bombEligible?'bombEligible':'playReady',actorId,{playedCardId:card.id,drawnCardId:null,targetIds:floorMatches.map(item=>item.id),requiresDecision:false});
+    }
+    if(pending.actorId!==actorId)throw new Error('No normal turn is in progress for the actor.');
+    const base={
+      playedCardId:pending.played.card.id,
+      drawnCardId:pending.drawn?.card.id||null,
+      targetIds:[],requiresDecision:false
+    };
+    if(pending.drawn&&pending.drawn.card.month===pending.played.card.month&&!state.floorStacks[pending.played.card.month]){
+      const sameMonthKinds=['jjokCandidate','ppeokSsaDaCandidate','ttadakCandidate'];
+      const kind=sameMonthKinds[pending.played.matchIds.length]||'legacySpecial';
+      return classification(kind,actorId,{...base,targetIds:[...pending.played.matchIds]});
+    }
+    if(pending.phase==='awaitingFloorTarget'){
+      const source=pending.played.targetId? 'drawn':'played';
+      const entry=source==='played'?pending.played:pending.drawn;
+      return classification('floorTargetDecision',actorId,{...base,source,targetIds:[...entry.matchIds],requiresDecision:true});
+    }
+    if(pending.phase==='awaitingDraw')return classification('awaitingDraw',actorId,base);
+    if(pending.phase==='awaitingTurnCompletion')return classification('awaitingTurnCompletion',actorId,base);
+    if(pending.phase!=='awaitingNormalResolution')return classification('legacySpecial',actorId,base);
+
+    const played=pending.played,drawn=pending.drawn;
+    const stack=state.floorStacks[played.card.month]||(drawn&&state.floorStacks[drawn.card.month]);
+    if(stack){
+      const entry=state.floorStacks[played.card.month]?played:drawn;
+      const selfPpeok=stack.source==='ppeok'&&stack.owner===side;
+      return classification(selfPpeok?'selfPpeokCandidate':'floorStackInteraction',actorId,{...base,targetIds:[...entry.matchIds],stackMonth:stack.month});
+    }
+    const entries=[played,drawn].filter(Boolean);
+    if(entries.some(entry=>entry.matchIds.length>2))return classification('legacySpecial',actorId,{...base,targetIds:entries.flatMap(entry=>entry.matchIds)});
+    const cardOutcomes=entries.map(entry=>({
+      source:entry===played?'played':'drawn',cardId:entry.card.id,
+      kind:entry.matchIds.length===0?'unmatchedLanding':entry.matchIds.length===1?'singleMatchCapture':'chosenMatchCapture',
+      targetId:entry.targetId
+    }));
+    return classification('normal',actorId,{...base,targetIds:entries.flatMap(entry=>entry.matchIds),cardOutcomes,sweep:'postResolution'});
+  }
+
+  function classification(kind,actorId,details){
+    return {kind,actorId,...details};
+  }
+
   function applyNormalTurnAction(currentState,action){
     const state=deserializeGameState(currentState);
     const side=validateActor(state,action);
@@ -324,7 +377,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,applyNormalTurnAction
+    serializeGameState,deserializeGameState,applyNormalTurnAction,classifyTurnOutcome
   });
 
   globalThis.GoStopEngine=api;

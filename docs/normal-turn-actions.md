@@ -31,6 +31,8 @@ A player-private target decision includes its neutral addressee, card ID, source
 
 The existing human/AI controllers still select cards and targets and preserve Shake/Bomb prompts and AI pacing. For eligible normal turns, they submit the play, draw, target, resolution, and completion actions to the engine. The browser uses returned `cardLanded` and `cardsCaptured` events to remove staged cards or run the existing capture-slide animation.
 
+`classifyTurnOutcome(state, { actorId, cardId? })` now owns the deterministic normal-versus-special routing decision. Before play, it can identify `bombEligible`; during a pending turn it returns `awaitingDraw`, `floorTargetDecision`, `normal`, `jjokCandidate`, `ppeokSsaDaCandidate`, `ttadakCandidate`, `selfPpeokCandidate`, `floorStackInteraction`, `awaitingTurnCompletion`, or the conservative `legacySpecial` fallback. Normal results include per-card `unmatchedLanding`, `singleMatchCapture`, or `chosenMatchCapture` details. All results are JSON-safe and use neutral actor IDs.
+
 The established browser animation order remains hand slap, deck lift/flip/slap, played-card resolution, drawn-card resolution, Sweep check, then `concludeTurn`. Durations, sleeps, hit-sound call sites, rendering, and Go/Stop flow are unchanged.
 
 ## Special-rule fallback retained in app.js
@@ -51,5 +53,6 @@ Bomb blank/deck-only turns also remain on the legacy path in this step.
 
 - The temporary `pendingTurn` is authoritative and serializable while a normal action sequence is active, but exact restoration into an already-partially-played browser animation remains a later controller/event-replay concern.
 - The reducer records unmatched landing slots at play/draw time so a capture resolved earlier in the same turn cannot move a later unmatched card into a newly opened hole. This preserves the existing in-flight reservation behavior.
-- The controller still detects whether the turn qualifies for the normal path. The engine independently rejects special resolution, but a future step should make action legality and special phases entirely authority-owned.
+- The engine now determines normal-versus-special routing, but mutations for classified special outcomes remain deliberately delegated to the legacy controller.
+- Sweep remains a post-resolution condition because it depends on whether capture mutation actually empties the floor; normal classification marks it `postResolution` rather than predicting it prematurely.
 - Player storage and `state.turn` still use legacy `human`/`ai` compatibility values because wholesale player-schema migration is outside Step 5B; public actions, events, decisions, and pending progress do not expose those identities.

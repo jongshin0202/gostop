@@ -235,6 +235,10 @@ test('a Bomb blank turn is consumed without going below zero',()=>{
 
 test('Ppeok/Ssa-da forms a three-card stack and increments the actor count',async()=>{
   const target=card('m4-1'),played=card('m4-2'),draw=card('m4-3');
+  let classified=stateWith({floor:[target],deck:[draw],human:api.makePlayer({hand:[played]})});
+  classified=extractedEngine.applyNormalTurnAction(classified,{type:'playCard',actorId:'playerA',cardId:played.id}).state;
+  classified=extractedEngine.applyNormalTurnAction(classified,{type:'drawNextCard',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.classifyTurnOutcome(classified,{actorId:'playerA'}).kind,'ppeokSsaDaCandidate');
   const state=useState(stateWith({floor:[target]})); api.initFloorSlots(state);
   await api.resolveCombinedTurn('human',{card:played,target,matchCount:1},{card:draw,target:played,matchCount:2});
   assert.equal(state.human.ppeoks,1);
@@ -630,4 +634,93 @@ test('normal-turn phases enforce ordered resolution and completion',()=>{
   state=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'}).state;
   assert.equal(state.pendingTurn.phase,'awaitingTurnCompletion');
   assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}),/not awaiting a deck draw/);
+});
+
+function classifyPlayedAndDrawn(initial,actorId,cardId,targetId=null){
+  let state=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId,cardId,targetId}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId}).state;
+  return {state,outcome:extractedEngine.classifyTurnOutcome(state,{actorId})};
+}
+
+test('classifier distinguishes unmatched and ordinary capture normal outcomes',()=>{
+  let result=classifyPlayedAndDrawn(stateWith({
+    deck:[card('m3-1')],floor:[card('m1-1')],human:api.makePlayer({hand:[card('m2-1')]})
+  }),'playerA','m2-1');
+  assert.equal(result.outcome.kind,'normal');
+  assert.deepEqual(result.outcome.cardOutcomes.map(item=>item.kind),['unmatchedLanding','unmatchedLanding']);
+
+  result=classifyPlayedAndDrawn(stateWith({
+    deck:[card('m3-2')],floor:cards('m2-2','m3-1'),human:api.makePlayer({hand:[card('m2-1')]})
+  }),'playerA','m2-1');
+  assert.equal(result.outcome.kind,'normal');
+  assert.deepEqual(result.outcome.cardOutcomes.map(item=>item.kind),['singleMatchCapture','singleMatchCapture']);
+});
+
+test('classifier exposes two legal floor targets as a neutral private decision',()=>{
+  const initial=stateWith({floor:cards('m2-2','m2-3'),human:api.makePlayer({hand:[card('m2-1')]})});
+  const state=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m2-1'}).state;
+  const outcome=extractedEngine.classifyTurnOutcome(state,{actorId:'playerA'});
+  assert.equal(outcome.kind,'floorTargetDecision');
+  assert.equal(outcome.requiresDecision,true);
+  assert.deepEqual(outcome.targetIds,['m2-2','m2-3']);
+  assert.equal(outcome.actorId,'playerA');
+});
+
+test('classifier distinguishes Jjok, Ppeok/Ssa-da, and Ttadak candidates',()=>{
+  const cases=[
+    {kind:'jjokCandidate',floor:[card('m8-1')],played:'m5-1',drawn:'m5-2'},
+    {kind:'ppeokSsaDaCandidate',floor:[card('m4-1')],played:'m4-2',drawn:'m4-3'},
+    {kind:'ttadakCandidate',floor:cards('m3-1','m3-2'),played:'m3-3',drawn:'m3-4',target:'m3-1'}
+  ];
+  for(const fixture of cases){
+    const result=classifyPlayedAndDrawn(stateWith({
+      deck:[card(fixture.drawn)],floor:fixture.floor,human:api.makePlayer({hand:[card(fixture.played)]})
+    }),'playerA',fixture.played,fixture.target||null);
+    assert.equal(result.outcome.kind,fixture.kind);
+  }
+});
+
+test('classifier distinguishes self-Ppeok and other floor-stack interactions',()=>{
+  for(const [owner,kind] of [['human','selfPpeokCandidate'],['ai','floorStackInteraction']]){
+    const stack=cards('m2-1','m2-2','m2-3');
+    const result=classifyPlayedAndDrawn(stateWith({
+      deck:[card('m8-1')],floor:stack,human:api.makePlayer({hand:[card('m2-4')]}),
+      floorStacks:{2:{month:2,cardIds:stack.map(item=>item.id),source:'ppeok',owner}}
+    }),'playerA','m2-4','m2-3');
+    assert.equal(result.outcome.kind,kind);
+    assert.equal(result.outcome.stackMonth,2);
+  }
+});
+
+test('classifier identifies Bomb eligibility without mutating the hand',()=>{
+  const hand=cards('m6-1','m6-2','m6-3');
+  const state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand,hiddenTripleMonths:[6]})});
+  const before=JSON.stringify(state);
+  const outcome=extractedEngine.classifyTurnOutcome(state,{actorId:'playerA',cardId:'m6-1'});
+  assert.equal(outcome.kind,'bombEligible');
+  assert.equal(outcome.actorId,'playerA');
+  assert.equal(JSON.stringify(state),before);
+});
+
+test('classification survives JSON round-trip and contains only neutral identities',()=>{
+  const pending=classifyPlayedAndDrawn(stateWith({
+    deck:[card('m5-2')],floor:[card('m8-1')],human:api.makePlayer({hand:[card('m5-1')]})
+  }),'playerA','m5-1').state;
+  const before=extractedEngine.classifyTurnOutcome(pending,{actorId:'playerA'});
+  const restored=extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(extractedEngine.serializeGameState(pending))));
+  const after=extractedEngine.classifyTurnOutcome(restored,{actorId:'playerA'});
+  assert.deepEqual(after,before);
+  assert.equal(after.kind,'jjokCandidate');
+  assert.equal(JSON.stringify(after).includes('human'),false);
+  assert.equal(JSON.stringify(after).includes('ai'),false);
+});
+
+test('playerA and playerB receive equivalent neutral classifications',()=>{
+  const playerA=classifyPlayedAndDrawn(stateWith({
+    deck:[card('m3-1')],floor:[card('m1-1')],human:api.makePlayer({hand:[card('m2-1')]})
+  }),'playerA','m2-1').outcome;
+  const playerB=classifyPlayedAndDrawn(stateWith({
+    turn:'ai',deck:[card('m3-1')],floor:[card('m1-1')],ai:api.makePlayer({hand:[card('m2-1')]})
+  }),'playerB','m2-1').outcome;
+  assert.deepEqual({...playerA,actorId:'neutral'},{...playerB,actorId:'neutral'});
 });

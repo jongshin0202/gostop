@@ -11,7 +11,7 @@
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
     hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,
-    applyNormalTurnAction
+    applyNormalTurnAction,classifyTurnOutcome
   }=engine;
   const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
@@ -90,6 +90,9 @@
     return result;
   }
   function normalAction(side,action){ return {...action,actorId:playerIdForLegacySide(side)}; }
+  function classifyNormalTurn(side,details={}){
+    return classifyTurnOutcome(state,{actorId:playerIdForLegacySide(side),...details});
+  }
 
 
   function freshState(nagariCarryPower=0) {
@@ -536,8 +539,6 @@
     const card=state.human.hand.find(c=>c.id===cardId); if(!card)return;
     presentation.locked=true; presentation.hintCardId=null;
 
-    const sameMonth=state.human.hand.filter(c=>c.month===card.month);
-    const floorSame=state.floor.filter(c=>c.month===card.month);
     if(canDeclareShake(state.human,card.month)){
       const shake=await chooseShake(card.month);
       if(shake){
@@ -546,7 +547,7 @@
         monthListDelete(state.human,'hiddenTripleMonths',card.month);
         render();
         await sleep(180);
-      }else if(floorSame.length===1 && !floorStackForMonth(card.month)){
+      }else if(classifyNormalTurn('human',{cardId:card.id}).kind==='bombEligible'){
         const useBomb=await chooseBomb(card.month);
         if(useBomb){
           presentation.pendingHumanCardId=null;
@@ -613,7 +614,6 @@
       // The computer also decides whether to Shake only when it is about to use
       // one of the three matching-month cards, never at the opening deal.
       if(monthListHas(state.ai,'hiddenTripleMonths',card.month)){
-        const sameMonth=state.ai.hand.filter(c=>c.month===card.month);
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
         if(canDeclareShake(state.ai,card.month) && !fourthOnFloor && Math.random()<.72){
           state.ai.shakes++;
@@ -641,15 +641,6 @@
     } finally {
       presentation.aiTurnInProgress=false;
     }
-  }
-
-  function canResolveAsNormalEngineTurn(play,draw){
-    if(draw&&draw.card.month===play.card.month)return false;
-    return [play,draw].filter(Boolean).every(action=>
-      action.matchCount<=2&&
-      (action.matchCount===0||!!action.target)&&
-      !floorStackForMonth(action.card.month)
-    );
   }
 
   async function presentNormalResolution(side,result){
@@ -686,7 +677,7 @@
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
       if(engineTurn)applyNormalAction(normalAction(side,{type:'drawNextCard'}));
-      if(engineTurn&&canResolveAsNormalEngineTurn(play,null))await resolveNormalEngineTurn(side,play,null);
+      if(engineTurn&&classifyNormalTurn(side).kind==='normal')await resolveNormalEngineTurn(side,play,null);
       else{
         if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
         await resolveCombinedTurn(side,play,null);
@@ -697,6 +688,7 @@
 
     const drawResult=engineTurn?applyNormalAction(normalAction(side,{type:'drawNextCard'})):null;
     const draw=engineTurn?drawResult.events.find(event=>event.type==='deckCardRevealed').card:state.deck.shift();
+    let turnClassification=engineTurn?classifyNormalTurn(side):null;
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
 
@@ -704,7 +696,7 @@
     let drawMatches=matchesFor(draw);
     let drawMatchCount=drawMatches.length;
 
-    const sameMonthSpecial=draw.month===playedCard.month && !floorStackForMonth(playedCard.month);
+    const sameMonthSpecial=turnClassification&&['jjokCandidate','ppeokSsaDaCandidate','ttadakCandidate'].includes(turnClassification.kind);
     if(sameMonthSpecial && playMatchCount<=2){
       drawTarget=playedCard;
     }else if(drawMatches.length===1){
@@ -719,12 +711,13 @@
 
     if(engineTurn&&drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
       applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:drawTarget.id}));
+      turnClassification=classifyNormalTurn(side);
     }
 
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
     const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
     const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
-    if(engineTurn&&canResolveAsNormalEngineTurn(play,drawn))await resolveNormalEngineTurn(side,play,drawn);
+    if(engineTurn&&turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
     else{
       if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
       await resolveCombinedTurn(side,play,drawn);
@@ -964,7 +957,7 @@
 
   function bestAiBombMonth(){
     const counts=countsByMonth(state.ai.hand);
-    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && monthListHas(state.ai,'hiddenTripleMonths',m) && state.floor.filter(c=>c.month===m).length===1 && !floorStackForMonth(m));
+    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && classifyNormalTurn('ai',{cardId:state.ai.hand.find(card=>card.month===m).id}).kind==='bombEligible');
     if(!months.length)return null;
     return months.sort((a,b)=>{
       const av=state.floor.filter(c=>c.month===a).reduce((x,c)=>x+captureValue(c),0);
