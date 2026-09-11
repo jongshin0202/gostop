@@ -1,10 +1,17 @@
 (() => {
   'use strict';
 
+  // Characterization tests opt in before this script loads. Production never
+  // sets this flag, so the browser startup and gameplay path remain unchanged.
+  const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
+
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monthShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const finishThreshold = 7;
+  const PLAYER_A = 'playerA';
+  const PLAYER_B = 'playerB';
+  const SOLO_VIEWER_ID = PLAYER_A;
 
   const defs = [
     [1,'Hikari','bright',null,''], [1,'Tanzaku','ribbon','red',''], [1,'Kasu 1','pi',null,''], [1,'Kasu 2','pi',null,''],
@@ -59,10 +66,40 @@
   let aiTurnInProgress = false;
   const stagedCards = new Map();
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
+
+  function otherPlayerId(playerId){
+    if(playerId===PLAYER_A)return PLAYER_B;
+    if(playerId===PLAYER_B)return PLAYER_A;
+    throw new Error(`Unknown player ID: ${playerId}`);
+  }
+  function legacySideForPlayerId(playerId){
+    if(playerId===PLAYER_A)return 'human';
+    if(playerId===PLAYER_B)return 'ai';
+    throw new Error(`Unknown player ID: ${playerId}`);
+  }
+  function playerIdForLegacySide(side){
+    if(side==='human')return PLAYER_A;
+    if(side==='ai')return PLAYER_B;
+    throw new Error(`Unknown legacy side: ${side}`);
+  }
+  function viewerSeatMap(viewerId){
+    return {bottom:viewerId,top:otherPlayerId(viewerId),me:viewerId,opponent:otherPlayerId(viewerId)};
+  }
+  function playerStateById(gameState,playerId){ return gameState[legacySideForPlayerId(playerId)]; }
+  function viewerRelativePlayers(gameState,viewerId){
+    const seats=viewerSeatMap(viewerId);
+    return {
+      bottom:{id:seats.bottom,player:playerStateById(gameState,seats.bottom)},
+      top:{id:seats.top,player:playerStateById(gameState,seats.top)}
+    };
+  }
+  function seatForLegacySide(side,viewerId=SOLO_VIEWER_ID){
+    return playerIdForLegacySide(side)===viewerId?'bottom':'top';
+  }
 
 
   function freshState() {
@@ -340,9 +377,12 @@
   }
 
   function render() {
-    const hScore=score(state.human.captured), aScore=score(state.ai.captured);
-    els.playerScore.textContent=hScore.total; els.aiScore.textContent=aScore.total;
-    if(els.goCount) els.goCount.textContent=state.human.go;
+    if(TEST_MODE)return;
+    const view=viewerRelativePlayers(state,SOLO_VIEWER_ID);
+    const bottomPlayer=view.bottom.player,topPlayer=view.top.player;
+    const bottomScore=score(bottomPlayer.captured),topScore=score(topPlayer.captured);
+    els.playerScore.textContent=bottomScore.total; els.aiScore.textContent=topScore.total;
+    if(els.goCount) els.goCount.textContent=bottomPlayer.go;
     [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=state.deck.length);
     if(els.roundCorner) els.roundCorner.textContent=roundNo;
     // Keep the table visually clean: animation itself communicates whose turn it is.
@@ -351,14 +391,14 @@
     if(els.promptText) els.promptText.textContent='';
 
     els.playerHand.innerHTML='';
-    state.human.hand.sort(sortCards).forEach(card=>{
+    bottomPlayer.hand.sort(sortCards).forEach(card=>{
       const el=createCardEl(card,'card hand-card');
       el.disabled = locked || state.turn!=='human';
       if(card.id===hintCardId) el.classList.add('matchable');
       el.addEventListener('click',()=>humanPlay(card.id, el));
       els.playerHand.appendChild(el);
     });
-    for(let i=0;i<state.human.bombFreeTurns;i++){
+    for(let i=0;i<bottomPlayer.bombFreeTurns;i++){
       const blank=document.createElement('button');
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
@@ -370,15 +410,15 @@
     }
 
     els.aiHand.innerHTML='';
-    state.ai.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
+    topPlayer.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
 
     renderFloor();
 
-    if(els.playerMultiplier) els.playerMultiplier.textContent=playerDoubleLabel(state.human);
-    if(els.aiMultiplier) els.aiMultiplier.textContent=playerDoubleLabel(state.ai);
+    if(els.playerMultiplier) els.playerMultiplier.textContent=playerDoubleLabel(bottomPlayer);
+    if(els.aiMultiplier) els.aiMultiplier.textContent=playerDoubleLabel(topPlayer);
 
-    renderCaptured(els.playerCaptured,state.human.captured,'human');
-    renderCaptured(els.aiCaptured,state.ai.captured,'ai');
+    renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
+    renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
   }
 
 
@@ -438,12 +478,13 @@
     {type:'pi',en:'Singles'}
   ];
 
-  function renderCaptured(root,cards,owner){
-    root.innerHTML=''; root.dataset.owner=owner;
+  function renderCaptured(root,cards,ownerId){
+    root.innerHTML=''; root.dataset.owner=ownerId;
+    const isViewer=ownerId===SOLO_VIEWER_ID;
     captureGroups.forEach(group=>{
       const groupCards=cards.filter(c=>c.type===group.type).sort((a,b)=>a.month-b.month);
       const btn=document.createElement('button'); btn.type='button'; btn.className='capture-group'; btn.dataset.captureType=group.type;
-      btn.setAttribute('aria-label',`${owner==='human'?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
+      btn.setAttribute('aria-label',`${isViewer?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
       const head=document.createElement('span'); head.className='capture-group-head';
       head.innerHTML=`<b>${group.en}</b><em>${groupCards.length}</em>`;
       const stack=document.createElement('span'); stack.className='capture-stack';
@@ -452,16 +493,17 @@
         img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
-      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(owner,group,groupCards)); root.appendChild(btn);
+      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(ownerId,group,groupCards)); root.appendChild(btn);
     });
   }
 
-  function openCapturedGroup(owner,group,cards){
-    els.captureOwner.textContent=owner==='human'?'YOUR CAPTURED CARDS':'COMPUTER CAPTURED CARDS';
+  function openCapturedGroup(ownerId,group,cards){
+    const isViewer=ownerId===SOLO_VIEWER_ID;
+    els.captureOwner.textContent=isViewer?'YOUR CAPTURED CARDS':'COMPUTER CAPTURED CARDS';
     els.captureTitle.textContent=group.en; els.captureMagnified.innerHTML='';
     cards.forEach(c=>els.captureMagnified.appendChild(createCardEl(c,'card magnified-card')));
     if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent='No cards captured in this group yet.'; els.captureMagnified.appendChild(empty); }
-    const s=score(owner==='human'?state.human.captured:state.ai.captured);
+    const s=score(playerStateById(state,ownerId).captured);
     const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} picture / animal cards${s.godori?' · Godori complete':''}`:group.type==='ribbon'?`${cards.length} stripe cards`:`${s.piCount} Singles value${s.piCount===1?'':'s'} (${cards.length} cards)`;
     els.captureSummary.textContent=detail; els.captureDialog.showModal();
   }
@@ -513,6 +555,11 @@
 
 
   function virtualHandCount(player){ return player.hand.length + player.bombFreeTurns; }
+  function consumeBombBlank(player){ player.bombFreeTurns=Math.max(0,player.bombFreeTurns-1); }
+  function canDeclareShake(player,month){
+    return player.hand.filter(c=>c.month===month).length===3 && player.hiddenTripleMonths.has(month);
+  }
+  function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
     if(locked || state.turn!=='human' || state.winner || state.human.bombFreeTurns<=0)return;
@@ -538,7 +585,7 @@
 
     const sameMonth=state.human.hand.filter(c=>c.month===card.month);
     const floorSame=state.floor.filter(c=>c.month===card.month);
-    if(sameMonth.length===3 && state.human.hiddenTripleMonths.has(card.month)){
+    if(canDeclareShake(state.human,card.month)){
       const shake=await chooseShake(card.month);
       if(shake){
         state.human.shakes++;
@@ -614,7 +661,7 @@
       if(state.ai.hiddenTripleMonths.has(card.month)){
         const sameMonth=state.ai.hand.filter(c=>c.month===card.month);
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
-        if(sameMonth.length===3 && !fourthOnFloor && Math.random()<.72){
+        if(canDeclareShake(state.ai,card.month) && !fourthOnFloor && Math.random()<.72){
           state.ai.shakes++;
           state.ai.shakenMonths.add(card.month);
           state.ai.hiddenTripleMonths.delete(card.month);
@@ -685,7 +732,7 @@
     if(state.winner)return;
     locked=true;
     const actor=state[side];
-    actor.bombFreeTurns=Math.max(0,actor.bombFreeTurns-1);
+    consumeBombBlank(actor);
     if(!state.deck.length){ await finishNagari(); return; }
     const draw=state.deck.shift();
     render();
@@ -710,11 +757,11 @@
     if(bombCards.length!==3 || !floorTarget){ locked=false; render(); return; }
 
     const bombSourceRects=bombCards.map((c,i)=>{
-      if(side==='human'){
+      if(seatForLegacySide(side)==='bottom'){
         const el=els.playerHand.querySelector(`[data-card-id="${c.id}"]`);
         if(el) return el.getBoundingClientRect();
       }
-      return side==='human'?approximateHumanSource(i,bombCards.length):approximateAiSource();
+      return seatForLegacySide(side)==='bottom'?approximateHumanSource(i,bombCards.length):approximateAiSource();
     });
     actor.hand=actor.hand.filter(c=>!bombCards.some(b=>b.id===c.id));
     actor.hiddenTripleMonths.delete(month);
@@ -848,6 +895,7 @@
   }
 
   async function animatePiTransfer(card,fromSide,toSide){
+    if(TEST_MODE)return;
     const fromRect=captureTargetRect(fromSide,'pi');
     const toRect=captureTargetRect(toSide,'pi');
     if(!fromRect.width||!toRect.width||prefersReducedMotion())return;
@@ -871,7 +919,7 @@
     const previous=side==='human'?lastHumanScore:lastAiScore;
     if(side==='human')lastHumanScore=sc.total;else lastAiScore=sc.total;
 
-    if(sc.total>=finishThreshold && sc.total>previous){
+    if(reachedNewFinishScore(sc.total,previous)){
       if(side==='human'){ locked=true; await humanGoStop(sc); return; }
       if(aiShouldGo(sc)){
         actor.go++; actor.lastGoScore=sc.total; showGoCallout('ai'); await sleep(980);
@@ -892,6 +940,7 @@
   }
 
   function scheduleTurnStart(){
+    if(TEST_MODE)return;
     if(state.winner)return;
     const side=state.turn, actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
@@ -1040,7 +1089,7 @@
     if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; return el; }
 
     const dx=landing.left-sourceRect.left, dy=landing.top-sourceRect.top;
-    const sideBias=side==='human'?-1:1;
+    const sideBias=seatForLegacySide(side)==='bottom'?-1:1;
     const duration=650;
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
     const a=el.animate([
@@ -1055,13 +1104,14 @@
   }
 
   async function animateBombSlap(side,cards,target,sourceRects=[]){
+    if(TEST_MODE)return;
     const landingBase=overlapLanding(target);
     if(!landingBase)return;
     const {w,h}=cardSize();
     const targetEl=els.floor.querySelector(`[data-card-id="${target.id}"]`);
     const tr=targetEl?targetEl.getBoundingClientRect():landingBase;
     const starts=cards.map((card,i)=>{
-      const src=sourceRects[i] || (side==='human'?approximateHumanSource(i,cards.length):approximateAiSource());
+      const src=sourceRects[i] || (seatForLegacySide(side)==='bottom'?approximateHumanSource(i,cards.length):approximateAiSource());
       const full=fullSizeSourceRect(src);
       const el=makePhysicalFace(card,full,'physical-card moving-card bomb-moving-card');
       stagedCards.set(card.id,el);
@@ -1093,6 +1143,11 @@
   }
 
   async function animateDeckLiftFlip(side,card){
+    if(TEST_MODE){
+      const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
+      stagedCards.set(card.id,el);
+      return el;
+    }
     const deck=els.deckStack.getBoundingClientRect(); const {w,h}=cardSize();
     const start={left:deck.left+deck.width/2-w/2,top:deck.top+deck.height/2-h/2,width:w,height:h};
     const el=document.createElement('div'); el.className='physical-card deck-draw-card'; el.dataset.cardId=card.id;
@@ -1119,6 +1174,7 @@
   }
 
   async function animateStagedSlap(el,card,target,kind='flip'){
+    if(TEST_MODE)return;
     const start=el.getBoundingClientRect(); normalizeFixed(el,start);
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
@@ -1135,7 +1191,7 @@
   }
 
   function captureTargetRect(side,type){
-    const root=side==='human'?els.playerCaptured:els.aiCaptured;
+    const root=seatForLegacySide(side)==='bottom'?els.playerCaptured:els.aiCaptured;
     const group=root.querySelector(`[data-capture-type="${type}"] .capture-stack`) || root.querySelector(`[data-capture-type="${type}"]`) || root;
     return group.getBoundingClientRect();
   }
@@ -1148,6 +1204,7 @@
 
 
   async function animateCaptureBatch(cards,side){
+    if(TEST_MODE)return;
     const unique=[];
     const seen=new Set();
     cards.filter(Boolean).forEach(c=>{if(!seen.has(c.id)){seen.add(c.id);unique.push(c);}});
@@ -1171,7 +1228,7 @@
         const dest=captureTargetRect(side,entry.card.type); const dc=rectCenter(dest);
         const target={left:dc.x-start.width*.24,top:dc.y-start.height*.24,width:start.width,height:start.height};
         const dx=target.left-start.left,dy=target.top-start.top;
-        const curve=side==='human'?24:-24;
+        const curve=seatForLegacySide(side)==='bottom'?24:-24;
         const a=entry.el.animate([
           {transform:'translate(0,0) rotate(0deg) scale(1)',opacity:1,offset:0},
           {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg) scale(.84)`,opacity:1,offset:.48},
@@ -1275,12 +1332,13 @@
 
   function showGoCallout(side){
     if(!els.goCallout)return;
-    const anchor=side==='ai'?document.querySelector('.opponent-zone'):document.querySelector('.player-zone');
+    const seat=seatForLegacySide(side);
+    const anchor=seat==='top'?document.querySelector('.opponent-zone'):document.querySelector('.player-zone');
     const r=anchor?anchor.getBoundingClientRect():null;
-    els.goCallout.className=`go-callout ${side==='ai'?'go-callout-ai':'go-callout-human'}`;
+    els.goCallout.className=`go-callout ${seat==='top'?'go-callout-ai':'go-callout-human'}`;
     if(r){
       els.goCallout.style.left=`${r.left+r.width/2}px`;
-      els.goCallout.style.top=side==='ai'?`${r.bottom-20}px`:`${r.top+24}px`;
+      els.goCallout.style.top=seat==='top'?`${r.bottom-20}px`:`${r.top+24}px`;
     }
     els.goCallout.textContent='GO!';
     void els.goCallout.offsetWidth;
@@ -1449,5 +1507,46 @@
     if(bombResolver){e.preventDefault();const r=bombResolver;bombResolver=null;els.bombDialog.close();r(false);}
   });
 
-  startGame();
+  if(TEST_MODE){
+    const cloneCard=card=>({...card,flags:[...card.flags]});
+    const makeTestPlayer=(overrides={})=>({
+      hand:[],captured:[],go:0,shakes:0,bombs:0,bombFreeTurns:0,ppeoks:0,
+      hiddenTripleMonths:new Set(),shakenMonths:new Set(),lastGoScore:0,
+      ...overrides
+    });
+    const makeTestState=(overrides={})=>{
+      const next={
+        deck:[],floor:[],human:makeTestPlayer(),ai:makeTestPlayer(),
+        floorStacks:{},turn:'human',winner:null,specialWinner:null,
+        ...overrides
+      };
+      if(!next.floorSlotByCard)initFloorSlots(next);
+      return next;
+    };
+    globalThis.GOSTOP_TEST_API=Object.freeze({
+      playerIds:Object.freeze({playerA:PLAYER_A,playerB:PLAYER_B}),
+      soloViewerId:SOLO_VIEWER_ID,
+      otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
+      viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
+      masterDeck:()=>MASTER_DECK.map(cloneCard),
+      card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
+      makePlayer:makeTestPlayer,
+      makeState:makeTestState,
+      setState(next){state=next;},
+      getState(){return state;},
+      setNagariCarryPower(value){nagariCarryPower=value;},
+      getNagariCarryPower(){return nagariCarryPower;},
+      setPreviousScores(human,ai){lastHumanScore=human;lastAiScore=ai;},
+      assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
+      markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
+      addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,
+      calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
+      stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,
+      getLocked(){return locked;}
+    });
+  }else{
+    startGame();
+  }
 })();

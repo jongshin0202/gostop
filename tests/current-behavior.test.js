@@ -1,0 +1,299 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+function fakeElement(){
+  return {
+    textContent:'',innerHTML:'',className:'',style:{},dataset:{},open:false,
+    classList:{add(){},remove(){},contains(){return false;}},
+    addEventListener(){},removeEventListener(){},appendChild(){},append(){},remove(){},
+    setAttribute(){},removeAttribute(){},querySelector(){return null;},querySelectorAll(){return [];},
+    getBoundingClientRect(){return {left:0,top:0,right:500,bottom:300,width:100,height:100};},
+    show(){this.open=true;},showModal(){this.open=true;},close(){this.open=false;}
+  };
+}
+
+function loadCurrentGame(){
+  const elements = new Map();
+  const document = {
+    getElementById(id){
+      if(!elements.has(id))elements.set(id,fakeElement());
+      return elements.get(id);
+    },
+    addEventListener(){},querySelector(){return fakeElement();},createElement(){return fakeElement();},
+    body:fakeElement(),documentElement:fakeElement()
+  };
+  const context = {
+    GOSTOP_TEST_MODE:true,document,console:{info(){},error(){},warn(){}},
+    crypto:require('node:crypto').webcrypto,
+    matchMedia(){return {matches:true};},
+    requestAnimationFrame(fn){fn();},setTimeout(fn){fn();return 0;},clearTimeout(){},
+    getComputedStyle(){return {getPropertyValue(){return '';}};},
+    Audio:function(){return {preload:'',crossOrigin:'',cloneNode(){return this;},play(){return Promise.resolve();},pause(){}};},
+    GOSTOP_AUDIO_PPEOK:'',GOSTOP_AUDIO_SHAKE:'',GOSTOP_AUDIO_FANFARE:''
+  };
+  context.window=context;
+  context.globalThis=context;
+  vm.createContext(context);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  vm.runInContext(source,context,{filename:'app.js'});
+  return {api:context.GOSTOP_TEST_API,elements};
+}
+
+const {api,elements}=loadCurrentGame();
+const card=id=>api.card(id);
+const cards=(...ids)=>ids.map(card);
+
+function stateWith(overrides={}){
+  return api.makeState({
+    human:api.makePlayer(),
+    ai:api.makePlayer(),
+    ...overrides
+  });
+}
+
+function useState(state){api.setState(state);return state;}
+
+test('playerA viewer maps playerA to bottom and playerB to top',()=>{
+  const state=stateWith({
+    human:api.makePlayer({hand:[card('m1-1')]}),
+    ai:api.makePlayer({hand:[card('m2-1')]})
+  });
+  const view=api.viewerRelativePlayers(state,api.playerIds.playerA);
+  assert.equal(view.bottom.id,'playerA');
+  assert.equal(view.bottom.player,state.human);
+  assert.equal(view.top.id,'playerB');
+  assert.equal(view.top.player,state.ai);
+});
+
+test('playerB viewer maps playerB to bottom and playerA to top',()=>{
+  const state=stateWith({
+    human:api.makePlayer({hand:[card('m1-1')]}),
+    ai:api.makePlayer({hand:[card('m2-1')]})
+  });
+  const view=api.viewerRelativePlayers(state,api.playerIds.playerB);
+  assert.equal(view.bottom.id,'playerB');
+  assert.equal(view.bottom.player,state.ai);
+  assert.equal(view.top.id,'playerA');
+  assert.equal(view.top.player,state.human);
+});
+
+test('otherPlayerId returns the opposite stable neutral identity',()=>{
+  assert.equal(api.otherPlayerId(api.playerIds.playerA),api.playerIds.playerB);
+  assert.equal(api.otherPlayerId(api.playerIds.playerB),api.playerIds.playerA);
+  assert.throws(()=>api.otherPlayerId('human'),/Unknown player ID/);
+});
+
+test('Solo compatibility maps playerA to human and playerB to AI',()=>{
+  assert.equal(api.soloViewerId,api.playerIds.playerA);
+  assert.equal(api.legacySideForPlayerId(api.playerIds.playerA),'human');
+  assert.equal(api.legacySideForPlayerId(api.playerIds.playerB),'ai');
+  assert.equal(api.playerIdForLegacySide('human'),api.playerIds.playerA);
+  assert.equal(api.playerIdForLegacySide('ai'),api.playerIds.playerB);
+  assert.equal(api.seatForLegacySide('human'),'bottom');
+  assert.equal(api.seatForLegacySide('ai'),'top');
+});
+
+test('traditional deck has 48 unique cards and exactly four cards per month',()=>{
+  const deck=api.masterDeck();
+  assert.doesNotThrow(()=>api.assertDeckIntegrity(deck));
+  assert.equal(deck.length,48);
+  assert.equal(new Set(deck.map(c=>c.id)).size,48);
+  for(let month=1;month<=12;month++)assert.equal(deck.filter(c=>c.month===month).length,4);
+  const duplicate=deck.slice(); duplicate[47]={...duplicate[0]};
+  assert.throws(()=>api.assertDeckIntegrity(duplicate),/duplicate card IDs/);
+});
+
+test('matching is by month and a three-card floor stack exposes only its top card',()=>{
+  const floor=cards('m1-1','m1-2','m2-1');
+  const state=useState(stateWith({floor}));
+  assert.equal(api.effectiveFloorMatchCards(card('m1-3')).map(c=>c.id).join(','),'m1-1,m1-2');
+  api.makePpeokStack('human',floor.slice(0,2).concat(card('m1-3')));
+  assert.equal(api.effectiveFloorMatchCards(card('m1-4')).map(c=>c.id).join(','),'m1-3');
+  assert.equal(api.expandedTargetCards(card('m1-3')).map(c=>c.id).join(','),'m1-1,m1-2,m1-3');
+  assert.equal(state.floorStacks[1].source,'ppeok');
+});
+
+test('scoring covers Brights, Godori, ribbon sets, Singles, and Gukjin optimization',()=>{
+  assert.equal(api.score(cards('m1-1','m3-1','m8-1')).brightPts,3);
+  assert.equal(api.score(cards('m1-1','m3-1','m12-1')).brightPts,2);
+  assert.equal(api.score(cards('m2-1','m4-1','m8-2')).godori,true);
+  assert.equal(api.score(cards('m2-1','m4-1','m8-2')).animalPts,5);
+  assert.equal(api.score(cards('m1-2','m2-2','m3-2')).ribbonPts,3);
+  const tenPi=cards('m1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m4-3','m4-4','m5-3','m5-4');
+  assert.equal(api.score(tenPi).piPts,1);
+  const gukjinWithNinePi=[card('m9-1'),...tenPi.slice(0,9)];
+  const optimized=api.score(gukjinWithNinePi);
+  assert.equal(optimized.gukjinAsPi,true);
+  assert.equal(optimized.piCount,11);
+  assert.equal(optimized.piPts,2);
+});
+
+test('settlement applies Go bonuses and all current doubling multipliers',()=>{
+  const scoring=cards('m1-1','m3-1','m8-1','m2-1','m4-1','m5-1','m6-1','m7-1','m8-2','m9-1');
+  const loserPi=cards('m1-3','m2-3','m3-3','m4-3','m5-3','m6-3','m7-3');
+  const state=useState(stateWith({
+    human:api.makePlayer({captured:scoring,go:3,shakes:1,bombs:1}),
+    ai:api.makePlayer({captured:loserPi,go:1,lastGoScore:1})
+  }));
+  api.setNagariCarryPower(1);
+  const settled=api.calculateFinalScore('human');
+  assert.equal(settled.baseTotal,11);
+  assert.equal(settled.goBonus,2);
+  assert.equal(settled.total,1664);
+  assert.deepEqual([...settled.formulaSteps],[
+    'Base 11','Go bonus +2','3 Go ×2','Shake ×2','Bomb ×2',
+    'Meong-bak ×2','Gwang-bak ×2','Go-bak ×2','Nagari carry ×2'
+  ]);
+  api.setNagariCarryPower(0);
+  assert.equal(state.winner,null);
+});
+
+test('Shake eligibility is hidden-triple gated and each declaration doubles settlement',()=>{
+  api.setNagariCarryPower(0);
+  const player=api.makePlayer({hand:cards('m5-1','m5-2','m5-3'),hiddenTripleMonths:new Set([5])});
+  assert.equal(api.canDeclareShake(player,5),true);
+  player.hiddenTripleMonths.clear();
+  assert.equal(api.canDeclareShake(player,5),false);
+  const state=useState(stateWith({
+    human:api.makePlayer({captured:cards('m1-1','m3-1','m8-1'),shakes:2}),
+    ai:api.makePlayer({captured:[card('m12-1')]})
+  }));
+  assert.equal(api.calculateFinalScore('human').total,12);
+  assert.equal(state.human.shakes,2);
+});
+
+test('Bomb captures the four-card month, steals Pi, and grants two blank turns',async()=>{
+  const triple=cards('m6-1','m6-2','m6-3');
+  const floorCard=card('m6-4');
+  const state=useState(stateWith({
+    deck:[card('m7-3')],floor:[floorCard],
+    human:api.makePlayer({hand:[...triple,card('m8-3')],hiddenTripleMonths:new Set([6])}),
+    ai:api.makePlayer({hand:[card('m9-3')],captured:[card('m10-3')]})
+  }));
+  api.initFloorSlots(state);
+  await api.executeBombTurn('human',6);
+  assert.equal(state.human.bombs,1);
+  assert.equal(state.human.bombFreeTurns,2);
+  assert.equal(state.human.captured.filter(c=>c.month===6).length,4);
+  assert.ok(state.human.captured.some(c=>c.id==='m10-3'));
+  assert.equal(state.ai.captured.length,0);
+  assert.equal(state.floor.some(c=>c.id==='m7-3'),true);
+});
+
+test('a Bomb blank turn is consumed without going below zero',()=>{
+  const player=api.makePlayer({bombFreeTurns:2});
+  api.consumeBombBlank(player); api.consumeBombBlank(player); api.consumeBombBlank(player);
+  assert.equal(player.bombFreeTurns,0);
+});
+
+test('Ppeok/Ssa-da forms a three-card stack and increments the actor count',async()=>{
+  const target=card('m4-1'),played=card('m4-2'),draw=card('m4-3');
+  const state=useState(stateWith({floor:[target]})); api.initFloorSlots(state);
+  await api.resolveCombinedTurn('human',{card:played,target,matchCount:1},{card:draw,target:played,matchCount:2});
+  assert.equal(state.human.ppeoks,1);
+  assert.deepEqual([...state.floorStacks[4].cardIds],[target.id,played.id,draw.id]);
+  assert.equal(new Set(state.floorStacks[4].cardIds.map(id=>state.floorSlotByCard[id])).size,1);
+});
+
+test('Self-Ppeok capture takes the full stack and transfers two Pi',async()=>{
+  const stack=cards('m2-1','m2-2','m2-3');
+  const state=useState(stateWith({
+    floor:[...stack],
+    human:api.makePlayer(),
+    ai:api.makePlayer({captured:cards('m7-3','m8-3')})
+  }));
+  api.initFloorSlots(state); api.makePpeokStack('human',stack);
+  await api.resolveSingleCard('human',{card:card('m2-4'),target:stack[2],matchCount:1},false);
+  assert.equal(state.floor.length,0);
+  assert.equal(state.human.captured.filter(c=>c.month===2).length,4);
+  assert.equal(state.human.captured.filter(c=>c.type==='pi').length,4);
+  assert.equal(state.ai.captured.length,0);
+});
+
+test('Ttadak captures two floor cards plus the played and drawn cards and steals Pi',async()=>{
+  const floor=cards('m3-1','m3-2');
+  const state=useState(stateWith({floor,ai:api.makePlayer({captured:[card('m7-3')]})}));
+  api.initFloorSlots(state);
+  await api.resolveCombinedTurn('human',{card:card('m3-3'),target:floor[0],matchCount:2},{card:card('m3-4'),target:card('m3-3'),matchCount:3});
+  assert.equal(state.human.captured.filter(c=>c.month===3).length,4);
+  assert.ok(state.human.captured.some(c=>c.id==='m7-3'));
+  assert.equal(state.floor.length,0);
+});
+
+test('Jjok captures an otherwise unmatched played/drawn pair and steals Pi',async()=>{
+  const state=useState(stateWith({
+    floor:[card('m8-1')],
+    ai:api.makePlayer({captured:[card('m7-3')]})
+  })); api.initFloorSlots(state);
+  await api.resolveCombinedTurn('human',{card:card('m5-1'),target:null,matchCount:0},{card:card('m5-2'),target:card('m5-1'),matchCount:1});
+  assert.equal(state.human.captured.filter(c=>c.month===5).map(c=>c.id).join(','),'m5-1,m5-2');
+  assert.ok(state.human.captured.some(c=>c.id==='m7-3'));
+  assert.equal(state.floor.map(c=>c.id).join(','),'m8-1');
+});
+
+test('Sweep transfers one Pi when a capture empties a live floor',async()=>{
+  const target=card('m10-1');
+  const state=useState(stateWith({
+    deck:[card('m12-3')],floor:[target],
+    human:api.makePlayer({hand:[card('m1-3')]}),
+    ai:api.makePlayer({hand:[card('m2-3')],captured:[card('m7-3')]})
+  })); api.initFloorSlots(state);
+  await api.resolveSingleCard('human',{card:card('m10-2'),target,matchCount:1},false);
+  await api.applySweepIfNeeded('human');
+  assert.equal(state.floor.length,0);
+  assert.ok(state.human.captured.some(c=>c.id==='m7-3'));
+});
+
+test('Chongtong recognizes four of a month and awards the current opening win',async()=>{
+  const state=useState(stateWith({human:api.makePlayer({hand:cards('m11-1','m11-2','m11-3','m11-4')})}));
+  api.setNagariCarryPower(0);
+  assert.deepEqual([...api.fourMonths(state.human.hand)],[11]);
+  await api.processOpeningSpecials();
+  assert.equal(state.winner,'human');
+  assert.equal(elements.get('resultScore').textContent,'10 Points');
+});
+
+test('Go/Stop eligibility requires threshold and a strict score increase',()=>{
+  assert.equal(api.reachedNewFinishScore(6,0),false);
+  assert.equal(api.reachedNewFinishScore(7,7),false);
+  assert.equal(api.reachedNewFinishScore(8,7),true);
+});
+
+test('Pi transfer prefers ordinary Pi and falls back to double Pi',async()=>{
+  const state=useState(stateWith({
+    ai:api.makePlayer({captured:cards('m11-2','m4-3')})
+  }));
+  await api.stealPiAnimated('human',1);
+  assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3');
+  await api.stealPiAnimated('human',1);
+  assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3,m11-2');
+});
+
+test('Nagari increments and caps carry power at three',async()=>{
+  api.setNagariCarryPower(2);
+  let state=useState(stateWith());
+  await api.finishNagari();
+  assert.equal(state.winner,'nagari');
+  assert.equal(api.getNagariCarryPower(),3);
+  state=useState(stateWith());
+  await api.finishNagari();
+  assert.equal(api.getNagariCarryPower(),3);
+  api.setNagariCarryPower(0);
+});
+
+test('floor slots remain stable after captures and unmatched cards fill holes',()=>{
+  const floor=cards('m1-1','m2-1','m3-1','m4-1');
+  const state=useState(stateWith({floor})); api.initFloorSlots(state);
+  const original=Object.fromEntries(floor.map(c=>[c.id,state.floorSlotByCard[c.id]]));
+  api.removeFloorCards([floor[1]]);
+  assert.equal(state.floorSlotByCard[floor[0].id],original[floor[0].id]);
+  assert.equal(state.floorSlotByCard[floor[2].id],original[floor[2].id]);
+  assert.equal(state.floorSlotByCard[floor[3].id],original[floor[3].id]);
+  const landed=card('m5-1'); api.addFloorCard(landed);
+  assert.equal(state.floorSlotByCard[landed.id],original[floor[1].id]);
+});
