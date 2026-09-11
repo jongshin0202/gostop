@@ -56,9 +56,9 @@ The complete match now round-trips losslessly through JSON, including deck order
 
 The temporary `human`/`ai` player-storage keys remain a compatibility concern, but they are aliases for `playerA`/`playerB`, not authoritative identity values. New serialization strictly rejects legacy values in `turn`, stack `owner`, winner fields, and score-history identity keys rather than silently normalizing ambiguous snapshots.
 
-Persistence is exact at stable engine turn boundaries and at the Shake decision boundary. The current asynchronous controller still keeps animation continuations and unextracted dialog promises in local call-stack/presentation state, so snapshots in the middle of those browser-only flows cannot resume at the exact await point without later event replay support.
+Persistence is exact at stable engine turn boundaries and at Shake/Bomb decision boundaries. The current asynchronous controller still keeps animation continuations and unextracted dialog promises in local call-stack/presentation state, so snapshots in the middle of those browser-only flows cannot resume at the exact await point without later event replay support.
 
-Shake eligibility and its pending decision are authoritative and private. `pendingDecision` records only the neutral player, month, attempted card ID, and legal choices. `projectStateForViewer` exposes that record only to its player; the opponent receives neither the decision nor hidden month/card data, and receives only `handCount` and `deckCount` rather than opponent-hand or deck identities. `shakeDeclared` is public, while KEEP SECRET emits no public event and retains the hidden triple long enough for the existing Bomb decision. Bomb execution remains outside the engine.
+Shake and Bomb decisions are authoritative and player-private. `projectStateForViewer` exposes either record only to its player; the opponent receives neither the decision nor hidden month/card data, and receives only `handCount` and `deckCount` rather than opponent-hand or deck identities. `shakeDeclared` and `bombDeclared` are public only after acceptance. KEEP SECRET and Bomb decline emit nothing public. Bomb capture, multiplier count, Pi transfer, and its two optional blank opportunities are engine-owned; a blank creates an `awaitingDraw` turn without consuming a hand card.
 
 ## Remaining mixed boundaries and risks
 

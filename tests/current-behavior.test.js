@@ -218,13 +218,16 @@ test('Bomb captures the four-card month, steals Pi, and grants two blank turns',
     ai:api.makePlayer({hand:[card('m9-3')],captured:[card('m10-3')]})
   }));
   api.initFloorSlots(state);
+  const offered=extractedEngine.applyNormalTurnAction(state,{type:'requestBombDecision',actorId:'playerA',cardId:'m6-1'});
+  api.setState(offered.state);
   await api.executeBombTurn('human',6);
-  assert.equal(state.human.bombs,1);
-  assert.equal(state.human.bombFreeTurns,2);
-  assert.equal(state.human.captured.filter(c=>c.month===6).length,4);
-  assert.ok(state.human.captured.some(c=>c.id==='m10-3'));
-  assert.equal(state.ai.captured.length,0);
-  assert.equal(state.floor.some(c=>c.id==='m7-3'),true);
+  const resolved=api.getState();
+  assert.equal(resolved.human.bombs,1);
+  assert.equal(resolved.human.bombFreeTurns,2);
+  assert.equal(resolved.human.captured.filter(c=>c.month===6).length,4);
+  assert.ok(resolved.human.captured.some(c=>c.id==='m10-3'));
+  assert.equal(resolved.ai.captured.length,0);
+  assert.equal(resolved.floor.some(c=>c.id==='m7-3'),true);
 });
 
 test('a Bomb blank turn is consumed without going below zero',()=>{
@@ -1011,7 +1014,8 @@ test('KEEP SECRET is silent, resumes play, and preserves immediate Bomb eligibil
     JSON.stringify(extractedEngine.projectStateForViewer(state,'playerB'))
   );
   assert.equal(extractedEngine.classifyTurnOutcome(kept.state,{actorId:'playerA',cardId:triple[0].id}).kind,'bombEligible');
-  const played=extractedEngine.applyNormalTurnAction(kept.state,{type:'playCard',actorId:'playerA',cardId:kept.resumePlay.cardId,targetId:'m6-4'});
+  const declined=extractedEngine.applyNormalTurnAction(kept.state,{type:'declineBomb',actorId:'playerA'});
+  const played=extractedEngine.applyNormalTurnAction(declined.state,{type:'playCard',actorId:'playerA',cardId:declined.resumePlay.cardId,targetId:'m6-4'});
   assert.equal(played.events[0].type,'cardPlayed');
 });
 
@@ -1049,4 +1053,138 @@ test('Shake responses reject missing and duplicate decisions',()=>{
   const pending=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:triple[0].id}).state;
   const answered=extractedEngine.applyNormalTurnAction(pending,{type:'keepShakeSecret',actorId:'playerA'}).state;
   assert.throws(()=>extractedEngine.applyNormalTurnAction(answered,{type:'keepShakeSecret',actorId:'playerA'}),/No Shake decision/);
+});
+
+function pendingBomb(actorId='playerA',{captured=[],extraHand=[],deck=[]}={}){
+  const side=actorId==='playerA'?'human':'ai';
+  const other=side==='human'?'ai':'human';
+  const month=actorId==='playerA'?6:7;
+  const triple=cards(`m${month}-1`,`m${month}-2`,`m${month}-3`);
+  let state=stateWith({
+    turn:actorId,deck,floor:[card(`m${month}-4`)],
+    [side]:api.makePlayer({hand:[...triple,...extraHand]}),[other]:api.makePlayer({captured})
+  });
+  api.initFloorSlots(state);
+  state=extractedEngine.initializeShakeEligibility(state);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId,cardId:triple[0].id}).state;
+  const kept=extractedEngine.applyNormalTurnAction(state,{type:'keepShakeSecret',actorId});
+  return {state:kept.state,decision:kept.pendingDecision,side,other,month,triple};
+}
+
+function assertBombWireSafe(state){
+  const restored=extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(extractedEngine.serializeGameState(state))));
+  assert.equal(JSON.stringify(restored),JSON.stringify(state));
+  return restored;
+}
+
+test('KEEP SECRET creates a private Bomb decision for both neutral players',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const {state,decision,month,triple}=pendingBomb(actorId);
+    assert.deepEqual(decision,{
+      type:'bombDecision',audience:'player-private',playerId:actorId,month,
+      cardIds:triple.map(item=>item.id),floorCardId:`m${month}-4`,choices:['bomb','playNormally']
+    });
+    assertBombWireSafe(state);
+    const actorView=extractedEngine.projectStateForViewer(state,actorId);
+    const opponentView=extractedEngine.projectStateForViewer(state,actorId==='playerA'?'playerB':'playerA');
+    assert.equal(actorView.pendingDecision.type,'bombDecision');
+    assert.deepEqual(actorView.legalActions,['declareBomb','declineBomb']);
+    assert.equal(opponentView.pendingDecision,undefined);
+    for(const hidden of triple)assert.equal(JSON.stringify(opponentView).includes(hidden.id),false);
+  }
+});
+
+test('declared Bomb atomically captures four cards, frees its slot, and grants two blanks',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const {state,side,other,month,triple}=pendingBomb(actorId,{captured:[card('m10-3')],extraHand:[card('m9-3')]});
+    const floorId=`m${month}-4`,floorSlot=state.floorSlotByCard[floorId];
+    assert.equal(Number.isInteger(floorSlot),true);
+    const result=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId});
+    assert.equal(result.state[side].hand.length,1);
+    assert.deepEqual(result.state[side].captured.filter(item=>item.month===month).map(item=>item.id),[...triple.map(item=>item.id),floorId]);
+    assert.equal(result.state.floorSlotByCard[floorId],undefined);
+    assert.equal(result.state[side].bombs,1);
+    assert.equal(result.state[side].bombFreeTurns,2);
+    assert.equal(result.state[other].captured.length,0);
+    assert.deepEqual(result.events.map(event=>event.type),[
+      'bombDeclared','bombCardsPlayed','cardsCaptured','piTransferred','bombBlankTurnsGranted','specialResolved'
+    ]);
+    assert.equal(result.events.find(event=>event.type==='piTransferred').reason,'bomb');
+    assert.equal(result.events.every(event=>event.audience==='public'&&event.actorId===actorId),true);
+    assert.equal(result.state.pendingTurn.phase,'awaitingDraw');
+    assertBombWireSafe(result.state);
+  }
+});
+
+test('Bomb Pi transfer falls back to double Pi and never fabricates a transfer',()=>{
+  let bomb=pendingBomb('playerA',{captured:[card('m12-4')]}).state;
+  let result=extractedEngine.applyNormalTurnAction(bomb,{type:'declareBomb',actorId:'playerA'});
+  assert.equal(result.events.find(event=>event.type==='piTransferred').cardId,'m12-4');
+
+  bomb=pendingBomb('playerA',{captured:[]}).state;
+  result=extractedEngine.applyNormalTurnAction(bomb,{type:'declareBomb',actorId:'playerA'});
+  assert.equal(result.events.some(event=>event.type==='piTransferred'),false);
+});
+
+test('declining Bomb is opponent-invisible and resumes the intended real-card play',()=>{
+  const initial=pendingBomb('playerA',{extraHand:[card('m9-3')]}).state;
+  const baseline={...initial}; delete baseline.pendingDecision;
+  const declined=extractedEngine.applyNormalTurnAction(initial,{type:'declineBomb',actorId:'playerA'});
+  assert.deepEqual(declined.events,[]);
+  assert.equal(JSON.stringify(extractedEngine.projectStateForViewer(declined.state,'playerB')),JSON.stringify(extractedEngine.projectStateForViewer(baseline,'playerB')));
+  const played=extractedEngine.applyNormalTurnAction(declined.state,{type:'playCard',actorId:'playerA',cardId:declined.resumePlay.cardId,targetId:'m6-4'});
+  assert.equal(played.events[0].type,'cardPlayed');
+});
+
+test('Bomb decisions reject wrong, duplicate, missing, and stale responses',()=>{
+  const {state}=pendingBomb();
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerB'}),/not playerB's turn|another player/);
+  const declared=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerA'});
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(declared.state,{type:'declareBomb',actorId:'playerA'}),/No Bomb decision/);
+  const stale=JSON.parse(JSON.stringify(state)); stale.floor=[]; stale.floorSlotByCard={};
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(stale,{type:'declareBomb',actorId:'playerA'}),/stale/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(stateWith(),{type:'declineBomb',actorId:'playerA'}),/No Bomb decision/);
+});
+
+test('Shake declaration consumes Bomb eligibility',()=>{
+  const {state,triple}=shakeState('playerA',{floor:[card('m6-4')]});
+  const attempted=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:triple[0].id});
+  const declared=extractedEngine.applyNormalTurnAction(attempted.state,{type:'declareShake',actorId:'playerA'});
+  assert.equal(extractedEngine.classifyTurnOutcome(declared.state,{actorId:'playerA',cardId:triple[0].id}).kind,'playReady');
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(declared.state,{type:'requestBombDecision',actorId:'playerA',cardId:triple[0].id}),/not Bomb eligible/);
+});
+
+test('Bomb blanks are optional, consume exactly twice, keep the hand, and enter deck draw',()=>{
+  let state=stateWith({
+    deck:cards('m8-1','m9-1'),human:api.makePlayer({hand:[card('m10-1')],bombFreeTurns:2})
+  });
+  let view=extractedEngine.projectStateForViewer(state,'playerA');
+  assert.deepEqual(view.legalActions,['attemptPlayCard','useBombBlank']);
+  const realPlay=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m10-1'});
+  assert.equal(realPlay.state.human.bombFreeTurns,2);
+  const handBefore=state.human.hand.map(item=>item.id);
+  for(const remaining of [1,0]){
+    let used=extractedEngine.applyNormalTurnAction(state,{type:'useBombBlank',actorId:'playerA'});
+    assert.equal(used.state.human.bombFreeTurns,remaining);
+    assert.deepEqual(used.state.human.hand.map(item=>item.id),handBefore);
+    assert.equal(used.state.pendingTurn.phase,'awaitingDraw');
+    state=assertBombWireSafe(used.state);
+    let drawn=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'});
+    assert.equal(drawn.events[0].type,'deckCardRevealed');
+    assert.equal(drawn.state.pendingTurn.nextResolution,'drawn');
+    state=assertBombWireSafe(drawn.state);
+    let resolved=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'});
+    state=extractedEngine.applyNormalTurnAction(resolved.state,{type:'completeTurn',actorId:'playerA'}).state;
+  }
+  assert.equal(state.human.bombFreeTurns,0);
+  state=assertBombWireSafe(state);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'useBombBlank',actorId:'playerA'}),/No Bomb blank turns/);
+  assert.deepEqual(state.human.hand.map(item=>item.id),handBefore);
+});
+
+test('Bomb sound can run only after an accepted public bombDeclared event',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const wrapper=source.slice(source.indexOf('async function executeBombTurn'),source.indexOf('async function resolveCombinedTurn'));
+  assert.equal(wrapper.indexOf("type:'declareBomb'")<wrapper.indexOf('animateBombSlap'),true);
+  assert.equal(source.slice(source.indexOf('if(els.bombBtn)'),source.indexOf('if(els.playOneBtn)')).includes('playBombSound'),false);
 });

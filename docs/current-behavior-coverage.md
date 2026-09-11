@@ -119,4 +119,10 @@ Sweep is now detected and mutated after the engine completes the applicable capt
 
 The engine initializes hidden three-card-month eligibility without opening a prompt. `attemptPlayCard` creates a JSON-safe player-private Shake decision only when an eligible triple card is selected; `declareShake` mutates Shake count/month state and emits public `shakeDeclared`, while `keepShakeSecret` emits nothing and preserves immediate Bomb eligibility. Both responses return the attempted card ID so Solo continues the same play.
 
-Viewer-projection tests prove only the acting viewer receives the decision, while opponent hand identities, hidden months, triple card IDs, and deck order are absent. Tests also cover both neutral actors, unrelated cards, serialization, wrong/stale/duplicate responses, declaration-driven bell presentation, and continuation after either choice. Bomb execution remains deferred.
+Viewer-projection tests prove only the acting viewer receives the decision, while opponent hand identities, hidden months, triple card IDs, and deck order are absent. Tests also cover both neutral actors, unrelated cards, serialization, wrong/stale/duplicate responses, declaration-driven bell presentation, and continuation after either choice. Step 6D subsequently moved Bomb execution into the engine.
+
+## Migration Step 6D Bomb coverage
+
+KEEP SECRET now creates a private Bomb decision when the established three-in-hand/fourth-on-floor condition holds. `declareBomb` atomically removes and publicly reveals the three cards, captures the ordered four-card month, frees the floor slot, increments Bomb state, grants exactly two optional blanks, transfers ordinary Pi before double-Pi fallback, and enters `awaitingDraw`; decline is silent and resumes the selected card.
+
+Tests cover both neutral actors, decision and event privacy, stale/wrong/duplicate responses, exact event order, accepted-event-driven sound, no-Pi fallback, serialization at decision/mutation/blank boundaries, optional real-card play, two blank consumptions, third-use rejection, hand preservation, direct deck draw, and Shake preventing later Bomb eligibility.

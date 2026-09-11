@@ -514,6 +514,7 @@
 
 
   function virtualHandCount(player){ return player.hand.length + player.bombFreeTurns; }
+  // Characterization compatibility helper; production blank consumption is engine-owned.
   function consumeBombBlank(player){ player.bombFreeTurns=Math.max(0,player.bombFreeTurns-1); }
   function canDeclareShake(player,month){
     // Characterization compatibility helper; production eligibility is engine-owned.
@@ -552,8 +553,8 @@
         render();
         await sleep(180);
       }else{
-        applyNormalAction(normalAction('human',{type:'keepShakeSecret'}));
-        if(classifyNormalTurn('human',{cardId:card.id}).kind==='bombEligible'){
+        const kept=applyNormalAction(normalAction('human',{type:'keepShakeSecret'}));
+        if(kept.pendingDecision?.type==='bombDecision'){
           const useBomb=await chooseBomb(card.month);
           if(useBomb){
             presentation.pendingHumanCardId=null;
@@ -561,6 +562,7 @@
             await executeBombTurn('human',card.month);
             return;
           }
+          applyNormalAction(normalAction('human',{type:'declineBomb'}));
         }
       }
     }
@@ -608,6 +610,8 @@
 
       const bombMonth=bestAiBombMonth();
       if(bombMonth!=null){
+        const card=state.ai.hand.find(item=>item.month===bombMonth);
+        applyNormalAction(normalAction('ai',{type:'requestBombDecision',cardId:card.id}));
         await executeBombTurn('ai',bombMonth);
         return;
       }
@@ -770,10 +774,19 @@
   async function executeDeckOnlyTurn(side){
     if(state.winner)return;
     presentation.locked=true;
-    const actor=state[side];
-    consumeBombBlank(actor);
-    if(!state.deck.length){ await finishNagari(); return; }
-    const draw=state.deck.shift();
+    applyNormalAction(normalAction(side,{type:'useBombBlank'}));
+    await executePendingDrawTurn(side);
+  }
+
+  async function executePendingDrawTurn(side){
+    if(!state.deck.length){
+      applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+      const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
+      await presentPiTransferEvents(side,completed.events);
+      await finishNagari(); return;
+    }
+    const drawResult=applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+    const draw=drawResult.events.find(event=>event.type==='deckCardRevealed').card;
     render();
     const stage=await animateDeckLiftFlip(side,draw);
     const matches=matchesFor(draw);
@@ -783,16 +796,29 @@
       if(side==='human')target=await chooseFloorTarget(matches,'Choose which floor card to hit');
       else{target=chooseBestMatch(matches);await previewAiTarget(target);}
     }else if(matches.length>2)target=chooseBestMatch(matches);
+    if(target&&state.pendingTurn?.drawn?.matchIds.includes(target.id)&&state.pendingTurn.drawn.targetId!==target.id){
+      applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:target.id}));
+    }
     await animateStagedSlap(stage,draw,target,'flip');
-    await resolveSingleCard(side,{card:draw,stage,target,matchCount:matches.length},true);
-    await applySweepIfNeeded(side);
+    const classification=classifyNormalTurn(side);
+    if(classification.kind==='normal'){
+      const resolved=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
+      await presentNormalResolution(side,resolved);
+      const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
+      await presentPiTransferEvents(side,completed.events);
+    }else{
+      applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
+      await resolveSingleCard(side,{card:draw,stage,target,matchCount:matches.length},true);
+      await applySweepIfNeeded(side);
+    }
     await concludeTurn(side);
   }
 
   async function executeBombTurn(side,month){
-    const actor=state[side];
-    const bombCards=actor.hand.filter(c=>c.month===month).slice(0,3);
-    const floorTarget=state.floor.find(c=>c.month===month);
+    // Presentation wrapper: declareBomb performs every authoritative Bomb mutation.
+    const decision=state.pendingDecision;
+    const bombCards=decision?.cardIds.map(id=>state[side].hand.find(card=>card.id===id)).filter(Boolean)||[];
+    const floorTarget=state.floor.find(c=>c.id===decision?.floorCardId);
     if(bombCards.length!==3 || !floorTarget){ presentation.locked=false; render(); return; }
 
     const bombSourceRects=bombCards.map((c,i)=>{
@@ -802,38 +828,20 @@
       }
       return seatForLegacySide(side)==='bottom'?approximateHumanSource(i,bombCards.length):approximateAiSource();
     });
-    actor.hand=actor.hand.filter(c=>!bombCards.some(b=>b.id===c.id));
-    monthListDelete(actor,'hiddenTripleMonths',month);
-    actor.bombs++;
-    actor.bombFreeTurns+=2;
-    render();
+    if(seatForLegacySide(side)==='bottom'){
+      bombCards.forEach(card=>{const el=els.playerHand.querySelector(`[data-card-id="${card.id}"]`);if(el)el.style.visibility='hidden';});
+    }else [...els.aiHand.querySelectorAll('.mini-back')].slice(0,3).forEach(el=>el.style.visibility='hidden');
+    const result=applyNormalAction(normalAction(side,{type:'declareBomb'}));
+    if(!result.events.some(event=>event.type==='bombDeclared'))return;
 
     await animateBombSlap(side,bombCards,floorTarget,bombSourceRects);
     await sleep(180);
 
     await animateCaptureBatch([...bombCards,floorTarget],side);
-    removeFloorCards([floorTarget]);
-    actor.captured.push(...bombCards,floorTarget);
-    await stealPiAnimated(side,1);
+    await presentPiTransferEvents(side,result.events);
     render();
     await sleep(260);
-
-    if(state.deck.length){
-      const draw=state.deck.shift();
-      render();
-      const stage=await animateDeckLiftFlip(side,draw);
-      const matches=matchesFor(draw);
-      let target=null;
-      if(matches.length===1)target=matches[0];
-      else if(matches.length===2){
-        if(side==='human')target=await chooseFloorTarget(matches,'Deck card: choose which floor card to hit');
-        else{target=chooseBestMatch(matches);await previewAiTarget(target);}
-      }else if(matches.length>2)target=chooseBestMatch(matches);
-      await animateStagedSlap(stage,draw,target,'flip');
-      await resolveSingleCard(side,{card:draw,stage,target,matchCount:matches.length},true);
-    }
-    await applySweepIfNeeded(side);
-    await concludeTurn(side);
+    await executePendingDrawTurn(side);
   }
 
   async function resolveCombinedTurn(side,play,draw){

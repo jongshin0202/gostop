@@ -192,10 +192,13 @@
     }
     if(state.pendingDecision){
       const decision=state.pendingDecision;
-      if(decision.type!=='shakeDecision'||decision.audience!=='player-private')throw new Error('Unknown private pending decision.');
+      if(!['shakeDecision','bombDecision'].includes(decision.type)||decision.audience!=='player-private')throw new Error('Unknown private pending decision.');
       if(decision.playerId!=='playerA'&&decision.playerId!=='playerB')throw new Error('Shake decision must name a neutral player.');
-      if(!Number.isInteger(decision.month)||decision.month<1||decision.month>12||typeof decision.cardId!=='string')throw new Error('Shake decision has invalid card/month data.');
-      if(JSON.stringify(decision.choices)!==JSON.stringify(['shake','keepSecret']))throw new Error('Shake decision has invalid choices.');
+      if(!Number.isInteger(decision.month)||decision.month<1||decision.month>12)throw new Error('Private decision has invalid month data.');
+      const expected=decision.type==='shakeDecision'?['shake','keepSecret']:['bomb','playNormally'];
+      if(JSON.stringify(decision.choices)!==JSON.stringify(expected))throw new Error('Private decision has invalid choices.');
+      if(decision.type==='shakeDecision'&&typeof decision.cardId!=='string')throw new Error('Shake decision has invalid card data.');
+      if(decision.type==='bombDecision'&&(!Array.isArray(decision.cardIds)||decision.cardIds.length!==3||typeof decision.floorCardId!=='string'))throw new Error('Bomb decision has invalid card data.');
     }
     return state;
   }
@@ -211,6 +214,13 @@
     delete projected[opponentSide].hand;
     projected[opponentSide].hiddenTripleMonths=[];
     if(projected.pendingDecision?.playerId!==viewerId)delete projected.pendingDecision;
+    projected.legalActions=[];
+    if(projected.pendingDecision?.type==='shakeDecision')projected.legalActions.push('declareShake','keepShakeSecret');
+    else if(projected.pendingDecision?.type==='bombDecision')projected.legalActions.push('declareBomb','declineBomb');
+    else if(state.turn===viewerId&&!state.pendingTurn&&!state.pendingDecision){
+      if(state[viewerSide].hand.length)projected.legalActions.push('attemptPlayCard');
+      if(state[viewerSide].bombFreeTurns>0)projected.legalActions.push('useBombBlank');
+    }
     return projected;
   }
 
@@ -221,6 +231,15 @@
     });
     delete state.pendingDecision;
     return state;
+  }
+
+  function bombDecisionFor(state,side,actorId,cardId){
+    const card=state[side].hand.find(item=>item.id===cardId);
+    if(!card)return null;
+    const cards=state[side].hand.filter(item=>item.month===card.month).slice(0,3);
+    const floorCard=matchingCards(state.floor,card)[0];
+    if(cards.length!==3||!state[side].hiddenTripleMonths.includes(card.month)||!floorCard||state.floorStacks[card.month])return null;
+    return {type:'bombDecision',audience:'player-private',playerId:actorId,month:card.month,cardIds:cards.map(item=>item.id),floorCardId:floorCard.id,choices:['bomb','playNormally']};
   }
 
   function firstOpenFloorSlot(state,reserved=[]){
@@ -272,6 +291,15 @@
       return classification(bombEligible?'bombEligible':'playReady',actorId,{playedCardId:card.id,drawnCardId:null,targetIds:floorMatches.map(item=>item.id),requiresDecision:false});
     }
     if(pending.actorId!==actorId)throw new Error('No normal turn is in progress for the actor.');
+    if(!pending.played){
+      const base={playedCardId:null,drawnCardId:pending.drawn?.card.id||null,targetIds:[],requiresDecision:false};
+      if(pending.phase==='awaitingDraw')return classification('awaitingDraw',actorId,base);
+      if(pending.phase==='awaitingFloorTarget')return classification('floorTargetDecision',actorId,{...base,source:'drawn',targetIds:[...pending.drawn.matchIds],requiresDecision:true});
+      if(pending.phase==='awaitingTurnCompletion')return classification('awaitingTurnCompletion',actorId,base);
+      if(pending.phase!=='awaitingNormalResolution')return classification('legacySpecial',actorId,base);
+      if(state.floorStacks[pending.drawn.card.month]||pending.drawn.matchIds.length>2)return classification('legacySpecial',actorId,{...base,targetIds:[...pending.drawn.matchIds]});
+      return classification('normal',actorId,{...base,targetIds:[...pending.drawn.matchIds],cardOutcomes:[{source:'drawn',cardId:pending.drawn.card.id,kind:pending.drawn.matchIds.length===0?'unmatchedLanding':pending.drawn.matchIds.length===1?'singleMatchCapture':'chosenMatchCapture',targetId:pending.drawn.targetId}],sweep:'postResolution'});
+    }
     const base={
       playedCardId:pending.played.card.id,
       drawnCardId:pending.drawn?.card.id||null,
@@ -461,6 +489,14 @@
       return {state,events,pendingDecision:state.pendingDecision?serializeGameState(state.pendingDecision):null};
     }
 
+    if(action.type==='requestBombDecision'){
+      if(state.pendingTurn||state.pendingDecision)throw new Error('A turn or decision is already in progress.');
+      const decision=bombDecisionFor(state,side,actorId,action.cardId);
+      if(!decision)throw new Error('The attempted card is not Bomb eligible.');
+      state.pendingDecision=decision;
+      return {state,events,pendingDecision:serializeGameState(decision)};
+    }
+
     if(action.type==='declareShake'||action.type==='keepShakeSecret'){
       const decision=state.pendingDecision;
       if(!decision||decision.type!=='shakeDecision')throw new Error('No Shake decision is pending.');
@@ -472,7 +508,46 @@
         player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
         events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,shakeCount:player.shakes,multiplier:2**player.shakes});
       }
-      return {state,events,pendingDecision:null,resumePlay:{actorId,cardId:decision.cardId}};
+      if(action.type==='keepShakeSecret'){
+        const bombDecision=bombDecisionFor(state,side,actorId,decision.cardId);
+        if(bombDecision)state.pendingDecision=bombDecision;
+      }
+      return {state,events,pendingDecision:state.pendingDecision?serializeGameState(state.pendingDecision):null,resumePlay:{actorId,cardId:decision.cardId}};
+    }
+
+
+    if(action.type==='declineBomb'||action.type==='declareBomb'){
+      const decision=state.pendingDecision;
+      if(!decision||decision.type!=='bombDecision')throw new Error('No Bomb decision is pending.');
+      if(decision.playerId!==actorId)throw new Error('The Bomb decision belongs to another player.');
+      delete state.pendingDecision;
+      if(action.type==='declineBomb')return {state,events,pendingDecision:null,resumePlay:{actorId,cardId:decision.cardIds[0]}};
+      const bombCards=decision.cardIds.map(id=>player.hand.find(card=>card.id===id));
+      const floorCard=state.floor.find(card=>card.id===decision.floorCardId);
+      if(bombCards.some(card=>!card)||!floorCard)throw new Error('Bomb decision is stale.');
+      player.hand=player.hand.filter(card=>!decision.cardIds.includes(card.id));
+      player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
+      removeFloorCardIds(state,[floorCard.id]);
+      player.captured.push(...bombCards,floorCard);
+      player.bombs++; player.bombFreeTurns+=2;
+      events.push({type:'bombDeclared',audience:'public',actorId,month:decision.month,bombCount:player.bombs});
+      events.push({type:'bombCardsPlayed',audience:'public',actorId,cardIds:[...decision.cardIds]});
+      events.push({type:'cardsCaptured',audience:'public',actorId,rule:'bomb',cardIds:[...decision.cardIds,floorCard.id]});
+      const otherSide=side==='human'?'ai':'human';
+      transferPi(state,otherSide,side,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'bomb',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
+      events.push({type:'bombBlankTurnsGranted',audience:'public',actorId,count:2,remaining:player.bombFreeTurns});
+      events.push({type:'specialResolved',audience:'public',actorId,rule:'bomb'});
+      state.pendingTurn={phase:'awaitingDraw',mode:'bomb',actorId,nextResolution:null,played:null,drawn:null,sweepResolved:false};
+      return {state,events,pendingDecision:null};
+    }
+
+    if(action.type==='useBombBlank'){
+      if(state.pendingTurn||state.pendingDecision)throw new Error('A turn or decision is already in progress.');
+      if(player.bombFreeTurns<=0)throw new Error('No Bomb blank turns remain.');
+      player.bombFreeTurns--;
+      state.pendingTurn={phase:'awaitingDraw',mode:'bombBlank',actorId,nextResolution:null,played:null,drawn:null,sweepResolved:false};
+      events.push({type:'bombBlankUsed',audience:'public',actorId,remaining:player.bombFreeTurns});
+      return {state,events,pendingDecision:null};
     }
 
     if(action.type==='playCard'){
@@ -501,7 +576,7 @@
       entry.targetId=selectTarget(entry.matchIds,action.targetId);
       if(!entry.targetId)throw new Error('A legal floor target is required.');
       pending.phase=action.source==='played'?'awaitingDraw':'awaitingNormalResolution';
-      if(action.source==='drawn')pending.nextResolution='played';
+      if(action.source==='drawn')pending.nextResolution=pending.played?'played':'drawn';
       events.push({type:'floorTargetChosen',audience:'public',actorId,source:action.source,targetId:entry.targetId});
       return {state,events,pendingDecision:null};
     }
@@ -509,15 +584,19 @@
     if(action.type==='drawNextCard'){
       if(pending.phase!=='awaitingDraw')throw new Error('The turn is not awaiting a deck draw.');
       if(pending.drawn)throw new Error('The deck card has already been drawn.');
-      if(!state.deck.length){ pending.phase='awaitingNormalResolution'; pending.nextResolution='played'; return {state,events,pendingDecision:null}; }
+      if(!state.deck.length){
+        pending.phase=pending.played?'awaitingNormalResolution':'awaitingTurnCompletion';
+        pending.nextResolution=pending.played?'played':null;
+        return {state,events,pendingDecision:null};
+      }
       const card=state.deck.shift();
       const matchIds=matchingCards(state.floor,card).map(match=>match.id);
-      const reserved=pending.played.landingSlot==null?[]:[pending.played.landingSlot];
+      const reserved=pending.played?.landingSlot==null?[]:[pending.played.landingSlot];
       const landingSlot=matchIds.length===0?firstOpenFloorSlot(state,reserved):null;
       pending.drawn={card,matchIds,targetId:selectTarget(matchIds,action.targetId),landingSlot,resolved:false};
       const needsTarget=matchIds.length>1&&!pending.drawn.targetId;
       pending.phase=needsTarget?'awaitingFloorTarget':'awaitingNormalResolution';
-      if(!needsTarget)pending.nextResolution='played';
+      if(!needsTarget)pending.nextResolution=pending.played?'played':'drawn';
       events.push({type:'deckCardRevealed',audience:'public',actorId,card,targetId:pending.drawn.targetId,matchCount:matchIds.length});
       return {state,events,pendingDecision:needsTarget?targetDecision(pending,'drawn'):null};
     }
@@ -534,7 +613,7 @@
       if(!entry||entry.resolved)throw new Error('Card is unavailable for normal resolution.');
       if(entry.matchIds.length>2||!entry.targetId&&entry.matchIds.length>0)throw new Error('Card requires non-normal resolution or a target.');
       if(state.floorStacks[entry.card.month])throw new Error('Stack capture requires special-rule resolution.');
-      if(pending.drawn&&pending.drawn.card.month===pending.played.card.month)throw new Error('Same-month turn requires special-rule resolution.');
+      if(pending.played&&pending.drawn&&pending.drawn.card.month===pending.played.card.month)throw new Error('Same-month turn requires special-rule resolution.');
       if(entry.matchIds.length===0){
         const slot=entry.landingSlot;
         if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
@@ -549,8 +628,8 @@
         events.push({type:'cardsCaptured',audience:'public',actorId,source:action.source,cards:[entry.card,target]});
       }
       entry.resolved=true;
-      if(pending.played.resolved&&pending.drawn&&!pending.drawn.resolved)pending.nextResolution='drawn';
-      else if(pending.played.resolved&&(!pending.drawn||pending.drawn.resolved)){
+      if(pending.played?.resolved&&pending.drawn&&!pending.drawn.resolved)pending.nextResolution='drawn';
+      else if((!pending.played||pending.played.resolved)&&(!pending.drawn||pending.drawn.resolved)){
         pending.phase='awaitingTurnCompletion';
         pending.nextResolution=null;
       }
@@ -559,7 +638,7 @@
 
     if(action.type==='completeTurn'){
       if(pending.phase!=='awaitingTurnCompletion')throw new Error('The turn is not awaiting completion.');
-      if(!pending.played.resolved||pending.drawn&&!pending.drawn.resolved)throw new Error('Normal turn cards are not fully resolved.');
+      if(pending.played&&!pending.played.resolved||pending.drawn&&!pending.drawn.resolved)throw new Error('Normal turn cards are not fully resolved.');
       if(!pending.sweepResolved)applySweepMutation(state,actorId,side,events,'normal');
       delete state.pendingTurn;
       events.push({type:'turnCompleted',audience:'public',actorId});
