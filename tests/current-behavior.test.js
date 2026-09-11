@@ -437,3 +437,128 @@ test('authoritative match state survives a lossless serialize/JSON/deserialize r
   });
   assert.equal(JSON.stringify(afterSettlement),JSON.stringify(beforeSettlement));
 });
+
+async function legacyNormalOutcome(initial,playedId,playTargetId=null){
+  const legacy=api.deserializeGameState(JSON.parse(JSON.stringify(initial)));
+  const played=legacy[legacy.turn].hand.find(item=>item.id===playedId);
+  legacy[legacy.turn].hand=legacy[legacy.turn].hand.filter(item=>item.id!==playedId);
+  const drawn=legacy.deck.shift()||null;
+  useState(legacy);
+  const playMatches=api.effectiveFloorMatchCards(played);
+  const playTarget=playTargetId?legacy.floor.find(item=>item.id===playTargetId):playMatches[0]||null;
+  const drawMatches=drawn?api.effectiveFloorMatchCards(drawn):[];
+  const drawTarget=drawMatches[0]||null;
+  if(playMatches.length===0)api.reserveFloorSlot(played);
+  if(drawn&&drawMatches.length===0)api.reserveFloorSlot(drawn);
+  await api.resolveCombinedTurn(
+    legacy.turn,{card:played,target:playTarget,matchCount:playMatches.length},
+    drawn?{card:drawn,target:drawTarget,matchCount:drawMatches.length}:null
+  );
+  return legacy;
+}
+
+function engineNormalOutcome(initial,playedId,playTargetId=null,drawTargetId=null){
+  let result=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:initial.turn,cardId:playedId,targetId:playTargetId});
+  const events=[...result.events];
+  let state=result.state;
+  if(state.deck.length){
+    result=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actor:initial.turn,targetId:drawTargetId});
+    state=result.state; events.push(...result.events);
+  }
+  for(const source of ['played','drawn']){
+    if(source==='drawn'&&!state.pendingNormalTurn.drawn)continue;
+    result=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actor:initial.turn,source});
+    state=result.state; events.push(...result.events);
+  }
+  result=extractedEngine.applyNormalTurnAction(state,{type:'completeTurn',actor:initial.turn});
+  return {state:result.state,events:events.concat(result.events)};
+}
+
+test('normal unmatched play/draw engine actions match the legacy outcome and event order',async()=>{
+  const initial=stateWith({
+    deck:[card('m3-1')],floor:[card('m1-1')],
+    human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m1-1':0}
+  });
+  const legacy=await legacyNormalOutcome(initial,'m2-1');
+  const actual=engineNormalOutcome(initial,'m2-1');
+  assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
+  assert.deepEqual(actual.events.map(event=>event.type),[
+    'cardPlayed','deckCardRevealed','cardLanded','cardLanded','turnCompleted'
+  ]);
+  assert.equal(actual.events.every(event=>event.audience==='public'),true);
+});
+
+test('normal single captures engine actions match the legacy outcome',async()=>{
+  const initial=stateWith({
+    deck:[card('m3-2')],floor:cards('m2-2','m3-1','m8-1'),
+    human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m2-2':0,'m3-1':1,'m8-1':2}
+  });
+  const legacy=await legacyNormalOutcome(initial,'m2-1');
+  const actual=engineNormalOutcome(initial,'m2-1');
+  assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
+  assert.deepEqual(actual.events.map(event=>event.type),[
+    'cardPlayed','deckCardRevealed','cardsCaptured','cardsCaptured','turnCompleted'
+  ]);
+});
+
+test('normal engine preserves a pre-reserved unmatched slot when the played capture opens an earlier hole',async()=>{
+  const initial=stateWith({
+    deck:[card('m3-1')],floor:cards('m2-2','m8-1'),
+    human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m2-2':0,'m8-1':1}
+  });
+  const legacy=await legacyNormalOutcome(initial,'m2-1');
+  const actual=engineNormalOutcome(initial,'m2-1');
+  assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
+  assert.equal(actual.state.floorSlotByCard['m3-1'],2);
+});
+
+test('normal chosen-target action matches the legacy two-target outcome',async()=>{
+  const initial=stateWith({
+    deck:[card('m4-3')],floor:cards('m2-2','m2-3','m8-1'),
+    human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m2-2':0,'m2-3':1,'m8-1':2}
+  });
+  const legacy=await legacyNormalOutcome(initial,'m2-1','m2-3');
+  const actual=engineNormalOutcome(initial,'m2-1','m2-3');
+  assert.equal(JSON.stringify(actual.state),JSON.stringify(legacy));
+  assert.equal(actual.state.human.captured.some(item=>item.id==='m2-3'),true);
+  assert.equal(actual.state.floor.some(item=>item.id==='m2-2'),true);
+});
+
+test('normal actions validate actor, ownership, and legal chosen target',()=>{
+  const initial=stateWith({
+    floor:cards('m2-2','m2-3'),human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m2-2':0,'m2-3':1}
+  });
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'ai',cardId:'m2-1'}),/not ai's turn/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m9-1'}),/not owned/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m2-1',targetId:'m8-1'}),/Illegal floor target/);
+  const pending=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m2-1'});
+  assert.equal(pending.pendingDecision.type,'chooseFloorTarget');
+  const chosen=extractedEngine.applyNormalTurnAction(pending.state,{type:'chooseFloorTarget',actor:'human',source:'played',targetId:'m2-3'});
+  assert.equal(chosen.state.pendingNormalTurn.played.targetId,'m2-3');
+  assert.equal(pending.pendingDecision.audience,'player-private');
+  assert.equal(pending.pendingDecision.playerId,'human');
+});
+
+test('normal engine rejects same-month and floor-stack special resolution',()=>{
+  let state=stateWith({
+    deck:[card('m5-2')],floor:[card('m8-1')],human:api.makePlayer({hand:[card('m5-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m8-1':0}
+  });
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actor:'human',cardId:'m5-1'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actor:'human'}).state;
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actor:'human',source:'played'}),/Same-month turn/);
+
+  state=stateWith({
+    floor:cards('m4-1','m4-2','m4-3'),
+    human:api.makePlayer({hand:[card('m4-4')]}),
+    floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'ai'}},
+    floorSlotCount:12,floorSlotByCard:{'m4-1':0,'m4-2':0,'m4-3':0}
+  });
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actor:'human',cardId:'m4-4',targetId:'m4-3'}).state;
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actor:'human',source:'played'}),/non-normal resolution|Stack capture/);
+});

@@ -80,3 +80,9 @@ Added tests prove that in-flight reservations choose distinct slots without ente
 ## Serialization normalization coverage
 
 The four authoritative triple-month `Set` fields are now unique month arrays accessed through representation helpers. Go/Stop score history and Nagari carry moved into `state.matchContext`. The suite verifies a complete state through serialize → JSON stringify/parse → deserialize, including ordered deck, private hands, captures, floor slots/stacks, all player counters and declarations, result fields, cross-hand context, and identical settlement before and after restoration.
+
+## Migration Step 5A normal-turn coverage
+
+Normal unmatched landings, ordinary single captures, and player-selected two-target captures now run through deterministic `playCard`, `chooseFloorTarget`, `drawNextCard`, `resolveNormalCard`, and `completeTurn` engine actions. Parity fixtures compare their final authoritative state against the retained legacy resolver, including the subtle case where a pre-reserved unmatched landing must not move into a hole opened by the preceding capture.
+
+Validation tests cover actor/turn, card ownership, target legality, player-private target decisions, public ordered events, and explicit rejection of same-month and floor-stack special resolution. All earlier special-rule characterization tests remain on and continue to exercise the existing `app.js` branches.

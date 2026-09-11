@@ -180,11 +180,119 @@
     return state;
   }
 
+  function firstOpenFloorSlot(state,reserved=[]){
+    const used=new Set([...Object.values(state.floorSlotByCard||{}),...reserved]);
+    const count=Number.isFinite(state.floorSlotCount)?state.floorSlotCount:12;
+    for(let slot=0;slot<count;slot++)if(!used.has(slot))return slot;
+    let slot=count; while(used.has(slot))slot++; return slot;
+  }
+
+  function validateActor(state,actor){
+    if(actor!=='human'&&actor!=='ai')throw new Error(`Unknown actor: ${actor}`);
+    if(state.turn!==actor)throw new Error(`It is not ${actor}'s turn.`);
+  }
+
+  function selectTarget(matchIds,targetId){
+    if(matchIds.length===0){
+      if(targetId!=null)throw new Error('An unmatched card cannot target a floor card.');
+      return null;
+    }
+    if(matchIds.length===1){
+      if(targetId!=null&&targetId!==matchIds[0])throw new Error('Illegal floor target.');
+      return matchIds[0];
+    }
+    if(targetId==null)return null;
+    if(!matchIds.includes(targetId))throw new Error('Illegal floor target.');
+    return targetId;
+  }
+
+  function applyNormalTurnAction(currentState,action){
+    const state=deserializeGameState(currentState);
+    validateActor(state,action.actor);
+    const events=[];
+    const player=state[action.actor];
+
+    if(action.type==='playCard'){
+      if(state.pendingNormalTurn)throw new Error('A turn is already in progress.');
+      const index=player.hand.findIndex(card=>card.id===action.cardId);
+      if(index<0)throw new Error('Played card is not owned by the actor.');
+      const card=player.hand[index];
+      const matchIds=matchingCards(state.floor,card).map(match=>match.id);
+      const targetId=selectTarget(matchIds,action.targetId);
+      player.hand.splice(index,1);
+      const landingSlot=matchIds.length===0?firstOpenFloorSlot(state):null;
+      state.pendingNormalTurn={actor:action.actor,played:{card,matchIds,targetId,landingSlot,resolved:false},drawn:null};
+      events.push({type:'cardPlayed',audience:'public',actor:action.actor,card,targetId,matchCount:matchIds.length});
+      return {state,events,pendingDecision:matchIds.length>1&&!targetId?{type:'chooseFloorTarget',audience:'player-private',playerId:action.actor,source:'played'}:null};
+    }
+
+    const pending=state.pendingNormalTurn;
+    if(!pending||pending.actor!==action.actor)throw new Error('No normal turn is in progress for the actor.');
+
+    if(action.type==='chooseFloorTarget'){
+      const entry=action.source==='played'?pending.played:action.source==='drawn'?pending.drawn:null;
+      if(!entry)throw new Error('Unknown target-choice source.');
+      entry.targetId=selectTarget(entry.matchIds,action.targetId);
+      if(!entry.targetId)throw new Error('A legal floor target is required.');
+      events.push({type:'floorTargetChosen',audience:'public',actor:action.actor,source:action.source,targetId:entry.targetId});
+      return {state,events,pendingDecision:null};
+    }
+
+    if(action.type==='drawNextCard'){
+      if(pending.drawn)throw new Error('The deck card has already been drawn.');
+      if(!state.deck.length)return {state,events,pendingDecision:null};
+      const card=state.deck.shift();
+      const matchIds=matchingCards(state.floor,card).map(match=>match.id);
+      const reserved=pending.played.landingSlot==null?[]:[pending.played.landingSlot];
+      const landingSlot=matchIds.length===0?firstOpenFloorSlot(state,reserved):null;
+      pending.drawn={card,matchIds,targetId:selectTarget(matchIds,action.targetId),landingSlot,resolved:false};
+      events.push({type:'deckCardRevealed',audience:'public',actor:action.actor,card,targetId:pending.drawn.targetId,matchCount:matchIds.length});
+      return {state,events,pendingDecision:matchIds.length>1&&!pending.drawn.targetId?{type:'chooseFloorTarget',audience:'player-private',playerId:action.actor,source:'drawn'}:null};
+    }
+
+    if(action.type==='deferSpecialTurn'){
+      delete state.pendingNormalTurn;
+      return {state,events,pendingDecision:null};
+    }
+
+    if(action.type==='resolveNormalCard'){
+      const entry=action.source==='played'?pending.played:action.source==='drawn'?pending.drawn:null;
+      if(!entry||entry.resolved)throw new Error('Card is unavailable for normal resolution.');
+      if(entry.matchIds.length>2||!entry.targetId&&entry.matchIds.length>0)throw new Error('Card requires non-normal resolution or a target.');
+      if(state.floorStacks[entry.card.month])throw new Error('Stack capture requires special-rule resolution.');
+      if(pending.drawn&&pending.drawn.card.month===pending.played.card.month)throw new Error('Same-month turn requires special-rule resolution.');
+      if(entry.matchIds.length===0){
+        const slot=entry.landingSlot;
+        if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
+        state.floor.push(entry.card); state.floorSlotByCard[entry.card.id]=slot;
+        events.push({type:'cardLanded',audience:'public',actor:action.actor,source:action.source,card:entry.card,slot});
+      }else{
+        const target=state.floor.find(card=>card.id===entry.targetId);
+        if(!target)throw new Error('Selected floor target is no longer available.');
+        state.floor=state.floor.filter(card=>card.id!==target.id);
+        delete state.floorSlotByCard[target.id];
+        player.captured.push(entry.card,target);
+        events.push({type:'cardsCaptured',audience:'public',actor:action.actor,source:action.source,cards:[entry.card,target]});
+      }
+      entry.resolved=true;
+      return {state,events,pendingDecision:null};
+    }
+
+    if(action.type==='completeTurn'){
+      if(!pending.played.resolved||pending.drawn&&!pending.drawn.resolved)throw new Error('Normal turn cards are not fully resolved.');
+      delete state.pendingNormalTurn;
+      events.push({type:'turnCompleted',audience:'public',actor:action.actor});
+      return {state,events,pendingDecision:null};
+    }
+
+    throw new Error(`Unsupported normal-turn action: ${action.type}`);
+  }
+
   const api=Object.freeze({
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState
+    serializeGameState,deserializeGameState,applyNormalTurnAction
   });
 
   globalThis.GoStopEngine=api;

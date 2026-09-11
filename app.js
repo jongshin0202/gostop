@@ -10,7 +10,8 @@
   if(!engine)throw new Error('GoStopEngine must load before app.js.');
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
-    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,
+    applyNormalTurnAction
   }=engine;
   const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
@@ -83,6 +84,11 @@
   function monthListHas(player,field,month){ return player[field].includes(month); }
   function monthListAdd(player,field,month){ if(!monthListHas(player,field,month))player[field].push(month); }
   function monthListDelete(player,field,month){ player[field]=player[field].filter(value=>value!==month); }
+  function applyNormalAction(action){
+    const result=applyNormalTurnAction(state,action);
+    state=result.state;
+    return result;
+  }
 
 
   function freshState(nagariCarryPower=0) {
@@ -579,9 +585,10 @@
     clickedEl.classList.remove('pending-card');
     const sourceRect=clickedEl.getBoundingClientRect();
     clickedEl.style.visibility='hidden';
-    const idx=state.human.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.human.hand.splice(idx,1);
     monthListDelete(state.human,'hiddenTripleMonths',card.month);
-    await playFullTurn('human',card,sourceRect,target,matches.length);
+    const playResult=applyNormalAction({type:'playCard',actor:'human',cardId:card.id,targetId:target?.id||null});
+    const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
+    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true);
   }
 
   async function aiTurn(){
@@ -626,25 +633,68 @@
       else if(matches.length===2)target=chooseBestMatch(matches);
       else if(matches.length>2)target=chooseBestMatch(matches);
       if(target && matches.length>1) await previewAiTarget(target);
-      const idx=state.ai.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.ai.hand.splice(idx,1);
       monthListDelete(state.ai,'hiddenTripleMonths',card.month);
-      await playFullTurn('ai',card,sourceRect,target,matches.length);
+      const playResult=applyNormalAction({type:'playCard',actor:'ai',cardId:card.id,targetId:target?.id||null});
+      const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
+      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true);
     } finally {
       presentation.aiTurnInProgress=false;
     }
   }
 
-  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
+  function canResolveAsNormalEngineTurn(play,draw){
+    if(draw&&draw.card.month===play.card.month)return false;
+    return [play,draw].filter(Boolean).every(action=>
+      action.matchCount<=2&&
+      (action.matchCount===0||!!action.target)&&
+      !floorStackForMonth(action.card.month)
+    );
+  }
+
+  async function presentNormalResolution(side,result){
+    const event=result.events[0];
+    if(event.type==='cardLanded'){
+      presentation.floorSlotReservations.delete(event.card.id);
+      removeStage(event.card.id);
+      render();
+      await sleep(180);
+      return;
+    }
+    if(event.type==='cardsCaptured'){
+      await animateCaptureBatch(event.cards,side);
+      render();
+      await sleep(190);
+    }
+  }
+
+  async function resolveNormalEngineTurn(side,play,draw){
+    let result=applyNormalAction({type:'resolveNormalCard',actor:side,source:'played'});
+    await presentNormalResolution(side,result);
+    if(draw){
+      result=applyNormalAction({type:'resolveNormalCard',actor:side,source:'drawn'});
+      await presentNormalResolution(side,result);
+    }
+    applyNormalAction({type:'completeTurn',actor:side});
+    await applySweepIfNeeded(side);
+  }
+
+  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount,engineTurn=false){
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
     await sleep(330);
 
     if(!state.deck.length){
-      await resolveCombinedTurn(side,{card:playedCard,stage:playedStage,target,matchCount:playMatchCount},null);
+      const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+      if(engineTurn&&canResolveAsNormalEngineTurn(play,null))await resolveNormalEngineTurn(side,play,null);
+      else{
+        if(engineTurn)applyNormalAction({type:'deferSpecialTurn',actor:side});
+        await resolveCombinedTurn(side,play,null);
+      }
       await concludeTurn(side);
       return;
     }
 
-    const draw=state.deck.shift();
+    const drawResult=engineTurn?applyNormalAction({type:'drawNextCard',actor:side}):null;
+    const draw=engineTurn?drawResult.events.find(event=>event.type==='deckCardRevealed').card:state.deck.shift();
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
 
@@ -665,12 +715,18 @@
       if(side==='ai')await previewAiTarget(drawTarget);
     }
 
+    if(engineTurn&&drawTarget&&state.pendingNormalTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingNormalTurn.drawn.targetId!==drawTarget.id){
+      applyNormalAction({type:'chooseFloorTarget',actor:side,source:'drawn',targetId:drawTarget.id});
+    }
+
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
-    await resolveCombinedTurn(
-      side,
-      {card:playedCard,stage:playedStage,target,matchCount:playMatchCount},
-      {card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount}
-    );
+    const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+    const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
+    if(engineTurn&&canResolveAsNormalEngineTurn(play,drawn))await resolveNormalEngineTurn(side,play,drawn);
+    else{
+      if(engineTurn)applyNormalAction({type:'deferSpecialTurn',actor:side});
+      await resolveCombinedTurn(side,play,drawn);
+    }
     await concludeTurn(side);
   }
 
