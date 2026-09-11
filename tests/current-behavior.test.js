@@ -1624,3 +1624,94 @@ test('browser presents Three-Ppeok only from authoritative terminal events',()=>
   assert.equal(extracted.indexOf('playPpeokSound()')<extracted.indexOf('await sleep(450)'),true);
   assert.equal(extracted.indexOf('await sleep(450)')<extracted.indexOf('presentThreePpeok(result)'),true);
 });
+
+test('engine captures initial and opponent Ppeok floor stacks for both players',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const opponentId=actorId==='playerA'?'playerB':'playerA';
+    for(const source of ['initial','ppeok']){
+      const stackCards=cards('m2-1','m2-2','m2-3');
+      const result=specialFixture(actorId,{
+        floor:stackCards,handCard:card('m2-4'),drawCard:card('m8-1'),captured:[card('m7-3')],
+        floorStacks:{2:{month:2,cardIds:stackCards.map(card=>card.id),source,owner:source==='initial'?null:opponentId}},
+        targetId:'m2-3'
+      });
+      const side=actorId==='playerA'?'human':'ai';
+      const other=side==='human'?'ai':'human';
+      assert.equal(result.outcome.kind,'floorStackInteraction');
+      assert.deepEqual(result.state[side].captured.slice(0,4).map(card=>card.id),['m2-4','m2-1','m2-2','m2-3']);
+      assert.equal(result.state[other].captured.length,0);
+      assert.equal(result.state.floorStacks[2],undefined);
+      for(const card of stackCards)assert.equal(result.state.floorSlotByCard[card.id],undefined);
+      assert.deepEqual(result.events.slice(0,3).map(event=>event.type),['floorStackRemoved','cardsCaptured','piTransferred']);
+      assert.equal(result.events[2].reason,source==='initial'?'initialStack':'opponentPpeok');
+      assert.deepEqual(wireRoundTrip(result.state),result.state);
+    }
+  }
+});
+
+test('deck-only floor-stack interaction is classified and resolved by authority',()=>{
+  const stackCards=cards('m3-1','m3-2','m3-3');
+  let state=stateWith({
+    turn:'playerA',deck:[card('m3-4')],floor:stackCards,
+    human:api.makePlayer({bombFreeTurns:1}),ai:api.makePlayer({captured:[card('m6-3')]}),
+    floorStacks:{3:{month:3,cardIds:stackCards.map(card=>card.id),source:'initial',owner:null}}
+  });
+  api.initFloorSlots(state);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'useBombBlank',actorId:'playerA'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA',targetId:'m3-3'}).state;
+  assert.equal(extractedEngine.classifyTurnOutcome(state,{actorId:'playerA'}).kind,'floorStackInteraction');
+  const result=extractedEngine.applySpecialTurnAction(state,{type:'resolveSpecialTurn',actorId:'playerA'});
+  assert.deepEqual(result.state.human.captured.slice(0,4).map(card=>card.id),['m3-4','m3-1','m3-2','m3-3']);
+  assert.equal(result.events.find(event=>event.type==='piTransferred').reason,'initialStack');
+});
+
+test('legacySpecial is a fail-loud invariant path, not a browser authority fallback',()=>{
+  let state=stateWith({turn:'playerA',deck:[card('m8-1')],floor:cards('m4-1','m4-2','m4-3'),human:api.makePlayer({hand:[card('m4-4')]})});
+  api.initFloorSlots(state);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m4-4',targetId:'m4-1'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.classifyTurnOutcome(state,{actorId:'playerA'}).kind,'legacySpecial');
+  assert.throws(()=>extractedEngine.applySpecialTurnAction(state,{type:'resolveSpecialTurn',actorId:'playerA'}),/not extracted/);
+  // Production hand construction marks every three-card floor month as a stack,
+  // so this fixture is deliberately missing required canonical stack metadata.
+});
+
+test('viewer projection exposes only public authority and addressed decisions',()=>{
+  const hiddenA=card('m10-1'),hiddenB=card('m11-1'),deckCard=card('m12-1');
+  const state=stateWith({
+    turn:'playerA',deck:[deckCard],floor:[card('m1-1')],floorSlotByCard:{'m1-1':4},floorSlotCount:12,
+    human:api.makePlayer({hand:[hiddenA],captured:[card('m2-1')]}),
+    ai:api.makePlayer({hand:[hiddenB],captured:[card('m3-1')]}),
+    pendingDecision:{type:'goStopDecision',audience:'player-private',playerId:'playerA',score:7,previousGoScore:0,choices:['go','stop']}
+  });
+  for(const viewerId of ['playerA','playerB']){
+    const view=extractedEngine.projectStateForViewer(state,viewerId);
+    const own=viewerId==='playerA'?'human':'ai',other=own==='human'?'ai':'human';
+    assert.equal(view[own].hand.length,1);
+    assert.equal(view[other].hand,undefined);
+    assert.equal(view[other].handCount,1);
+    assert.equal(view.deck,undefined); assert.equal(view.deckCount,1);
+    assert.deepEqual(view.floor.map(card=>card.id),['m1-1']);
+    assert.equal(view.floorSlotByCard['m1-1'],4);
+    assert.equal(view.turn,'playerA');
+    assert.equal(view[other].captured.length,1);
+    assert.equal(Boolean(view.pendingDecision),viewerId==='playerA');
+    assert.deepEqual(view.legalActions,viewerId==='playerA'?['declareGo','declareStop']:[]);
+  }
+});
+
+test('production app has no reachable in-hand authority mutation fallback',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const combined=source.slice(source.indexOf('async function resolveCombinedTurn'),source.indexOf('async function resolveSingleCard'));
+  const single=source.slice(source.indexOf('async function resolveSingleCard'),source.indexOf('async function applySweepIfNeeded'));
+  const pi=source.slice(source.indexOf('async function stealPiAnimated'),source.indexOf('async function animatePiTransfer'));
+  assert.equal(combined.includes("if(!TEST_MODE)throw new Error('Legacy combined-turn mutation is characterization-only.')"),true);
+  assert.equal(single.includes("if(!TEST_MODE)throw new Error('Legacy single-card mutation is characterization-only.')"),true);
+  assert.equal(pi.includes("if(!TEST_MODE)throw new Error('Legacy Pi mutation is characterization-only.')"),true);
+  const productionTurn=source.slice(source.indexOf('async function playFullTurn'),source.indexOf('async function resolveCombinedTurn'));
+  assert.equal(productionTurn.includes('resolveCombinedTurn('),false);
+  assert.equal(productionTurn.includes('resolveSingleCard('),false);
+  assert.equal(productionTurn.includes('state.deck.shift('),false);
+  assert.equal(productionTurn.includes("throw new Error(`Unhandled authoritative turn classification"),true);
+  assert.equal(source.includes('bottomPlayer.hand.sort('),false);
+});

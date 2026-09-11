@@ -41,17 +41,27 @@ Ppeok/Ssa-da resolution now also performs the immediate Three-Ppeok terminal che
 
 `classifyTurnOutcome(state, { actorId, cardId? })` now owns the deterministic normal-versus-special routing decision. Before play, it can identify `bombEligible`; during a pending turn it returns `awaitingDraw`, `floorTargetDecision`, `normal`, `jjokCandidate`, `ppeokSsaDaCandidate`, `ttadakCandidate`, `selfPpeokCandidate`, `floorStackInteraction`, `awaitingTurnCompletion`, or the conservative `legacySpecial` fallback. Normal results include per-card `unmatchedLanding`, `singleMatchCapture`, or `chosenMatchCapture` details. All results are JSON-safe and use neutral actor IDs.
 
+| Classification | Engine handler | Browser responsibility |
+| --- | --- | --- |
+| `playReady` | `attemptPlayCard` / `playCard` | Select and animate the card |
+| `bombEligible` | private Bomb decision actions | Present the private choice |
+| `awaitingDraw` | `drawNextCard` | Animate deck lift/flip |
+| `floorTargetDecision` | `chooseFloorTarget` | Collect addressed target choice |
+| `normal` | `resolveNormalCard` | Animate landing/capture events |
+| `jjokCandidate`, `ppeokSsaDaCandidate`, `ttadakCandidate`, `selfPpeokCandidate` | `resolveSpecialTurn` | Preserve rule-specific choreography/audio |
+| `floorStackInteraction` | `resolveSpecialTurn` | Animate full-stack capture and laugh |
+| `awaitingTurnCompletion` | `completeTurn` | Present completion/transfer events |
+| `legacySpecial` | deterministic error | None; canonical production states cannot use a browser fallback |
+
 The established browser animation order remains hand slap, deck lift/flip/slap, played-card resolution, drawn-card resolution, Sweep check, then `concludeTurn`. Durations, sleeps, hit-sound call sites, rendering, and Go/Stop flow are unchanged.
 
 ## Special-rule fallback retained in app.js
 
 `applySpecialTurnAction(state, { type: 'resolveSpecialTurn', actorId })` now mutates classified Ppeok/Ssa-da, Self-Ppeok, Jjok, and Ttadak outcomes and evaluates Sweep after the complete capture. It emits ordered public stack, capture, reason-tagged Pi-transfer, `sweepTriggered`, and completion events containing neutral IDs and card IDs only. The browser presents those events with the existing sound and animation choreography.
 
-The browser still calls `deferSpecialTurn` and uses the legacy `resolveCombinedTurn`/`resolveSingleCard` fallback for unextracted cases. The duplicate implementations of the four extracted outcomes remain reachable only as conservative fallback/test characterization paths, not the classified production route. This retains:
+The browser no longer calls `deferSpecialTurn`, `resolveCombinedTurn`, or `resolveSingleCard` in production. Those mutation helpers and the old Pi helper are guarded characterization oracles that throw outside `TEST_MODE`. Known normal and special classifications resolve through engine actions; an unexpected `legacySpecial` classification throws instead of silently granting browser authority.
 
-- Other unextracted Pi transfers;
-- other retained legacy special-resolution fallbacks; and
-- all special scoring and settlement behavior.
+`floorStackInteraction` now captures initial stacks and opponent Ppeok stacks in the engine, preserving full-stack card order, canonical slot cleanup, one-Pi transfer, and ordinary-Pi-first fallback. Self-Ppeok remains on its existing engine branch. Presentation consumes `floorStackRemoved`, `cardsCaptured`, and reason-tagged `piTransferred` events and retains the Ppeok laugh where applicable.
 
 Bomb and `useBombBlank` are engine-owned. Each blank decrements the public remaining count once, removes no hand card, and enters the same authoritative draw/target/resolution/completion lifecycle; ordinary card play remains legal while blanks remain. Sweep detection and mutation are engine-owned: extracted specials evaluate it in the same transaction, normal and Bomb-draw turns evaluate it during completion, and an engine `resolveSweep` bridge supports unextracted legacy resolution without allowing `app.js` to mutate Pi.
 
@@ -59,7 +69,7 @@ Bomb and `useBombBlank` are engine-owned. Each blank decrements the public remai
 
 - `pendingTurn` and private Shake/Bomb/Go-Stop decisions are authoritative and serializable. Nagari and all current terminal results are likewise serializable. Exact restoration into an already-partially-played browser animation remains a later controller/event-replay concern.
 - The reducer records unmatched landing slots at play/draw time so a capture resolved earlier in the same turn cannot move a later unmatched card into a newly opened hole. This preserves the existing in-flight reservation behavior.
-- The engine now mutates the four Step 6A outcomes; mutations for all other classified special outcomes remain deliberately delegated to the legacy controller.
+- The engine mutates every production-reachable classified outcome. A floor month containing three loose cards without canonical stack metadata is an invalid hand-state invariant and classifies as fail-loud `legacySpecial`; production new-hand creation always records such a stack.
 - Sweep remains a post-resolution condition because it depends on whether capture mutation actually empties the live floor; the engine evaluates it only after the relevant capture and emits no Pi-transfer event when the opponent has no Pi.
 - Player storage still uses `state.human`/`state.ai`, and browser functions retain matching local aliases because wholesale storage and DOM renaming is outside Step 5D. Explicit adapters prevent those aliases from becoming authoritative identity values.
 - `projectStateForViewer` removes deck order, opponent hand identities, opponent hidden-triple metadata, and any private decision not addressed to the viewer. Declined Shake/Bomb choices produce no opponent-visible event; accepted declarations become public. Bomb execution is authority-owned, while its existing animation wrapper remains local presentation.

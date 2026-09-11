@@ -82,8 +82,8 @@
     return playerIdForLegacySide(side)===viewerId?'bottom':'top';
   }
   function monthListHas(player,field,month){ return player[field].includes(month); }
-  function monthListAdd(player,field,month){ if(!monthListHas(player,field,month))player[field].push(month); }
-  function monthListDelete(player,field,month){ player[field]=player[field].filter(value=>value!==month); }
+  function monthListAdd(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');if(!monthListHas(player,field,month))player[field].push(month); }
+  function monthListDelete(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');player[field]=player[field].filter(value=>value!==month); }
   function applyNormalAction(action){
     const result=applyNormalTurnAction(state,action);
     state=result.state;
@@ -226,17 +226,16 @@
     return used;
   }
   function firstFreeFloorSlot(st=state,commitCapacity=true){
-    if(!st.floorSlotByCard)st.floorSlotByCard={};
-    if(!Number.isFinite(st.floorSlotCount))st.floorSlotCount=12;
+    if(!st.floorSlotByCard||!Number.isFinite(st.floorSlotCount))throw new Error('Canonical floor slots must be initialized with the hand.');
     const used=occupiedFloorSlots(st);
     for(let i=0;i<st.floorSlotCount;i++) if(!used.has(i)) return i;
     let slot=st.floorSlotCount;
     while(used.has(slot))slot++;
-    if(commitCapacity)st.floorSlotCount=slot+4;
+    if(commitCapacity){if(!TEST_MODE)throw new Error('Canonical floor capacity is engine-owned after hand creation.');st.floorSlotCount=slot+4;}
     return slot;
   }
   function reserveFloorSlot(card,preferredSlot=null){
-    if(!state.floorSlotByCard)state.floorSlotByCard={};
+    if(!state.floorSlotByCard)throw new Error('Canonical floor slots must be initialized with the hand.');
     if(Number.isFinite(state.floorSlotByCard[card.id]))return state.floorSlotByCard[card.id];
     if(Number.isFinite(presentation.floorSlotReservations.get(card.id)))return presentation.floorSlotReservations.get(card.id);
     const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state,false);
@@ -244,6 +243,7 @@
     return slot;
   }
   function commitFloorSlot(card,preferredSlot=null){
+    if(!TEST_MODE)throw new Error('Canonical floor-slot commits are engine-owned after hand creation.');
     const reserved=presentation.floorSlotReservations.get(card.id);
     const slot=Number.isFinite(preferredSlot)?preferredSlot:Number.isFinite(reserved)?reserved:firstFreeFloorSlot(state);
     if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
@@ -274,6 +274,7 @@
     return stack.cardIds.map(id=>state.floor.find(c=>c.id===id)).filter(Boolean);
   }
   function removeFloorCards(cards){
+    if(!TEST_MODE)throw new Error('Legacy floor mutation is characterization-only.');
     const idsSet=new Set(cards.map(c=>c.id));
     const affectedMonths=new Set(cards.map(c=>c.month));
     state.floor=state.floor.filter(c=>!idsSet.has(c.id));
@@ -287,10 +288,12 @@
     });
   }
   function addFloorCard(card,preferredSlot=null){
+    if(!TEST_MODE)throw new Error('Legacy floor mutation is characterization-only.');
     commitFloorSlot(card,preferredSlot);
     if(!state.floor.some(c=>c.id===card.id)) state.floor.push(card);
   }
   function makePpeokStack(side,cards){
+    if(!TEST_MODE)throw new Error('Legacy Ppeok mutation is characterization-only.');
     const existing=cards.find(c=>state.floor.some(f=>f.id===c.id));
     const stackSlot=existing && Number.isFinite(state.floorSlotByCard?.[existing.id])
       ? state.floorSlotByCard[existing.id]
@@ -352,7 +355,7 @@
     if(els.promptText) els.promptText.textContent='';
 
     els.playerHand.innerHTML='';
-    bottomPlayer.hand.sort(sortCards).forEach(card=>{
+    [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       const el=createCardEl(card,'card hand-card');
       el.disabled = presentation.locked || state.turn!==PLAYER_A;
       if(card.id===presentation.hintCardId) el.classList.add('matchable');
@@ -390,7 +393,6 @@
 
   function renderFloor(){
     els.floor.innerHTML='';
-    if(!state.floorSlotByCard)initFloorSlots(state);
     const stackBySlot=new Map();
     Object.values(state.floorStacks).forEach(st=>{
       const cards=cardsInStack(st);
@@ -701,11 +703,12 @@
       }
     }else{
       let laughed=false;
+      const capturedPpeok=result.events.some(event=>event.type==='floorStackRemoved'&&event.stackSource==='ppeok');
       for(const event of result.events){
         if(event.type==='cardsCaptured'){
           const captured=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
           await animateCaptureBatch(captured,side);
-          if(classification.kind==='selfPpeokCandidate'&&!laughed){playLaughSound();laughed=true;}
+          if((classification.kind==='selfPpeokCandidate'||capturedPpeok)&&!laughed){playLaughSound();laughed=true;}
         }else if(event.type==='cardLanded'){
           presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await sleep(180);
         }else if(event.type==='piTransferred'){
@@ -718,27 +721,24 @@
     if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
   }
 
-  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount,engineTurn=false){
+  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
     await sleep(330);
 
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
-      if(engineTurn)applyNormalAction(normalAction(side,{type:'drawNextCard'}));
-      const classification=engineTurn?classifyNormalTurn(side):null;
-      if(engineTurn&&classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
-      else if(engineTurn&&['selfPpeokCandidate'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
-      else{
-        if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
-        await resolveCombinedTurn(side,play,null);
-      }
+      applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+      const classification=classifyNormalTurn(side);
+      if(classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
+      else if(['selfPpeokCandidate','floorStackInteraction'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
+      else throw new Error(`Unhandled authoritative turn classification: ${classification.kind}`);
       await concludeTurn(side);
       return;
     }
 
-    const drawResult=engineTurn?applyNormalAction(normalAction(side,{type:'drawNextCard'})):null;
-    const draw=engineTurn?drawResult.events.find(event=>event.type==='deckCardRevealed').card:state.deck.shift();
-    let turnClassification=engineTurn?classifyNormalTurn(side):null;
+    const drawResult=applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+    const draw=drawResult.events.find(event=>event.type==='deckCardRevealed').card;
+    let turnClassification=classifyNormalTurn(side);
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
 
@@ -759,7 +759,7 @@
       if(side==='ai')await previewAiTarget(drawTarget);
     }
 
-    if(engineTurn&&drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
+    if(drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
       applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:drawTarget.id}));
       turnClassification=classifyNormalTurn(side);
     }
@@ -767,13 +767,10 @@
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
     const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
     const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
-    const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate'];
-    if(engineTurn&&turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
-    else if(engineTurn&&extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
-    else{
-      if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
-      await resolveCombinedTurn(side,play,drawn);
-    }
+    const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate','floorStackInteraction'];
+    if(turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
+    else if(extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
+    else throw new Error(`Unhandled authoritative turn classification: ${turnClassification.kind}`);
     await concludeTurn(side);
   }
 
@@ -813,9 +810,8 @@
       const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
       await presentPiTransferEvents(side,completed.events);
     }else{
-      applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
-      await resolveSingleCard(side,{card:draw,stage,target,matchCount:matches.length},true);
-      await applySweepIfNeeded(side);
+      if(classification.kind==='floorStackInteraction')await resolveExtractedSpecialTurn(side,classification,null,{card:draw,stage,target,matchCount:matches.length});
+      else throw new Error(`Unhandled authoritative deck-only classification: ${classification.kind}`);
     }
     await concludeTurn(side);
   }
@@ -851,6 +847,7 @@
   }
 
   async function resolveCombinedTurn(side,play,draw){
+    if(!TEST_MODE)throw new Error('Legacy combined-turn mutation is characterization-only.');
     // Legacy fallback and characterization oracle. Production routes Ppeok/Ssa-da,
     // Jjok, Ttadak, and Self-Ppeok through applySpecialTurnAction before reaching here.
     const sameMonth=draw && draw.card.month===play.card.month && !floorStackForMonth(play.card.month);
@@ -895,6 +892,7 @@
   }
 
   async function resolveSingleCard(side,action,isDeck){
+    if(!TEST_MODE)throw new Error('Legacy single-card mutation is characterization-only.');
     if(!action)return;
     const {card,stage,target,matchCount}=action;
     if(!matchCount){
@@ -938,6 +936,7 @@
   }
 
   async function stealPiAnimated(side,count){
+    if(!TEST_MODE)throw new Error('Legacy Pi mutation is characterization-only.');
     const other=side==='human'?'ai':'human';
     for(let n=0;n<count;n++){
       const ordinary=state[other].captured.find(c=>c.type==='pi'&&!c.flags.includes('doublePi'));

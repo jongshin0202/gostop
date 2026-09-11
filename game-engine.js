@@ -423,7 +423,8 @@
       if(pending.phase==='awaitingFloorTarget')return classification('floorTargetDecision',actorId,{...base,source:'drawn',targetIds:[...pending.drawn.matchIds],requiresDecision:true});
       if(pending.phase==='awaitingTurnCompletion')return classification('awaitingTurnCompletion',actorId,base);
       if(pending.phase!=='awaitingNormalResolution')return classification('legacySpecial',actorId,base);
-      if(state.floorStacks[pending.drawn.card.month]||pending.drawn.matchIds.length>2)return classification('legacySpecial',actorId,{...base,targetIds:[...pending.drawn.matchIds]});
+      if(state.floorStacks[pending.drawn.card.month])return classification('floorStackInteraction',actorId,{...base,source:'drawn',targetIds:[...pending.drawn.matchIds],stackMonth:pending.drawn.card.month});
+      if(pending.drawn.matchIds.length>2)return classification('legacySpecial',actorId,{...base,targetIds:[...pending.drawn.matchIds]});
       return classification('normal',actorId,{...base,targetIds:[...pending.drawn.matchIds],cardOutcomes:[{source:'drawn',cardId:pending.drawn.card.id,kind:pending.drawn.matchIds.length===0?'unmatchedLanding':pending.drawn.matchIds.length===1?'singleMatchCapture':'chosenMatchCapture',targetId:pending.drawn.targetId}],sweep:'postResolution'});
     }
     const base={
@@ -519,7 +520,7 @@
       transferPi(state,otherSide,side,count).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason,cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
     };
     const finish=(rule,checkSweep=false)=>{
-      pending.played.resolved=true;
+      if(pending.played)pending.played.resolved=true;
       if(pending.drawn)pending.drawn.resolved=true;
       pending.phase='awaitingTurnCompletion'; pending.nextResolution=null; pending.sweepResolved=checkSweep;
       if(checkSweep)applySweepMutation(state,actorId,side,events,rule);
@@ -593,6 +594,41 @@
       pending.phase='awaitingTurnCompletion'; pending.nextResolution=null; pending.sweepResolved=true;
       applySweepMutation(state,actorId,side,events,'selfPpeok');
       events.push({type:'specialResolved',audience:'public',actorId,rule:'selfPpeok'});
+      return {state,events,outcome};
+    }
+
+    if(outcome.kind==='floorStackInteraction'){
+      const entry=outcome.source==='played'?pending.played:pending.drawn;
+      const stack=state.floorStacks[outcome.stackMonth];
+      if(!entry||!stack)throw new Error('Floor-stack interaction is stale.');
+      const stackCards=stack.cardIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean);
+      if(stackCards.length!==stack.cardIds.length)throw new Error('Floor-stack cards are unavailable.');
+      removeFloorCardIds(state,stack.cardIds);
+      actor.captured.push(entry.card,...stackCards);
+      events.push({type:'floorStackRemoved',audience:'public',actorId,rule:'floorStackCapture',stackSource:stack.source,month:stack.month,cardIds:[...stack.cardIds]});
+      events.push({type:'cardsCaptured',audience:'public',actorId,rule:'floorStackCapture',cardIds:[entry.card.id,...stack.cardIds]});
+      emitTransfers(1,stack.source==='initial'?'initialStack':'opponentPpeok');
+      entry.resolved=true;
+      const other=entry===pending.played?pending.drawn:pending.played;
+      if(other&&!other.resolved){
+        if(other.matchIds.length===0){
+          const slot=other.landingSlot;
+          if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
+          state.floor.push(other.card); state.floorSlotByCard[other.card.id]=slot;
+          events.push({type:'cardLanded',audience:'public',actorId,source:entry===pending.played?'drawn':'played',cardId:other.card.id,slot});
+        }else{
+          const targetId=other.targetId||other.matchIds[0];
+          const target=state.floor.find(card=>card.id===targetId);
+          if(!target)throw new Error('Floor-stack continuation target is unavailable.');
+          removeFloorCardIds(state,[targetId]);
+          actor.captured.push(other.card,target);
+          events.push({type:'cardsCaptured',audience:'public',actorId,rule:'normalContinuation',cardIds:[other.card.id,target.id]});
+        }
+        other.resolved=true;
+      }
+      pending.phase='awaitingTurnCompletion'; pending.nextResolution=null; pending.sweepResolved=true;
+      applySweepMutation(state,actorId,side,events,'floorStackCapture');
+      events.push({type:'specialResolved',audience:'public',actorId,rule:'floorStackCapture'});
       return {state,events,outcome};
     }
 

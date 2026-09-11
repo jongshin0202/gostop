@@ -70,9 +70,31 @@ Three-Ppeok is authority-owned as part of Ppeok/Ssa-da resolution. After stack c
 
 ## Remaining mixed boundaries and risks
 
-- Unextracted fallback stack handling still exists in `app.js`; its Three-Ppeok conclusion is routed through the same engine terminal API. Ppeok/Ssa-da stack creation and its canonical floor-slot commitment are engine-owned in the classified production path. Opening Chongtong detection and terminal mutation no longer occur in the browser controller.
+- Legacy mutation helpers remain in `app.js` solely as `TEST_MODE` characterization oracles and throw if called in production. All production classifications now resolve through engine actions; unexpected `legacySpecial` states fail loudly rather than entering a browser mutation fallback.
 - Controller functions may still use local `human`/`ai` aliases to select the compatibility storage objects and existing DOM paths. Explicit adapters translate those aliases at every authoritative identity boundary.
 - Sweep detection and Pi mutation are authoritative engine operations. Presentation consumes `sweepTriggered` and reason-tagged `piTransferred` events; the browser does not infer an empty-floor bonus or edit captured piles.
 - Canonical floor slots are presentation-motivated but intentionally authoritative and public. Treating them as local would allow the two future clients to disagree about persistent positions.
 - In-flight reservation cleanup is coupled to animation completion. Cancellation/reconciliation will need explicit handling when a future event queue exists; Step 4 preserves the existing awaited animation pipeline.
 - Deterministic angles preserve the established angle ranges but replace per-stack randomness with stable decoration, so a given public stack now looks identical on repeated renders and on both viewers.
+
+## Final authority table
+
+| Gameplay concern | Authority owner | Presentation owner |
+| --- | --- | --- |
+| Deck, hands, floor, captures | Engine after hand creation | Browser renders projected cards/counts |
+| Matching and target legality | Engine | Browser collects an addressed choice |
+| Initial/Ppeok stack interactions | Engine | Browser animates full-stack capture/laugh |
+| Pi transfers | Engine selects and moves the card | Browser animates `piTransferred` |
+| Shake / KEEP SECRET | Engine and private projection | Browser dialog, bells, reveal choreography |
+| Bomb and Bomb blanks | Engine | Browser choice and Bomb choreography |
+| Ppeok, Jjok, Ttadak, Self-Ppeok, Sweep | Engine | Browser card/audio choreography |
+| Three-Ppeok | Engine | Browser WIN result after Ppeok presentation |
+| Go/Stop | Engine | Browser decision UI/callouts; local AI policy |
+| Chongtong | Engine | Browser fanfare/result dialog |
+| Nagari and carry | Engine | Browser no-winner/result dialog |
+| Settlement and winner | Engine | Browser formats structured result |
+| Canonical floor slots | Engine | Browser keeps local in-flight reservations |
+| Pending decisions | Engine; viewer projection redacts | Browser resolver/dialog only |
+| AI policy | Solo browser controller | Browser pacing/cues |
+| Animations and audio | — | Browser |
+| Secure shuffle/deal/new-hand construction | Solo session/controller boundary | Browser deal presentation |

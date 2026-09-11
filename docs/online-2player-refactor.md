@@ -181,3 +181,15 @@ All ten stages remain isolated to `feature/online-2player`. A merge to the stabl
 ## Approval boundary
 
 Approval of this proposal would authorize only the staged extraction above. It would not authorize networking, gameplay/rule changes, UI redesign, terminology changes, backend work, or exposing any opponent hand identities to a client.
+## READY FOR ONLINE AUTHORITY
+
+- [x] no production in-hand mutation in `app.js`
+- [x] all reachable classifications engine-resolved
+- [x] state JSON-safe
+- [x] events JSON-safe
+- [x] viewer projection redacts hidden data
+- [x] Player A/B parity
+- [x] terminal states authoritative
+- [x] Solo behavior parity
+- [x] secure random shuffle remains outside transitions
+- [x] tests green
