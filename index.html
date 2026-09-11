@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#17110d" />
+  <title>Go-Stop: Korean Card Game</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <div class="ambient-room" aria-hidden="true"></div>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">Go-Stop</span>
+        <span class="brand-sub">KOREAN CARD GAME · MATGO</span>
+      </div>
+      <div class="round-status" aria-label="Game controls">
+        <button id="howToBtn" class="glass-btn" type="button">How to Play</button>
+        <button id="newGameBtn" class="glass-btn strong" type="button">New Game</button>
+      </div>
+    </header>
+
+    <main class="game-stage">
+      <section class="opponent-zone" aria-label="Computer player">
+        <div class="player-chip cpu-chip">
+          <div class="avatar cpu-avatar">AI</div>
+          <div><strong>Computer</strong><span id="aiThinking"></span></div>
+          <div class="score-pill"><b id="aiScore">0</b><small>pts</small></div><span id="aiMultiplier" class="multiplier-chip"></span>
+        </div>
+        <div id="aiHand" class="opponent-hand" aria-label="Computer cards"></div>
+        <div class="capture-panel cpu-capture-panel"><div class="capture-panel-title">Computer Captured Cards</div><div id="aiCaptured" class="captured-strip" aria-label="Computer captured cards"></div></div>
+      </section>
+
+      <section class="table" id="table" aria-label="Go-Stop table">
+        <div class="table-glow"></div>
+        <div class="table-pattern"></div>
+
+        <div class="table-center">
+          <div class="deck-zone" id="deckZone" aria-label="Draw pile">
+            <div class="deck-stack" id="deckStack">
+              <div class="back-card back-3"></div>
+              <div class="back-card back-2"></div>
+              <div class="back-card back-1"></div>
+            </div>
+            <span class="deck-label">DECK <b id="deckCount">20</b></span>
+          </div>
+          <div class="floor" id="floor" aria-label="Cards on the floor"></div>
+        </div>
+
+        <div id="impactLayer" class="impact-layer" aria-hidden="true"></div>
+        <div id="eventBanner" class="event-banner" role="status" aria-live="polite"></div>
+        <div id="actionCue" class="action-cue" aria-live="polite"></div>
+
+      </section>
+
+      <section class="player-zone" aria-label="Your player area">
+        <div class="capture-panel player-capture-panel"><div class="capture-panel-title">Your Captured Cards</div><div id="playerCaptured" class="captured-strip player-captured" aria-label="Your captured cards"></div></div>
+        <div class="player-row">
+          <div class="player-chip human-chip">
+            <div class="avatar human-avatar">YOU</div>
+            <div><strong>You</strong><span id="turnLabel"></span></div>
+            <div class="score-pill"><b id="playerScore">0</b><small>pts</small></div><span id="playerMultiplier" class="multiplier-chip"></span>
+          </div>
+
+        </div>
+        <div class="hand" id="playerHand" aria-label="Your cards"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="howToDialog">
+    <form method="dialog" class="dialog-card">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <div class="eyebrow">QUICK START</div>
+      <h2>How to Play Matgo</h2>
+      <p>Play one Hwatu card from your hand. Cards match by <b>month</b>. If the floor has a card from the same month, you capture a matching pair. Then the top deck card flips and resolves the same way.</p>
+      <div class="rules-grid">
+        <div><b>Brights</b><span>3+ Bright cards score; the Rain Bright changes the 3-Bright score.</span></div>
+        <div><b>Pictures</b><span>5 picture cards = 1 point, then +1 each. Godori adds 5.</span></div>
+        <div><b>Stripes</b><span>5 Stripes = 1 point, then +1 each. Stripe sets can add bonuses.</span></div>
+        <div><b>Singles</b><span>10 Singles value = 1 point, then +1 each.</span></div>
+      </div>
+      <p>When you reach the finish threshold, choose <b>STOP</b> to end the hand or <b>GO</b> to keep playing for a higher payout.</p>
+      <p class="muted">This build uses the Korean Matgo rule engine: Chongtong, Shake, Bomb, Ppeok/Jabbeok, Ttadak, Jjok, Sweep, Go multipliers, Pi-bak, Gwang-bak, Meong-bak, Go-bak, and Nagari carry.</p>
+    </form>
+  </dialog>
+
+
+
+  <dialog id="decisionDialog">
+    <div class="dialog-card decision-card">
+      <div class="eyebrow">YOU CAN FINISH</div>
+      <h2>Go or Stop?</h2>
+      <p id="decisionText"></p>
+      <div class="decision-actions">
+        <button id="goBtn" class="go-btn" type="button">GO</button>
+        <button id="stopBtn" class="stop-btn" type="button">STOP</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="resultDialog" class="grand-result-dialog">
+    <div class="dialog-card result-card grand-result-card">
+      <div id="resultCall" class="result-call stop-call">STOP!</div>
+      <div class="final-score" id="resultScore">0</div>
+      <h2 id="resultTitle" class="result-winner">Player Wins!</h2>
+      <p id="resultBreakdown" class="result-breakdown"></p>
+      <button id="playAgainBtn" class="play-again-grand" type="button">Play Again?</button>
+    </div>
+  </dialog>
+
+  <div id="goCallout" class="go-callout" aria-live="polite">GO!</div>
+
+  <dialog id="captureDialog">
+    <form method="dialog" class="dialog-card capture-dialog-card">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <div class="eyebrow" id="captureOwner">CAPTURED CARDS</div>
+      <h2 id="captureTitle">Gwang</h2>
+      <div id="captureMagnified" class="capture-magnified" aria-label="Magnified captured cards"></div>
+      <p id="captureSummary" class="muted"></p>
+    </form>
+  </dialog>
+
+  <dialog id="shakeDialog">
+    <div class="dialog-card special-rule-card">
+      <div class="eyebrow">SHAKE</div>
+      <h2>Reveal three matching-month cards?</h2>
+      <p id="shakeText"></p>
+      <div id="shakeCards" class="shake-cards" aria-label="Three same-month cards"></div>
+      <div class="decision-actions">
+        <button id="shakeBtn" class="go-btn" type="button">SHAKE ×2</button>
+        <button id="keepSecretBtn" class="stop-btn" type="button">KEEP SECRET</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="bombDialog">
+    <div class="dialog-card special-rule-card">
+      <div class="eyebrow">BOMB</div>
+      <h2>Play all three?</h2>
+      <p id="bombText"></p>
+      <div class="decision-actions">
+        <button id="bombBtn" class="go-btn" type="button">BOMB ×2</button>
+        <button id="playOneBtn" class="stop-btn" type="button">PLAY ONE</button>
+      </div>
+    </div>
+  </dialog>
+
+
+  <div class="compat-hidden" aria-hidden="true">
+    <span id="roundNo">1</span><span id="deckCountTop">20</span><span id="roundCorner">1</span><span id="deckCorner">20</span>
+    <span id="promptText"></span><span id="coachText"></span><button id="hintBtn" type="button" tabindex="-1"></button>
+    <button id="railHowTo" type="button" tabindex="-1"></button><button id="railNewGame" type="button" tabindex="-1"></button><button id="soundToggle" type="button" tabindex="-1"><span>Sound On</span></button>
+  </div>
+  <script src="audio-ppeok.js"></script>
+  <script src="audio-shake.js"></script>
+  <script src="audio-fanfare.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
