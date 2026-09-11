@@ -73,6 +73,10 @@ No new rule ambiguity was introduced. The extracted settlement preserves the exi
 
 ## Migration Step 4 state-boundary coverage
 
-Local locks, selection callbacks, dialog resolvers, staged DOM cards, highlights, AI scheduling protection, audio preference, and in-flight floor reservations now live in one `presentation` container. Go/Stop score history and Nagari carry live in a separate `gameplayContext`; canonical per-hand state and synchronized floor-slot occupancy remain authoritative.
+Local locks, selection callbacks, dialog resolvers, staged DOM cards, highlights, AI scheduling protection, audio preference, and in-flight floor reservations now live in one `presentation` container. Canonical per-hand state and synchronized floor-slot occupancy remain authoritative; Go/Stop score history and Nagari carry now reside in its serializable `matchContext`.
 
-Added tests prove that in-flight reservations choose distinct slots without entering authoritative state, deterministic tilt/stack decoration cannot mutate an outcome, and the authoritative object contains no presentation objects. The existing stable-hole and shared-stack-slot tests continue to cover canonical placement. Full semantic JSON serialization is deliberately deferred only for the four existing triple-month `Set` fields, as detailed in `docs/state-boundary.md`.
+Added tests prove that in-flight reservations choose distinct slots without entering authoritative state, deterministic tilt/stack decoration cannot mutate an outcome, and the authoritative object contains no presentation objects. The existing stable-hole and shared-stack-slot tests continue to cover canonical placement.
+
+## Serialization normalization coverage
+
+The four authoritative triple-month `Set` fields are now unique month arrays accessed through representation helpers. Go/Stop score history and Nagari carry moved into `state.matchContext`. The suite verifies a complete state through serialize → JSON stringify/parse → deserialize, including ordered deck, private hands, captures, floor slots/stacks, all player counters and declarations, result fields, cross-hand context, and identical settlement before and after restoration.

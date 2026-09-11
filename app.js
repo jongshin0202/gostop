@@ -10,7 +10,7 @@
   if(!engine)throw new Error('GoStopEngine must load before app.js.');
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
-    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState
   }=engine;
   const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
@@ -31,10 +31,6 @@
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
   let state = null;
-  const gameplayContext = {
-    lastScoreBySide:{human:0,ai:0},
-    nagariCarryPower:0
-  };
   const presentation = {
     roundNo:1,
     locked:false,
@@ -84,9 +80,12 @@
   function seatForLegacySide(side,viewerId=SOLO_VIEWER_ID){
     return playerIdForLegacySide(side)===viewerId?'bottom':'top';
   }
+  function monthListHas(player,field,month){ return player[field].includes(month); }
+  function monthListAdd(player,field,month){ if(!monthListHas(player,field,month))player[field].push(month); }
+  function monthListDelete(player,field,month){ player[field]=player[field].filter(value=>value!==month); }
 
 
-  function freshState() {
+  function freshState(nagariCarryPower=0) {
     let deck, human, ai, floor, auditId='';
     for (let attempt=0; attempt<200; attempt++) {
       deck = shuffle(MASTER_DECK.map(c => ({...c})));
@@ -106,7 +105,7 @@
     }
     const makePlayer = hand => ({
       hand, captured:[], go:0, shakes:0, bombs:0, bombFreeTurns:0,
-      ppeoks:0, hiddenTripleMonths:new Set(), shakenMonths:new Set(),
+      ppeoks:0, hiddenTripleMonths:[], shakenMonths:[],
       lastGoScore:0
     });
     const next = {
@@ -114,12 +113,13 @@
       human:makePlayer(human),
       ai:makePlayer(ai),
       floorStacks:{},
-      turn:'human', winner:null, specialWinner:null
+      turn:'human', winner:null, specialWinner:null,
+      matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower}
     };
     markInitialFloorStacks(next);
     initFloorSlots(next);
     [next.human,next.ai].forEach(player => {
-      tripleMonths(player.hand).forEach(m => player.hiddenTripleMonths.add(m));
+      tripleMonths(player.hand).forEach(month=>monthListAdd(player,'hiddenTripleMonths',month));
     });
     logShuffleAudit(auditId,next);
     return next;
@@ -503,7 +503,7 @@
   function virtualHandCount(player){ return player.hand.length + player.bombFreeTurns; }
   function consumeBombBlank(player){ player.bombFreeTurns=Math.max(0,player.bombFreeTurns-1); }
   function canDeclareShake(player,month){
-    return player.hand.filter(c=>c.month===month).length===3 && player.hiddenTripleMonths.has(month);
+    return player.hand.filter(c=>c.month===month).length===3 && monthListHas(player,'hiddenTripleMonths',month);
   }
   function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
@@ -535,8 +535,8 @@
       const shake=await chooseShake(card.month);
       if(shake){
         state.human.shakes++;
-        state.human.shakenMonths.add(card.month);
-        state.human.hiddenTripleMonths.delete(card.month);
+        monthListAdd(state.human,'shakenMonths',card.month);
+        monthListDelete(state.human,'hiddenTripleMonths',card.month);
         render();
         await sleep(180);
       }else if(floorSame.length===1 && !floorStackForMonth(card.month)){
@@ -580,7 +580,7 @@
     const sourceRect=clickedEl.getBoundingClientRect();
     clickedEl.style.visibility='hidden';
     const idx=state.human.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.human.hand.splice(idx,1);
-    state.human.hiddenTripleMonths.delete(card.month);
+    monthListDelete(state.human,'hiddenTripleMonths',card.month);
     await playFullTurn('human',card,sourceRect,target,matches.length);
   }
 
@@ -604,13 +604,13 @@
       }
       // The computer also decides whether to Shake only when it is about to use
       // one of the three matching-month cards, never at the opening deal.
-      if(state.ai.hiddenTripleMonths.has(card.month)){
+      if(monthListHas(state.ai,'hiddenTripleMonths',card.month)){
         const sameMonth=state.ai.hand.filter(c=>c.month===card.month);
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
         if(canDeclareShake(state.ai,card.month) && !fourthOnFloor && Math.random()<.72){
           state.ai.shakes++;
-          state.ai.shakenMonths.add(card.month);
-          state.ai.hiddenTripleMonths.delete(card.month);
+          monthListAdd(state.ai,'shakenMonths',card.month);
+          monthListDelete(state.ai,'hiddenTripleMonths',card.month);
           await revealAiShake(card.month);
           render();
           await sleep(220);
@@ -627,7 +627,7 @@
       else if(matches.length>2)target=chooseBestMatch(matches);
       if(target && matches.length>1) await previewAiTarget(target);
       const idx=state.ai.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.ai.hand.splice(idx,1);
-      state.ai.hiddenTripleMonths.delete(card.month);
+      monthListDelete(state.ai,'hiddenTripleMonths',card.month);
       await playFullTurn('ai',card,sourceRect,target,matches.length);
     } finally {
       presentation.aiTurnInProgress=false;
@@ -710,7 +710,7 @@
       return seatForLegacySide(side)==='bottom'?approximateHumanSource(i,bombCards.length):approximateAiSource();
     });
     actor.hand=actor.hand.filter(c=>!bombCards.some(b=>b.id===c.id));
-    actor.hiddenTripleMonths.delete(month);
+    monthListDelete(actor,'hiddenTripleMonths',month);
     actor.bombs++;
     actor.bombFreeTurns+=2;
     render();
@@ -862,8 +862,8 @@
     render();
     const actor=state[side];
     const sc=score(actor.captured);
-    const previous=side==='human'?gameplayContext.lastScoreBySide.human:gameplayContext.lastScoreBySide.ai;
-    if(side==='human')gameplayContext.lastScoreBySide.human=sc.total;else gameplayContext.lastScoreBySide.ai=sc.total;
+    const previous=side==='human'?state.matchContext.lastScoreBySide.human:state.matchContext.lastScoreBySide.ai;
+    if(side==='human')state.matchContext.lastScoreBySide.human=sc.total;else state.matchContext.lastScoreBySide.ai=sc.total;
 
     if(reachedNewFinishScore(sc.total,previous)){
       if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
@@ -906,7 +906,7 @@
 
   function bestAiBombMonth(){
     const counts=countsByMonth(state.ai.hand);
-    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && state.ai.hiddenTripleMonths.has(m) && state.floor.filter(c=>c.month===m).length===1 && !floorStackForMonth(m));
+    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && monthListHas(state.ai,'hiddenTripleMonths',m) && state.floor.filter(c=>c.month===m).length===1 && !floorStackForMonth(m));
     if(!months.length)return null;
     return months.sort((a,b)=>{
       const av=state.floor.filter(c=>c.month===a).reduce((x,c)=>x+captureValue(c),0);
@@ -1306,7 +1306,7 @@
   function calculateFinalScore(winnerSide){
     const actor=state[winnerSide];
     const loser=state[winnerSide==='human'?'ai':'human'];
-    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower:gameplayContext.nagariCarryPower});
+    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower:state.matchContext.nagariCarryPower});
   }
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
@@ -1324,18 +1324,18 @@
   async function finishNagari(){
     if(state.winner)return;
     state.winner='nagari'; presentation.locked=true;
-    gameplayContext.nagariCarryPower=Math.min(3,gameplayContext.nagariCarryPower+1);
-    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**gameplayContext.nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
+    state.matchContext.nagariCarryPower=Math.min(3,state.matchContext.nagariCarryPower+1);
+    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**state.matchContext.nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
     els.resultDialog.showModal(); render();
   }
 
   function finishSpecial(winner,points,reason){
     if(state.winner)return;
     state.winner=winner; presentation.locked=true;
-    const final=points*(2**gameplayContext.nagariCarryPower);
+    const final=points*(2**state.matchContext.nagariCarryPower);
     const specialCall=reason.startsWith('총통!')?'CHONGTONG!':'WIN!';
-    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${gameplayContext.nagariCarryPower?` · Nagari ×${2**gameplayContext.nagariCarryPower}`:''}`,'special');
-    gameplayContext.nagariCarryPower=0;
+    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${state.matchContext.nagariCarryPower?` · Nagari ×${2**state.matchContext.nagariCarryPower}`:''}`,'special');
+    state.matchContext.nagariCarryPower=0;
     els.resultDialog.showModal(); render();
   }
 
@@ -1347,7 +1347,7 @@
     const settled=calculateFinalScore(winner);
     const breakdown=formatScoreFormula(settled);
     setGrandResult('STOP!',winner==='human'?'Player Wins!':'Computer Wins!',`${settled.total} Points`,breakdown,'stop');
-    gameplayContext.nagariCarryPower=0;
+    state.matchContext.nagariCarryPower=0;
     els.resultDialog.showModal();render();
   }
 
@@ -1369,7 +1369,8 @@
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
-    state=freshState();presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;gameplayContext.lastScoreBySide.human=0;gameplayContext.lastScoreBySide.ai=0;
+    const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
+    state=freshState(nagariCarryPower);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;
     els.roundNo.textContent=presentation.roundNo;render();
     setTimeout(processOpeningSpecials,420);
   }
@@ -1418,13 +1419,14 @@
     const cloneCard=card=>({...card,flags:[...card.flags]});
     const makeTestPlayer=(overrides={})=>({
       hand:[],captured:[],go:0,shakes:0,bombs:0,bombFreeTurns:0,ppeoks:0,
-      hiddenTripleMonths:new Set(),shakenMonths:new Set(),lastGoScore:0,
+      hiddenTripleMonths:[],shakenMonths:[],lastGoScore:0,
       ...overrides
     });
     const makeTestState=(overrides={})=>{
       const next={
         deck:[],floor:[],human:makeTestPlayer(),ai:makeTestPlayer(),
         floorStacks:{},turn:'human',winner:null,specialWinner:null,
+        matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower:0},
         ...overrides
       };
       if(!next.floorSlotByCard)initFloorSlots(next);
@@ -1435,15 +1437,16 @@
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
+      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
       card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
       makePlayer:makeTestPlayer,
       makeState:makeTestState,
       setState(next){state=next;},
       getState(){return state;},
-      setNagariCarryPower(value){gameplayContext.nagariCarryPower=value;},
-      getNagariCarryPower(){return gameplayContext.nagariCarryPower;},
-      setPreviousScores(human,ai){gameplayContext.lastScoreBySide.human=human;gameplayContext.lastScoreBySide.ai=ai;},
+      setNagariCarryPower(value){state.matchContext.nagariCarryPower=value;},
+      getNagariCarryPower(){return state.matchContext.nagariCarryPower;},
+      setPreviousScores(human,ai){state.matchContext.lastScoreBySide.human=human;state.matchContext.lastScoreBySide.ai=ai;},
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,

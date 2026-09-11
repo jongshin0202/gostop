@@ -132,10 +132,59 @@
     return {base:winnerScore,total,reasons,baseTotal,goBonus,formulaSteps};
   }
 
+  function assertJsonSafe(value,path='state',seen=new Set()){
+    if(value===null||typeof value==='string'||typeof value==='boolean')return;
+    if(typeof value==='number'){
+      if(!Number.isFinite(value))throw new Error(`${path} contains a non-finite number.`);
+      return;
+    }
+    if(typeof value!=='object')throw new Error(`${path} contains a non-JSON-safe ${typeof value} value.`);
+    if(seen.has(value))throw new Error(`${path} contains a circular reference.`);
+    if(Array.isArray(value)){
+      seen.add(value); value.forEach((item,index)=>assertJsonSafe(item,`${path}[${index}]`,seen)); seen.delete(value); return;
+    }
+    if(Object.prototype.toString.call(value)!=='[object Object]'){
+      throw new Error(`${path} contains a non-JSON-safe ${Object.prototype.toString.call(value).slice(8,-1)} value.`);
+    }
+    seen.add(value);
+    Object.entries(value).forEach(([key,item])=>assertJsonSafe(item,`${path}.${key}`,seen));
+    seen.delete(value);
+  }
+
+  function serializeGameState(state){
+    assertJsonSafe(state);
+    return JSON.parse(JSON.stringify(state));
+  }
+
+  function normalizeMonthList(value,field){
+    if(!Array.isArray(value))throw new Error(`${field} must be an array.`);
+    const months=[];
+    value.forEach(month=>{
+      if(!Number.isInteger(month)||month<1||month>12)throw new Error(`${field} contains an invalid month.`);
+      if(!months.includes(month))months.push(month);
+    });
+    return months;
+  }
+
+  function deserializeGameState(data){
+    const state=serializeGameState(data);
+    ['human','ai'].forEach(side=>{
+      if(!state[side]||typeof state[side]!=='object')throw new Error(`state.${side} is required.`);
+      state[side].hiddenTripleMonths=normalizeMonthList(state[side].hiddenTripleMonths,`state.${side}.hiddenTripleMonths`);
+      state[side].shakenMonths=normalizeMonthList(state[side].shakenMonths,`state.${side}.shakenMonths`);
+    });
+    if(!state.matchContext||typeof state.matchContext!=='object')throw new Error('state.matchContext is required.');
+    if(!state.matchContext.lastScoreBySide||typeof state.matchContext.lastScoreBySide!=='object'){
+      throw new Error('state.matchContext.lastScoreBySide is required.');
+    }
+    return state;
+  }
+
   const api=Object.freeze({
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
-    matchingCards,score,scoreWithGukjinMode,calculateSettlement
+    matchingCards,score,scoreWithGukjinMode,calculateSettlement,
+    serializeGameState,deserializeGameState
   });
 
   globalThis.GoStopEngine=api;

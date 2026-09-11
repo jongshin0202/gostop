@@ -195,9 +195,11 @@ test('extracted settlement preserves each current bonus and bak multiplier',()=>
 
 test('Shake eligibility is hidden-triple gated and each declaration doubles settlement',()=>{
   api.setNagariCarryPower(0);
-  const player=api.makePlayer({hand:cards('m5-1','m5-2','m5-3'),hiddenTripleMonths:new Set([5])});
+  const player=api.makePlayer({hand:cards('m5-1','m5-2','m5-3'),hiddenTripleMonths:[5]});
   assert.equal(api.canDeclareShake(player,5),true);
-  player.hiddenTripleMonths.clear();
+  api.monthListAdd(player,'hiddenTripleMonths',5);
+  assert.equal(player.hiddenTripleMonths.join(','),'5');
+  api.monthListDelete(player,'hiddenTripleMonths',5);
   assert.equal(api.canDeclareShake(player,5),false);
   const state=useState(stateWith({
     human:api.makePlayer({captured:cards('m1-1','m3-1','m8-1'),shakes:2}),
@@ -212,7 +214,7 @@ test('Bomb captures the four-card month, steals Pi, and grants two blank turns',
   const floorCard=card('m6-4');
   const state=useState(stateWith({
     deck:[card('m7-3')],floor:[floorCard],
-    human:api.makePlayer({hand:[...triple,card('m8-3')],hiddenTripleMonths:new Set([6])}),
+    human:api.makePlayer({hand:[...triple,card('m8-3')],hiddenTripleMonths:[6]}),
     ai:api.makePlayer({hand:[card('m9-3')],captured:[card('m10-3')]})
   }));
   api.initFloorSlots(state);
@@ -315,12 +317,12 @@ test('Pi transfer prefers ordinary Pi and falls back to double Pi',async()=>{
 });
 
 test('Nagari increments and caps carry power at three',async()=>{
-  api.setNagariCarryPower(2);
   let state=useState(stateWith());
+  api.setNagariCarryPower(2);
   await api.finishNagari();
   assert.equal(state.winner,'nagari');
   assert.equal(api.getNagariCarryPower(),3);
-  state=useState(stateWith());
+  state=useState(stateWith({matchContext:{lastScoreBySide:{human:0,ai:0},nagariCarryPower:3}}));
   await api.finishNagari();
   assert.equal(api.getNagariCarryPower(),3);
   api.setNagariCarryPower(0);
@@ -372,7 +374,7 @@ test('stack angles and card tilt are deterministic presentation decoration only'
   assert.equal(JSON.stringify(state),before);
 });
 
-test('authoritative state contains no presentation objects and documents only Set serialization blockers',()=>{
+test('authoritative state is entirely JSON-safe and contains no presentation objects',()=>{
   const state=stateWith({floor:[card('m1-1')]});
   const blockers=[];
   function visit(value,path){
@@ -385,12 +387,53 @@ test('authoritative state contains no presentation objects and documents only Se
     Object.entries(value).forEach(([key,item])=>visit(item,path?`${path}.${key}`:key));
   }
   visit(state,'');
-  assert.deepEqual(blockers.sort(),[
-    'ai.hiddenTripleMonths:Set','ai.shakenMonths:Set',
-    'human.hiddenTripleMonths:Set','human.shakenMonths:Set'
-  ]);
+  assert.deepEqual(blockers,[]);
   assert.equal('floorSlotReservations' in state,false);
   assert.equal('stagedCards' in state,false);
   assert.equal('locked' in state,false);
-  assert.doesNotThrow(()=>JSON.parse(JSON.stringify(state)));
+  const parsed=JSON.parse(JSON.stringify(state));
+  assert.equal(JSON.stringify(parsed),JSON.stringify(state));
+});
+
+test('authoritative match state survives a lossless serialize/JSON/deserialize round trip',()=>{
+  const deck=cards('m12-4','m11-4','m10-4','m9-4');
+  const floor=cards('m4-1','m4-2','m4-3','m8-1');
+  const state=stateWith({
+    deck,
+    floor,
+    human:api.makePlayer({
+      hand:cards('m1-1','m2-1'),captured:cards('m3-1','m5-3'),go:2,shakes:1,bombs:1,
+      bombFreeTurns:2,ppeoks:1,hiddenTripleMonths:[6],shakenMonths:[7],lastGoScore:5
+    }),
+    ai:api.makePlayer({
+      hand:cards('m9-1','m10-1'),captured:cards('m12-1','m6-3'),go:1,
+      hiddenTripleMonths:[10,11],shakenMonths:[2],lastGoScore:3
+    }),
+    floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'human'}},
+    floorSlotCount:12,
+    floorSlotByCard:{'m4-1':2,'m4-2':2,'m4-3':2,'m8-1':7},
+    turn:'ai',winner:null,specialWinner:null,
+    matchContext:{lastScoreBySide:{human:6,ai:4},nagariCarryPower:2}
+  });
+  const beforeSettlement=extractedEngine.calculateSettlement({
+    winner:state.human,loser:state.ai,nagariCarryPower:state.matchContext.nagariCarryPower
+  });
+  const plain=api.serializeGameState(state);
+  const wire=JSON.parse(JSON.stringify(plain));
+  const restored=api.deserializeGameState(wire);
+
+  assert.equal(JSON.stringify(restored),JSON.stringify(state));
+  assert.equal(restored.deck.map(item=>item.id).join(','),deck.map(item=>item.id).join(','));
+  assert.equal(restored.human.hiddenTripleMonths.join(','),'6');
+  assert.equal(restored.human.shakenMonths.join(','),'7');
+  assert.equal(restored.ai.hiddenTripleMonths.join(','),'10,11');
+  assert.equal(restored.ai.shakenMonths.join(','),'2');
+  assert.equal(restored.human.bombFreeTurns,2);
+  assert.equal(JSON.stringify(restored.floorStacks),JSON.stringify(state.floorStacks));
+  assert.equal(JSON.stringify(restored.floorSlotByCard),JSON.stringify(state.floorSlotByCard));
+  assert.equal(JSON.stringify(restored.matchContext),JSON.stringify(state.matchContext));
+  const afterSettlement=extractedEngine.calculateSettlement({
+    winner:restored.human,loser:restored.ai,nagariCarryPower:restored.matchContext.nagariCarryPower
+  });
+  assert.equal(JSON.stringify(afterSettlement),JSON.stringify(beforeSettlement));
 });
