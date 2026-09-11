@@ -458,19 +458,19 @@ async function legacyNormalOutcome(initial,playedId,playTargetId=null){
 }
 
 function engineNormalOutcome(initial,playedId,playTargetId=null,drawTargetId=null){
-  let result=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:initial.turn,cardId:playedId,targetId:playTargetId});
+  let result=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:initial.turn==='human'?'playerA':'playerB',cardId:playedId,targetId:playTargetId});
   const events=[...result.events];
   let state=result.state;
   if(state.deck.length){
-    result=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actor:initial.turn,targetId:drawTargetId});
+    result=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:initial.turn==='human'?'playerA':'playerB',targetId:drawTargetId});
     state=result.state; events.push(...result.events);
   }
   for(const source of ['played','drawn']){
-    if(source==='drawn'&&!state.pendingNormalTurn.drawn)continue;
-    result=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actor:initial.turn,source});
+    if(source==='drawn'&&!state.pendingTurn.drawn)continue;
+    result=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:initial.turn==='human'?'playerA':'playerB',source});
     state=result.state; events.push(...result.events);
   }
-  result=extractedEngine.applyNormalTurnAction(state,{type:'completeTurn',actor:initial.turn});
+  result=extractedEngine.applyNormalTurnAction(state,{type:'completeTurn',actorId:initial.turn==='human'?'playerA':'playerB'});
   return {state:result.state,events:events.concat(result.events)};
 }
 
@@ -487,6 +487,7 @@ test('normal unmatched play/draw engine actions match the legacy outcome and eve
     'cardPlayed','deckCardRevealed','cardLanded','cardLanded','turnCompleted'
   ]);
   assert.equal(actual.events.every(event=>event.audience==='public'),true);
+  assert.equal(actual.events.every(event=>event.actorId==='playerA'),true);
 });
 
 test('normal single captures engine actions match the legacy outcome',async()=>{
@@ -533,15 +534,16 @@ test('normal actions validate actor, ownership, and legal chosen target',()=>{
     floor:cards('m2-2','m2-3'),human:api.makePlayer({hand:[card('m2-1')]}),
     floorSlotCount:12,floorSlotByCard:{'m2-2':0,'m2-3':1}
   });
-  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'ai',cardId:'m2-1'}),/not ai's turn/);
-  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m9-1'}),/not owned/);
-  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m2-1',targetId:'m8-1'}),/Illegal floor target/);
-  const pending=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m2-1'});
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerB',cardId:'m2-1'}),/not playerB's turn/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m9-1'}),/not owned/);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m2-1',targetId:'m8-1'}),/Illegal floor target/);
+  const pending=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m2-1'});
   assert.equal(pending.pendingDecision.type,'chooseFloorTarget');
-  const chosen=extractedEngine.applyNormalTurnAction(pending.state,{type:'chooseFloorTarget',actor:'human',source:'played',targetId:'m2-3'});
-  assert.equal(chosen.state.pendingNormalTurn.played.targetId,'m2-3');
+  const chosen=extractedEngine.applyNormalTurnAction(pending.state,{type:'chooseFloorTarget',actorId:'playerA',source:'played',targetId:'m2-3'});
+  assert.equal(chosen.state.pendingTurn.played.targetId,'m2-3');
   assert.equal(pending.pendingDecision.audience,'player-private');
-  assert.equal(pending.pendingDecision.playerId,'human');
+  assert.equal(pending.pendingDecision.playerId,'playerA');
+  assert.deepEqual(pending.pendingDecision.legalTargetIds,['m2-2','m2-3']);
 });
 
 test('normal engine rejects same-month and floor-stack special resolution',()=>{
@@ -549,9 +551,9 @@ test('normal engine rejects same-month and floor-stack special resolution',()=>{
     deck:[card('m5-2')],floor:[card('m8-1')],human:api.makePlayer({hand:[card('m5-1')]}),
     floorSlotCount:12,floorSlotByCard:{'m8-1':0}
   });
-  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actor:'human',cardId:'m5-1'}).state;
-  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actor:'human'}).state;
-  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actor:'human',source:'played'}),/Same-month turn/);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m5-1'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}).state;
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'played'}),/Same-month turn/);
 
   state=stateWith({
     floor:cards('m4-1','m4-2','m4-3'),
@@ -559,6 +561,73 @@ test('normal engine rejects same-month and floor-stack special resolution',()=>{
     floorStacks:{4:{month:4,cardIds:['m4-1','m4-2','m4-3'],source:'ppeok',owner:'ai'}},
     floorSlotCount:12,floorSlotByCard:{'m4-1':0,'m4-2':0,'m4-3':0}
   });
-  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actor:'human',cardId:'m4-4',targetId:'m4-3'}).state;
-  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actor:'human',source:'played'}),/non-normal resolution|Stack capture/);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m4-4',targetId:'m4-3'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}).state;
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'played'}),/non-normal resolution|Stack capture/);
+});
+
+test('public normal-turn actions reject legacy actor identities',()=>{
+  const initial=stateWith({human:api.makePlayer({hand:[card('m2-1')]})});
+  for(const actorId of ['human','ai']){
+    assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId,cardId:'m2-1'}),/Unknown actorId/);
+  }
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actor:'human',cardId:'m2-1'}),/neutral actorId/);
+});
+
+test('playerB performs the AI-side normal action sequence with neutral event identities',()=>{
+  const initial=stateWith({
+    turn:'ai',deck:[card('m3-1')],floor:[card('m1-1')],
+    ai:api.makePlayer({hand:[card('m2-1')]}),floorSlotCount:12,floorSlotByCard:{'m1-1':0}
+  });
+  const actual=engineNormalOutcome(initial,'m2-1');
+  assert.equal(actual.state.ai.hand.length,0);
+  assert.equal(actual.state.floor.some(item=>item.id==='m2-1'),true);
+  assert.equal(actual.events.every(event=>event.actorId==='playerB'),true);
+  assert.equal(actual.events.some(event=>Object.hasOwn(event,'actor')),false);
+});
+
+test('awaiting-target state round-trips with the exact neutral private decision',()=>{
+  const initial=stateWith({
+    floor:cards('m2-2','m2-3'),human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m2-2':0,'m2-3':1}
+  });
+  const result=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m2-1'});
+  assert.equal(result.state.pendingTurn.phase,'awaitingFloorTarget');
+  assert.equal(result.state.pendingTurn.actorId,'playerA');
+  const restored=extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(extractedEngine.serializeGameState(result.state))));
+  assert.deepEqual(restored.pendingTurn,result.state.pendingTurn);
+  assert.deepEqual(result.pendingDecision,{
+    type:'chooseFloorTarget',audience:'player-private',playerId:'playerA',actorId:'playerA',source:'played',
+    cardId:'m2-1',legalTargetIds:['m2-2','m2-3'],phase:'awaitingFloorTarget'
+  });
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(restored,{type:'drawNextCard',actorId:'playerA'}),/not awaiting a deck draw/);
+  const chosen=extractedEngine.applyNormalTurnAction(restored,{type:'chooseFloorTarget',actorId:'playerA',source:'played',targetId:'m2-2'});
+  assert.equal(chosen.state.pendingTurn.phase,'awaitingDraw');
+});
+
+test('awaiting-draw state round-trips with exactly draw as its next action',()=>{
+  const initial=stateWith({
+    deck:[card('m3-1')],floor:[card('m1-1')],human:api.makePlayer({hand:[card('m2-1')]}),
+    floorSlotCount:12,floorSlotByCard:{'m1-1':0}
+  });
+  const played=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m2-1'});
+  assert.equal(played.state.pendingTurn.phase,'awaitingDraw');
+  const restored=extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(played.state)));
+  assert.deepEqual(restored.pendingTurn,played.state.pendingTurn);
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(restored,{type:'resolveNormalCard',actorId:'playerA',source:'played'}),/not awaiting normal resolution/);
+  const drawn=extractedEngine.applyNormalTurnAction(restored,{type:'drawNextCard',actorId:'playerA'});
+  assert.equal(drawn.state.pendingTurn.phase,'awaitingNormalResolution');
+  assert.equal(drawn.state.pendingTurn.nextResolution,'played');
+});
+
+test('normal-turn phases enforce ordered resolution and completion',()=>{
+  const initial=stateWith({deck:[card('m3-1')],human:api.makePlayer({hand:[card('m2-1')]})});
+  let state=extractedEngine.applyNormalTurnAction(initial,{type:'playCard',actorId:'playerA',cardId:'m2-1'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}).state;
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'}),/must be played/);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'played'}).state;
+  assert.equal(state.pendingTurn.nextResolution,'drawn');
+  state=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'}).state;
+  assert.equal(state.pendingTurn.phase,'awaitingTurnCompletion');
+  assert.throws(()=>extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}),/not awaiting a deck draw/);
 });

@@ -6,13 +6,26 @@ This step extracts only deterministic, non-special card resolution. Korean speci
 
 `applyNormalTurnAction(state, action)` clones and validates the serializable authoritative state, then supports this ordered action sequence:
 
-1. `playCard` validates actor/turn, card ownership, and an optional legal floor target; removes the owned card; and emits public `cardPlayed`.
+1. `playCard` validates neutral `actorId`/turn, card ownership, and an optional legal floor target; removes the owned card; and emits public `cardPlayed`.
 2. `chooseFloorTarget` validates a selected floor card for the played or drawn card and emits public `floorTargetChosen`.
 3. `drawNextCard` removes and publicly reveals the next ordered deck card through `deckCardRevealed`.
 4. `resolveNormalCard` performs either a normal unmatched landing (`cardLanded`) or capture of one selected floor card (`cardsCaptured`). It rejects stack captures, more-than-two match branches, and same-month played/drawn combinations so special behavior cannot silently enter this path.
 5. `completeTurn` verifies that available normal cards resolved, removes temporary pending-turn state, and emits `turnCompleted`. Existing `concludeTurn` still performs scoring, Go/Stop, Nagari, and scheduling.
 
 All events currently emitted by this narrow path are explicitly `public`. The reducer has no DOM, animation, audio, timer, AI, or network access. It does not expose unrevealed deck cards or any hand other than through the returned authoritative state retained by the current Solo authority.
+
+## Neutral action protocol and resumable phases
+
+The public action field is `actorId`, whose only valid values are `playerA` and `playerB`. In Solo, the compatibility mapping remains `playerA` to `state.human` and `playerB` to `state.ai`; legacy `human` or `ai` actor values are rejected at the engine boundary. The internal `state.turn` and player storage remain legacy-shaped for this narrow migration.
+
+While an extracted turn is active, serializable `state.pendingTurn` records its neutral `actorId`, played/drawn card data, legal matching card IDs, chosen target, reserved landing slot, and one of these phases:
+
+- `awaitingFloorTarget` — only the recorded actor may choose one of the recorded legal target IDs;
+- `awaitingDraw` — the next legal extracted action is the authoritative deck draw;
+- `awaitingNormalResolution` — `nextResolution` identifies whether the played or drawn card resolves next; or
+- `awaitingTurnCompletion` — both available cards resolved and the extracted turn may complete.
+
+A player-private target decision includes its neutral addressee, card ID, source, phase, and complete legal target ID list. Because the pending state contains no callback, promise, DOM node, or animation data, each stable decision boundary survives `serializeGameState`, JSON transport, and `deserializeGameState` without losing the legal continuation.
 
 ## Browser boundary
 
@@ -36,7 +49,7 @@ Bomb blank/deck-only turns also remain on the legacy path in this step.
 
 ## Known boundary risks
 
-- The temporary `pendingNormalTurn` is authoritative and serializable while a normal action sequence is active, but exact restoration into browser animation remains a later controller/event-replay concern.
+- The temporary `pendingTurn` is authoritative and serializable while a normal action sequence is active, but exact restoration into an already-partially-played browser animation remains a later controller/event-replay concern.
 - The reducer records unmatched landing slots at play/draw time so a capture resolved earlier in the same turn cannot move a later unmatched card into a newly opened hole. This preserves the existing in-flight reservation behavior.
 - The controller still detects whether the turn qualifies for the normal path. The engine independently rejects special resolution, but a future step should make action legality and special phases entirely authority-owned.
-- The normal reducer still uses legacy `human`/`ai` actor values because wholesale player-schema migration is outside Step 5A.
+- Player storage and `state.turn` still use legacy `human`/`ai` compatibility values because wholesale player-schema migration is outside Step 5B; public actions, events, decisions, and pending progress do not expose those identities.

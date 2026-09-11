@@ -86,3 +86,9 @@ The four authoritative triple-month `Set` fields are now unique month arrays acc
 Normal unmatched landings, ordinary single captures, and player-selected two-target captures now run through deterministic `playCard`, `chooseFloorTarget`, `drawNextCard`, `resolveNormalCard`, and `completeTurn` engine actions. Parity fixtures compare their final authoritative state against the retained legacy resolver, including the subtle case where a pre-reserved unmatched landing must not move into a hole opened by the preceding capture.
 
 Validation tests cover actor/turn, card ownership, target legality, player-private target decisions, public ordered events, and explicit rejection of same-month and floor-stack special resolution. All earlier special-rule characterization tests remain on and continue to exercise the existing `app.js` branches.
+
+## Migration Step 5B protocol coverage
+
+The extracted action boundary now accepts only neutral `actorId` values (`playerA` or `playerB`); events and private decisions use the same IDs. Solo adapts its local human to `playerA` and AI to `playerB`, while the authoritative player keys and `state.turn` remain legacy-shaped behind that compatibility boundary.
+
+Serializable `state.pendingTurn` phases make target choice, deck draw, ordered played/drawn resolution, and completion explicit. Tests round-trip both awaiting-target and awaiting-draw states through JSON, verify the preserved legal continuation, exercise a complete `playerB` turn, reject legacy and wrong-player actors, and verify neutral actor IDs on all normal-turn events.

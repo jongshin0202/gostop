@@ -89,6 +89,7 @@
     state=result.state;
     return result;
   }
+  function normalAction(side,action){ return {...action,actorId:playerIdForLegacySide(side)}; }
 
 
   function freshState(nagariCarryPower=0) {
@@ -586,7 +587,7 @@
     const sourceRect=clickedEl.getBoundingClientRect();
     clickedEl.style.visibility='hidden';
     monthListDelete(state.human,'hiddenTripleMonths',card.month);
-    const playResult=applyNormalAction({type:'playCard',actor:'human',cardId:card.id,targetId:target?.id||null});
+    const playResult=applyNormalAction(normalAction('human',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
     const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
     await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true);
   }
@@ -634,7 +635,7 @@
       else if(matches.length>2)target=chooseBestMatch(matches);
       if(target && matches.length>1) await previewAiTarget(target);
       monthListDelete(state.ai,'hiddenTripleMonths',card.month);
-      const playResult=applyNormalAction({type:'playCard',actor:'ai',cardId:card.id,targetId:target?.id||null});
+      const playResult=applyNormalAction(normalAction('ai',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
       const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
       await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true);
     } finally {
@@ -668,13 +669,13 @@
   }
 
   async function resolveNormalEngineTurn(side,play,draw){
-    let result=applyNormalAction({type:'resolveNormalCard',actor:side,source:'played'});
+    let result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'played'}));
     await presentNormalResolution(side,result);
     if(draw){
-      result=applyNormalAction({type:'resolveNormalCard',actor:side,source:'drawn'});
+      result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
       await presentNormalResolution(side,result);
     }
-    applyNormalAction({type:'completeTurn',actor:side});
+    applyNormalAction(normalAction(side,{type:'completeTurn'}));
     await applySweepIfNeeded(side);
   }
 
@@ -684,16 +685,17 @@
 
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+      if(engineTurn)applyNormalAction(normalAction(side,{type:'drawNextCard'}));
       if(engineTurn&&canResolveAsNormalEngineTurn(play,null))await resolveNormalEngineTurn(side,play,null);
       else{
-        if(engineTurn)applyNormalAction({type:'deferSpecialTurn',actor:side});
+        if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
         await resolveCombinedTurn(side,play,null);
       }
       await concludeTurn(side);
       return;
     }
 
-    const drawResult=engineTurn?applyNormalAction({type:'drawNextCard',actor:side}):null;
+    const drawResult=engineTurn?applyNormalAction(normalAction(side,{type:'drawNextCard'})):null;
     const draw=engineTurn?drawResult.events.find(event=>event.type==='deckCardRevealed').card:state.deck.shift();
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
@@ -715,8 +717,8 @@
       if(side==='ai')await previewAiTarget(drawTarget);
     }
 
-    if(engineTurn&&drawTarget&&state.pendingNormalTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingNormalTurn.drawn.targetId!==drawTarget.id){
-      applyNormalAction({type:'chooseFloorTarget',actor:side,source:'drawn',targetId:drawTarget.id});
+    if(engineTurn&&drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
+      applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:drawTarget.id}));
     }
 
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
@@ -724,7 +726,7 @@
     const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
     if(engineTurn&&canResolveAsNormalEngineTurn(play,drawn))await resolveNormalEngineTurn(side,play,drawn);
     else{
-      if(engineTurn)applyNormalAction({type:'deferSpecialTurn',actor:side});
+      if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
       await resolveCombinedTurn(side,play,drawn);
     }
     await concludeTurn(side);

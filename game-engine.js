@@ -187,9 +187,19 @@
     let slot=count; while(used.has(slot))slot++; return slot;
   }
 
-  function validateActor(state,actor){
-    if(actor!=='human'&&actor!=='ai')throw new Error(`Unknown actor: ${actor}`);
-    if(state.turn!==actor)throw new Error(`It is not ${actor}'s turn.`);
+  const PLAYER_A='playerA';
+  const PLAYER_B='playerB';
+  function legacySideForPlayerId(playerId){
+    if(playerId===PLAYER_A)return 'human';
+    if(playerId===PLAYER_B)return 'ai';
+    throw new Error(`Unknown actorId: ${playerId}`);
+  }
+
+  function validateActor(state,action){
+    if(Object.prototype.hasOwnProperty.call(action,'actor'))throw new Error('Use neutral actorId, not actor.');
+    const side=legacySideForPlayerId(action.actorId);
+    if(state.turn!==side)throw new Error(`It is not ${action.actorId}'s turn.`);
+    return side;
   }
 
   function selectTarget(matchIds,targetId){
@@ -208,12 +218,13 @@
 
   function applyNormalTurnAction(currentState,action){
     const state=deserializeGameState(currentState);
-    validateActor(state,action.actor);
+    const side=validateActor(state,action);
+    const actorId=action.actorId;
     const events=[];
-    const player=state[action.actor];
+    const player=state[side];
 
     if(action.type==='playCard'){
-      if(state.pendingNormalTurn)throw new Error('A turn is already in progress.');
+      if(state.pendingTurn)throw new Error('A turn is already in progress.');
       const index=player.hand.findIndex(card=>card.id===action.cardId);
       if(index<0)throw new Error('Played card is not owned by the actor.');
       const card=player.hand[index];
@@ -221,41 +232,51 @@
       const targetId=selectTarget(matchIds,action.targetId);
       player.hand.splice(index,1);
       const landingSlot=matchIds.length===0?firstOpenFloorSlot(state):null;
-      state.pendingNormalTurn={actor:action.actor,played:{card,matchIds,targetId,landingSlot,resolved:false},drawn:null};
-      events.push({type:'cardPlayed',audience:'public',actor:action.actor,card,targetId,matchCount:matchIds.length});
-      return {state,events,pendingDecision:matchIds.length>1&&!targetId?{type:'chooseFloorTarget',audience:'player-private',playerId:action.actor,source:'played'}:null};
+      const needsTarget=matchIds.length>1&&!targetId;
+      state.pendingTurn={phase:needsTarget?'awaitingFloorTarget':'awaitingDraw',actorId,nextResolution:null,played:{card,matchIds,targetId,landingSlot,resolved:false},drawn:null};
+      events.push({type:'cardPlayed',audience:'public',actorId,card,targetId,matchCount:matchIds.length});
+      return {state,events,pendingDecision:needsTarget?targetDecision(state.pendingTurn,'played'):null};
     }
 
-    const pending=state.pendingNormalTurn;
-    if(!pending||pending.actor!==action.actor)throw new Error('No normal turn is in progress for the actor.');
+    const pending=state.pendingTurn;
+    if(!pending||pending.actorId!==actorId)throw new Error('No normal turn is in progress for the actor.');
 
     if(action.type==='chooseFloorTarget'){
+      if(pending.phase!=='awaitingFloorTarget')throw new Error('The turn is not awaiting a floor target.');
       const entry=action.source==='played'?pending.played:action.source==='drawn'?pending.drawn:null;
       if(!entry)throw new Error('Unknown target-choice source.');
       entry.targetId=selectTarget(entry.matchIds,action.targetId);
       if(!entry.targetId)throw new Error('A legal floor target is required.');
-      events.push({type:'floorTargetChosen',audience:'public',actor:action.actor,source:action.source,targetId:entry.targetId});
+      pending.phase=action.source==='played'?'awaitingDraw':'awaitingNormalResolution';
+      if(action.source==='drawn')pending.nextResolution='played';
+      events.push({type:'floorTargetChosen',audience:'public',actorId,source:action.source,targetId:entry.targetId});
       return {state,events,pendingDecision:null};
     }
 
     if(action.type==='drawNextCard'){
+      if(pending.phase!=='awaitingDraw')throw new Error('The turn is not awaiting a deck draw.');
       if(pending.drawn)throw new Error('The deck card has already been drawn.');
-      if(!state.deck.length)return {state,events,pendingDecision:null};
+      if(!state.deck.length){ pending.phase='awaitingNormalResolution'; pending.nextResolution='played'; return {state,events,pendingDecision:null}; }
       const card=state.deck.shift();
       const matchIds=matchingCards(state.floor,card).map(match=>match.id);
       const reserved=pending.played.landingSlot==null?[]:[pending.played.landingSlot];
       const landingSlot=matchIds.length===0?firstOpenFloorSlot(state,reserved):null;
       pending.drawn={card,matchIds,targetId:selectTarget(matchIds,action.targetId),landingSlot,resolved:false};
-      events.push({type:'deckCardRevealed',audience:'public',actor:action.actor,card,targetId:pending.drawn.targetId,matchCount:matchIds.length});
-      return {state,events,pendingDecision:matchIds.length>1&&!pending.drawn.targetId?{type:'chooseFloorTarget',audience:'player-private',playerId:action.actor,source:'drawn'}:null};
+      const needsTarget=matchIds.length>1&&!pending.drawn.targetId;
+      pending.phase=needsTarget?'awaitingFloorTarget':'awaitingNormalResolution';
+      if(!needsTarget)pending.nextResolution='played';
+      events.push({type:'deckCardRevealed',audience:'public',actorId,card,targetId:pending.drawn.targetId,matchCount:matchIds.length});
+      return {state,events,pendingDecision:needsTarget?targetDecision(pending,'drawn'):null};
     }
 
     if(action.type==='deferSpecialTurn'){
-      delete state.pendingNormalTurn;
+      delete state.pendingTurn;
       return {state,events,pendingDecision:null};
     }
 
     if(action.type==='resolveNormalCard'){
+      if(pending.phase!=='awaitingNormalResolution')throw new Error('The turn is not awaiting normal resolution.');
+      if(action.source!==pending.nextResolution)throw new Error(`The next normal resolution must be ${pending.nextResolution}.`);
       const entry=action.source==='played'?pending.played:action.source==='drawn'?pending.drawn:null;
       if(!entry||entry.resolved)throw new Error('Card is unavailable for normal resolution.');
       if(entry.matchIds.length>2||!entry.targetId&&entry.matchIds.length>0)throw new Error('Card requires non-normal resolution or a target.');
@@ -265,27 +286,38 @@
         const slot=entry.landingSlot;
         if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
         state.floor.push(entry.card); state.floorSlotByCard[entry.card.id]=slot;
-        events.push({type:'cardLanded',audience:'public',actor:action.actor,source:action.source,card:entry.card,slot});
+        events.push({type:'cardLanded',audience:'public',actorId,source:action.source,card:entry.card,slot});
       }else{
         const target=state.floor.find(card=>card.id===entry.targetId);
         if(!target)throw new Error('Selected floor target is no longer available.');
         state.floor=state.floor.filter(card=>card.id!==target.id);
         delete state.floorSlotByCard[target.id];
         player.captured.push(entry.card,target);
-        events.push({type:'cardsCaptured',audience:'public',actor:action.actor,source:action.source,cards:[entry.card,target]});
+        events.push({type:'cardsCaptured',audience:'public',actorId,source:action.source,cards:[entry.card,target]});
       }
       entry.resolved=true;
+      if(pending.played.resolved&&pending.drawn&&!pending.drawn.resolved)pending.nextResolution='drawn';
+      else if(pending.played.resolved&&(!pending.drawn||pending.drawn.resolved)){
+        pending.phase='awaitingTurnCompletion';
+        pending.nextResolution=null;
+      }
       return {state,events,pendingDecision:null};
     }
 
     if(action.type==='completeTurn'){
+      if(pending.phase!=='awaitingTurnCompletion')throw new Error('The turn is not awaiting completion.');
       if(!pending.played.resolved||pending.drawn&&!pending.drawn.resolved)throw new Error('Normal turn cards are not fully resolved.');
-      delete state.pendingNormalTurn;
-      events.push({type:'turnCompleted',audience:'public',actor:action.actor});
+      delete state.pendingTurn;
+      events.push({type:'turnCompleted',audience:'public',actorId});
       return {state,events,pendingDecision:null};
     }
 
     throw new Error(`Unsupported normal-turn action: ${action.type}`);
+  }
+
+  function targetDecision(pending,source){
+    const entry=source==='played'?pending.played:pending.drawn;
+    return {type:'chooseFloorTarget',audience:'player-private',playerId:pending.actorId,actorId:pending.actorId,source,cardId:entry.card.id,legalTargetIds:[...entry.matchIds],phase:pending.phase};
   }
 
   const api=Object.freeze({
