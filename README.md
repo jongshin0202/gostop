@@ -10,6 +10,14 @@ Open `index.html` in a modern desktop browser.
 
 The Hwatu card artwork and several CC0 sound effects are loaded from public web sources, so an internet connection is recommended.
 
+## Test
+
+Run the deterministic current-behavior characterization suite with Node.js:
+
+```sh
+node --test tests/current-behavior.test.js
+```
+
 ## Current gameplay
 
 - 48-card Hwatu deck
