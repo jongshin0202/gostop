@@ -70,3 +70,9 @@ The tests load the engine both as a classic script before `app.js` and directly 
 Secure shuffle and audit logging intentionally remain in `app.js` because randomness belongs to the current local authority. Stack-aware floor matching, initial-stack creation, floor-slot management, Gukjin presentation, all mutable captures/turns/special rules, AI, DOM, animations, dialogs, and audio also remain there because they depend on mutable state or presentation sequencing.
 
 No new rule ambiguity was introduced. The extracted settlement preserves the existing multiplier order and the previously documented conventions; in particular, it does not decide any unresolved terminology or special-rule policy.
+
+## Migration Step 4 state-boundary coverage
+
+Local locks, selection callbacks, dialog resolvers, staged DOM cards, highlights, AI scheduling protection, audio preference, and in-flight floor reservations now live in one `presentation` container. Go/Stop score history and Nagari carry live in a separate `gameplayContext`; canonical per-hand state and synchronized floor-slot occupancy remain authoritative.
+
+Added tests prove that in-flight reservations choose distinct slots without entering authoritative state, deterministic tilt/stack decoration cannot mutate an outcome, and the authoritative object contains no presentation objects. The existing stable-hole and shared-stack-slot tests continue to cover canonical placement. Full semantic JSON serialization is deliberately deferred only for the four existing triple-month `Set` fields, as detailed in `docs/state-boundary.md`.

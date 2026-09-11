@@ -337,3 +337,60 @@ test('floor slots remain stable after captures and unmatched cards fill holes',(
   const landed=card('m5-1'); api.addFloorCard(landed);
   assert.equal(state.floorSlotByCard[landed.id],original[floor[1].id]);
 });
+
+test('in-flight floor reservations prevent duplicate occupancy without entering authoritative state',()=>{
+  const deck=api.masterDeck();
+  const floor=deck.slice(0,12);
+  const state=useState(stateWith({floor})); api.initFloorSlots(state);
+  const first=deck[12],second=deck[13];
+  const firstSlot=api.reserveFloorSlot(first);
+  const secondSlot=api.reserveFloorSlot(second);
+  assert.notEqual(firstSlot,secondSlot);
+  assert.equal(firstSlot,12);
+  assert.equal(secondSlot,13);
+  assert.equal(state.floorSlotCount,12);
+  assert.equal(state.floorSlotByCard[first.id],undefined);
+  assert.equal(state.floorSlotByCard[second.id],undefined);
+  assert.equal(JSON.stringify(api.getPresentationSnapshot().floorSlotReservations),JSON.stringify({[first.id]:firstSlot,[second.id]:secondSlot}));
+  api.addFloorCard(first); api.addFloorCard(second);
+  assert.equal(state.floorSlotByCard[first.id],firstSlot);
+  assert.equal(state.floorSlotByCard[second.id],secondSlot);
+  assert.equal(JSON.stringify(api.getPresentationSnapshot().floorSlotReservations),'{}');
+});
+
+test('stack angles and card tilt are deterministic presentation decoration only',()=>{
+  const stackCards=cards('m4-1','m4-2','m4-3');
+  const state=useState(stateWith({floor:[...stackCards]})); api.initFloorSlots(state);
+  api.makePpeokStack('human',stackCards);
+  const before=JSON.stringify(state);
+  const stack=state.floorStacks[4];
+  const firstAngles=stackCards.map((item,index)=>api.stableStackAngle(stack,item,index));
+  const secondAngles=stackCards.map((item,index)=>api.stableStackAngle(stack,item,index));
+  assert.deepEqual(firstAngles,secondAngles);
+  assert.equal(api.stableFloorTilt(stackCards[0]),api.stableFloorTilt(stackCards[0]));
+  assert.equal(Object.hasOwn(stack,'angles'),false);
+  assert.equal(JSON.stringify(state),before);
+});
+
+test('authoritative state contains no presentation objects and documents only Set serialization blockers',()=>{
+  const state=stateWith({floor:[card('m1-1')]});
+  const blockers=[];
+  function visit(value,path){
+    const tag=Object.prototype.toString.call(value);
+    if(tag==='[object Set]'||tag==='[object Map]'||typeof value==='function'){
+      blockers.push(`${path}:${tag==='[object Set]'?'Set':tag==='[object Map]'?'Map':'function'}`);
+      return;
+    }
+    if(!value||typeof value!=='object')return;
+    Object.entries(value).forEach(([key,item])=>visit(item,path?`${path}.${key}`:key));
+  }
+  visit(state,'');
+  assert.deepEqual(blockers.sort(),[
+    'ai.hiddenTripleMonths:Set','ai.shakenMonths:Set',
+    'human.hiddenTripleMonths:Set','human.shakenMonths:Set'
+  ]);
+  assert.equal('floorSlotReservations' in state,false);
+  assert.equal('stagedCards' in state,false);
+  assert.equal('locked' in state,false);
+  assert.doesNotThrow(()=>JSON.parse(JSON.stringify(state)));
+});

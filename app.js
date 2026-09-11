@@ -31,20 +31,24 @@
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
   let state = null;
-  let roundNo = 1;
-  let locked = false;
-  let lastHumanScore = 0;
-  let lastAiScore = 0;
-  let hintCardId = null;
-  let soundEnabled = true;
-  let targetChoiceCleanup = null;
-  let pendingHumanCardId = null;
-  let queuedHumanCardSwitch = null;
-  let nagariCarryPower = 0;
-  let shakeResolver = null;
-  let bombResolver = null;
-  let aiTurnInProgress = false;
-  const stagedCards = new Map();
+  const gameplayContext = {
+    lastScoreBySide:{human:0,ai:0},
+    nagariCarryPower:0
+  };
+  const presentation = {
+    roundNo:1,
+    locked:false,
+    hintCardId:null,
+    soundEnabled:true,
+    targetChoiceCleanup:null,
+    pendingHumanCardId:null,
+    queuedHumanCardSwitch:null,
+    shakeResolver:null,
+    bombResolver:null,
+    aiTurnInProgress:false,
+    stagedCards:new Map(),
+    floorSlotReservations:new Map()
+  };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -184,6 +188,7 @@
   }
   function initFloorSlots(st){
     // Fixed table positions: cards never compact or shift after a capture.
+    presentation.floorSlotReservations.clear();
     st.floorSlotCount=12;
     st.floorSlotByCard={};
     st.floor.forEach((card,i)=>{ st.floorSlotByCard[card.id]=i; });
@@ -197,38 +202,53 @@
   function occupiedFloorSlots(st=state){
     const used=new Set();
     if(!st || !st.floorSlotByCard)return used;
-    // Include reserved landing slots for cards that are mid-animation and not
-    // yet committed to state.floor. This prevents two cards in the same turn
-    // from being assigned to the same blank space.
     Object.values(st.floorSlotByCard).forEach(slot=>{ if(Number.isFinite(slot))used.add(slot); });
+    // In-flight landing reservations are local presentation state. They block
+    // duplicate visual occupancy without becoming authoritative floor cards.
+    presentation.floorSlotReservations.forEach(slot=>{if(Number.isFinite(slot))used.add(slot);});
     return used;
   }
-  function firstFreeFloorSlot(st=state){
+  function firstFreeFloorSlot(st=state,commitCapacity=true){
     if(!st.floorSlotByCard)st.floorSlotByCard={};
     if(!Number.isFinite(st.floorSlotCount))st.floorSlotCount=12;
     const used=occupiedFloorSlots(st);
     for(let i=0;i<st.floorSlotCount;i++) if(!used.has(i)) return i;
-    const slot=st.floorSlotCount;
-    st.floorSlotCount+=4;
+    let slot=st.floorSlotCount;
+    while(used.has(slot))slot++;
+    if(commitCapacity)st.floorSlotCount=slot+4;
     return slot;
   }
   function reserveFloorSlot(card,preferredSlot=null){
     if(!state.floorSlotByCard)state.floorSlotByCard={};
     if(Number.isFinite(state.floorSlotByCard[card.id]))return state.floorSlotByCard[card.id];
-    const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state);
-    state.floorSlotByCard[card.id]=slot;
+    if(Number.isFinite(presentation.floorSlotReservations.get(card.id)))return presentation.floorSlotReservations.get(card.id);
+    const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state,false);
+    presentation.floorSlotReservations.set(card.id,slot);
     return slot;
   }
+  function commitFloorSlot(card,preferredSlot=null){
+    const reserved=presentation.floorSlotReservations.get(card.id);
+    const slot=Number.isFinite(preferredSlot)?preferredSlot:Number.isFinite(reserved)?reserved:firstFreeFloorSlot(state);
+    if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
+    state.floorSlotByCard[card.id]=slot;
+    presentation.floorSlotReservations.delete(card.id);
+    return slot;
+  }
+  function visualHash(value){
+    let hash=0; for(const char of value)hash=(hash*31+char.charCodeAt(0))>>>0; return hash;
+  }
   function stableFloorTilt(card){
-    let h=0; for(const ch of card.id)h=(h*31+ch.charCodeAt(0))>>>0;
-    return ((h%61)-30)/10; // stable -3.0..+3.0 degrees
+    return ((visualHash(card.id)%61)-30)/10; // stable -3.0..+3.0 degrees
+  }
+  function stableStackAngle(stack,card,index){
+    const base=[-10,2,12][index]||0;
+    return base+((visualHash(`${stack.source}:${stack.month}:${card.id}`)%41)-20)/10;
   }
   function makeStackInfo(cards,source,owner){
     return {
       month:cards[0]?.month,
       cardIds:cards.map(c=>c.id),
-      source, owner,
-      angles:cards.map((_,i)=>[-10,2,12][i] + (Math.random()*4-2))
+      source, owner
     };
   }
   function floorStackForMonth(month){ return state.floorStacks[month] || null; }
@@ -240,14 +260,17 @@
     const idsSet=new Set(cards.map(c=>c.id));
     const affectedMonths=new Set(cards.map(c=>c.month));
     state.floor=state.floor.filter(c=>!idsSet.has(c.id));
-    idsSet.forEach(id=>{ if(state.floorSlotByCard) delete state.floorSlotByCard[id]; });
+    idsSet.forEach(id=>{
+      if(state.floorSlotByCard)delete state.floorSlotByCard[id];
+      presentation.floorSlotReservations.delete(id);
+    });
     affectedMonths.forEach(month=>{
       const st=state.floorStacks[month];
       if(st && st.cardIds.some(id=>idsSet.has(id))) delete state.floorStacks[month];
     });
   }
   function addFloorCard(card,preferredSlot=null){
-    reserveFloorSlot(card,preferredSlot);
+    commitFloorSlot(card,preferredSlot);
     if(!state.floor.some(c=>c.id===card.id)) state.floor.push(card);
   }
   function makePpeokStack(side,cards){
@@ -256,7 +279,7 @@
       ? state.floorSlotByCard[existing.id]
       : firstFreeFloorSlot(state);
     cards.forEach(c=>addFloorCard(c,stackSlot));
-    cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; });
+    cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; presentation.floorSlotReservations.delete(c.id); });
     state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',side);
     state[side].ppeoks++;
   }
@@ -305,7 +328,7 @@
     els.playerScore.textContent=bottomScore.total; els.aiScore.textContent=topScore.total;
     if(els.goCount) els.goCount.textContent=bottomPlayer.go;
     [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=state.deck.length);
-    if(els.roundCorner) els.roundCorner.textContent=roundNo;
+    if(els.roundCorner) els.roundCorner.textContent=presentation.roundNo;
     // Keep the table visually clean: animation itself communicates whose turn it is.
     els.turnLabel.textContent = '';
     els.aiThinking.textContent = '';
@@ -314,8 +337,8 @@
     els.playerHand.innerHTML='';
     bottomPlayer.hand.sort(sortCards).forEach(card=>{
       const el=createCardEl(card,'card hand-card');
-      el.disabled = locked || state.turn!=='human';
-      if(card.id===hintCardId) el.classList.add('matchable');
+      el.disabled = presentation.locked || state.turn!=='human';
+      if(card.id===presentation.hintCardId) el.classList.add('matchable');
       el.addEventListener('click',()=>humanPlay(card.id, el));
       els.playerHand.appendChild(el);
     });
@@ -324,7 +347,7 @@
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
-      blank.disabled=locked || state.turn!=='human';
+      blank.disabled=presentation.locked || state.turn!=='human';
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
       els.playerHand.appendChild(blank);
@@ -358,7 +381,9 @@
       if(Number.isFinite(slot))stackBySlot.set(slot,st);
     });
 
-    for(let slot=0; slot<state.floorSlotCount; slot++){
+    const reservedSlots=[...presentation.floorSlotReservations.values()];
+    const visibleSlotCount=Math.max(state.floorSlotCount,reservedSlots.length?Math.max(...reservedSlots)+1:0);
+    for(let slot=0; slot<visibleSlotCount; slot++){
       const slotEl=document.createElement('div');
       slotEl.className='floor-slot';
       slotEl.dataset.floorSlot=String(slot);
@@ -369,7 +394,7 @@
         wrap.dataset.stackMonth=String(stack.month);
         cardsInStack(stack).forEach((c,i)=>{
           const el=createCardEl(c,'card floor-card stacked-floor-card');
-          el.style.setProperty('--stack-angle',`${stack.angles[i]||0}deg`);
+          el.style.setProperty('--stack-angle',`${stableStackAngle(stack,c,i)}deg`);
           el.style.setProperty('--stack-x',`${i*5}px`);
           el.style.setProperty('--stack-y',`${i*3}px`);
           el.style.zIndex=String(i+1);
@@ -445,14 +470,14 @@
   async function chooseFloorTarget(matches, message='Choose which card to hit'){
     if(matches.length<=1) return matches[0]||null;
     cleanupTargetChoice();
-    locked=true;
+    presentation.locked=true;
     showActionCue('human','choose a floor card');
 
     return new Promise(resolve=>{
       const handlers=[];
       const finish=card=>{
         handlers.forEach(({el,click,key})=>{el.removeEventListener('click',click);el.removeEventListener('keydown',key);el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');});
-        targetChoiceCleanup=null;
+        presentation.targetChoiceCleanup=null;
         resolve(card);
       };
       matches.forEach(card=>{
@@ -462,10 +487,10 @@
         const key=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();finish(card);}};
         el.addEventListener('click',click); el.addEventListener('keydown',key); handlers.push({el,click,key});
       });
-      targetChoiceCleanup=()=>finish(null);
+      presentation.targetChoiceCleanup=()=>finish(null);
     });
   }
-  function cleanupTargetChoice(){ if(targetChoiceCleanup){ const fn=targetChoiceCleanup; targetChoiceCleanup=null; fn(); } }
+  function cleanupTargetChoice(){ if(presentation.targetChoiceCleanup){ const fn=presentation.targetChoiceCleanup; presentation.targetChoiceCleanup=null; fn(); } }
 
   async function previewAiTarget(target){
     if(!target)return;
@@ -483,8 +508,8 @@
   function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
-    if(locked || state.turn!=='human' || state.winner || state.human.bombFreeTurns<=0)return;
-    locked=true; hintCardId=null; render();
+    if(presentation.locked || state.turn!=='human' || state.winner || state.human.bombFreeTurns<=0)return;
+    presentation.locked=true; presentation.hintCardId=null; render();
     await executeDeckOnlyTurn('human');
   }
 
@@ -493,16 +518,16 @@
 
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
-    if(locked){
-      if(targetChoiceCleanup && pendingHumanCardId && cardId!==pendingHumanCardId){
-        queuedHumanCardSwitch={cardId,clickedEl};
-        targetChoiceCleanup();
+    if(presentation.locked){
+      if(presentation.targetChoiceCleanup && presentation.pendingHumanCardId && cardId!==presentation.pendingHumanCardId){
+        presentation.queuedHumanCardSwitch={cardId,clickedEl};
+        presentation.targetChoiceCleanup();
       }
       return;
     }
 
     const card=state.human.hand.find(c=>c.id===cardId); if(!card)return;
-    locked=true; hintCardId=null;
+    presentation.locked=true; presentation.hintCardId=null;
 
     const sameMonth=state.human.hand.filter(c=>c.month===card.month);
     const floorSame=state.floor.filter(c=>c.month===card.month);
@@ -517,8 +542,8 @@
       }else if(floorSame.length===1 && !floorStackForMonth(card.month)){
         const useBomb=await chooseBomb(card.month);
         if(useBomb){
-          pendingHumanCardId=null;
-          queuedHumanCardSwitch=null;
+          presentation.pendingHumanCardId=null;
+          presentation.queuedHumanCardSwitch=null;
           await executeBombTurn('human',card.month);
           return;
         }
@@ -527,7 +552,7 @@
 
     const matches=matchesFor(card);
     clickedEl.classList.add('pending-card');
-    pendingHumanCardId=card.id;
+    presentation.pendingHumanCardId=card.id;
     let target=null;
     if(matches.length===1) target=matches[0];
     else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which floor card to hit');
@@ -538,10 +563,10 @@
     // moving or consuming the original card.
     if(matches.length===2 && !target){
       clickedEl.classList.remove('pending-card');
-      pendingHumanCardId=null;
-      locked=false;
-      const next=queuedHumanCardSwitch;
-      queuedHumanCardSwitch=null;
+      presentation.pendingHumanCardId=null;
+      presentation.locked=false;
+      const next=presentation.queuedHumanCardSwitch;
+      presentation.queuedHumanCardSwitch=null;
       if(next){
         await nextFrame();
         return humanPlay(next.cardId,next.clickedEl);
@@ -549,8 +574,8 @@
       return;
     }
 
-    queuedHumanCardSwitch=null;
-    pendingHumanCardId=null;
+    presentation.queuedHumanCardSwitch=null;
+    presentation.pendingHumanCardId=null;
     clickedEl.classList.remove('pending-card');
     const sourceRect=clickedEl.getBoundingClientRect();
     clickedEl.style.visibility='hidden';
@@ -560,9 +585,9 @@
   }
 
   async function aiTurn(){
-    if(state.turn!=='ai'||state.winner||aiTurnInProgress)return;
-    aiTurnInProgress=true;
-    locked=true;
+    if(state.turn!=='ai'||state.winner||presentation.aiTurnInProgress)return;
+    presentation.aiTurnInProgress=true;
+    presentation.locked=true;
     try {
       render(); await sleep(520);
 
@@ -605,7 +630,7 @@
       state.ai.hiddenTripleMonths.delete(card.month);
       await playFullTurn('ai',card,sourceRect,target,matches.length);
     } finally {
-      aiTurnInProgress=false;
+      presentation.aiTurnInProgress=false;
     }
   }
 
@@ -651,7 +676,7 @@
 
   async function executeDeckOnlyTurn(side){
     if(state.winner)return;
-    locked=true;
+    presentation.locked=true;
     const actor=state[side];
     consumeBombBlank(actor);
     if(!state.deck.length){ await finishNagari(); return; }
@@ -675,7 +700,7 @@
     const actor=state[side];
     const bombCards=actor.hand.filter(c=>c.month===month).slice(0,3);
     const floorTarget=state.floor.find(c=>c.month===month);
-    if(bombCards.length!==3 || !floorTarget){ locked=false; render(); return; }
+    if(bombCards.length!==3 || !floorTarget){ presentation.locked=false; render(); return; }
 
     const bombSourceRects=bombCards.map((c,i)=>{
       if(seatForLegacySide(side)==='bottom'){
@@ -837,11 +862,11 @@
     render();
     const actor=state[side];
     const sc=score(actor.captured);
-    const previous=side==='human'?lastHumanScore:lastAiScore;
-    if(side==='human')lastHumanScore=sc.total;else lastAiScore=sc.total;
+    const previous=side==='human'?gameplayContext.lastScoreBySide.human:gameplayContext.lastScoreBySide.ai;
+    if(side==='human')gameplayContext.lastScoreBySide.human=sc.total;else gameplayContext.lastScoreBySide.ai=sc.total;
 
     if(reachedNewFinishScore(sc.total,previous)){
-      if(side==='human'){ locked=true; await humanGoStop(sc); return; }
+      if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
       if(aiShouldGo(sc)){
         actor.go++; actor.lastGoScore=sc.total; showGoCallout('ai'); await sleep(980);
       }else{
@@ -865,16 +890,16 @@
     if(state.winner)return;
     const side=state.turn, actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
-      locked=true;
+      presentation.locked=true;
       setTimeout(()=>executeDeckOnlyTurn(side),760);
       return;
     }
     if(side==='ai'){
-      locked=true;
+      presentation.locked=true;
       setTimeout(aiTurn,820);
     }else{
       // Human Bomb credits are visible blank cards; the player explicitly clicks one.
-      locked=false;
+      presentation.locked=false;
       render();
     }
   }
@@ -900,7 +925,7 @@
     if(!els.bombDialog)return true;
     els.bombText.textContent=`You hold three ${monthNames[month-1]} cards and the fourth is on the floor. Use BOMB to play all three, take the set, steal 1 Pi, and earn a ×2 win multiplier.`;
     els.bombDialog.showModal();
-    return new Promise(resolve=>{ bombResolver=resolve; });
+    return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
 
   async function chooseShake(month){
@@ -914,7 +939,7 @@
     els.shakeCards.innerHTML='';
     cards.forEach(c=>els.shakeCards.appendChild(createCardEl(c,'card magnified-card')));
     els.shakeDialog.showModal();
-    return new Promise(resolve=>{ shakeResolver=resolve; });
+    return new Promise(resolve=>{ presentation.shakeResolver=resolve; });
   }
 
   async function processOpeningSpecials(){
@@ -935,7 +960,7 @@
     // stays hidden until that player actually tries to use one of those cards.
     // This is both less intrusive and closer to table play: the declaration is
     // made at the moment the triple becomes relevant, not as a startup modal.
-    locked=false; render(); scheduleTurnStart();
+    presentation.locked=false; render(); scheduleTurnStart();
   }
 
   async function revealAiShake(month){
@@ -975,7 +1000,7 @@
   }
 
   function overlapLanding(targetCard){
-    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || stagedCards.get(targetCard.id);
+    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || presentation.stagedCards.get(targetCard.id);
     if(!targetEl)return null;
     const r=targetEl.getBoundingClientRect(); const sign=Math.random()<.5?-1:1;
     const x=r.width*(0.22+Math.random()*.24)*sign;
@@ -993,7 +1018,7 @@
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='1160';
   }
-  function removeStage(id){ const el=stagedCards.get(id); if(el){ stagedCards.delete(id); el.remove(); } }
+  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } }
 
   function fullSizeSourceRect(sourceRect){
     const {w,h}=cardSize();
@@ -1004,7 +1029,7 @@
   async function animateHandCardSlap(side,card,sourceRect,target){
     // CPU backs are intentionally smaller in the rack, but the card entering play is always full Hwatu size.
     sourceRect=fullSizeSourceRect(sourceRect);
-    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); stagedCards.set(card.id,el);
+    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); presentation.stagedCards.set(card.id,el);
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     if(!landing)return el;
     if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; return el; }
@@ -1035,7 +1060,7 @@
       const src=sourceRects[i] || (seatForLegacySide(side)==='bottom'?approximateHumanSource(i,cards.length):approximateAiSource());
       const full=fullSizeSourceRect(src);
       const el=makePhysicalFace(card,full,'physical-card moving-card bomb-moving-card');
-      stagedCards.set(card.id,el);
+      presentation.stagedCards.set(card.id,el);
       return {card,el,start:full,i};
     });
     if(prefersReducedMotion()){
@@ -1066,7 +1091,7 @@
   async function animateDeckLiftFlip(side,card){
     if(TEST_MODE){
       const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
-      stagedCards.set(card.id,el);
+      presentation.stagedCards.set(card.id,el);
       return el;
     }
     const deck=els.deckStack.getBoundingClientRect(); const {w,h}=cardSize();
@@ -1076,7 +1101,7 @@
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
     const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front';
     const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=''; front.appendChild(img); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
-    stagedCards.set(card.id,el);
+    presentation.stagedCards.set(card.id,el);
     if(prefersReducedMotion()){ inner.style.transform='rotateY(180deg)'; return el; }
 
     const tableR=els.table.getBoundingClientRect();
@@ -1125,13 +1150,13 @@
 
 
   async function animateCaptureBatch(cards,side){
-    if(TEST_MODE)return;
     const unique=[];
     const seen=new Set();
     cards.filter(Boolean).forEach(c=>{if(!seen.has(c.id)){seen.add(c.id);unique.push(c);}});
+    if(TEST_MODE){unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));return;}
     const entries=[];
     unique.forEach(card=>{
-      const staged=stagedCards.get(card.id);
+      const staged=presentation.stagedCards.get(card.id);
       if(staged) entries.push({el:staged,card,placeholder:null,staged:true});
       else {
         const e=detachFloorCard(card);
@@ -1140,7 +1165,8 @@
     });
     if(!entries.length)return;
     if(prefersReducedMotion()){
-      entries.forEach(e=>{ stagedCards.delete(e.card.id); e.el.remove(); if(e.placeholder)e.placeholder.remove(); });
+      entries.forEach(e=>{ presentation.stagedCards.delete(e.card.id); e.el.remove(); if(e.placeholder)e.placeholder.remove(); });
+      unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
       return;
     }
     const jobs=entries.map((entry,i)=>new Promise(resolve=>{
@@ -1156,14 +1182,14 @@
           {transform:`translate(${dx}px,${dy}px) rotate(0deg) scale(.46)`,opacity:.96,offset:1}
         ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
-        stagedCards.delete(entry.card.id);
+        presentation.stagedCards.delete(entry.card.id);
         entry.el.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
       },i*70);
     }));
     await Promise.all(jobs);
-    // These exact physical cards have left the floor/table. Release any fixed
-    // slot reservations only after their slide-to-capture animation completes.
-    unique.forEach(card=>{ if(state.floorSlotByCard) delete state.floorSlotByCard[card.id]; });
+    // These in-flight cards have left the table. Canonical occupied slots are
+    // released by removeFloorCards when the authoritative capture is applied.
+    unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
   }
 
   async function animateCaptureSlides(playedCard,captured,side,stage){
@@ -1197,7 +1223,7 @@
     });
   }
   function playSample(name,volume=1,playbackRate=1,maxMs=0){
-    if(!soundEnabled)return;
+    if(!presentation.soundEnabled)return;
     try{
       unlockAudio();
       const base=audioBases[name];
@@ -1210,7 +1236,7 @@
     }catch(_){ }
   }
   function playHitSound(){
-    if(!soundEnabled)return;
+    if(!presentation.soundEnabled)return;
     // Floor impact only: loud, dry card-on-card crack. No pile/deck sounds.
     playSample('slam',1,1);
     playSample('slam',.72,1);
@@ -1280,7 +1306,7 @@
   function calculateFinalScore(winnerSide){
     const actor=state[winnerSide];
     const loser=state[winnerSide==='human'?'ai':'human'];
-    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower});
+    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower:gameplayContext.nagariCarryPower});
   }
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
@@ -1297,19 +1323,19 @@
 
   async function finishNagari(){
     if(state.winner)return;
-    state.winner='nagari'; locked=true;
-    nagariCarryPower=Math.min(3,nagariCarryPower+1);
-    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
+    state.winner='nagari'; presentation.locked=true;
+    gameplayContext.nagariCarryPower=Math.min(3,gameplayContext.nagariCarryPower+1);
+    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**gameplayContext.nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
     els.resultDialog.showModal(); render();
   }
 
   function finishSpecial(winner,points,reason){
     if(state.winner)return;
-    state.winner=winner; locked=true;
-    const final=points*(2**nagariCarryPower);
+    state.winner=winner; presentation.locked=true;
+    const final=points*(2**gameplayContext.nagariCarryPower);
     const specialCall=reason.startsWith('총통!')?'CHONGTONG!':'WIN!';
-    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${nagariCarryPower?` · Nagari ×${2**nagariCarryPower}`:''}`,'special');
-    nagariCarryPower=0;
+    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${gameplayContext.nagariCarryPower?` · Nagari ×${2**gameplayContext.nagariCarryPower}`:''}`,'special');
+    gameplayContext.nagariCarryPower=0;
     els.resultDialog.showModal(); render();
   }
 
@@ -1317,34 +1343,34 @@
 
   function finishGame(winner,sc,reason){
     if(winner==='draw'){ finishNagari(); return; }
-    state.winner=winner;locked=true;hideActionCue();
+    state.winner=winner;presentation.locked=true;hideActionCue();
     const settled=calculateFinalScore(winner);
     const breakdown=formatScoreFormula(settled);
     setGrandResult('STOP!',winner==='human'?'Player Wins!':'Computer Wins!',`${settled.total} Points`,breakdown,'stop');
-    nagariCarryPower=0;
+    gameplayContext.nagariCarryPower=0;
     els.resultDialog.showModal();render();
   }
 
 
   function recommendHumanCard(){
-    if(!state||state.turn!=='human'||locked)return;
+    if(!state||state.turn!=='human'||presentation.locked)return;
     let best=state.human.hand[0],val=-Infinity;
     state.human.hand.forEach(c=>{
       const matches=matchesFor(c),cv=matches.length?captureValue(c)+Math.max(...matches.map(captureValue)):0;
       const combo=(c.flags.includes('godori')?2:0)+(c.ribbonSet?1:0)+(c.type==='bright'?2:0),v=cv*1.4+combo+Math.random()*.1;
       if(v>val){val=v;best=c;}
     });
-    hintCardId=best.id;render();
+    presentation.hintCardId=best.id;render();
   }
 
 
   function startGame(){
-    queuedHumanCardSwitch=null; pendingHumanCardId=null; cleanupTargetChoice(); stagedCards.forEach(el=>el.remove()); stagedCards.clear(); hideActionCue();
-    if(shakeResolver){shakeResolver(false);shakeResolver=null;}
-    if(bombResolver){bombResolver(false);bombResolver=null;}
+    presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
+    if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
+    if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
-    state=freshState();locked=true;aiTurnInProgress=false;hintCardId=null;lastHumanScore=0;lastAiScore=0;
-    els.roundNo.textContent=roundNo;render();
+    state=freshState();presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;gameplayContext.lastScoreBySide.human=0;gameplayContext.lastScoreBySide.ai=0;
+    els.roundNo.textContent=presentation.roundNo;render();
     setTimeout(processOpeningSpecials,420);
   }
 
@@ -1352,28 +1378,28 @@
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
   els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
   if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
-  if(els.railNewGame)els.railNewGame.addEventListener('click',()=>{roundNo++;startGame();});
-  if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{soundEnabled=!soundEnabled;els.soundToggle.querySelector('span').textContent=soundEnabled?'Sound On':'Sound Off';if(soundEnabled)unlockAudio();});
-  els.newGameBtn.addEventListener('click',()=>{roundNo++;startGame();});
-  els.playAgainBtn.addEventListener('click',()=>{roundNo++;startGame();});
+  if(els.railNewGame)els.railNewGame.addEventListener('click',()=>{presentation.roundNo++;startGame();});
+  if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
+  els.newGameBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
+  els.playAgainBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
   els.hintBtn.addEventListener('click',recommendHumanCard);
-  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!=='human')return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');locked=true;state.turn='ai';render();setTimeout(aiTurn,1150);});
+  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!=='human')return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');presentation.locked=true;state.turn='ai';render();setTimeout(aiTurn,1150);});
   els.stopBtn.addEventListener('click',()=>{if(!state)return;els.decisionDialog.close();finishGame('human',score(state.human.captured),'You chose STOP.');});
 
 
   if(els.shakeBtn)els.shakeBtn.addEventListener('click',()=>{
-    if(!shakeResolver)return;
+    if(!presentation.shakeResolver)return;
     playShakeSound();
-    const r=shakeResolver; shakeResolver=null; els.shakeDialog.close(); r(true);
+    const r=presentation.shakeResolver; presentation.shakeResolver=null; els.shakeDialog.close(); r(true);
   });
   if(els.keepSecretBtn)els.keepSecretBtn.addEventListener('click',()=>{
-    if(!shakeResolver)return; const r=shakeResolver; shakeResolver=null; els.shakeDialog.close(); r(false);
+    if(!presentation.shakeResolver)return; const r=presentation.shakeResolver; presentation.shakeResolver=null; els.shakeDialog.close(); r(false);
   });
   if(els.bombBtn)els.bombBtn.addEventListener('click',()=>{
-    if(!bombResolver)return; const r=bombResolver; bombResolver=null; els.bombDialog.close(); r(true);
+    if(!presentation.bombResolver)return; const r=presentation.bombResolver; presentation.bombResolver=null; els.bombDialog.close(); r(true);
   });
   if(els.playOneBtn)els.playOneBtn.addEventListener('click',()=>{
-    if(!bombResolver)return; const r=bombResolver; bombResolver=null; els.bombDialog.close(); r(false);
+    if(!presentation.bombResolver)return; const r=presentation.bombResolver; presentation.bombResolver=null; els.bombDialog.close(); r(false);
   });
 
 
@@ -1382,10 +1408,10 @@
   });
 
   if(els.shakeDialog)els.shakeDialog.addEventListener('cancel',e=>{
-    if(shakeResolver){e.preventDefault();const r=shakeResolver;shakeResolver=null;els.shakeDialog.close();r(false);}
+    if(presentation.shakeResolver){e.preventDefault();const r=presentation.shakeResolver;presentation.shakeResolver=null;els.shakeDialog.close();r(false);}
   });
   if(els.bombDialog)els.bombDialog.addEventListener('cancel',e=>{
-    if(bombResolver){e.preventDefault();const r=bombResolver;bombResolver=null;els.bombDialog.close();r(false);}
+    if(presentation.bombResolver){e.preventDefault();const r=presentation.bombResolver;presentation.bombResolver=null;els.bombDialog.close();r(false);}
   });
 
   if(TEST_MODE){
@@ -1415,17 +1441,26 @@
       makeState:makeTestState,
       setState(next){state=next;},
       getState(){return state;},
-      setNagariCarryPower(value){nagariCarryPower=value;},
-      getNagariCarryPower(){return nagariCarryPower;},
-      setPreviousScores(human,ai){lastHumanScore=human;lastAiScore=ai;},
+      setNagariCarryPower(value){gameplayContext.nagariCarryPower=value;},
+      getNagariCarryPower(){return gameplayContext.nagariCarryPower;},
+      setPreviousScores(human,ai){gameplayContext.lastScoreBySide.human=human;gameplayContext.lastScoreBySide.ai=ai;},
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
-      addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
+      commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,
-      getLocked(){return locked;}
+      stableFloorTilt,stableStackAngle,
+      getLocked(){return presentation.locked;},
+      getPresentationSnapshot(){
+        return {
+          floorSlotReservations:Object.fromEntries(presentation.floorSlotReservations),
+          stagedCardCount:presentation.stagedCards.size,
+          locked:presentation.locked,
+          hintCardId:presentation.hintCardId
+        };
+      }
     });
   }else{
     startGame();
