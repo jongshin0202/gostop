@@ -239,11 +239,14 @@ test('Ppeok/Ssa-da forms a three-card stack and increments the actor count',asyn
   classified=extractedEngine.applyNormalTurnAction(classified,{type:'playCard',actorId:'playerA',cardId:played.id}).state;
   classified=extractedEngine.applyNormalTurnAction(classified,{type:'drawNextCard',actorId:'playerA'}).state;
   assert.equal(extractedEngine.classifyTurnOutcome(classified,{actorId:'playerA'}).kind,'ppeokSsaDaCandidate');
+  const engineResult=extractedEngine.applySpecialTurnAction(classified,{type:'resolveSpecialTurn',actorId:'playerA'});
   const state=useState(stateWith({floor:[target]})); api.initFloorSlots(state);
   await api.resolveCombinedTurn('human',{card:played,target,matchCount:1},{card:draw,target:played,matchCount:2});
   assert.equal(state.human.ppeoks,1);
   assert.deepEqual([...state.floorStacks[4].cardIds],[target.id,played.id,draw.id]);
   assert.equal(new Set(state.floorStacks[4].cardIds.map(id=>state.floorSlotByCard[id])).size,1);
+  assert.deepEqual(engineResult.events[0].cardIds,[...state.floorStacks[4].cardIds]);
+  assert.equal(engineResult.events[0].type,'ppeokFormed');
 });
 
 test('Self-Ppeok capture takes the full stack and transfers two Pi',async()=>{
@@ -793,4 +796,97 @@ test('authoritative identity-bearing fields contain no human or ai values',()=>{
   scan(state);
   assert.deepEqual(legacyIdentityPaths,[]);
   assert.deepEqual(Object.keys(state.matchContext.lastScoreBySide).sort(),['playerA','playerB']);
+});
+
+function specialFixture(actorId,{floor,handCard,drawCard,captured=[],floorStacks={},targetId=null}){
+  const side=actorId==='playerA'?'human':'ai';
+  const other=side==='human'?'ai':'human';
+  let state=stateWith({
+    turn:actorId,deck:drawCard?[drawCard]:[],floor,
+    [side]:api.makePlayer({hand:[handCard]}),[other]:api.makePlayer({captured}),floorStacks
+  });
+  if(!Object.keys(state.floorSlotByCard).length)api.initFloorSlots(state);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId,cardId:handCard.id,targetId}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId}).state;
+  return extractedEngine.applySpecialTurnAction(state,{type:'resolveSpecialTurn',actorId});
+}
+
+function assertSpecialWireSafe(result,actorId){
+  const restored=extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(extractedEngine.serializeGameState(result.state))));
+  assert.equal(JSON.stringify(restored),JSON.stringify(result.state));
+  assert.equal(result.events.every(event=>event.audience==='public'),true);
+  assert.equal(result.events.every(event=>event.actorId===actorId),true);
+  assert.equal(result.events.some(event=>Object.hasOwn(event,'hand')),false);
+  assert.doesNotThrow(()=>JSON.stringify(result.events));
+}
+
+test('engine forms Ppeok/Ssa-da stacks for both neutral players with legacy ordering and slots',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const result=specialFixture(actorId,{
+      floor:[card('m4-1')],handCard:card('m4-2'),drawCard:card('m4-3')
+    });
+    const stack=result.state.floorStacks[4];
+    const side=actorId==='playerA'?'human':'ai';
+    assert.deepEqual(stack.cardIds,['m4-1','m4-2','m4-3']);
+    assert.equal(stack.owner,actorId);
+    assert.equal(result.state[side].ppeoks,1);
+    assert.equal(new Set(stack.cardIds.map(id=>result.state.floorSlotByCard[id])).size,1);
+    assert.deepEqual(result.events.map(event=>event.type),['ppeokFormed','specialResolved']);
+    assertSpecialWireSafe(result,actorId);
+  }
+});
+
+test('engine Self-Ppeok captures the full own stack and transfers ordinary Pi before fallback',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const stackCards=cards('m2-1','m2-2','m2-3');
+    const result=specialFixture(actorId,{
+      floor:stackCards,handCard:card('m2-4'),drawCard:card('m8-1'),
+      captured:cards('m12-4','m7-3'),
+      floorStacks:{2:{month:2,cardIds:stackCards.map(item=>item.id),source:'ppeok',owner:actorId}},targetId:'m2-3'
+    });
+    const side=actorId==='playerA'?'human':'ai';
+    const other=side==='human'?'ai':'human';
+    assert.equal(result.state.floorStacks[2],undefined);
+    assert.equal(result.state[side].captured.filter(item=>item.month===2).length,4);
+    assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.cardId),['m7-3','m12-4']);
+    assert.equal(result.state[other].captured.length,0);
+    assert.deepEqual(result.events.map(event=>event.type),['floorStackRemoved','cardsCaptured','piTransferred','piTransferred','specialResolved','checkSweep']);
+    assertSpecialWireSafe(result,actorId);
+  }
+});
+
+test('engine Self-Ppeok gracefully transfers only available Pi',()=>{
+  const stackCards=cards('m6-1','m6-2','m6-3');
+  const result=specialFixture('playerA',{
+    floor:stackCards,handCard:card('m6-4'),drawCard:card('m8-1'),captured:[card('m12-4')],
+    floorStacks:{6:{month:6,cardIds:stackCards.map(item=>item.id),source:'ppeok',owner:'playerA'}},targetId:'m6-3'
+  });
+  assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.cardId),['m12-4']);
+});
+
+test('engine Jjok captures its pair and transfers one Pi for both players',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const result=specialFixture(actorId,{
+      floor:[card('m8-1')],handCard:card('m5-1'),drawCard:card('m5-2'),captured:cards('m12-4','m7-3')
+    });
+    const side=actorId==='playerA'?'human':'ai';
+    assert.deepEqual(result.state[side].captured.filter(item=>item.month===5).map(item=>item.id),['m5-1','m5-2']);
+    assert.deepEqual(result.events.map(event=>event.type),['cardsCaptured','piTransferred','specialResolved','checkSweep']);
+    assert.equal(result.events.find(event=>event.type==='piTransferred').cardId,'m7-3');
+    assertSpecialWireSafe(result,actorId);
+  }
+});
+
+test('engine Ttadak takes four cards without an intermediate drawn-target decision',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const result=specialFixture(actorId,{
+      floor:cards('m3-1','m3-2'),handCard:card('m3-3'),drawCard:card('m3-4'),captured:[card('m7-3')],targetId:'m3-1'
+    });
+    const side=actorId==='playerA'?'human':'ai';
+    assert.equal(result.outcome.kind,'ttadakCandidate');
+    assert.equal(result.state[side].captured.filter(item=>item.month===3).length,4);
+    assert.equal(result.state.floor.some(item=>item.month===3),false);
+    assert.deepEqual(result.events.map(event=>event.type),['cardsCaptured','piTransferred','specialResolved','checkSweep']);
+    assertSpecialWireSafe(result,actorId);
+  }
 });

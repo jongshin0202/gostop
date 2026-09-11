@@ -11,7 +11,7 @@
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
     hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,
-    applyNormalTurnAction,classifyTurnOutcome
+    applyNormalTurnAction,applySpecialTurnAction,classifyTurnOutcome
   }=engine;
   const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
@@ -86,6 +86,11 @@
   function monthListDelete(player,field,month){ player[field]=player[field].filter(value=>value!==month); }
   function applyNormalAction(action){
     const result=applyNormalTurnAction(state,action);
+    state=result.state;
+    return result;
+  }
+  function applySpecialAction(action){
+    const result=applySpecialTurnAction(state,action);
     state=result.state;
     return result;
   }
@@ -670,6 +675,32 @@
     await applySweepIfNeeded(side);
   }
 
+  async function resolveExtractedSpecialTurn(side,classification,play,draw){
+    const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
+    if(classification.kind==='ppeokSsaDaCandidate'){
+      removeStage(play.card.id); if(draw)removeStage(draw.card.id);
+      playPpeokSound(); render();
+      if(state[side].ppeoks>=3){ await sleep(450); finishSpecial(side,7,'Three ppeoks in one hand'); }
+    }else{
+      const captureEvent=result.events.find(event=>event.type==='cardsCaptured');
+      const captured=captureEvent.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
+      await animateCaptureBatch(captured,side);
+      if(classification.kind==='selfPpeokCandidate')playLaughSound();
+      for(const event of result.events.filter(item=>item.type==='piTransferred')){
+        const card=MASTER_DECK.find(item=>item.id===event.cardId);
+        await animatePiTransfer(card,legacySideForPlayerId(event.fromPlayerId),side);
+      }
+      render(); await sleep(190);
+    }
+    if(state.pendingTurn?.phase==='awaitingNormalResolution'){
+      const source=state.pendingTurn.nextResolution;
+      const normalResult=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source}));
+      await presentNormalResolution(side,normalResult);
+    }
+    if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
+    if(result.events.some(event=>event.type==='checkSweep'))await applySweepIfNeeded(side);
+  }
+
   async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount,engineTurn=false){
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
     await sleep(330);
@@ -677,7 +708,9 @@
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
       if(engineTurn)applyNormalAction(normalAction(side,{type:'drawNextCard'}));
-      if(engineTurn&&classifyNormalTurn(side).kind==='normal')await resolveNormalEngineTurn(side,play,null);
+      const classification=engineTurn?classifyNormalTurn(side):null;
+      if(engineTurn&&classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
+      else if(engineTurn&&['selfPpeokCandidate'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
       else{
         if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
         await resolveCombinedTurn(side,play,null);
@@ -717,7 +750,9 @@
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
     const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
     const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
+    const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate'];
     if(engineTurn&&turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
+    else if(engineTurn&&extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
     else{
       if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
       await resolveCombinedTurn(side,play,drawn);
@@ -795,6 +830,8 @@
   }
 
   async function resolveCombinedTurn(side,play,draw){
+    // Legacy fallback and characterization oracle. Production routes Ppeok/Ssa-da,
+    // Jjok, Ttadak, and Self-Ppeok through applySpecialTurnAction before reaching here.
     const sameMonth=draw && draw.card.month===play.card.month && !floorStackForMonth(play.card.month);
 
     if(draw && sameMonth && play.matchCount===0){

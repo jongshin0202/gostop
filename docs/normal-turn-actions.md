@@ -37,22 +37,22 @@ The established browser animation order remains hand slap, deck lift/flip/slap, 
 
 ## Special-rule fallback retained in app.js
 
-The browser deliberately calls `deferSpecialTurn` and uses the existing `resolveCombinedTurn`/`resolveSingleCard` code when the played and drawn cards share a month, a floor stack is involved, or a card has more than two effective matches. This retains:
+`applySpecialTurnAction(state, { type: 'resolveSpecialTurn', actorId })` now mutates classified Ppeok/Ssa-da, Self-Ppeok, Jjok, and Ttadak outcomes. It emits ordered public stack, capture, Pi-transfer, completion, and `checkSweep` events containing neutral IDs and card IDs only. The browser presents those events with the existing sound and animation choreography.
+
+The browser still calls `deferSpecialTurn` and uses the legacy `resolveCombinedTurn`/`resolveSingleCard` fallback for unextracted cases. The duplicate implementations of the four extracted outcomes remain reachable only as conservative fallback/test characterization paths, not the classified production route. This retains:
 
 - Shake and Bomb;
-- Ppeok/Ssa-da and Self-Ppeok;
-- Ttadak and Jjok;
 - Sweep and Pi transfer;
 - Chongtong;
 - Go/Stop and Nagari; and
 - all special scoring and settlement behavior.
 
-Bomb blank/deck-only turns also remain on the legacy path in this step.
+Bomb blank/deck-only turns also remain on the legacy path in this step. Sweep mutation remains in `app.js`: the engine emits `checkSweep` only after an extracted special capture, and the browser performs the established post-mutation floor check and Pi-transfer animation.
 
 ## Known boundary risks
 
 - The temporary `pendingTurn` is authoritative and serializable while a normal action sequence is active, but exact restoration into an already-partially-played browser animation remains a later controller/event-replay concern.
 - The reducer records unmatched landing slots at play/draw time so a capture resolved earlier in the same turn cannot move a later unmatched card into a newly opened hole. This preserves the existing in-flight reservation behavior.
-- The engine now determines normal-versus-special routing, but mutations for classified special outcomes remain deliberately delegated to the legacy controller.
+- The engine now mutates the four Step 6A outcomes; mutations for all other classified special outcomes remain deliberately delegated to the legacy controller.
 - Sweep remains a post-resolution condition because it depends on whether capture mutation actually empties the floor; normal classification marks it `postResolution` rather than predicting it prematurely.
 - Player storage still uses `state.human`/`state.ai`, and browser functions retain matching local aliases because wholesale storage and DOM renaming is outside Step 5D. Explicit adapters prevent those aliases from becoming authoritative identity values.

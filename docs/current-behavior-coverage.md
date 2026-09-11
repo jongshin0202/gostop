@@ -104,3 +104,9 @@ Fixtures cover both neutral actors, JSON round-trip stability, neutral-only clas
 Authoritative `turn`, floor-stack `owner`, player-valued result fields, and score-history keys now use `playerA`/`playerB`. Deserialization strictly rejects legacy identity values rather than guessing how an old snapshot should map. The `state.human`/`state.ai` storage keys and browser-side aliases remain as the intentional Solo compatibility boundary.
 
 Tests exercise both neutral turns, wrong-player rejection, neutral Ppeok ownership and Self-Ppeok classification, lossless identity round trips, strict legacy rejection, and a recursive known-identity-field scan.
+
+## Migration Step 6A special-mutation coverage
+
+The deterministic `resolveSpecialTurn` action now performs Ppeok/Ssa-da formation, own-stack Self-Ppeok capture, Jjok, and Ttadak mutations for both neutral players. It owns canonical stack slots and cleanup, neutral ownership, Ppeok counts, capture ordering, and ordinary-Pi-first transfers with double-Pi and insufficient-Pi fallback.
+
+Tests assert event order/audience/neutral IDs, absence of hand data, exact stack and capture ordering, shared/free slot behavior, Ttadak decision precedence, legacy Ppeok presentation parity, and JSON round trips after every extracted family. Sweep remains a browser-side post-resolution mutation triggered by the engine's public `checkSweep` signal.

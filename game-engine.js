@@ -265,8 +265,9 @@
     const stack=state.floorStacks[played.card.month]||(drawn&&state.floorStacks[drawn.card.month]);
     if(stack){
       const entry=state.floorStacks[played.card.month]?played:drawn;
+      const source=entry===played?'played':'drawn';
       const selfPpeok=stack.source==='ppeok'&&stack.owner===actorId;
-      return classification(selfPpeok?'selfPpeokCandidate':'floorStackInteraction',actorId,{...base,targetIds:[...entry.matchIds],stackMonth:stack.month});
+      return classification(selfPpeok?'selfPpeokCandidate':'floorStackInteraction',actorId,{...base,source,targetIds:[...entry.matchIds],stackMonth:stack.month});
     }
     const entries=[played,drawn].filter(Boolean);
     if(entries.some(entry=>entry.matchIds.length>2))return classification('legacySpecial',actorId,{...base,targetIds:entries.flatMap(entry=>entry.matchIds)});
@@ -281,6 +282,110 @@
   function classification(kind,actorId,details){
     return {kind,actorId,...details};
   }
+
+  function transferPi(state,fromSide,toSide,count){
+    const transferred=[];
+    for(let index=0;index<count;index++){
+      const ordinary=state[fromSide].captured.find(card=>card.type==='pi'&&!card.flags.includes('doublePi'));
+      const card=ordinary||state[fromSide].captured.find(item=>item.type==='pi');
+      if(!card)break;
+      state[fromSide].captured=state[fromSide].captured.filter(item=>item.id!==card.id);
+      state[toSide].captured.push(card);
+      transferred.push(card.id);
+    }
+    return transferred;
+  }
+
+  function removeFloorCardIds(state,cardIds){
+    const ids=new Set(cardIds);
+    state.floor=state.floor.filter(card=>!ids.has(card.id));
+    cardIds.forEach(id=>delete state.floorSlotByCard[id]);
+    Object.keys(state.floorStacks).forEach(month=>{
+      if(state.floorStacks[month].cardIds.some(id=>ids.has(id)))delete state.floorStacks[month];
+    });
+  }
+
+  function applySpecialTurnAction(currentState,action){
+    if(action.type!=='resolveSpecialTurn')throw new Error(`Unsupported special-turn action: ${action.type}`);
+    const state=deserializeGameState(currentState);
+    const side=validateActor(state,action);
+    const actorId=action.actorId;
+    const pending=state.pendingTurn;
+    if(!pending||pending.actorId!==actorId)throw new Error('No turn is in progress for the actor.');
+    const outcome=classifyTurnOutcome(state,{actorId});
+    const events=[];
+    const actor=state[side],otherSide=side==='human'?'ai':'human';
+    const finish=(rule,checkSweep=false)=>{
+      pending.played.resolved=true;
+      if(pending.drawn)pending.drawn.resolved=true;
+      pending.phase='awaitingTurnCompletion'; pending.nextResolution=null;
+      events.push({type:'specialResolved',audience:'public',actorId,rule});
+      if(checkSweep)events.push({type:'checkSweep',audience:'public',actorId,rule});
+      return {state,events,outcome};
+    };
+    const emitTransfers=(count,rule)=>{
+      transferPi(state,otherSide,side,count).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,rule,cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
+    };
+
+    if(outcome.kind==='ppeokSsaDaCandidate'){
+      const target=state.floor.find(card=>card.id===pending.played.targetId)||matchingCards(state.floor,pending.played.card)[0];
+      if(!target)throw new Error('Ppeok/Ssa-da target is unavailable.');
+      const cards=[target,pending.played.card,pending.drawn.card];
+      const slot=state.floorSlotByCard[target.id];
+      cards.forEach(card=>{
+        if(!state.floor.some(item=>item.id===card.id))state.floor.push(card);
+        state.floorSlotByCard[card.id]=slot;
+      });
+      state.floorStacks[target.month]={month:target.month,cardIds:cards.map(card=>card.id),source:'ppeok',owner:actorId};
+      actor.ppeoks++;
+      events.push({type:'ppeokFormed',audience:'public',actorId,rule:'ppeokSsaDa',cardIds:cards.map(card=>card.id),month:target.month,slot,ppeokCount:actor.ppeoks});
+      return finish('ppeokSsaDa');
+    }
+
+    if(outcome.kind==='jjokCandidate'){
+      const cardIds=[pending.played.card.id,pending.drawn.card.id];
+      actor.captured.push(pending.played.card,pending.drawn.card);
+      events.push({type:'cardsCaptured',audience:'public',actorId,rule:'jjok',cardIds});
+      emitTransfers(1,'jjok');
+      return finish('jjok',true);
+    }
+
+    if(outcome.kind==='ttadakCandidate'){
+      const floorCards=pending.played.matchIds.slice(0,2).map(id=>state.floor.find(card=>card.id===id)).filter(Boolean);
+      if(floorCards.length!==2)throw new Error('Ttadak floor cards are unavailable.');
+      removeFloorCardIds(state,floorCards.map(card=>card.id));
+      const captured=[pending.played.card,pending.drawn.card,...floorCards];
+      actor.captured.push(...captured);
+      events.push({type:'cardsCaptured',audience:'public',actorId,rule:'ttadak',cardIds:captured.map(card=>card.id)});
+      emitTransfers(1,'ttadak');
+      return finish('ttadak',true);
+    }
+
+    if(outcome.kind==='selfPpeokCandidate'){
+      const entry=outcome.source==='played'?pending.played:pending.drawn;
+      const stack=state.floorStacks[outcome.stackMonth];
+      const stackCards=stack.cardIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean);
+      removeFloorCardIds(state,stack.cardIds);
+      actor.captured.push(entry.card,...stackCards);
+      events.push({type:'floorStackRemoved',audience:'public',actorId,rule:'selfPpeok',month:stack.month,cardIds:[...stack.cardIds]});
+      events.push({type:'cardsCaptured',audience:'public',actorId,rule:'selfPpeok',cardIds:[entry.card.id,...stack.cardIds]});
+      emitTransfers(2,'selfPpeok');
+      entry.resolved=true;
+      const other=entry===pending.played?pending.drawn:pending.played;
+      if(other&&!other.resolved){
+        pending.phase='awaitingNormalResolution'; pending.nextResolution=entry===pending.played?'drawn':'played';
+      }else{
+        pending.phase='awaitingTurnCompletion'; pending.nextResolution=null;
+      }
+      events.push({type:'specialResolved',audience:'public',actorId,rule:'selfPpeok'});
+      events.push({type:'checkSweep',audience:'public',actorId,rule:'selfPpeok'});
+      return {state,events,outcome};
+    }
+
+    throw new Error(`Classified outcome ${outcome.kind} is not extracted for special resolution.`);
+  }
+
+  function otherPlayerId(playerId){ return playerId===PLAYER_A?PLAYER_B:PLAYER_A; }
 
   function applyNormalTurnAction(currentState,action){
     const state=deserializeGameState(currentState);
@@ -390,7 +495,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,applyNormalTurnAction,classifyTurnOutcome
+    serializeGameState,deserializeGameState,applyNormalTurnAction,applySpecialTurnAction,classifyTurnOutcome
   });
 
   globalThis.GoStopEngine=api;
