@@ -60,3 +60,13 @@ The suite also proves both viewer orientations and the temporary Solo compatibil
 The production renderer now obtains bottom/top players through this seat map. Capture inspection, capture animation destinations, card motion direction, Bomb source geometry, and Go callout placement also resolve legacy actors through the same viewer-relative boundary. Existing DOM IDs, CSS classes, labels, rules, turn scheduling, AI policy, scoring, and authoritative `human`/`ai` schema intentionally remain unchanged.
 
 The chief Step 2 risk is that presentation still receives legacy `human`/`ai` actor values from the rule pipeline. Centralizing their conversion prevents new boundary branching, but full removal must wait for later migration steps so rule execution is not rewritten prematurely. “Computer” also intentionally remains Solo presentation metadata.
+
+## Migration Step 3 extraction coverage
+
+`game-engine.js` now owns the immutable month/card definitions and master deck plus the pure `assertDeckIntegrity`, `countsByMonth`, `tripleMonths`, `fourMonths`, `hasFourOfMonth`, `matchingCards`, `score`, `scoreWithGukjinMode`, and parameterized `calculateSettlement` functions. `app.js` consumes that frozen API and retains only a thin state-to-settlement wrapper for its current `human`/`ai` state.
+
+The tests load the engine both as a classic script before `app.js` and directly through CommonJS. Added assertions cover the frozen API, matching and triple/four-month helpers, and isolated settlement results for Go bonus, Shake, Bomb, Pi-bak, Gwang-bak, Meong-bak, Go-bak, and Nagari in addition to the existing combined settlement fixture.
+
+Secure shuffle and audit logging intentionally remain in `app.js` because randomness belongs to the current local authority. Stack-aware floor matching, initial-stack creation, floor-slot management, Gukjin presentation, all mutable captures/turns/special rules, AI, DOM, animations, dialogs, and audio also remain there because they depend on mutable state or presentation sequencing.
+
+No new rule ambiguity was introduced. The extracted settlement preserves the existing multiplier order and the previously documented conventions; in particular, it does not decide any unresolved terminology or special-rule policy.

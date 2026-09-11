@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const extractedEngine = require('../game-engine.js');
 
 function fakeElement(){
   return {
@@ -39,6 +40,8 @@ function loadCurrentGame(){
   context.window=context;
   context.globalThis=context;
   vm.createContext(context);
+  const engineSource=fs.readFileSync(path.join(__dirname,'..','game-engine.js'),'utf8');
+  vm.runInContext(engineSource,context,{filename:'game-engine.js'});
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   vm.runInContext(source,context,{filename:'app.js'});
   return {api:context.GOSTOP_TEST_API,elements};
@@ -57,6 +60,12 @@ function stateWith(overrides={}){
 }
 
 function useState(state){api.setState(state);return state;}
+
+test('extracted engine exposes a frozen classic-script-compatible API',()=>{
+  assert.equal(Object.isFrozen(extractedEngine),true);
+  assert.equal(Object.isFrozen(extractedEngine.masterDeck),true);
+  assert.equal(extractedEngine.masterDeck.length,48);
+});
 
 test('playerA viewer maps playerA to bottom and playerB to top',()=>{
   const state=stateWith({
@@ -108,6 +117,15 @@ test('traditional deck has 48 unique cards and exactly four cards per month',()=
   assert.throws(()=>api.assertDeckIntegrity(duplicate),/duplicate card IDs/);
 });
 
+test('extracted month helpers preserve matching and triple/four detection',()=>{
+  const sample=cards('m1-1','m1-2','m1-3','m2-1');
+  assert.equal(extractedEngine.matchingCards(sample,1).map(c=>c.id).join(','),'m1-1,m1-2,m1-3');
+  assert.deepEqual(extractedEngine.tripleMonths(sample),[1]);
+  assert.deepEqual(extractedEngine.fourMonths(sample.concat(card('m1-4'))),[1]);
+  assert.equal(extractedEngine.hasFourOfMonth(sample),false);
+  assert.equal(extractedEngine.hasFourOfMonth(sample.concat(card('m1-4'))),true);
+});
+
 test('matching is by month and a three-card floor stack exposes only its top card',()=>{
   const floor=cards('m1-1','m1-2','m2-1');
   const state=useState(stateWith({floor}));
@@ -151,6 +169,28 @@ test('settlement applies Go bonuses and all current doubling multipliers',()=>{
   ]);
   api.setNagariCarryPower(0);
   assert.equal(state.winner,null);
+});
+
+test('extracted settlement preserves each current bonus and bak multiplier',()=>{
+  const player=(captured,overrides={})=>({captured,go:0,shakes:0,bombs:0,lastGoScore:0,...overrides});
+  const threeBright=cards('m1-1','m3-1','m8-1');
+  const defendingBright=[card('m12-1')];
+  const settle=(winner,loser=player(defendingBright),nagariCarryPower=0)=>
+    extractedEngine.calculateSettlement({winner,loser,nagariCarryPower});
+
+  assert.equal(settle(player(threeBright,{go:2})).total,5);
+  assert.equal(settle(player(threeBright,{shakes:1})).total,6);
+  assert.equal(settle(player(threeBright,{bombs:1})).total,6);
+  assert.equal(settle(player(threeBright),player([])).total,6);
+  assert.equal(settle(player(threeBright),player([],{go:1,lastGoScore:0})).total,12);
+  assert.equal(settle(player(threeBright),player(defendingBright),1).total,6);
+
+  const tenPi=cards('m1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m4-3','m4-4','m5-3','m5-4');
+  const sevenPi=cards('m6-3','m6-4','m7-3','m7-4','m8-3','m8-4','m9-3');
+  assert.equal(settle(player(tenPi),player(sevenPi)).total,2);
+
+  const sevenAnimals=cards('m2-1','m4-1','m5-1','m6-1','m7-1','m8-2','m9-1');
+  assert.equal(settle(player(sevenAnimals)).total,16);
 });
 
 test('Shake eligibility is hidden-triple gated and each declaration doubles settlement',()=>{

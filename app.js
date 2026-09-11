@@ -6,39 +6,19 @@
   const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
 
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const monthShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const engine = globalThis.GoStopEngine;
+  if(!engine)throw new Error('GoStopEngine must load before app.js.');
+  const {
+    monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode
+  }=engine;
+  const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
   const PLAYER_A = 'playerA';
   const PLAYER_B = 'playerB';
   const SOLO_VIEWER_ID = PLAYER_A;
 
-  const defs = [
-    [1,'Hikari','bright',null,''], [1,'Tanzaku','ribbon','red',''], [1,'Kasu 1','pi',null,''], [1,'Kasu 2','pi',null,''],
-    [2,'Tane','animal',null,'godori'], [2,'Tanzaku','ribbon','red',''], [2,'Kasu 1','pi',null,''], [2,'Kasu 2','pi',null,''],
-    [3,'Hikari','bright',null,''], [3,'Tanzaku','ribbon','red',''], [3,'Kasu 1','pi',null,''], [3,'Kasu 2','pi',null,''],
-    [4,'Tane','animal',null,'godori'], [4,'Tanzaku','ribbon','grass',''], [4,'Kasu 1','pi',null,''], [4,'Kasu 2','pi',null,''],
-    [5,'Tane','animal',null,''], [5,'Tanzaku','ribbon','grass',''], [5,'Kasu 1','pi',null,''], [5,'Kasu 2','pi',null,''],
-    [6,'Tane','animal',null,''], [6,'Tanzaku','ribbon','blue',''], [6,'Kasu 1','pi',null,''], [6,'Kasu 2','pi',null,''],
-    [7,'Tane','animal',null,''], [7,'Tanzaku','ribbon','grass',''], [7,'Kasu 1','pi',null,''], [7,'Kasu 2','pi',null,''],
-    [8,'Hikari','bright',null,''], [8,'Tane','animal',null,'godori'], [8,'Kasu 1','pi',null,''], [8,'Kasu 2','pi',null,''],
-    [9,'Tane','animal',null,'switchPi'], [9,'Tanzaku','ribbon','blue',''], [9,'Kasu 1','pi',null,''], [9,'Kasu 2','pi',null,''],
-    [10,'Tane','animal',null,''], [10,'Tanzaku','ribbon','blue',''], [10,'Kasu 1','pi',null,''], [10,'Kasu 2','pi',null,''],
-    [11,'Hikari','bright',null,''], [11,'Kasu 1','pi',null,'doublePi'], [11,'Kasu 2','pi',null,''], [11,'Kasu 3','pi',null,''],
-    [12,'Hikari','bright',null,'rain'], [12,'Tane','animal',null,''], [12,'Tanzaku','ribbon',null,''], [12,'Kasu','pi',null,'doublePi']
-  ];
-
-  function cardFilename(month, suffix) { return `Hwatu ${monthNames[month-1]} ${suffix}.svg`; }
   function artUrl(filename) { return COMMONS + encodeURIComponent(filename).replace(/%2F/g,'/'); }
-
-  const MASTER_DECK = defs.map((d, i) => ({
-    id: `m${d[0]}-${i%4+1}`,
-    month: d[0],
-    type: d[2],
-    ribbonSet: d[3],
-    flags: d[4] ? d[4].split(',') : [],
-    file: cardFilename(d[0], d[1])
-  }));
 
   const ids = [
     'playerHand','aiHand','floor','playerCaptured','aiCaptured','deckCount','deckCountTop','deckCorner','roundCorner',
@@ -167,16 +147,6 @@
     return Array.from(a,v=>v.toString(16).padStart(8,'0')).join('-');
   }
 
-  function assertDeckIntegrity(deck){
-    if(deck.length!==48) throw new Error(`Deck integrity failure: expected 48 cards, got ${deck.length}.`);
-    const ids=new Set(deck.map(c=>c.id));
-    if(ids.size!==48) throw new Error(`Deck integrity failure: duplicate card IDs detected (${ids.size}/48 unique).`);
-    for(let m=1;m<=12;m++){
-      const count=deck.filter(c=>c.month===m).length;
-      if(count!==4) throw new Error(`Deck integrity failure: month ${m} has ${count} cards instead of 4.`);
-    }
-  }
-
   function logShuffleAudit(id,st){
     const summarize=cards=>{
       const counts=countsByMonth(cards);
@@ -204,22 +174,6 @@
       [a[i],a[j]]=[a[j],a[i]];
     }
     return a;
-  }
-  function hasFourOfMonth(cards){
-    const n={}; cards.forEach(c=>n[c.month]=(n[c.month]||0)+1);
-    return Object.values(n).some(v=>v===4);
-  }
-
-  function countsByMonth(cards){
-    const out={}; cards.forEach(c=>out[c.month]=(out[c.month]||0)+1); return out;
-  }
-  function tripleMonths(cards){
-    const n=countsByMonth(cards);
-    return Object.keys(n).map(Number).filter(m=>n[m]===3);
-  }
-  function fourMonths(cards){
-    const n=countsByMonth(cards);
-    return Object.keys(n).map(Number).filter(m=>n[m]===4);
   }
   function markInitialFloorStacks(st){
     const n=countsByMonth(st.floor);
@@ -312,7 +266,7 @@
       const cs=cardsInStack(st);
       return cs.length ? [cs[cs.length-1]] : [];
     }
-    return state.floor.filter(c=>c.month===card.month);
+    return matchingCards(state.floor,card);
   }
   function expandedTargetCards(targetCard){
     if(!targetCard)return[];
@@ -327,39 +281,6 @@
     if(st.source==='initial') return 1;
     if(st.source==='ppeok') return st.owner===side ? 2 : 1;
     return 0;
-  }
-
-
-  function score(cards) {
-    const normal=scoreWithGukjinMode(cards,false);
-    const asPi=scoreWithGukjinMode(cards,true);
-    return asPi.total>normal.total ? asPi : normal;
-  }
-
-  function scoreWithGukjinMode(cards,gukjinAsPi) {
-    const isGukjin=c=>c.month===9 && c.type==='animal' && c.flags.includes('switchPi');
-    const bright = cards.filter(c=>c.type==='bright');
-    const animals = cards.filter(c=>c.type==='animal' && !(gukjinAsPi&&isGukjin(c)));
-    const ribbons = cards.filter(c=>c.type==='ribbon');
-    const piCards = cards.filter(c=>c.type==='pi');
-    let brightPts=0;
-    if(bright.length===3) brightPts=bright.some(c=>c.flags.includes('rain'))?2:3;
-    else if(bright.length===4) brightPts=4;
-    else if(bright.length>=5) brightPts=15;
-    let animalPts = animals.length>=5 ? animals.length-4 : 0;
-    const godori = [2,4,8].every(m=>animals.some(c=>c.month===m && c.flags.includes('godori')));
-    if(godori) animalPts += 5;
-    let ribbonPts = ribbons.length>=5 ? ribbons.length-4 : 0;
-    const setBonus = (name, months) => months.every(m=>ribbons.some(c=>c.month===m && c.ribbonSet===name)) ? 3 : 0;
-    ribbonPts += setBonus('red',[1,2,3]) + setBonus('blue',[6,9,10]) + setBonus('grass',[4,5,7]);
-    let piCount = piCards.reduce((sum,c)=>sum+(c.flags.includes('doublePi')?2:1),0);
-    if(gukjinAsPi && cards.some(isGukjin)) piCount += 2;
-    const piPts = piCount>=10 ? piCount-9 : 0;
-    return {
-      total:brightPts+animalPts+ribbonPts+piPts,
-      brightPts,animalPts,ribbonPts,piPts,bright:bright.length,animals:animals.length,
-      ribbons:ribbons.length,piCount,godori,gukjinAsPi
-    };
   }
 
   function createCardEl(card, className='card') {
@@ -1359,47 +1280,7 @@
   function calculateFinalScore(winnerSide){
     const actor=state[winnerSide];
     const loser=state[winnerSide==='human'?'ai':'human'];
-    const sc=score(actor.captured), lsc=score(loser.captured);
-    const baseTotal=sc.total;
-    const goBonus=Math.min(actor.go,2);
-    let total=baseTotal + goBonus;
-    const reasons=[];
-    const formulaSteps=[`Base ${baseTotal}`];
-
-    if(goBonus>0){
-      formulaSteps.push(`Go bonus +${goBonus}`);
-    }
-    if(actor.go>=3){
-      const p=actor.go-2;
-      const goMult=2**p;
-      total*=goMult;
-      reasons.push(`${actor.go} Go ×${goMult}`);
-      formulaSteps.push(`${actor.go} Go ×${goMult}`);
-    }
-
-    let doublePower=actor.shakes+actor.bombs;
-    if(actor.shakes){
-      const m=2**actor.shakes;
-      reasons.push(`Shake ×${m}`);
-      formulaSteps.push(`Shake ×${m}`);
-    }
-    if(actor.bombs){
-      const m=2**actor.bombs;
-      reasons.push(`Bomb ×${m}`);
-      formulaSteps.push(`Bomb ×${m}`);
-    }
-    if(sc.animals>=7){doublePower++;reasons.push('Meong-bak ×2');formulaSteps.push('Meong-bak ×2');}
-    if(sc.piCount>=10 && lsc.piCount<=7){doublePower++;reasons.push('Pi-bak ×2');formulaSteps.push('Pi-bak ×2');}
-    if(sc.bright>=3 && lsc.bright===0){doublePower++;reasons.push('Gwang-bak ×2');formulaSteps.push('Gwang-bak ×2');}
-    if(loser.go>0 && score(loser.captured).total<=loser.lastGoScore){doublePower++;reasons.push('Go-bak ×2');formulaSteps.push('Go-bak ×2');}
-    if(nagariCarryPower>0){
-      const m=2**nagariCarryPower;
-      doublePower+=nagariCarryPower;
-      reasons.push(`Nagari carry ×${m}`);
-      formulaSteps.push(`Nagari carry ×${m}`);
-    }
-    total*=2**doublePower;
-    return {base:sc,total,reasons,baseTotal,goBonus,formulaSteps};
+    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower});
   }
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
