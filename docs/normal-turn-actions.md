@@ -31,7 +31,9 @@ A player-private target decision includes its neutral addressee, card ID, source
 
 Before normal turn interaction, `resolveOpeningState` performs authoritative Chongtong resolution. It preserves the established Player A-first precedence when both hands in a representable fixture contain a four-card month, emits one public neutral `chongtongDeclared` event for the ten-point result, and leaves a terminal state with no legal normal action. The browser only presents that event; its existing fanfare remains local presentation. A non-Chongtong opening continues into the same delayed Shake/Bomb and normal-turn flow.
 
-The existing human/AI controllers still select cards and targets, display Shake/Bomb prompts, and preserve AI pacing. The engine initializes hidden triple eligibility and `attemptPlayCard` pauses an intended play with a serializable private `shakeDecision` only when that triple card is attempted. `declareShake` publicly increments Shake state and emits `shakeDeclared`; `keepShakeSecret` emits nothing public and creates a private `bombDecision` when the fourth card is on the floor. Declining Bomb remains private and resumes the intended card; declaring Bomb atomically reveals/captures the four cards, transfers Pi, records the multiplier, grants two optional blanks, and enters deck draw.
+The existing human/AI controllers still select cards and targets, display Shake/Bomb/Go-Stop prompts, choose AI policy, and preserve AI pacing. The engine initializes hidden triple eligibility and `attemptPlayCard` pauses an intended play with a serializable private `shakeDecision` only when that triple card is attempted. `declareShake` publicly increments Shake state and emits `shakeDeclared`; `keepShakeSecret` emits nothing public and creates a private `bombDecision` when the fourth card is on the floor. Declining Bomb remains private and resumes the intended card; declaring Bomb atomically reveals/captures the four cards, transfers Pi, records the multiplier, grants two optional blanks, and enters deck draw.
+
+After all capture, Pi-transfer, and Sweep mutations are complete, `evaluateGoStop` evaluates the established seven-point threshold and strict improvement over the actor's last accepted GO score. An eligible turn pauses at a JSON-safe, player-private `goStopDecision`; otherwise authority either hands the turn to the other neutral player or reports that the still-unextracted Nagari conclusion is required. `declareGo` increments the actor's GO count, records the accepted score, emits public `goDeclared`, and performs the same handoff. `declareStop` sets the neutral ordinary winner, stores the structured `calculateSettlement` result, and emits public `stopDeclared` and `handEnded`. The browser only chooses AI preference and presents accepted events.
 
 `classifyTurnOutcome(state, { actorId, cardId? })` now owns the deterministic normal-versus-special routing decision. Before play, it can identify `bombEligible`; during a pending turn it returns `awaitingDraw`, `floorTargetDecision`, `normal`, `jjokCandidate`, `ppeokSsaDaCandidate`, `ttadakCandidate`, `selfPpeokCandidate`, `floorStackInteraction`, `awaitingTurnCompletion`, or the conservative `legacySpecial` fallback. Normal results include per-card `unmatchedLanding`, `singleMatchCapture`, or `chosenMatchCapture` details. All results are JSON-safe and use neutral actor IDs.
 
@@ -44,14 +46,14 @@ The established browser animation order remains hand slap, deck lift/flip/slap, 
 The browser still calls `deferSpecialTurn` and uses the legacy `resolveCombinedTurn`/`resolveSingleCard` fallback for unextracted cases. The duplicate implementations of the four extracted outcomes remain reachable only as conservative fallback/test characterization paths, not the classified production route. This retains:
 
 - Other unextracted Pi transfers;
-- Go/Stop and Nagari; and
+- Nagari/deck-exhaustion conclusion; and
 - all special scoring and settlement behavior.
 
 Bomb and `useBombBlank` are engine-owned. Each blank decrements the public remaining count once, removes no hand card, and enters the same authoritative draw/target/resolution/completion lifecycle; ordinary card play remains legal while blanks remain. Sweep detection and mutation are engine-owned: extracted specials evaluate it in the same transaction, normal and Bomb-draw turns evaluate it during completion, and an engine `resolveSweep` bridge supports unextracted legacy resolution without allowing `app.js` to mutate Pi.
 
 ## Known boundary risks
 
-- `pendingTurn` and private Shake/Bomb decisions are authoritative and serializable. Exact restoration into an already-partially-played browser animation remains a later controller/event-replay concern.
+- `pendingTurn` and private Shake/Bomb/Go-Stop decisions are authoritative and serializable. Exact restoration into an already-partially-played browser animation remains a later controller/event-replay concern.
 - The reducer records unmatched landing slots at play/draw time so a capture resolved earlier in the same turn cannot move a later unmatched card into a newly opened hole. This preserves the existing in-flight reservation behavior.
 - The engine now mutates the four Step 6A outcomes; mutations for all other classified special outcomes remain deliberately delegated to the legacy controller.
 - Sweep remains a post-resolution condition because it depends on whether capture mutation actually empties the live floor; the engine evaluates it only after the relevant capture and emits no Pi-transfer event when the opponent has no Pi.

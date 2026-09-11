@@ -192,13 +192,14 @@
     }
     if(state.pendingDecision){
       const decision=state.pendingDecision;
-      if(!['shakeDecision','bombDecision'].includes(decision.type)||decision.audience!=='player-private')throw new Error('Unknown private pending decision.');
+      if(!['shakeDecision','bombDecision','goStopDecision'].includes(decision.type)||decision.audience!=='player-private')throw new Error('Unknown private pending decision.');
       if(decision.playerId!=='playerA'&&decision.playerId!=='playerB')throw new Error('Shake decision must name a neutral player.');
-      if(!Number.isInteger(decision.month)||decision.month<1||decision.month>12)throw new Error('Private decision has invalid month data.');
-      const expected=decision.type==='shakeDecision'?['shake','keepSecret']:['bomb','playNormally'];
+      if(decision.type!=='goStopDecision'&&(!Number.isInteger(decision.month)||decision.month<1||decision.month>12))throw new Error('Private decision has invalid month data.');
+      const expected=decision.type==='shakeDecision'?['shake','keepSecret']:decision.type==='bombDecision'?['bomb','playNormally']:['go','stop'];
       if(JSON.stringify(decision.choices)!==JSON.stringify(expected))throw new Error('Private decision has invalid choices.');
       if(decision.type==='shakeDecision'&&typeof decision.cardId!=='string')throw new Error('Shake decision has invalid card data.');
       if(decision.type==='bombDecision'&&(!Array.isArray(decision.cardIds)||decision.cardIds.length!==3||typeof decision.floorCardId!=='string'))throw new Error('Bomb decision has invalid card data.');
+      if(decision.type==='goStopDecision'&&(!Number.isFinite(decision.score)||!Number.isFinite(decision.previousGoScore)))throw new Error('Go/Stop decision has invalid score data.');
     }
     return state;
   }
@@ -217,6 +218,7 @@
     projected.legalActions=[];
     if(projected.pendingDecision?.type==='shakeDecision')projected.legalActions.push('declareShake','keepShakeSecret');
     else if(projected.pendingDecision?.type==='bombDecision')projected.legalActions.push('declareBomb','declineBomb');
+    else if(projected.pendingDecision?.type==='goStopDecision')projected.legalActions.push('declareGo','declareStop');
     else if(!state.winner&&state.turn===viewerId&&!state.pendingTurn&&!state.pendingDecision){
       if(state[viewerSide].hand.length)projected.legalActions.push('attemptPlayCard');
       if(state[viewerSide].bombFreeTurns>0)projected.legalActions.push('useBombBlank');
@@ -280,6 +282,62 @@
     state.specialWinner=winner.actorId;
     state.openingOutcome={type:'chongtong',actorId:winner.actorId,month,points};
     return {state,events:[{type:'chongtongDeclared',audience:'public',actorId:winner.actorId,month,points}]};
+  }
+
+  function cannotContinueTurn(state,side){
+    return state[side].hand.length+state[side].bombFreeTurns===0||state.deck.length===0;
+  }
+
+  function evaluateGoStop(currentState,{actorId}={}){
+    const state=deserializeGameState(currentState);
+    const side=validateActor(state,{actorId});
+    if(state.pendingTurn||state.pendingDecision)throw new Error('A turn or decision is already in progress.');
+    const currentScore=score(state[side].captured).total;
+    const previousGoScore=state.matchContext.lastScoreBySide[actorId];
+    if(currentScore>=7&&currentScore>previousGoScore){
+      state.pendingDecision={type:'goStopDecision',audience:'player-private',playerId:actorId,score:currentScore,previousGoScore,choices:['go','stop']};
+      return {state,events:[],pendingDecision:serializeGameState(state.pendingDecision),requiresNagari:false};
+    }
+    const requiresNagari=cannotContinueTurn(state,side);
+    const events=[];
+    if(!requiresNagari){
+      state.turn=otherPlayerId(actorId);
+      events.push({type:'turnHandedOff',audience:'public',actorId,toPlayerId:state.turn});
+    }
+    return {state,events,pendingDecision:null,requiresNagari};
+  }
+
+  function applyGoStopAction(currentState,action){
+    if(!action||!['declareGo','declareStop'].includes(action.type))throw new Error(`Unsupported Go/Stop action: ${action?.type}`);
+    const state=deserializeGameState(currentState);
+    const side=validateActor(state,action);
+    const decision=state.pendingDecision;
+    if(!decision||decision.type!=='goStopDecision')throw new Error('No Go/Stop decision is pending.');
+    if(decision.playerId!==action.actorId)throw new Error('The Go/Stop decision belongs to another player.');
+    const currentScore=score(state[side].captured).total;
+    if(currentScore!==decision.score||state.matchContext.lastScoreBySide[action.actorId]!==decision.previousGoScore)throw new Error('Go/Stop decision is stale.');
+    delete state.pendingDecision;
+    const events=[];
+    if(action.type==='declareGo'){
+      state[side].go++;
+      state[side].lastGoScore=currentScore;
+      state.matchContext.lastScoreBySide[action.actorId]=currentScore;
+      events.push({type:'goDeclared',audience:'public',actorId:action.actorId,goCount:state[side].go,score:currentScore});
+      const requiresNagari=cannotContinueTurn(state,side);
+      if(!requiresNagari){
+        state.turn=otherPlayerId(action.actorId);
+        events.push({type:'turnHandedOff',audience:'public',actorId:action.actorId,toPlayerId:state.turn});
+      }
+      return {state,events,pendingDecision:null,requiresNagari};
+    }
+    const otherSide=side==='human'?'ai':'human';
+    const settlement=calculateSettlement({winner:state[side],loser:state[otherSide],nagariCarryPower:state.matchContext.nagariCarryPower});
+    state.winner=action.actorId;
+    state.terminalResult={type:'stop',winnerId:action.actorId,score:settlement.total,settlement};
+    state.matchContext.nagariCarryPower=0;
+    events.push({type:'stopDeclared',audience:'public',actorId:action.actorId});
+    events.push({type:'handEnded',audience:'public',winnerId:action.actorId,reason:'stop',settlement:serializeGameState(settlement)});
+    return {state,events,pendingDecision:null,requiresNagari:false};
   }
 
   function selectTarget(matchIds,targetId){
@@ -675,7 +733,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   });
 
   globalThis.GoStopEngine=api;

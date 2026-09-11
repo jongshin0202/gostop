@@ -1265,3 +1265,147 @@ test('Chongtong fanfare and result presentation require the authoritative event'
   assert.equal(presenter.includes('if(event.actorId===PLAYER_A)playChongtongFanfare()'),true);
   assert.equal(presenter.includes('state.winner='),false);
 });
+
+const sevenPointPi=()=>cards(
+  'm1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m4-3','m4-4',
+  'm5-3','m5-4','m6-3','m6-4','m7-3','m7-4','m8-3','m8-4'
+);
+const goStopState=(actorId='playerA',captured=sevenPointPi(),overrides={})=>{
+  const side=actorId==='playerA'?'human':'ai';
+  return stateWith({turn:actorId,deck:[card('m12-1')],[side]:api.makePlayer({hand:[card('m11-3')],captured,...overrides})});
+};
+const wireRoundTrip=state=>extractedEngine.deserializeGameState(JSON.parse(JSON.stringify(extractedEngine.serializeGameState(state))));
+
+test('Go/Stop eligibility uses seven points and strict improvement for both players',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const below=extractedEngine.evaluateGoStop(goStopState(actorId,sevenPointPi().slice(0,15)),{actorId});
+    assert.equal(below.pendingDecision,null);
+    assert.equal(below.state.turn,actorId==='playerA'?'playerB':'playerA');
+
+    let eligible=extractedEngine.evaluateGoStop(goStopState(actorId),{actorId});
+    assert.deepEqual(eligible.pendingDecision,{type:'goStopDecision',audience:'player-private',playerId:actorId,score:7,previousGoScore:0,choices:['go','stop']});
+    eligible=extractedEngine.evaluateGoStop(goStopState(actorId,sevenPointPi(),{lastGoScore:7}),{actorId});
+    // The neutral match context is authoritative for the prior accepted GO.
+    assert.equal(eligible.pendingDecision.score,7);
+    const equal=goStopState(actorId); equal.matchContext.lastScoreBySide[actorId]=7;
+    assert.equal(extractedEngine.evaluateGoStop(equal,{actorId}).pendingDecision,null);
+    const lower=goStopState(actorId,sevenPointPi().slice(0,15)); lower.matchContext.lastScoreBySide[actorId]=7;
+    assert.equal(extractedEngine.evaluateGoStop(lower,{actorId}).pendingDecision,null);
+    const improved=goStopState(actorId,[...sevenPointPi(),card('m9-3')]); improved.matchContext.lastScoreBySide[actorId]=7;
+    assert.equal(extractedEngine.evaluateGoStop(improved,{actorId}).pendingDecision.score,8);
+  }
+});
+
+test('GO mutates authority once, emits a neutral public event, and hands off',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const side=actorId==='playerA'?'human':'ai';
+    const pending=extractedEngine.evaluateGoStop(goStopState(actorId),{actorId}).state;
+    const restored=wireRoundTrip(pending);
+    const result=extractedEngine.applyGoStopAction(restored,{type:'declareGo',actorId});
+    assert.equal(result.state[side].go,1);
+    assert.equal(result.state[side].lastGoScore,7);
+    assert.equal(result.state.matchContext.lastScoreBySide[actorId],7);
+    assert.equal(result.state.winner,null);
+    assert.equal(result.state.turn,actorId==='playerA'?'playerB':'playerA');
+    assert.deepEqual(result.events[0],{type:'goDeclared',audience:'public',actorId,goCount:1,score:7});
+    assert.equal(result.events[1].type,'turnHandedOff');
+    assert.deepEqual(wireRoundTrip(result.state),result.state);
+    assert.throws(()=>extractedEngine.applyGoStopAction(result.state,{type:'declareGo',actorId}),/not .* turn|No Go\/Stop decision/);
+  }
+});
+
+test('STOP owns the neutral terminal result and exact settlement formula',()=>{
+  const captured=[...sevenPointPi(),...cards('m1-1','m3-1','m8-1','m2-1','m4-1','m5-1','m6-1','m7-1','m8-2','m9-1','m10-1')];
+  const state=goStopState('playerA',captured,{shakes:1,bombs:1});
+  state.matchContext.nagariCarryPower=1;
+  state.ai=api.makePlayer({captured:[],go:1,lastGoScore:3});
+  const pending=extractedEngine.evaluateGoStop(state,{actorId:'playerA'}).state;
+  const expected=extractedEngine.calculateSettlement({winner:pending.human,loser:pending.ai,nagariCarryPower:1});
+  const result=extractedEngine.applyGoStopAction(pending,{type:'declareStop',actorId:'playerA'});
+  assert.equal(result.state.winner,'playerA');
+  assert.equal(result.state.specialWinner,null);
+  assert.deepEqual(result.state.terminalResult,{type:'stop',winnerId:'playerA',score:expected.total,settlement:expected});
+  assert.deepEqual(result.events.map(event=>event.type),['stopDeclared','handEnded']);
+  assert.deepEqual(result.events[1].settlement,expected);
+  assert.deepEqual(result.state.terminalResult.settlement.formulaSteps,expected.formulaSteps);
+  assert.equal(expected.reasons.includes('Shake ×2'),true);
+  assert.equal(expected.reasons.includes('Bomb ×2'),true);
+  assert.equal(expected.reasons.includes('Meong-bak ×2'),true);
+  assert.equal(expected.reasons.includes('Pi-bak ×2'),true);
+  assert.equal(expected.reasons.includes('Gwang-bak ×2'),true);
+  assert.equal(expected.reasons.includes('Go-bak ×2'),true);
+  assert.equal(expected.reasons.includes('Nagari carry ×2'),true);
+  assert.equal(result.state.matchContext.nagariCarryPower,0);
+  assert.deepEqual(wireRoundTrip(result.state),result.state);
+  assert.deepEqual(extractedEngine.projectStateForViewer(result.state,'playerA').legalActions,[]);
+});
+
+test('Go/Stop private decision is viewer-safe and rejects invalid responses',()=>{
+  const hidden=card('m10-1');
+  const pending=extractedEngine.evaluateGoStop(goStopState('playerA',sevenPointPi(),{hand:[hidden]}),{actorId:'playerA'}).state;
+  const actorView=extractedEngine.projectStateForViewer(pending,'playerA');
+  const opponentView=extractedEngine.projectStateForViewer(pending,'playerB');
+  assert.deepEqual(actorView.legalActions,['declareGo','declareStop']);
+  assert.equal(opponentView.pendingDecision,undefined);
+  assert.deepEqual(opponentView.legalActions,[]);
+  assert.equal(JSON.stringify(opponentView).includes(hidden.id),false);
+  assert.throws(()=>extractedEngine.applyGoStopAction(pending,{type:'declareStop',actorId:'playerB'}),/not playerB's turn|another player/);
+  assert.throws(()=>extractedEngine.applyGoStopAction(goStopState(),{type:'declareStop',actorId:'playerA'}),/No Go\/Stop decision/);
+  const stale=wireRoundTrip(pending); stale.human.captured.pop();
+  assert.throws(()=>extractedEngine.applyGoStopAction(stale,{type:'declareStop',actorId:'playerA'}),/stale/);
+  assert.throws(()=>extractedEngine.applyGoStopAction(pending,{type:'invalid',actorId:'playerA'}),/Unsupported Go\/Stop action/);
+});
+
+test('multiple GO decisions reopen only after a strict score increase',()=>{
+  let state=extractedEngine.evaluateGoStop(goStopState('playerA'),{actorId:'playerA'}).state;
+  state=extractedEngine.applyGoStopAction(state,{type:'declareGo',actorId:'playerA'}).state;
+  state.turn='playerA';
+  let result=extractedEngine.evaluateGoStop(state,{actorId:'playerA'});
+  assert.equal(result.pendingDecision,null);
+  state=result.state; state.turn='playerA'; state.human.captured.push(card('m9-3'));
+  result=extractedEngine.evaluateGoStop(state,{actorId:'playerA'});
+  assert.equal(result.pendingDecision.score,8);
+  state=extractedEngine.applyGoStopAction(result.state,{type:'declareGo',actorId:'playerA'}).state;
+  assert.equal(state.human.go,2);
+  assert.equal(state.human.lastGoScore,8);
+  assert.equal(state.matchContext.lastScoreBySide.playerA,8);
+  const settled=extractedEngine.calculateSettlement({winner:state.human,loser:state.ai});
+  assert.equal(settled.goBonus,2);
+});
+
+test('exhausted turns defer Nagari but Bomb-blank completion can earn Go/Stop',()=>{
+  let blank=goStopState('playerA'); blank.human.bombFreeTurns=1;
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'useBombBlank',actorId:'playerA'}).state;
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'drawNextCard',actorId:'playerA'}).state;
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'}).state;
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'completeTurn',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.evaluateGoStop(blank,{actorId:'playerA'}).pendingDecision.score,7);
+
+  const exhausted=goStopState('playerA'); exhausted.deck=[]; exhausted.human.hand=[];
+  const eligible=extractedEngine.evaluateGoStop(exhausted,{actorId:'playerA'});
+  assert.equal(eligible.pendingDecision.type,'goStopDecision');
+  const go=extractedEngine.applyGoStopAction(eligible.state,{type:'declareGo',actorId:'playerA'});
+  assert.equal(go.requiresNagari,true);
+  assert.equal(go.state.turn,'playerA');
+
+  const below=goStopState('playerA',sevenPointPi().slice(0,15)); below.deck=[]; below.human.hand=[];
+  assert.equal(extractedEngine.evaluateGoStop(below,{actorId:'playerA'}).requiresNagari,true);
+});
+
+test('Chongtong terminal state cannot enter Go/Stop evaluation',()=>{
+  const terminal=extractedEngine.resolveOpeningState(openingState({humanHand:cards('m6-1','m6-2','m6-3','m6-4')})).state;
+  assert.throws(()=>extractedEngine.evaluateGoStop(terminal,{actorId:'playerA'}),/already complete/);
+});
+
+test('browser Go/Stop production flow delegates mutation and presentation to engine results',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const conclude=source.slice(source.indexOf('async function concludeTurn'),source.indexOf('function scheduleTurnStart'));
+  assert.equal(conclude.includes('evaluateGoStop(state'),true);
+  assert.equal(conclude.includes('actor.go++'),false);
+  assert.equal(conclude.includes('lastGoScore='),false);
+  const buttons=source.slice(source.indexOf("els.goBtn.addEventListener"),source.indexOf("if(els.shakeBtn)"));
+  assert.equal(buttons.includes("type:'declareGo'"),true);
+  assert.equal(buttons.includes("type:'declareStop'"),true);
+  assert.equal(buttons.includes('.go++'),false);
+  assert.equal(buttons.includes('state.winner='),false);
+});

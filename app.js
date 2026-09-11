@@ -11,7 +11,7 @@
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
     hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,
-    applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   }=engine;
   const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
@@ -93,6 +93,10 @@
     const result=applySpecialTurnAction(state,action);
     state=result.state;
     return result;
+  }
+
+  function applyGoStopDecision(action){
+    const result=applyGoStopAction(state,action); state=result.state; return result;
   }
   function normalAction(side,action){ return {...action,actorId:playerIdForLegacySide(side)}; }
   function classifyNormalTurn(side,details={}){
@@ -963,28 +967,26 @@
   async function concludeTurn(side){
     if(state.winner)return;
     render();
-    const actor=state[side];
-    const sc=score(actor.captured);
     const actorId=playerIdForLegacySide(side);
-    const previous=state.matchContext.lastScoreBySide[actorId];
-    state.matchContext.lastScoreBySide[actorId]=sc.total;
-
-    if(reachedNewFinishScore(sc.total,previous)){
+    let result=evaluateGoStop(state,{actorId}); state=result.state;
+    if(result.pendingDecision){
+      const sc=score(state[side].captured);
       if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
-      if(aiShouldGo(sc)){
-        actor.go++; actor.lastGoScore=sc.total; showGoCallout('ai'); await sleep(980);
+      const action={type:aiShouldGo(sc)?'declareGo':'declareStop',actorId};
+      result=applyGoStopDecision(action);
+      if(action.type==='declareGo'){
+        if(result.events.some(event=>event.type==='goDeclared'))showGoCallout('ai');
+        await sleep(980);
       }else{
-        finishGame('ai',sc,'Computer chose STOP.');
-        return;
+        presentStopResult(result); return;
       }
     }
 
-    if(virtualHandCount(actor)===0 || state.deck.length===0){
+    if(result.requiresNagari){
       await finishNagari(); return;
     }
 
     await sleep(760);
-    state.turn=otherPlayerId(playerIdForLegacySide(side));
     render();
     scheduleTurnStart();
   }
@@ -1431,6 +1433,15 @@
     els.decisionDialog.show();
   }
 
+  function presentStopResult(result){
+    const ended=result.events.find(event=>event.type==='handEnded');
+    if(!ended)return;
+    const side=legacySideForPlayerId(ended.winnerId);
+    presentation.locked=true; hideActionCue();
+    setGrandResult('STOP!',side==='human'?'Player Wins!':'Computer Wins!',`${ended.settlement.total} Points`,formatScoreFormula(ended.settlement),'stop');
+    els.resultDialog.showModal(); render();
+  }
+
   async function finishNagari(){
     if(state.winner)return;
     state.winner='nagari'; presentation.locked=true;
@@ -1452,6 +1463,8 @@
   function finishByScore(){ finishNagari(); }
 
   function finishGame(winner,sc,reason){
+    // Legacy characterization helper only. Voluntary STOP production flow uses
+    // applyGoStopAction and presents its authoritative terminal result.
     if(winner==='draw'){ finishNagari(); return; }
     state.winner=playerIdForLegacySide(winner);presentation.locked=true;hideActionCue();
     const settled=calculateFinalScore(winner);
@@ -1494,8 +1507,19 @@
   els.newGameBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
   els.playAgainBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
   els.hintBtn.addEventListener('click',recommendHumanCard);
-  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!==PLAYER_A)return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');presentation.locked=true;state.turn=PLAYER_B;render();setTimeout(aiTurn,1150);});
-  els.stopBtn.addEventListener('click',()=>{if(!state)return;els.decisionDialog.close();finishGame('human',score(state.human.captured),'You chose STOP.');});
+  els.goBtn.addEventListener('click',()=>{
+    if(!state||state.turn!==PLAYER_A)return;
+    const result=applyGoStopDecision({type:'declareGo',actorId:PLAYER_A});
+    els.decisionDialog.close();
+    if(result.events.some(event=>event.type==='goDeclared'))showGoCallout('human');
+    presentation.locked=true; render();
+    if(result.requiresNagari)setTimeout(finishNagari,0); else setTimeout(scheduleTurnStart,1150);
+  });
+  els.stopBtn.addEventListener('click',()=>{
+    if(!state||state.turn!==PLAYER_A)return;
+    const result=applyGoStopDecision({type:'declareStop',actorId:PLAYER_A});
+    els.decisionDialog.close(); presentStopResult(result);
+  });
 
 
   if(els.shakeBtn)els.shakeBtn.addEventListener('click',()=>{
