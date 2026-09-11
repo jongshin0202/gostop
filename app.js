@@ -1,37 +1,25 @@
 (() => {
   'use strict';
 
+  // Characterization tests opt in before this script loads. Production never
+  // sets this flag, so the browser startup and gameplay path remain unchanged.
+  const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
+
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const monthShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const engine = globalThis.GoStopEngine;
+  if(!engine)throw new Error('GoStopEngine must load before app.js.');
+  const {
+    monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,
+    applyNormalTurnAction,applySpecialTurnAction,classifyTurnOutcome
+  }=engine;
+  const MASTER_DECK = engine.masterDeck;
   const finishThreshold = 7;
+  const PLAYER_A = 'playerA';
+  const PLAYER_B = 'playerB';
+  const SOLO_VIEWER_ID = PLAYER_A;
 
-  const defs = [
-    [1,'Hikari','bright',null,''], [1,'Tanzaku','ribbon','red',''], [1,'Kasu 1','pi',null,''], [1,'Kasu 2','pi',null,''],
-    [2,'Tane','animal',null,'godori'], [2,'Tanzaku','ribbon','red',''], [2,'Kasu 1','pi',null,''], [2,'Kasu 2','pi',null,''],
-    [3,'Hikari','bright',null,''], [3,'Tanzaku','ribbon','red',''], [3,'Kasu 1','pi',null,''], [3,'Kasu 2','pi',null,''],
-    [4,'Tane','animal',null,'godori'], [4,'Tanzaku','ribbon','grass',''], [4,'Kasu 1','pi',null,''], [4,'Kasu 2','pi',null,''],
-    [5,'Tane','animal',null,''], [5,'Tanzaku','ribbon','grass',''], [5,'Kasu 1','pi',null,''], [5,'Kasu 2','pi',null,''],
-    [6,'Tane','animal',null,''], [6,'Tanzaku','ribbon','blue',''], [6,'Kasu 1','pi',null,''], [6,'Kasu 2','pi',null,''],
-    [7,'Tane','animal',null,''], [7,'Tanzaku','ribbon','grass',''], [7,'Kasu 1','pi',null,''], [7,'Kasu 2','pi',null,''],
-    [8,'Hikari','bright',null,''], [8,'Tane','animal',null,'godori'], [8,'Kasu 1','pi',null,''], [8,'Kasu 2','pi',null,''],
-    [9,'Tane','animal',null,'switchPi'], [9,'Tanzaku','ribbon','blue',''], [9,'Kasu 1','pi',null,''], [9,'Kasu 2','pi',null,''],
-    [10,'Tane','animal',null,''], [10,'Tanzaku','ribbon','blue',''], [10,'Kasu 1','pi',null,''], [10,'Kasu 2','pi',null,''],
-    [11,'Hikari','bright',null,''], [11,'Kasu 1','pi',null,'doublePi'], [11,'Kasu 2','pi',null,''], [11,'Kasu 3','pi',null,''],
-    [12,'Hikari','bright',null,'rain'], [12,'Tane','animal',null,''], [12,'Tanzaku','ribbon',null,''], [12,'Kasu','pi',null,'doublePi']
-  ];
-
-  function cardFilename(month, suffix) { return `Hwatu ${monthNames[month-1]} ${suffix}.svg`; }
   function artUrl(filename) { return COMMONS + encodeURIComponent(filename).replace(/%2F/g,'/'); }
-
-  const MASTER_DECK = defs.map((d, i) => ({
-    id: `m${d[0]}-${i%4+1}`,
-    month: d[0],
-    type: d[2],
-    ribbonSet: d[3],
-    flags: d[4] ? d[4].split(',') : [],
-    file: cardFilename(d[0], d[1])
-  }));
 
   const ids = [
     'playerHand','aiHand','floor','playerCaptured','aiCaptured','deckCount','deckCountTop','deckCorner','roundCorner',
@@ -44,28 +32,75 @@
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
   let state = null;
-  let roundNo = 1;
-  let locked = false;
-  let lastHumanScore = 0;
-  let lastAiScore = 0;
-  let hintCardId = null;
-  let soundEnabled = true;
-  let targetChoiceCleanup = null;
-  let pendingHumanCardId = null;
-  let queuedHumanCardSwitch = null;
-  let nagariCarryPower = 0;
-  let shakeResolver = null;
-  let bombResolver = null;
-  let aiTurnInProgress = false;
-  const stagedCards = new Map();
+  const presentation = {
+    roundNo:1,
+    locked:false,
+    hintCardId:null,
+    soundEnabled:true,
+    targetChoiceCleanup:null,
+    pendingHumanCardId:null,
+    queuedHumanCardSwitch:null,
+    shakeResolver:null,
+    bombResolver:null,
+    aiTurnInProgress:false,
+    stagedCards:new Map(),
+    floorSlotReservations:new Map()
+  };
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
 
+  function otherPlayerId(playerId){
+    if(playerId===PLAYER_A)return PLAYER_B;
+    if(playerId===PLAYER_B)return PLAYER_A;
+    throw new Error(`Unknown player ID: ${playerId}`);
+  }
+  function legacySideForPlayerId(playerId){
+    if(playerId===PLAYER_A)return 'human';
+    if(playerId===PLAYER_B)return 'ai';
+    throw new Error(`Unknown player ID: ${playerId}`);
+  }
+  function playerIdForLegacySide(side){
+    if(side==='human')return PLAYER_A;
+    if(side==='ai')return PLAYER_B;
+    throw new Error(`Unknown legacy side: ${side}`);
+  }
+  function viewerSeatMap(viewerId){
+    return {bottom:viewerId,top:otherPlayerId(viewerId),me:viewerId,opponent:otherPlayerId(viewerId)};
+  }
+  function playerStateById(gameState,playerId){ return gameState[legacySideForPlayerId(playerId)]; }
+  function viewerRelativePlayers(gameState,viewerId){
+    const seats=viewerSeatMap(viewerId);
+    return {
+      bottom:{id:seats.bottom,player:playerStateById(gameState,seats.bottom)},
+      top:{id:seats.top,player:playerStateById(gameState,seats.top)}
+    };
+  }
+  function seatForLegacySide(side,viewerId=SOLO_VIEWER_ID){
+    return playerIdForLegacySide(side)===viewerId?'bottom':'top';
+  }
+  function monthListHas(player,field,month){ return player[field].includes(month); }
+  function monthListAdd(player,field,month){ if(!monthListHas(player,field,month))player[field].push(month); }
+  function monthListDelete(player,field,month){ player[field]=player[field].filter(value=>value!==month); }
+  function applyNormalAction(action){
+    const result=applyNormalTurnAction(state,action);
+    state=result.state;
+    return result;
+  }
+  function applySpecialAction(action){
+    const result=applySpecialTurnAction(state,action);
+    state=result.state;
+    return result;
+  }
+  function normalAction(side,action){ return {...action,actorId:playerIdForLegacySide(side)}; }
+  function classifyNormalTurn(side,details={}){
+    return classifyTurnOutcome(state,{actorId:playerIdForLegacySide(side),...details});
+  }
 
-  function freshState() {
+
+  function freshState(nagariCarryPower=0) {
     let deck, human, ai, floor, auditId='';
     for (let attempt=0; attempt<200; attempt++) {
       deck = shuffle(MASTER_DECK.map(c => ({...c})));
@@ -85,7 +120,7 @@
     }
     const makePlayer = hand => ({
       hand, captured:[], go:0, shakes:0, bombs:0, bombFreeTurns:0,
-      ppeoks:0, hiddenTripleMonths:new Set(), shakenMonths:new Set(),
+      ppeoks:0, hiddenTripleMonths:[], shakenMonths:[],
       lastGoScore:0
     });
     const next = {
@@ -93,12 +128,13 @@
       human:makePlayer(human),
       ai:makePlayer(ai),
       floorStacks:{},
-      turn:'human', winner:null, specialWinner:null
+      turn:PLAYER_A, winner:null, specialWinner:null,
+      matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower}
     };
     markInitialFloorStacks(next);
     initFloorSlots(next);
     [next.human,next.ai].forEach(player => {
-      tripleMonths(player.hand).forEach(m => player.hiddenTripleMonths.add(m));
+      tripleMonths(player.hand).forEach(month=>monthListAdd(player,'hiddenTripleMonths',month));
     });
     logShuffleAudit(auditId,next);
     return next;
@@ -130,16 +166,6 @@
     return Array.from(a,v=>v.toString(16).padStart(8,'0')).join('-');
   }
 
-  function assertDeckIntegrity(deck){
-    if(deck.length!==48) throw new Error(`Deck integrity failure: expected 48 cards, got ${deck.length}.`);
-    const ids=new Set(deck.map(c=>c.id));
-    if(ids.size!==48) throw new Error(`Deck integrity failure: duplicate card IDs detected (${ids.size}/48 unique).`);
-    for(let m=1;m<=12;m++){
-      const count=deck.filter(c=>c.month===m).length;
-      if(count!==4) throw new Error(`Deck integrity failure: month ${m} has ${count} cards instead of 4.`);
-    }
-  }
-
   function logShuffleAudit(id,st){
     const summarize=cards=>{
       const counts=countsByMonth(cards);
@@ -168,22 +194,6 @@
     }
     return a;
   }
-  function hasFourOfMonth(cards){
-    const n={}; cards.forEach(c=>n[c.month]=(n[c.month]||0)+1);
-    return Object.values(n).some(v=>v===4);
-  }
-
-  function countsByMonth(cards){
-    const out={}; cards.forEach(c=>out[c.month]=(out[c.month]||0)+1); return out;
-  }
-  function tripleMonths(cards){
-    const n=countsByMonth(cards);
-    return Object.keys(n).map(Number).filter(m=>n[m]===3);
-  }
-  function fourMonths(cards){
-    const n=countsByMonth(cards);
-    return Object.keys(n).map(Number).filter(m=>n[m]===4);
-  }
   function markInitialFloorStacks(st){
     const n=countsByMonth(st.floor);
     Object.keys(n).map(Number).filter(m=>n[m]===3).forEach(month=>{
@@ -193,6 +203,7 @@
   }
   function initFloorSlots(st){
     // Fixed table positions: cards never compact or shift after a capture.
+    presentation.floorSlotReservations.clear();
     st.floorSlotCount=12;
     st.floorSlotByCard={};
     st.floor.forEach((card,i)=>{ st.floorSlotByCard[card.id]=i; });
@@ -206,38 +217,53 @@
   function occupiedFloorSlots(st=state){
     const used=new Set();
     if(!st || !st.floorSlotByCard)return used;
-    // Include reserved landing slots for cards that are mid-animation and not
-    // yet committed to state.floor. This prevents two cards in the same turn
-    // from being assigned to the same blank space.
     Object.values(st.floorSlotByCard).forEach(slot=>{ if(Number.isFinite(slot))used.add(slot); });
+    // In-flight landing reservations are local presentation state. They block
+    // duplicate visual occupancy without becoming authoritative floor cards.
+    presentation.floorSlotReservations.forEach(slot=>{if(Number.isFinite(slot))used.add(slot);});
     return used;
   }
-  function firstFreeFloorSlot(st=state){
+  function firstFreeFloorSlot(st=state,commitCapacity=true){
     if(!st.floorSlotByCard)st.floorSlotByCard={};
     if(!Number.isFinite(st.floorSlotCount))st.floorSlotCount=12;
     const used=occupiedFloorSlots(st);
     for(let i=0;i<st.floorSlotCount;i++) if(!used.has(i)) return i;
-    const slot=st.floorSlotCount;
-    st.floorSlotCount+=4;
+    let slot=st.floorSlotCount;
+    while(used.has(slot))slot++;
+    if(commitCapacity)st.floorSlotCount=slot+4;
     return slot;
   }
   function reserveFloorSlot(card,preferredSlot=null){
     if(!state.floorSlotByCard)state.floorSlotByCard={};
     if(Number.isFinite(state.floorSlotByCard[card.id]))return state.floorSlotByCard[card.id];
-    const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state);
-    state.floorSlotByCard[card.id]=slot;
+    if(Number.isFinite(presentation.floorSlotReservations.get(card.id)))return presentation.floorSlotReservations.get(card.id);
+    const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state,false);
+    presentation.floorSlotReservations.set(card.id,slot);
     return slot;
   }
+  function commitFloorSlot(card,preferredSlot=null){
+    const reserved=presentation.floorSlotReservations.get(card.id);
+    const slot=Number.isFinite(preferredSlot)?preferredSlot:Number.isFinite(reserved)?reserved:firstFreeFloorSlot(state);
+    if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
+    state.floorSlotByCard[card.id]=slot;
+    presentation.floorSlotReservations.delete(card.id);
+    return slot;
+  }
+  function visualHash(value){
+    let hash=0; for(const char of value)hash=(hash*31+char.charCodeAt(0))>>>0; return hash;
+  }
   function stableFloorTilt(card){
-    let h=0; for(const ch of card.id)h=(h*31+ch.charCodeAt(0))>>>0;
-    return ((h%61)-30)/10; // stable -3.0..+3.0 degrees
+    return ((visualHash(card.id)%61)-30)/10; // stable -3.0..+3.0 degrees
+  }
+  function stableStackAngle(stack,card,index){
+    const base=[-10,2,12][index]||0;
+    return base+((visualHash(`${stack.source}:${stack.month}:${card.id}`)%41)-20)/10;
   }
   function makeStackInfo(cards,source,owner){
     return {
       month:cards[0]?.month,
       cardIds:cards.map(c=>c.id),
-      source, owner,
-      angles:cards.map((_,i)=>[-10,2,12][i] + (Math.random()*4-2))
+      source, owner
     };
   }
   function floorStackForMonth(month){ return state.floorStacks[month] || null; }
@@ -249,14 +275,17 @@
     const idsSet=new Set(cards.map(c=>c.id));
     const affectedMonths=new Set(cards.map(c=>c.month));
     state.floor=state.floor.filter(c=>!idsSet.has(c.id));
-    idsSet.forEach(id=>{ if(state.floorSlotByCard) delete state.floorSlotByCard[id]; });
+    idsSet.forEach(id=>{
+      if(state.floorSlotByCard)delete state.floorSlotByCard[id];
+      presentation.floorSlotReservations.delete(id);
+    });
     affectedMonths.forEach(month=>{
       const st=state.floorStacks[month];
       if(st && st.cardIds.some(id=>idsSet.has(id))) delete state.floorStacks[month];
     });
   }
   function addFloorCard(card,preferredSlot=null){
-    reserveFloorSlot(card,preferredSlot);
+    commitFloorSlot(card,preferredSlot);
     if(!state.floor.some(c=>c.id===card.id)) state.floor.push(card);
   }
   function makePpeokStack(side,cards){
@@ -265,8 +294,8 @@
       ? state.floorSlotByCard[existing.id]
       : firstFreeFloorSlot(state);
     cards.forEach(c=>addFloorCard(c,stackSlot));
-    cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; });
-    state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',side);
+    cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; presentation.floorSlotReservations.delete(c.id); });
+    state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',playerIdForLegacySide(side));
     state[side].ppeoks++;
   }
   function effectiveFloorMatchCards(card){
@@ -275,7 +304,7 @@
       const cs=cardsInStack(st);
       return cs.length ? [cs[cs.length-1]] : [];
     }
-    return state.floor.filter(c=>c.month===card.month);
+    return matchingCards(state.floor,card);
   }
   function expandedTargetCards(targetCard){
     if(!targetCard)return[];
@@ -288,41 +317,8 @@
     const st=floorStackForMonth(targetCard.month);
     if(!st || !st.cardIds.includes(targetCard.id)) return 0;
     if(st.source==='initial') return 1;
-    if(st.source==='ppeok') return st.owner===side ? 2 : 1;
+    if(st.source==='ppeok') return st.owner===playerIdForLegacySide(side) ? 2 : 1;
     return 0;
-  }
-
-
-  function score(cards) {
-    const normal=scoreWithGukjinMode(cards,false);
-    const asPi=scoreWithGukjinMode(cards,true);
-    return asPi.total>normal.total ? asPi : normal;
-  }
-
-  function scoreWithGukjinMode(cards,gukjinAsPi) {
-    const isGukjin=c=>c.month===9 && c.type==='animal' && c.flags.includes('switchPi');
-    const bright = cards.filter(c=>c.type==='bright');
-    const animals = cards.filter(c=>c.type==='animal' && !(gukjinAsPi&&isGukjin(c)));
-    const ribbons = cards.filter(c=>c.type==='ribbon');
-    const piCards = cards.filter(c=>c.type==='pi');
-    let brightPts=0;
-    if(bright.length===3) brightPts=bright.some(c=>c.flags.includes('rain'))?2:3;
-    else if(bright.length===4) brightPts=4;
-    else if(bright.length>=5) brightPts=15;
-    let animalPts = animals.length>=5 ? animals.length-4 : 0;
-    const godori = [2,4,8].every(m=>animals.some(c=>c.month===m && c.flags.includes('godori')));
-    if(godori) animalPts += 5;
-    let ribbonPts = ribbons.length>=5 ? ribbons.length-4 : 0;
-    const setBonus = (name, months) => months.every(m=>ribbons.some(c=>c.month===m && c.ribbonSet===name)) ? 3 : 0;
-    ribbonPts += setBonus('red',[1,2,3]) + setBonus('blue',[6,9,10]) + setBonus('grass',[4,5,7]);
-    let piCount = piCards.reduce((sum,c)=>sum+(c.flags.includes('doublePi')?2:1),0);
-    if(gukjinAsPi && cards.some(isGukjin)) piCount += 2;
-    const piPts = piCount>=10 ? piCount-9 : 0;
-    return {
-      total:brightPts+animalPts+ribbonPts+piPts,
-      brightPts,animalPts,ribbonPts,piPts,bright:bright.length,animals:animals.length,
-      ribbons:ribbons.length,piCount,godori,gukjinAsPi
-    };
   }
 
   function createCardEl(card, className='card') {
@@ -340,45 +336,48 @@
   }
 
   function render() {
-    const hScore=score(state.human.captured), aScore=score(state.ai.captured);
-    els.playerScore.textContent=hScore.total; els.aiScore.textContent=aScore.total;
-    if(els.goCount) els.goCount.textContent=state.human.go;
+    if(TEST_MODE)return;
+    const view=viewerRelativePlayers(state,SOLO_VIEWER_ID);
+    const bottomPlayer=view.bottom.player,topPlayer=view.top.player;
+    const bottomScore=score(bottomPlayer.captured),topScore=score(topPlayer.captured);
+    els.playerScore.textContent=bottomScore.total; els.aiScore.textContent=topScore.total;
+    if(els.goCount) els.goCount.textContent=bottomPlayer.go;
     [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=state.deck.length);
-    if(els.roundCorner) els.roundCorner.textContent=roundNo;
+    if(els.roundCorner) els.roundCorner.textContent=presentation.roundNo;
     // Keep the table visually clean: animation itself communicates whose turn it is.
     els.turnLabel.textContent = '';
     els.aiThinking.textContent = '';
     if(els.promptText) els.promptText.textContent='';
 
     els.playerHand.innerHTML='';
-    state.human.hand.sort(sortCards).forEach(card=>{
+    bottomPlayer.hand.sort(sortCards).forEach(card=>{
       const el=createCardEl(card,'card hand-card');
-      el.disabled = locked || state.turn!=='human';
-      if(card.id===hintCardId) el.classList.add('matchable');
+      el.disabled = presentation.locked || state.turn!==PLAYER_A;
+      if(card.id===presentation.hintCardId) el.classList.add('matchable');
       el.addEventListener('click',()=>humanPlay(card.id, el));
       els.playerHand.appendChild(el);
     });
-    for(let i=0;i<state.human.bombFreeTurns;i++){
+    for(let i=0;i<bottomPlayer.bombFreeTurns;i++){
       const blank=document.createElement('button');
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
-      blank.disabled=locked || state.turn!=='human';
+      blank.disabled=presentation.locked || state.turn!==PLAYER_A;
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
       els.playerHand.appendChild(blank);
     }
 
     els.aiHand.innerHTML='';
-    state.ai.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
+    topPlayer.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
 
     renderFloor();
 
-    if(els.playerMultiplier) els.playerMultiplier.textContent=playerDoubleLabel(state.human);
-    if(els.aiMultiplier) els.aiMultiplier.textContent=playerDoubleLabel(state.ai);
+    if(els.playerMultiplier) els.playerMultiplier.textContent=playerDoubleLabel(bottomPlayer);
+    if(els.aiMultiplier) els.aiMultiplier.textContent=playerDoubleLabel(topPlayer);
 
-    renderCaptured(els.playerCaptured,state.human.captured,'human');
-    renderCaptured(els.aiCaptured,state.ai.captured,'ai');
+    renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
+    renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
   }
 
 
@@ -397,7 +396,9 @@
       if(Number.isFinite(slot))stackBySlot.set(slot,st);
     });
 
-    for(let slot=0; slot<state.floorSlotCount; slot++){
+    const reservedSlots=[...presentation.floorSlotReservations.values()];
+    const visibleSlotCount=Math.max(state.floorSlotCount,reservedSlots.length?Math.max(...reservedSlots)+1:0);
+    for(let slot=0; slot<visibleSlotCount; slot++){
       const slotEl=document.createElement('div');
       slotEl.className='floor-slot';
       slotEl.dataset.floorSlot=String(slot);
@@ -408,7 +409,7 @@
         wrap.dataset.stackMonth=String(stack.month);
         cardsInStack(stack).forEach((c,i)=>{
           const el=createCardEl(c,'card floor-card stacked-floor-card');
-          el.style.setProperty('--stack-angle',`${stack.angles[i]||0}deg`);
+          el.style.setProperty('--stack-angle',`${stableStackAngle(stack,c,i)}deg`);
           el.style.setProperty('--stack-x',`${i*5}px`);
           el.style.setProperty('--stack-y',`${i*3}px`);
           el.style.zIndex=String(i+1);
@@ -438,12 +439,13 @@
     {type:'pi',en:'Singles'}
   ];
 
-  function renderCaptured(root,cards,owner){
-    root.innerHTML=''; root.dataset.owner=owner;
+  function renderCaptured(root,cards,ownerId){
+    root.innerHTML=''; root.dataset.owner=ownerId;
+    const isViewer=ownerId===SOLO_VIEWER_ID;
     captureGroups.forEach(group=>{
       const groupCards=cards.filter(c=>c.type===group.type).sort((a,b)=>a.month-b.month);
       const btn=document.createElement('button'); btn.type='button'; btn.className='capture-group'; btn.dataset.captureType=group.type;
-      btn.setAttribute('aria-label',`${owner==='human'?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
+      btn.setAttribute('aria-label',`${isViewer?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
       const head=document.createElement('span'); head.className='capture-group-head';
       head.innerHTML=`<b>${group.en}</b><em>${groupCards.length}</em>`;
       const stack=document.createElement('span'); stack.className='capture-stack';
@@ -452,16 +454,17 @@
         img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
-      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(owner,group,groupCards)); root.appendChild(btn);
+      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(ownerId,group,groupCards)); root.appendChild(btn);
     });
   }
 
-  function openCapturedGroup(owner,group,cards){
-    els.captureOwner.textContent=owner==='human'?'YOUR CAPTURED CARDS':'COMPUTER CAPTURED CARDS';
+  function openCapturedGroup(ownerId,group,cards){
+    const isViewer=ownerId===SOLO_VIEWER_ID;
+    els.captureOwner.textContent=isViewer?'YOUR CAPTURED CARDS':'COMPUTER CAPTURED CARDS';
     els.captureTitle.textContent=group.en; els.captureMagnified.innerHTML='';
     cards.forEach(c=>els.captureMagnified.appendChild(createCardEl(c,'card magnified-card')));
     if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent='No cards captured in this group yet.'; els.captureMagnified.appendChild(empty); }
-    const s=score(owner==='human'?state.human.captured:state.ai.captured);
+    const s=score(playerStateById(state,ownerId).captured);
     const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} picture / animal cards${s.godori?' · Godori complete':''}`:group.type==='ribbon'?`${cards.length} stripe cards`:`${s.piCount} Singles value${s.piCount===1?'':'s'} (${cards.length} cards)`;
     els.captureSummary.textContent=detail; els.captureDialog.showModal();
   }
@@ -482,14 +485,14 @@
   async function chooseFloorTarget(matches, message='Choose which card to hit'){
     if(matches.length<=1) return matches[0]||null;
     cleanupTargetChoice();
-    locked=true;
+    presentation.locked=true;
     showActionCue('human','choose a floor card');
 
     return new Promise(resolve=>{
       const handlers=[];
       const finish=card=>{
         handlers.forEach(({el,click,key})=>{el.removeEventListener('click',click);el.removeEventListener('keydown',key);el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');});
-        targetChoiceCleanup=null;
+        presentation.targetChoiceCleanup=null;
         resolve(card);
       };
       matches.forEach(card=>{
@@ -499,10 +502,10 @@
         const key=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();finish(card);}};
         el.addEventListener('click',click); el.addEventListener('keydown',key); handlers.push({el,click,key});
       });
-      targetChoiceCleanup=()=>finish(null);
+      presentation.targetChoiceCleanup=()=>finish(null);
     });
   }
-  function cleanupTargetChoice(){ if(targetChoiceCleanup){ const fn=targetChoiceCleanup; targetChoiceCleanup=null; fn(); } }
+  function cleanupTargetChoice(){ if(presentation.targetChoiceCleanup){ const fn=presentation.targetChoiceCleanup; presentation.targetChoiceCleanup=null; fn(); } }
 
   async function previewAiTarget(target){
     if(!target)return;
@@ -513,44 +516,47 @@
 
 
   function virtualHandCount(player){ return player.hand.length + player.bombFreeTurns; }
+  function consumeBombBlank(player){ player.bombFreeTurns=Math.max(0,player.bombFreeTurns-1); }
+  function canDeclareShake(player,month){
+    return player.hand.filter(c=>c.month===month).length===3 && monthListHas(player,'hiddenTripleMonths',month);
+  }
+  function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
-    if(locked || state.turn!=='human' || state.winner || state.human.bombFreeTurns<=0)return;
-    locked=true; hintCardId=null; render();
+    if(presentation.locked || state.turn!==PLAYER_A || state.winner || state.human.bombFreeTurns<=0)return;
+    presentation.locked=true; presentation.hintCardId=null; render();
     await executeDeckOnlyTurn('human');
   }
 
   async function humanPlay(cardId, clickedEl){
-    if(state.turn!=='human' || state.winner)return;
+    if(state.turn!==PLAYER_A || state.winner)return;
 
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
-    if(locked){
-      if(targetChoiceCleanup && pendingHumanCardId && cardId!==pendingHumanCardId){
-        queuedHumanCardSwitch={cardId,clickedEl};
-        targetChoiceCleanup();
+    if(presentation.locked){
+      if(presentation.targetChoiceCleanup && presentation.pendingHumanCardId && cardId!==presentation.pendingHumanCardId){
+        presentation.queuedHumanCardSwitch={cardId,clickedEl};
+        presentation.targetChoiceCleanup();
       }
       return;
     }
 
     const card=state.human.hand.find(c=>c.id===cardId); if(!card)return;
-    locked=true; hintCardId=null;
+    presentation.locked=true; presentation.hintCardId=null;
 
-    const sameMonth=state.human.hand.filter(c=>c.month===card.month);
-    const floorSame=state.floor.filter(c=>c.month===card.month);
-    if(sameMonth.length===3 && state.human.hiddenTripleMonths.has(card.month)){
+    if(canDeclareShake(state.human,card.month)){
       const shake=await chooseShake(card.month);
       if(shake){
         state.human.shakes++;
-        state.human.shakenMonths.add(card.month);
-        state.human.hiddenTripleMonths.delete(card.month);
+        monthListAdd(state.human,'shakenMonths',card.month);
+        monthListDelete(state.human,'hiddenTripleMonths',card.month);
         render();
         await sleep(180);
-      }else if(floorSame.length===1 && !floorStackForMonth(card.month)){
+      }else if(classifyNormalTurn('human',{cardId:card.id}).kind==='bombEligible'){
         const useBomb=await chooseBomb(card.month);
         if(useBomb){
-          pendingHumanCardId=null;
-          queuedHumanCardSwitch=null;
+          presentation.pendingHumanCardId=null;
+          presentation.queuedHumanCardSwitch=null;
           await executeBombTurn('human',card.month);
           return;
         }
@@ -559,7 +565,7 @@
 
     const matches=matchesFor(card);
     clickedEl.classList.add('pending-card');
-    pendingHumanCardId=card.id;
+    presentation.pendingHumanCardId=card.id;
     let target=null;
     if(matches.length===1) target=matches[0];
     else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which floor card to hit');
@@ -570,10 +576,10 @@
     // moving or consuming the original card.
     if(matches.length===2 && !target){
       clickedEl.classList.remove('pending-card');
-      pendingHumanCardId=null;
-      locked=false;
-      const next=queuedHumanCardSwitch;
-      queuedHumanCardSwitch=null;
+      presentation.pendingHumanCardId=null;
+      presentation.locked=false;
+      const next=presentation.queuedHumanCardSwitch;
+      presentation.queuedHumanCardSwitch=null;
       if(next){
         await nextFrame();
         return humanPlay(next.cardId,next.clickedEl);
@@ -581,20 +587,21 @@
       return;
     }
 
-    queuedHumanCardSwitch=null;
-    pendingHumanCardId=null;
+    presentation.queuedHumanCardSwitch=null;
+    presentation.pendingHumanCardId=null;
     clickedEl.classList.remove('pending-card');
     const sourceRect=clickedEl.getBoundingClientRect();
     clickedEl.style.visibility='hidden';
-    const idx=state.human.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.human.hand.splice(idx,1);
-    state.human.hiddenTripleMonths.delete(card.month);
-    await playFullTurn('human',card,sourceRect,target,matches.length);
+    monthListDelete(state.human,'hiddenTripleMonths',card.month);
+    const playResult=applyNormalAction(normalAction('human',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
+    const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
+    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true);
   }
 
   async function aiTurn(){
-    if(state.turn!=='ai'||state.winner||aiTurnInProgress)return;
-    aiTurnInProgress=true;
-    locked=true;
+    if(state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
+    presentation.aiTurnInProgress=true;
+    presentation.locked=true;
     try {
       render(); await sleep(520);
 
@@ -611,13 +618,12 @@
       }
       // The computer also decides whether to Shake only when it is about to use
       // one of the three matching-month cards, never at the opening deal.
-      if(state.ai.hiddenTripleMonths.has(card.month)){
-        const sameMonth=state.ai.hand.filter(c=>c.month===card.month);
+      if(monthListHas(state.ai,'hiddenTripleMonths',card.month)){
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
-        if(sameMonth.length===3 && !fourthOnFloor && Math.random()<.72){
+        if(canDeclareShake(state.ai,card.month) && !fourthOnFloor && Math.random()<.72){
           state.ai.shakes++;
-          state.ai.shakenMonths.add(card.month);
-          state.ai.hiddenTripleMonths.delete(card.month);
+          monthListAdd(state.ai,'shakenMonths',card.month);
+          monthListDelete(state.ai,'hiddenTripleMonths',card.month);
           await revealAiShake(card.month);
           render();
           await sleep(220);
@@ -633,25 +639,89 @@
       else if(matches.length===2)target=chooseBestMatch(matches);
       else if(matches.length>2)target=chooseBestMatch(matches);
       if(target && matches.length>1) await previewAiTarget(target);
-      const idx=state.ai.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.ai.hand.splice(idx,1);
-      state.ai.hiddenTripleMonths.delete(card.month);
-      await playFullTurn('ai',card,sourceRect,target,matches.length);
+      monthListDelete(state.ai,'hiddenTripleMonths',card.month);
+      const playResult=applyNormalAction(normalAction('ai',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
+      const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
+      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true);
     } finally {
-      aiTurnInProgress=false;
+      presentation.aiTurnInProgress=false;
     }
   }
 
-  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
+  async function presentNormalResolution(side,result){
+    const event=result.events[0];
+    if(event.type==='cardLanded'){
+      presentation.floorSlotReservations.delete(event.card.id);
+      removeStage(event.card.id);
+      render();
+      await sleep(180);
+      return;
+    }
+    if(event.type==='cardsCaptured'){
+      await animateCaptureBatch(event.cards,side);
+      render();
+      await sleep(190);
+    }
+  }
+
+  async function resolveNormalEngineTurn(side,play,draw){
+    let result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'played'}));
+    await presentNormalResolution(side,result);
+    if(draw){
+      result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
+      await presentNormalResolution(side,result);
+    }
+    applyNormalAction(normalAction(side,{type:'completeTurn'}));
+    await applySweepIfNeeded(side);
+  }
+
+  async function resolveExtractedSpecialTurn(side,classification,play,draw){
+    const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
+    if(classification.kind==='ppeokSsaDaCandidate'){
+      removeStage(play.card.id); if(draw)removeStage(draw.card.id);
+      playPpeokSound(); render();
+      if(state[side].ppeoks>=3){ await sleep(450); finishSpecial(side,7,'Three ppeoks in one hand'); }
+    }else{
+      const captureEvent=result.events.find(event=>event.type==='cardsCaptured');
+      const captured=captureEvent.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
+      await animateCaptureBatch(captured,side);
+      if(classification.kind==='selfPpeokCandidate')playLaughSound();
+      for(const event of result.events.filter(item=>item.type==='piTransferred')){
+        const card=MASTER_DECK.find(item=>item.id===event.cardId);
+        await animatePiTransfer(card,legacySideForPlayerId(event.fromPlayerId),side);
+      }
+      render(); await sleep(190);
+    }
+    if(state.pendingTurn?.phase==='awaitingNormalResolution'){
+      const source=state.pendingTurn.nextResolution;
+      const normalResult=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source}));
+      await presentNormalResolution(side,normalResult);
+    }
+    if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
+    if(result.events.some(event=>event.type==='checkSweep'))await applySweepIfNeeded(side);
+  }
+
+  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount,engineTurn=false){
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
     await sleep(330);
 
     if(!state.deck.length){
-      await resolveCombinedTurn(side,{card:playedCard,stage:playedStage,target,matchCount:playMatchCount},null);
+      const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+      if(engineTurn)applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+      const classification=engineTurn?classifyNormalTurn(side):null;
+      if(engineTurn&&classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
+      else if(engineTurn&&['selfPpeokCandidate'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
+      else{
+        if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
+        await resolveCombinedTurn(side,play,null);
+      }
       await concludeTurn(side);
       return;
     }
 
-    const draw=state.deck.shift();
+    const drawResult=engineTurn?applyNormalAction(normalAction(side,{type:'drawNextCard'})):null;
+    const draw=engineTurn?drawResult.events.find(event=>event.type==='deckCardRevealed').card:state.deck.shift();
+    let turnClassification=engineTurn?classifyNormalTurn(side):null;
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
 
@@ -659,7 +729,7 @@
     let drawMatches=matchesFor(draw);
     let drawMatchCount=drawMatches.length;
 
-    const sameMonthSpecial=draw.month===playedCard.month && !floorStackForMonth(playedCard.month);
+    const sameMonthSpecial=turnClassification&&['jjokCandidate','ppeokSsaDaCandidate','ttadakCandidate'].includes(turnClassification.kind);
     if(sameMonthSpecial && playMatchCount<=2){
       drawTarget=playedCard;
     }else if(drawMatches.length===1){
@@ -672,20 +742,29 @@
       if(side==='ai')await previewAiTarget(drawTarget);
     }
 
+    if(engineTurn&&drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
+      applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:drawTarget.id}));
+      turnClassification=classifyNormalTurn(side);
+    }
+
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
-    await resolveCombinedTurn(
-      side,
-      {card:playedCard,stage:playedStage,target,matchCount:playMatchCount},
-      {card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount}
-    );
+    const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+    const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
+    const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate'];
+    if(engineTurn&&turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
+    else if(engineTurn&&extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
+    else{
+      if(engineTurn)applyNormalAction(normalAction(side,{type:'deferSpecialTurn'}));
+      await resolveCombinedTurn(side,play,drawn);
+    }
     await concludeTurn(side);
   }
 
   async function executeDeckOnlyTurn(side){
     if(state.winner)return;
-    locked=true;
+    presentation.locked=true;
     const actor=state[side];
-    actor.bombFreeTurns=Math.max(0,actor.bombFreeTurns-1);
+    consumeBombBlank(actor);
     if(!state.deck.length){ await finishNagari(); return; }
     const draw=state.deck.shift();
     render();
@@ -707,17 +786,17 @@
     const actor=state[side];
     const bombCards=actor.hand.filter(c=>c.month===month).slice(0,3);
     const floorTarget=state.floor.find(c=>c.month===month);
-    if(bombCards.length!==3 || !floorTarget){ locked=false; render(); return; }
+    if(bombCards.length!==3 || !floorTarget){ presentation.locked=false; render(); return; }
 
     const bombSourceRects=bombCards.map((c,i)=>{
-      if(side==='human'){
+      if(seatForLegacySide(side)==='bottom'){
         const el=els.playerHand.querySelector(`[data-card-id="${c.id}"]`);
         if(el) return el.getBoundingClientRect();
       }
-      return side==='human'?approximateHumanSource(i,bombCards.length):approximateAiSource();
+      return seatForLegacySide(side)==='bottom'?approximateHumanSource(i,bombCards.length):approximateAiSource();
     });
     actor.hand=actor.hand.filter(c=>!bombCards.some(b=>b.id===c.id));
-    actor.hiddenTripleMonths.delete(month);
+    monthListDelete(actor,'hiddenTripleMonths',month);
     actor.bombs++;
     actor.bombFreeTurns+=2;
     render();
@@ -751,6 +830,8 @@
   }
 
   async function resolveCombinedTurn(side,play,draw){
+    // Legacy fallback and characterization oracle. Production routes Ppeok/Ssa-da,
+    // Jjok, Ttadak, and Self-Ppeok through applySpecialTurnAction before reaching here.
     const sameMonth=draw && draw.card.month===play.card.month && !floorStackForMonth(play.card.month);
 
     if(draw && sameMonth && play.matchCount===0){
@@ -848,6 +929,7 @@
   }
 
   async function animatePiTransfer(card,fromSide,toSide){
+    if(TEST_MODE)return;
     const fromRect=captureTargetRect(fromSide,'pi');
     const toRect=captureTargetRect(toSide,'pi');
     if(!fromRect.width||!toRect.width||prefersReducedMotion())return;
@@ -868,11 +950,12 @@
     render();
     const actor=state[side];
     const sc=score(actor.captured);
-    const previous=side==='human'?lastHumanScore:lastAiScore;
-    if(side==='human')lastHumanScore=sc.total;else lastAiScore=sc.total;
+    const actorId=playerIdForLegacySide(side);
+    const previous=state.matchContext.lastScoreBySide[actorId];
+    state.matchContext.lastScoreBySide[actorId]=sc.total;
 
-    if(sc.total>=finishThreshold && sc.total>previous){
-      if(side==='human'){ locked=true; await humanGoStop(sc); return; }
+    if(reachedNewFinishScore(sc.total,previous)){
+      if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
       if(aiShouldGo(sc)){
         actor.go++; actor.lastGoScore=sc.total; showGoCallout('ai'); await sleep(980);
       }else{
@@ -886,32 +969,33 @@
     }
 
     await sleep(760);
-    state.turn=side==='human'?'ai':'human';
+    state.turn=otherPlayerId(playerIdForLegacySide(side));
     render();
     scheduleTurnStart();
   }
 
   function scheduleTurnStart(){
+    if(TEST_MODE)return;
     if(state.winner)return;
-    const side=state.turn, actor=state[side];
+    const side=legacySideForPlayerId(state.turn), actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
-      locked=true;
+      presentation.locked=true;
       setTimeout(()=>executeDeckOnlyTurn(side),760);
       return;
     }
     if(side==='ai'){
-      locked=true;
+      presentation.locked=true;
       setTimeout(aiTurn,820);
     }else{
       // Human Bomb credits are visible blank cards; the player explicitly clicks one.
-      locked=false;
+      presentation.locked=false;
       render();
     }
   }
 
   function bestAiBombMonth(){
     const counts=countsByMonth(state.ai.hand);
-    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && state.ai.hiddenTripleMonths.has(m) && state.floor.filter(c=>c.month===m).length===1 && !floorStackForMonth(m));
+    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && classifyNormalTurn('ai',{cardId:state.ai.hand.find(card=>card.month===m).id}).kind==='bombEligible');
     if(!months.length)return null;
     return months.sort((a,b)=>{
       const av=state.floor.filter(c=>c.month===a).reduce((x,c)=>x+captureValue(c),0);
@@ -930,7 +1014,7 @@
     if(!els.bombDialog)return true;
     els.bombText.textContent=`You hold three ${monthNames[month-1]} cards and the fourth is on the floor. Use BOMB to play all three, take the set, steal 1 Pi, and earn a ×2 win multiplier.`;
     els.bombDialog.showModal();
-    return new Promise(resolve=>{ bombResolver=resolve; });
+    return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
 
   async function chooseShake(month){
@@ -944,7 +1028,7 @@
     els.shakeCards.innerHTML='';
     cards.forEach(c=>els.shakeCards.appendChild(createCardEl(c,'card magnified-card')));
     els.shakeDialog.showModal();
-    return new Promise(resolve=>{ shakeResolver=resolve; });
+    return new Promise(resolve=>{ presentation.shakeResolver=resolve; });
   }
 
   async function processOpeningSpecials(){
@@ -965,7 +1049,7 @@
     // stays hidden until that player actually tries to use one of those cards.
     // This is both less intrusive and closer to table play: the declaration is
     // made at the moment the triple becomes relevant, not as a startup modal.
-    locked=false; render(); scheduleTurnStart();
+    presentation.locked=false; render(); scheduleTurnStart();
   }
 
   async function revealAiShake(month){
@@ -1005,7 +1089,7 @@
   }
 
   function overlapLanding(targetCard){
-    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || stagedCards.get(targetCard.id);
+    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || presentation.stagedCards.get(targetCard.id);
     if(!targetEl)return null;
     const r=targetEl.getBoundingClientRect(); const sign=Math.random()<.5?-1:1;
     const x=r.width*(0.22+Math.random()*.24)*sign;
@@ -1023,7 +1107,7 @@
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='1160';
   }
-  function removeStage(id){ const el=stagedCards.get(id); if(el){ stagedCards.delete(id); el.remove(); } }
+  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } }
 
   function fullSizeSourceRect(sourceRect){
     const {w,h}=cardSize();
@@ -1034,13 +1118,13 @@
   async function animateHandCardSlap(side,card,sourceRect,target){
     // CPU backs are intentionally smaller in the rack, but the card entering play is always full Hwatu size.
     sourceRect=fullSizeSourceRect(sourceRect);
-    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); stagedCards.set(card.id,el);
+    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); presentation.stagedCards.set(card.id,el);
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     if(!landing)return el;
     if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; return el; }
 
     const dx=landing.left-sourceRect.left, dy=landing.top-sourceRect.top;
-    const sideBias=side==='human'?-1:1;
+    const sideBias=seatForLegacySide(side)==='bottom'?-1:1;
     const duration=650;
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
     const a=el.animate([
@@ -1055,16 +1139,17 @@
   }
 
   async function animateBombSlap(side,cards,target,sourceRects=[]){
+    if(TEST_MODE)return;
     const landingBase=overlapLanding(target);
     if(!landingBase)return;
     const {w,h}=cardSize();
     const targetEl=els.floor.querySelector(`[data-card-id="${target.id}"]`);
     const tr=targetEl?targetEl.getBoundingClientRect():landingBase;
     const starts=cards.map((card,i)=>{
-      const src=sourceRects[i] || (side==='human'?approximateHumanSource(i,cards.length):approximateAiSource());
+      const src=sourceRects[i] || (seatForLegacySide(side)==='bottom'?approximateHumanSource(i,cards.length):approximateAiSource());
       const full=fullSizeSourceRect(src);
       const el=makePhysicalFace(card,full,'physical-card moving-card bomb-moving-card');
-      stagedCards.set(card.id,el);
+      presentation.stagedCards.set(card.id,el);
       return {card,el,start:full,i};
     });
     if(prefersReducedMotion()){
@@ -1093,6 +1178,11 @@
   }
 
   async function animateDeckLiftFlip(side,card){
+    if(TEST_MODE){
+      const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
+      presentation.stagedCards.set(card.id,el);
+      return el;
+    }
     const deck=els.deckStack.getBoundingClientRect(); const {w,h}=cardSize();
     const start={left:deck.left+deck.width/2-w/2,top:deck.top+deck.height/2-h/2,width:w,height:h};
     const el=document.createElement('div'); el.className='physical-card deck-draw-card'; el.dataset.cardId=card.id;
@@ -1100,7 +1190,7 @@
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
     const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front';
     const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=''; front.appendChild(img); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
-    stagedCards.set(card.id,el);
+    presentation.stagedCards.set(card.id,el);
     if(prefersReducedMotion()){ inner.style.transform='rotateY(180deg)'; return el; }
 
     const tableR=els.table.getBoundingClientRect();
@@ -1119,6 +1209,7 @@
   }
 
   async function animateStagedSlap(el,card,target,kind='flip'){
+    if(TEST_MODE)return;
     const start=el.getBoundingClientRect(); normalizeFixed(el,start);
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
@@ -1135,7 +1226,7 @@
   }
 
   function captureTargetRect(side,type){
-    const root=side==='human'?els.playerCaptured:els.aiCaptured;
+    const root=seatForLegacySide(side)==='bottom'?els.playerCaptured:els.aiCaptured;
     const group=root.querySelector(`[data-capture-type="${type}"] .capture-stack`) || root.querySelector(`[data-capture-type="${type}"]`) || root;
     return group.getBoundingClientRect();
   }
@@ -1151,9 +1242,10 @@
     const unique=[];
     const seen=new Set();
     cards.filter(Boolean).forEach(c=>{if(!seen.has(c.id)){seen.add(c.id);unique.push(c);}});
+    if(TEST_MODE){unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));return;}
     const entries=[];
     unique.forEach(card=>{
-      const staged=stagedCards.get(card.id);
+      const staged=presentation.stagedCards.get(card.id);
       if(staged) entries.push({el:staged,card,placeholder:null,staged:true});
       else {
         const e=detachFloorCard(card);
@@ -1162,7 +1254,8 @@
     });
     if(!entries.length)return;
     if(prefersReducedMotion()){
-      entries.forEach(e=>{ stagedCards.delete(e.card.id); e.el.remove(); if(e.placeholder)e.placeholder.remove(); });
+      entries.forEach(e=>{ presentation.stagedCards.delete(e.card.id); e.el.remove(); if(e.placeholder)e.placeholder.remove(); });
+      unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
       return;
     }
     const jobs=entries.map((entry,i)=>new Promise(resolve=>{
@@ -1171,21 +1264,21 @@
         const dest=captureTargetRect(side,entry.card.type); const dc=rectCenter(dest);
         const target={left:dc.x-start.width*.24,top:dc.y-start.height*.24,width:start.width,height:start.height};
         const dx=target.left-start.left,dy=target.top-start.top;
-        const curve=side==='human'?24:-24;
+        const curve=seatForLegacySide(side)==='bottom'?24:-24;
         const a=entry.el.animate([
           {transform:'translate(0,0) rotate(0deg) scale(1)',opacity:1,offset:0},
           {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg) scale(.84)`,opacity:1,offset:.48},
           {transform:`translate(${dx}px,${dy}px) rotate(0deg) scale(.46)`,opacity:.96,offset:1}
         ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
-        stagedCards.delete(entry.card.id);
+        presentation.stagedCards.delete(entry.card.id);
         entry.el.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
       },i*70);
     }));
     await Promise.all(jobs);
-    // These exact physical cards have left the floor/table. Release any fixed
-    // slot reservations only after their slide-to-capture animation completes.
-    unique.forEach(card=>{ if(state.floorSlotByCard) delete state.floorSlotByCard[card.id]; });
+    // These in-flight cards have left the table. Canonical occupied slots are
+    // released by removeFloorCards when the authoritative capture is applied.
+    unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
   }
 
   async function animateCaptureSlides(playedCard,captured,side,stage){
@@ -1219,7 +1312,7 @@
     });
   }
   function playSample(name,volume=1,playbackRate=1,maxMs=0){
-    if(!soundEnabled)return;
+    if(!presentation.soundEnabled)return;
     try{
       unlockAudio();
       const base=audioBases[name];
@@ -1232,7 +1325,7 @@
     }catch(_){ }
   }
   function playHitSound(){
-    if(!soundEnabled)return;
+    if(!presentation.soundEnabled)return;
     // Floor impact only: loud, dry card-on-card crack. No pile/deck sounds.
     playSample('slam',1,1);
     playSample('slam',.72,1);
@@ -1275,12 +1368,13 @@
 
   function showGoCallout(side){
     if(!els.goCallout)return;
-    const anchor=side==='ai'?document.querySelector('.opponent-zone'):document.querySelector('.player-zone');
+    const seat=seatForLegacySide(side);
+    const anchor=seat==='top'?document.querySelector('.opponent-zone'):document.querySelector('.player-zone');
     const r=anchor?anchor.getBoundingClientRect():null;
-    els.goCallout.className=`go-callout ${side==='ai'?'go-callout-ai':'go-callout-human'}`;
+    els.goCallout.className=`go-callout ${seat==='top'?'go-callout-ai':'go-callout-human'}`;
     if(r){
       els.goCallout.style.left=`${r.left+r.width/2}px`;
-      els.goCallout.style.top=side==='ai'?`${r.bottom-20}px`:`${r.top+24}px`;
+      els.goCallout.style.top=seat==='top'?`${r.bottom-20}px`:`${r.top+24}px`;
     }
     els.goCallout.textContent='GO!';
     void els.goCallout.offsetWidth;
@@ -1301,47 +1395,7 @@
   function calculateFinalScore(winnerSide){
     const actor=state[winnerSide];
     const loser=state[winnerSide==='human'?'ai':'human'];
-    const sc=score(actor.captured), lsc=score(loser.captured);
-    const baseTotal=sc.total;
-    const goBonus=Math.min(actor.go,2);
-    let total=baseTotal + goBonus;
-    const reasons=[];
-    const formulaSteps=[`Base ${baseTotal}`];
-
-    if(goBonus>0){
-      formulaSteps.push(`Go bonus +${goBonus}`);
-    }
-    if(actor.go>=3){
-      const p=actor.go-2;
-      const goMult=2**p;
-      total*=goMult;
-      reasons.push(`${actor.go} Go ×${goMult}`);
-      formulaSteps.push(`${actor.go} Go ×${goMult}`);
-    }
-
-    let doublePower=actor.shakes+actor.bombs;
-    if(actor.shakes){
-      const m=2**actor.shakes;
-      reasons.push(`Shake ×${m}`);
-      formulaSteps.push(`Shake ×${m}`);
-    }
-    if(actor.bombs){
-      const m=2**actor.bombs;
-      reasons.push(`Bomb ×${m}`);
-      formulaSteps.push(`Bomb ×${m}`);
-    }
-    if(sc.animals>=7){doublePower++;reasons.push('Meong-bak ×2');formulaSteps.push('Meong-bak ×2');}
-    if(sc.piCount>=10 && lsc.piCount<=7){doublePower++;reasons.push('Pi-bak ×2');formulaSteps.push('Pi-bak ×2');}
-    if(sc.bright>=3 && lsc.bright===0){doublePower++;reasons.push('Gwang-bak ×2');formulaSteps.push('Gwang-bak ×2');}
-    if(loser.go>0 && score(loser.captured).total<=loser.lastGoScore){doublePower++;reasons.push('Go-bak ×2');formulaSteps.push('Go-bak ×2');}
-    if(nagariCarryPower>0){
-      const m=2**nagariCarryPower;
-      doublePower+=nagariCarryPower;
-      reasons.push(`Nagari carry ×${m}`);
-      formulaSteps.push(`Nagari carry ×${m}`);
-    }
-    total*=2**doublePower;
-    return {base:sc,total,reasons,baseTotal,goBonus,formulaSteps};
+    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower:state.matchContext.nagariCarryPower});
   }
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
@@ -1358,19 +1412,19 @@
 
   async function finishNagari(){
     if(state.winner)return;
-    state.winner='nagari'; locked=true;
-    nagariCarryPower=Math.min(3,nagariCarryPower+1);
-    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
+    state.winner='nagari'; presentation.locked=true;
+    state.matchContext.nagariCarryPower=Math.min(3,state.matchContext.nagariCarryPower+1);
+    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**state.matchContext.nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
     els.resultDialog.showModal(); render();
   }
 
   function finishSpecial(winner,points,reason){
     if(state.winner)return;
-    state.winner=winner; locked=true;
-    const final=points*(2**nagariCarryPower);
+    state.winner=playerIdForLegacySide(winner); presentation.locked=true;
+    const final=points*(2**state.matchContext.nagariCarryPower);
     const specialCall=reason.startsWith('총통!')?'CHONGTONG!':'WIN!';
-    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${nagariCarryPower?` · Nagari ×${2**nagariCarryPower}`:''}`,'special');
-    nagariCarryPower=0;
+    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${state.matchContext.nagariCarryPower?` · Nagari ×${2**state.matchContext.nagariCarryPower}`:''}`,'special');
+    state.matchContext.nagariCarryPower=0;
     els.resultDialog.showModal(); render();
   }
 
@@ -1378,34 +1432,35 @@
 
   function finishGame(winner,sc,reason){
     if(winner==='draw'){ finishNagari(); return; }
-    state.winner=winner;locked=true;hideActionCue();
+    state.winner=playerIdForLegacySide(winner);presentation.locked=true;hideActionCue();
     const settled=calculateFinalScore(winner);
     const breakdown=formatScoreFormula(settled);
     setGrandResult('STOP!',winner==='human'?'Player Wins!':'Computer Wins!',`${settled.total} Points`,breakdown,'stop');
-    nagariCarryPower=0;
+    state.matchContext.nagariCarryPower=0;
     els.resultDialog.showModal();render();
   }
 
 
   function recommendHumanCard(){
-    if(!state||state.turn!=='human'||locked)return;
+    if(!state||state.turn!==PLAYER_A||presentation.locked)return;
     let best=state.human.hand[0],val=-Infinity;
     state.human.hand.forEach(c=>{
       const matches=matchesFor(c),cv=matches.length?captureValue(c)+Math.max(...matches.map(captureValue)):0;
       const combo=(c.flags.includes('godori')?2:0)+(c.ribbonSet?1:0)+(c.type==='bright'?2:0),v=cv*1.4+combo+Math.random()*.1;
       if(v>val){val=v;best=c;}
     });
-    hintCardId=best.id;render();
+    presentation.hintCardId=best.id;render();
   }
 
 
   function startGame(){
-    queuedHumanCardSwitch=null; pendingHumanCardId=null; cleanupTargetChoice(); stagedCards.forEach(el=>el.remove()); stagedCards.clear(); hideActionCue();
-    if(shakeResolver){shakeResolver(false);shakeResolver=null;}
-    if(bombResolver){bombResolver(false);bombResolver=null;}
+    presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
+    if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
+    if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
-    state=freshState();locked=true;aiTurnInProgress=false;hintCardId=null;lastHumanScore=0;lastAiScore=0;
-    els.roundNo.textContent=roundNo;render();
+    const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
+    state=freshState(nagariCarryPower);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;
+    els.roundNo.textContent=presentation.roundNo;render();
     setTimeout(processOpeningSpecials,420);
   }
 
@@ -1413,28 +1468,28 @@
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
   els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
   if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
-  if(els.railNewGame)els.railNewGame.addEventListener('click',()=>{roundNo++;startGame();});
-  if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{soundEnabled=!soundEnabled;els.soundToggle.querySelector('span').textContent=soundEnabled?'Sound On':'Sound Off';if(soundEnabled)unlockAudio();});
-  els.newGameBtn.addEventListener('click',()=>{roundNo++;startGame();});
-  els.playAgainBtn.addEventListener('click',()=>{roundNo++;startGame();});
+  if(els.railNewGame)els.railNewGame.addEventListener('click',()=>{presentation.roundNo++;startGame();});
+  if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
+  els.newGameBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
+  els.playAgainBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
   els.hintBtn.addEventListener('click',recommendHumanCard);
-  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!=='human')return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');locked=true;state.turn='ai';render();setTimeout(aiTurn,1150);});
+  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!==PLAYER_A)return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');presentation.locked=true;state.turn=PLAYER_B;render();setTimeout(aiTurn,1150);});
   els.stopBtn.addEventListener('click',()=>{if(!state)return;els.decisionDialog.close();finishGame('human',score(state.human.captured),'You chose STOP.');});
 
 
   if(els.shakeBtn)els.shakeBtn.addEventListener('click',()=>{
-    if(!shakeResolver)return;
+    if(!presentation.shakeResolver)return;
     playShakeSound();
-    const r=shakeResolver; shakeResolver=null; els.shakeDialog.close(); r(true);
+    const r=presentation.shakeResolver; presentation.shakeResolver=null; els.shakeDialog.close(); r(true);
   });
   if(els.keepSecretBtn)els.keepSecretBtn.addEventListener('click',()=>{
-    if(!shakeResolver)return; const r=shakeResolver; shakeResolver=null; els.shakeDialog.close(); r(false);
+    if(!presentation.shakeResolver)return; const r=presentation.shakeResolver; presentation.shakeResolver=null; els.shakeDialog.close(); r(false);
   });
   if(els.bombBtn)els.bombBtn.addEventListener('click',()=>{
-    if(!bombResolver)return; const r=bombResolver; bombResolver=null; els.bombDialog.close(); r(true);
+    if(!presentation.bombResolver)return; const r=presentation.bombResolver; presentation.bombResolver=null; els.bombDialog.close(); r(true);
   });
   if(els.playOneBtn)els.playOneBtn.addEventListener('click',()=>{
-    if(!bombResolver)return; const r=bombResolver; bombResolver=null; els.bombDialog.close(); r(false);
+    if(!presentation.bombResolver)return; const r=presentation.bombResolver; presentation.bombResolver=null; els.bombDialog.close(); r(false);
   });
 
 
@@ -1443,11 +1498,63 @@
   });
 
   if(els.shakeDialog)els.shakeDialog.addEventListener('cancel',e=>{
-    if(shakeResolver){e.preventDefault();const r=shakeResolver;shakeResolver=null;els.shakeDialog.close();r(false);}
+    if(presentation.shakeResolver){e.preventDefault();const r=presentation.shakeResolver;presentation.shakeResolver=null;els.shakeDialog.close();r(false);}
   });
   if(els.bombDialog)els.bombDialog.addEventListener('cancel',e=>{
-    if(bombResolver){e.preventDefault();const r=bombResolver;bombResolver=null;els.bombDialog.close();r(false);}
+    if(presentation.bombResolver){e.preventDefault();const r=presentation.bombResolver;presentation.bombResolver=null;els.bombDialog.close();r(false);}
   });
 
-  startGame();
+  if(TEST_MODE){
+    const cloneCard=card=>({...card,flags:[...card.flags]});
+    const makeTestPlayer=(overrides={})=>({
+      hand:[],captured:[],go:0,shakes:0,bombs:0,bombFreeTurns:0,ppeoks:0,
+      hiddenTripleMonths:[],shakenMonths:[],lastGoScore:0,
+      ...overrides
+    });
+    const makeTestState=(overrides={})=>{
+      const next={
+        deck:[],floor:[],human:makeTestPlayer(),ai:makeTestPlayer(),
+        floorStacks:{},turn:PLAYER_A,winner:null,specialWinner:null,
+        matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0},
+        ...overrides
+      };
+      if(!next.floorSlotByCard)initFloorSlots(next);
+      return next;
+    };
+    globalThis.GOSTOP_TEST_API=Object.freeze({
+      playerIds:Object.freeze({playerA:PLAYER_A,playerB:PLAYER_B}),
+      soloViewerId:SOLO_VIEWER_ID,
+      otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
+      viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
+      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,
+      masterDeck:()=>MASTER_DECK.map(cloneCard),
+      card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
+      makePlayer:makeTestPlayer,
+      makeState:makeTestState,
+      setState(next){state=next;},
+      getState(){return state;},
+      setNagariCarryPower(value){state.matchContext.nagariCarryPower=value;},
+      getNagariCarryPower(){return state.matchContext.nagariCarryPower;},
+      setPreviousScores(human,ai){state.matchContext.lastScoreBySide.playerA=human;state.matchContext.lastScoreBySide.playerB=ai;},
+      assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
+      markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
+      commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,
+      calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
+      stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,
+      stableFloorTilt,stableStackAngle,
+      getLocked(){return presentation.locked;},
+      getPresentationSnapshot(){
+        return {
+          floorSlotReservations:Object.fromEntries(presentation.floorSlotReservations),
+          stagedCardCount:presentation.stagedCards.size,
+          locked:presentation.locked,
+          hintCardId:presentation.hintCardId
+        };
+      }
+    });
+  }else{
+    startGame();
+  }
 })();
