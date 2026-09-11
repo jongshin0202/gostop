@@ -10,7 +10,7 @@
   if(!engine)throw new Error('GoStopEngine must load before app.js.');
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
-    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,
+    hasFourOfMonth,matchingCards,score,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,
     evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   }=engine;
   const MASTER_DECK = engine.masterDeck;
@@ -1069,9 +1069,8 @@
     const reason=playerWon
       ? `총통! You won because you were dealt all 4 cards from the same month (${monthNames[event.month-1]}).`
       : `총통! Computer won by holding all 4 cards from the same month (${monthNames[event.month-1]}).`;
-    const final=event.points*(2**state.matchContext.nagariCarryPower);
-    setGrandResult('CHONGTONG!',playerWon?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${state.matchContext.nagariCarryPower?` · Nagari ×${2**state.matchContext.nagariCarryPower}`:''}`,'special');
-    state.matchContext.nagariCarryPower=0;
+    const terminal=state.terminalResult;
+    setGrandResult('CHONGTONG!',playerWon?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`${reason}${terminal.nagariCarryPower?` · Nagari ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1444,9 +1443,10 @@
 
   async function finishNagari(){
     if(state.winner)return;
-    state.winner='nagari'; presentation.locked=true;
-    state.matchContext.nagariCarryPower=Math.min(3,state.matchContext.nagariCarryPower+1);
-    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**state.matchContext.nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
+    const result=resolveNagari(state,{actorId:state.turn}); state=result.state;
+    const event=result.events.find(item=>item.type==='nagariDeclared');
+    presentation.locked=true;
+    setGrandResult('NAGARI!','No Winner',`Next Hand ×${event.nextHandMultiplier}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1461,19 +1461,6 @@
   }
 
   function finishByScore(){ finishNagari(); }
-
-  function finishGame(winner,sc,reason){
-    // Legacy characterization helper only. Voluntary STOP production flow uses
-    // applyGoStopAction and presents its authoritative terminal result.
-    if(winner==='draw'){ finishNagari(); return; }
-    state.winner=playerIdForLegacySide(winner);presentation.locked=true;hideActionCue();
-    const settled=calculateFinalScore(winner);
-    const breakdown=formatScoreFormula(settled);
-    setGrandResult('STOP!',winner==='human'?'Player Wins!':'Computer Wins!',`${settled.total} Points`,breakdown,'stop');
-    state.matchContext.nagariCarryPower=0;
-    els.resultDialog.showModal();render();
-  }
-
 
   function recommendHumanCard(){
     if(!state||state.turn!==PLAYER_A||presentation.locked)return;
@@ -1570,7 +1557,7 @@
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
-      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,
+      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
       card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
       makePlayer:makeTestPlayer,

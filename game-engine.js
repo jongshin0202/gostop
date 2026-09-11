@@ -278,14 +278,36 @@
     const winner=candidates.find(candidate=>candidate.months.length);
     if(!winner){ state.openingOutcome=null; return {state,events:[]}; }
     const month=winner.months[0],points=10;
+    const nagariCarryPower=state.matchContext.nagariCarryPower;
+    const multiplier=2**nagariCarryPower;
     state.winner=winner.actorId;
     state.specialWinner=winner.actorId;
     state.openingOutcome={type:'chongtong',actorId:winner.actorId,month,points};
+    state.terminalResult={type:'chongtong',winnerId:winner.actorId,basePoints:points,nagariCarryPower,multiplier,finalPoints:points*multiplier};
+    state.matchContext.nagariCarryPower=0;
     return {state,events:[{type:'chongtongDeclared',audience:'public',actorId:winner.actorId,month,points}]};
   }
 
   function cannotContinueTurn(state,side){
     return state[side].hand.length+state[side].bombFreeTurns===0||state.deck.length===0;
+  }
+
+  function resolveNagari(currentState,{actorId}={}){
+    const state=deserializeGameState(currentState);
+    const side=validateActor(state,{actorId});
+    if(state.pendingDecision)throw new Error('A private decision must be resolved before Nagari.');
+    if(state.pendingTurn)throw new Error('The current turn must be completed before Nagari.');
+    if(!cannotContinueTurn(state,side))throw new Error('Nagari is not available while play can continue.');
+    const carryPower=Math.min(3,state.matchContext.nagariCarryPower+1);
+    const terminalResult={type:'nagari',winnerId:null,carryPower,nextHandMultiplier:2**carryPower};
+    state.winner='nagari';
+    state.matchContext.nagariCarryPower=carryPower;
+    state.terminalResult=terminalResult;
+    const events=[
+      {type:'nagariDeclared',audience:'public',actorId,carryPower,nextHandMultiplier:terminalResult.nextHandMultiplier},
+      {type:'handEnded',audience:'public',winnerId:null,reason:'nagari',terminalResult:serializeGameState(terminalResult)}
+    ];
+    return {state,events,terminalResult:serializeGameState(terminalResult)};
   }
 
   function evaluateGoStop(currentState,{actorId}={}){
@@ -733,7 +755,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,resolveNagari,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
   });
 
   globalThis.GoStopEngine=api;

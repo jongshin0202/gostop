@@ -333,6 +333,7 @@ test('Nagari increments and caps carry power at three',async()=>{
   let state=useState(stateWith());
   api.setNagariCarryPower(2);
   await api.finishNagari();
+  state=api.getState();
   assert.equal(state.winner,'nagari');
   assert.equal(api.getNagariCarryPower(),3);
   state=useState(stateWith({matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:3}}));
@@ -1408,4 +1409,140 @@ test('browser Go/Stop production flow delegates mutation and presentation to eng
   assert.equal(buttons.includes("type:'declareStop'"),true);
   assert.equal(buttons.includes('.go++'),false);
   assert.equal(buttons.includes('state.winner='),false);
+});
+
+const exhaustedState=(actorId='playerA',carryPower=0,playerOverrides={})=>{
+  const side=actorId==='playerA'?'human':'ai';
+  return stateWith({
+    turn:actorId,deck:[],matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:carryPower},
+    [side]:api.makePlayer({hand:[],bombFreeTurns:0,...playerOverrides})
+  });
+};
+
+test('Nagari exhaustion preserves hand-plus-blanks and empty-deck rules',()=>{
+  let state=stateWith({turn:'playerA',deck:[card('m12-1')],human:api.makePlayer({hand:[],bombFreeTurns:0})});
+  assert.equal(extractedEngine.evaluateGoStop(state,{actorId:'playerA'}).requiresNagari,true);
+  state.human.bombFreeTurns=1;
+  const continuing=extractedEngine.evaluateGoStop(state,{actorId:'playerA'});
+  assert.equal(continuing.requiresNagari,false);
+  assert.equal(continuing.state.turn,'playerB');
+  state=stateWith({turn:'playerA',deck:[],human:api.makePlayer({hand:[card('m11-3')],bombFreeTurns:2})});
+  assert.equal(extractedEngine.evaluateGoStop(state,{actorId:'playerA'}).requiresNagari,true);
+});
+
+test('authoritative Nagari resolves for both players with public no-winner events',()=>{
+  for(const actorId of ['playerA','playerB']){
+    const before=wireRoundTrip(exhaustedState(actorId));
+    const result=extractedEngine.resolveNagari(before,{actorId});
+    assert.equal(result.state.winner,'nagari');
+    assert.equal(result.state.specialWinner,null);
+    assert.deepEqual(result.state.terminalResult,{type:'nagari',winnerId:null,carryPower:1,nextHandMultiplier:2});
+    assert.deepEqual(result.events,[
+      {type:'nagariDeclared',audience:'public',actorId,carryPower:1,nextHandMultiplier:2},
+      {type:'handEnded',audience:'public',winnerId:null,reason:'nagari',terminalResult:{type:'nagari',winnerId:null,carryPower:1,nextHandMultiplier:2}}
+    ]);
+    assert.equal(JSON.stringify(result.events).includes('cardId'),false);
+    assert.deepEqual(wireRoundTrip(result.state),result.state);
+    for(const viewerId of ['playerA','playerB']){
+      const view=extractedEngine.projectStateForViewer(result.state,viewerId);
+      assert.equal(view.winner,'nagari');
+      assert.deepEqual(view.terminalResult,result.state.terminalResult);
+      assert.deepEqual(view.legalActions,[]);
+    }
+    assert.throws(()=>extractedEngine.resolveNagari(result.state,{actorId}),/already complete/);
+    assert.throws(()=>extractedEngine.applyNormalTurnAction(result.state,{type:'useBombBlank',actorId}),/already complete/);
+    assert.throws(()=>extractedEngine.applyGoStopAction(result.state,{type:'declareGo',actorId}),/already complete|Unsupported/);
+  }
+});
+
+test('Nagari carry increments across authority-created hands and caps at three',()=>{
+  let carryPower=0;
+  for(const expected of [1,2,3,3]){
+    const hand=exhaustedState('playerA',carryPower);
+    assert.equal(hand.matchContext.nagariCarryPower,carryPower);
+    const result=extractedEngine.resolveNagari(hand,{actorId:'playerA'});
+    assert.equal(result.state.matchContext.nagariCarryPower,expected);
+    assert.equal(result.state.terminalResult.nextHandMultiplier,2**expected);
+    carryPower=result.state.matchContext.nagariCarryPower;
+  }
+});
+
+test('Nagari rejects premature, unresolved, wrong-player, and duplicate resolution',()=>{
+  const playable=stateWith({turn:'playerA',deck:[card('m12-1')],human:api.makePlayer({hand:[card('m11-3')]})});
+  assert.throws(()=>extractedEngine.resolveNagari(playable,{actorId:'playerA'}),/not available/);
+  assert.throws(()=>extractedEngine.resolveNagari(exhaustedState('playerA'),{actorId:'playerB'}),/not playerB's turn/);
+  const pending=exhaustedState('playerA');
+  pending.pendingDecision={type:'goStopDecision',audience:'player-private',playerId:'playerA',score:7,previousGoScore:0,choices:['go','stop']};
+  assert.throws(()=>extractedEngine.resolveNagari(pending,{actorId:'playerA'}),/decision must be resolved/);
+});
+
+test('Go/Stop remains before Nagari on final turns',()=>{
+  let final=exhaustedState('playerA',1,{captured:sevenPointPi()});
+  let evaluated=extractedEngine.evaluateGoStop(final,{actorId:'playerA'});
+  assert.equal(evaluated.pendingDecision.type,'goStopDecision');
+  const stopped=extractedEngine.applyGoStopAction(evaluated.state,{type:'declareStop',actorId:'playerA'});
+  assert.equal(stopped.state.winner,'playerA');
+  assert.equal(stopped.state.terminalResult.settlement.reasons.includes('Nagari carry ×2'),true);
+  assert.equal(stopped.state.matchContext.nagariCarryPower,0);
+  assert.throws(()=>extractedEngine.resolveNagari(stopped.state,{actorId:'playerA'}),/already complete/);
+
+  final=exhaustedState('playerA',0,{captured:sevenPointPi()});
+  evaluated=extractedEngine.evaluateGoStop(final,{actorId:'playerA'});
+  const went=extractedEngine.applyGoStopAction(evaluated.state,{type:'declareGo',actorId:'playerA'});
+  assert.equal(went.requiresNagari,true);
+  const nagari=extractedEngine.resolveNagari(went.state,{actorId:'playerA'});
+  assert.equal(nagari.state.human.go,1);
+  assert.equal(nagari.state.winner,'nagari');
+});
+
+test('equal or lower post-GO exhausted scores become Nagari without another decision',()=>{
+  for(const captured of [sevenPointPi(),sevenPointPi().slice(0,15)]){
+    const state=exhaustedState('playerA',0,{captured,go:1,lastGoScore:7});
+    state.matchContext.lastScoreBySide.playerA=7;
+    const evaluated=extractedEngine.evaluateGoStop(state,{actorId:'playerA'});
+    assert.equal(evaluated.pendingDecision,null);
+    assert.equal(evaluated.requiresNagari,true);
+    assert.equal(extractedEngine.resolveNagari(evaluated.state,{actorId:'playerA'}).state.winner,'nagari');
+  }
+});
+
+test('Chongtong consumes carry authoritatively and preserves its ten-point base',()=>{
+  const opening=openingState({humanHand:cards('m6-1','m6-2','m6-3','m6-4')});
+  opening.matchContext.nagariCarryPower=2;
+  const result=extractedEngine.resolveOpeningState(opening);
+  assert.deepEqual(result.state.terminalResult,{type:'chongtong',winnerId:'playerA',basePoints:10,nagariCarryPower:2,multiplier:4,finalPoints:40});
+  assert.equal(result.state.matchContext.nagariCarryPower,0);
+  assert.deepEqual(wireRoundTrip(result.state),result.state);
+});
+
+test('Bomb empty-deck paths preserve their direct Nagari boundary while last-card draw evaluates score',()=>{
+  let bomb=pendingBomb('playerA',{deck:[]}).state;
+  bomb=extractedEngine.applyNormalTurnAction(bomb,{type:'declareBomb',actorId:'playerA'}).state;
+  bomb=extractedEngine.applyNormalTurnAction(bomb,{type:'drawNextCard',actorId:'playerA'}).state;
+  bomb=extractedEngine.applyNormalTurnAction(bomb,{type:'completeTurn',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.resolveNagari(bomb,{actorId:'playerA'}).state.winner,'nagari');
+
+  let blank=stateWith({turn:'playerA',deck:[],human:api.makePlayer({bombFreeTurns:1})});
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'useBombBlank',actorId:'playerA'}).state;
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'drawNextCard',actorId:'playerA'}).state;
+  blank=extractedEngine.applyNormalTurnAction(blank,{type:'completeTurn',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.resolveNagari(blank,{actorId:'playerA'}).state.winner,'nagari');
+
+  let last=goStopState('playerA'); last.human.bombFreeTurns=1;
+  last=extractedEngine.applyNormalTurnAction(last,{type:'useBombBlank',actorId:'playerA'}).state;
+  last=extractedEngine.applyNormalTurnAction(last,{type:'drawNextCard',actorId:'playerA'}).state;
+  last=extractedEngine.applyNormalTurnAction(last,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'}).state;
+  last=extractedEngine.applyNormalTurnAction(last,{type:'completeTurn',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.evaluateGoStop(last,{actorId:'playerA'}).pendingDecision.score,7);
+});
+
+test('browser Nagari and Chongtong presentation contain no authoritative carry mutation',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const nagari=source.slice(source.indexOf('async function finishNagari'),source.indexOf('function finishSpecial'));
+  assert.equal(nagari.includes('resolveNagari(state'),true);
+  assert.equal(nagari.includes("state.winner='nagari'"),false);
+  assert.equal(nagari.includes('Math.min(3'),false);
+  const chongtong=source.slice(source.indexOf('function presentChongtong'),source.indexOf('async function revealAiShake'));
+  assert.equal(chongtong.includes('terminal.finalPoints'),true);
+  assert.equal(chongtong.includes('nagariCarryPower=0'),false);
 });
