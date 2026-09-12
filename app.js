@@ -1827,12 +1827,11 @@
     await presentDealSequence();
   }
   async function presentDealSequence(){
-    if(TEST_MODE){traceAudio('shuffle');return;}
-    presentation.deckDisplayCount=48;render();playShuffleSound();await sleep(480);
+    if(TEST_MODE){traceAudio('deal');return;}
+    presentation.deckDisplayCount=48;render();
     for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();playDealSound(count);await sleep(34);}
     presentation.deckDisplayCount=null;render();
   }
-  function playShuffleSound(){traceAudio('shuffle');playProceduralNoise('shuffle');}
   function playDiceSound(){presentation.diceSoundCount++;traceAudio('dice');playProceduralNoise('dice');}
   function playDealSound(index){if(index%2===0){traceAudio('deal');synthNotes([[0,230+(index%5)*18,.035]]);}}
   async function startGame(){

@@ -2035,7 +2035,7 @@ test('shuffle remains secure rejection-sampled Fisher-Yates with only floor-four
 });
 
 test('starter dice remains presentation-only, rolls only for a new session, and settles after its audio gate',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sequence=source.slice(source.indexOf('async function presentOpeningSequence'),source.indexOf('function playShuffleSound'));
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sequence=source.slice(source.indexOf('async function presentOpeningSequence'),source.indexOf('function playDiceSound'));
   assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
   assert.ok(sequence.indexOf('await sleep(900)')<sequence.indexOf("classList.remove('rolling')"));
   assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf("els.openingDie.textContent=starter===PLAYER_A?'P':'C'"));
@@ -2219,14 +2219,27 @@ test('KISS presentation invokes one dedicated smooch path and respects Sound Off
   assert.doesNotMatch(source,/SpeechSynthesisUtterance/);
 });
 
-test('round-start audio trace has only dice before first shuffle and none before later shuffles',async()=>{
+test('round-start audio trace has dice only on a fresh session and never includes shuffle audio',async()=>{
   api.resetSession();api.resetAudioTrace();
-  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);
-  assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);
-  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['shuffle']);
-  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['shuffle']);
-  api.resetSession();api.resetAudioTrace();assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerB',true);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/function playShuffleSound\(\)\{traceAudio\('shuffle'\);playProceduralNoise\('shuffle'\);\}/);
+  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);await api.presentDealSequence();
+  assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice','deal']);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);
+  api.resetSession();api.resetAudioTrace();assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerB',true);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice','deal']);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/playShuffleSound|traceAudio\('shuffle'\)/);assert.match(source,/playDealSound\(count\)/);
+});
+
+test('both seats use one capture-panel sizing contract without player-only stretching',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(html,/capture-panel game-capture-panel cpu-capture-panel/);
+  assert.match(html,/capture-panel game-capture-panel player-capture-panel/);
+  const contract=css.match(/\.game-capture-panel\{([^}]+)\}/)?.[1]||'';
+  for(const declaration of ['width:min(500px,100%)','height:116px','min-height:116px','max-height:116px','padding:8px 12px'])assert.ok(contract.includes(declaration),declaration);
+  assert.doesNotMatch(css,/\.player-capture-panel\{[^}]*(?:width|height|padding):/);
+  assert.match(css,/\.captured-strip\{[^}]*grid-template-columns:repeat\(4,1fr\)/);
+  assert.match(css,/\.captured-mini\{[^}]*width:41px!important;height:66px!important/);
+  assert.match(css,/@media\(min-width:1051px\)\{\.opponent-zone,\.player-zone\{grid-template-columns:max-content minmax\(260px,1fr\) minmax\(390px,620px\)/);
 });
 
 test('authoritative unmatched deck landing keeps its reserved slot after earlier capture cleanup',()=>{

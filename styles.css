@@ -242,10 +242,9 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 
 /* V1.9.5: top CPU area remains visually open; no shaded capture ribbon/bar. */
 .opponent-zone{background:transparent!important;box-shadow:none!important;border:0!important}
-.cpu-capture-panel,.opponent-zone .capture-panel{background:transparent!important;border:0!important;box-shadow:none!important}
 
 /* V1.9.7: CPU row must have no accidental overlay/shade. */
-.opponent-zone,.opponent-hand,.cpu-capture-panel{background:transparent!important;background-image:none!important;box-shadow:none!important;filter:none!important;backdrop-filter:none!important;}
+.opponent-zone,.opponent-hand{background:transparent!important;background-image:none!important;box-shadow:none!important;filter:none!important;backdrop-filter:none!important;}
 .opponent-zone::before,.opponent-zone::after,.opponent-hand::before,.opponent-hand::after{content:none!important;display:none!important;}
 .mini-back{position:relative!important;overflow:hidden!important;}
 
@@ -410,24 +409,16 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 .opponent-hand{grid-column:2;}
 .opponent-zone .cpu-capture-panel{
   grid-column:3!important;
-  width:500px!important;
-  justify-self:stretch!important;
+  justify-self:end!important;
   align-self:center!important;
-  background:linear-gradient(180deg,rgba(32,19,13,.94),rgba(18,12,9,.92))!important;
-  border:1px solid rgba(216,175,105,.34)!important;
-  border-radius:12px!important;
-  padding:8px 12px!important;
-  box-shadow:0 10px 30px rgba(0,0,0,.3)!important;
-  filter:none!important;
-  backdrop-filter:none!important;
 }
 @media(max-width:1050px){
   .opponent-zone{grid-template-columns:150px 1fr!important;padding:0 18px!important;}
-  .cpu-capture-panel{grid-column:1/3!important;grid-row:2!important;width:100%!important;max-width:500px!important;justify-self:end!important;}
+  .cpu-capture-panel{grid-column:1/3!important;grid-row:2!important;justify-self:end!important;}
 }
 @media(max-width:700px){
   .opponent-zone{grid-template-columns:115px 1fr!important;padding:0 4px!important;}
-  .cpu-capture-panel{grid-column:1/3!important;width:100%!important;max-width:none!important;justify-self:stretch!important;}
+  .cpu-capture-panel{grid-column:1/3!important;justify-self:stretch!important;}
 }
 /* Consolidated regression fixes: one edge-to-edge card face at every scale. */
 .card,.physical-card,.flying-card,.capture-ghost{padding:0!important;background:#a92d21!important;border:1px solid #a92d21!important}
@@ -460,11 +451,11 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
   .game-stage{width:100%;padding:18px 14px 28px;grid-template-rows:auto minmax(520px,auto) auto;gap:10px}
   .opponent-zone{display:grid!important;grid-template-columns:170px minmax(0,1fr)!important;grid-template-rows:auto auto;padding:0!important;gap:8px 12px!important}
   .cpu-chip{grid-column:1!important;grid-row:1!important}.opponent-hand{grid-column:2!important;grid-row:1!important;min-width:0}
-  .opponent-zone .cpu-capture-panel{grid-column:1/3!important;grid-row:2!important;width:100%!important;max-width:none!important}
+  .opponent-zone .cpu-capture-panel{grid-column:1/3!important;grid-row:2!important}
   .table{margin:0 12px}
   .player-zone{display:grid;grid-template-columns:170px minmax(0,1fr);grid-template-rows:auto auto;padding:0!important;gap:8px 12px}
   .player-row{grid-column:1!important;grid-row:1!important}.hand{grid-column:2!important;grid-row:1!important;min-width:0}
-  .player-capture-panel{grid-column:1/3!important;grid-row:2!important;width:100%}
+  .player-capture-panel{grid-column:1/3!important;grid-row:2!important}
 }
 
 /* Phone portrait and landscape use a true vertical flow; the page, not the board, scrolls. */
@@ -478,7 +469,7 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
   .game-stage{width:100%;padding:8px 5px 18px;display:grid;grid-template-rows:auto 390px auto;gap:8px}
   .opponent-zone{grid-row:1!important;display:grid!important;grid-template-columns:minmax(132px,auto) minmax(0,1fr)!important;grid-template-rows:auto auto!important;margin:0!important;padding:0!important;gap:5px!important}
   .cpu-chip{grid-column:1!important;grid-row:1!important;align-self:center}.opponent-hand{grid-column:2!important;grid-row:1!important;height:94px;justify-content:flex-end;overflow-x:auto;overflow-y:visible;padding:3px 4px}
-  .opponent-zone .cpu-capture-panel{grid-column:1/3!important;grid-row:2!important;width:100%!important;padding:5px!important}
+  .opponent-zone .cpu-capture-panel{grid-column:1/3!important;grid-row:2!important}
   .table{grid-row:2;margin:0!important;min-height:390px;height:390px;border-width:9px;border-radius:24px;transform:none;overflow:visible}
   .table-center{inset:34px 7px 28px;grid-template-columns:58px minmax(0,1fr);gap:3px}
   .deck-stack{width:48px;height:77px}.deck-label{font-size:9px;padding:3px 5px}
@@ -487,7 +478,7 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
   .player-zone{grid-row:3;display:grid;grid-template-columns:1fr!important;grid-template-rows:105px auto auto!important;padding:0!important;gap:5px!important}
   .hand{grid-column:1!important;grid-row:1!important;width:100%;height:105px;justify-content:flex-start;align-items:center;overflow-x:auto;overflow-y:visible;padding:8px 6px;scrollbar-width:thin}
   .hand-card-slot{margin-left:-9px;flex:0 0 var(--card-w);height:calc(var(--card-h) + 12px)}.hand-card-slot:first-child{margin-left:0}.hand .card{margin-left:0;flex:0 0 var(--card-w)}
-  .player-row{grid-column:1!important;grid-row:2!important}.player-capture-panel{grid-column:1!important;grid-row:3!important;width:100%;padding:5px!important}
+  .player-row{grid-column:1!important;grid-row:2!important}.player-capture-panel{grid-column:1!important;grid-row:3!important}
   .player-chip{width:100%;grid-template-columns:34px minmax(0,1fr) 43px auto;gap:5px;padding:5px 7px;border-radius:10px}.avatar{width:32px;height:32px}.player-chip strong{font-size:13px}.score-pill{height:34px;padding-left:6px}.score-pill b{font-size:19px}.session-stats{font-size:9px}
   .capture-panel-title{font-size:11px;margin-bottom:2px}.captured-strip{gap:2px}.capture-group{padding:2px 1px}.capture-group-head{font-size:10px!important;margin-bottom:2px}.capture-stack{width:46px;height:55px;padding:1px}.captured-mini{width:32px!important;height:51px!important}.capture-empty{height:48px}
   dialog{width:calc(100vw - 16px);max-width:none;max-height:calc(100dvh - 20px);padding:0;overflow:auto}.dialog-card{max-height:calc(100dvh - 20px);overflow:auto;padding:18px 14px}.decision-actions{flex-wrap:wrap}.decision-actions>button{flex:1 1 130px}.capture-magnified{max-height:48dvh}.magnified-card{width:86px;height:139px}
@@ -538,3 +529,7 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 .solo-start-overlay{position:fixed;inset:0;z-index:2100;display:grid;place-content:center;justify-items:center;gap:28px;background:radial-gradient(circle at center,#314d3c 0,#17100ce8 58%)}.solo-start-overlay[hidden]{display:none}.solo-start-overlay strong{font-size:clamp(2.6rem,8vw,6rem);color:#ffd677;text-shadow:0 6px 20px #000}.play-solo-btn{border:1px solid #e6bb63;border-radius:14px;padding:15px 34px;background:linear-gradient(#963628,#5d2019);font-size:1.35rem;font-weight:800;cursor:pointer;box-shadow:0 12px 30px #0008}.two-single-examples article{margin-top:10px;padding:8px;background:#ffffff08;border-radius:8px}.two-single-examples article>span{display:block;margin-bottom:6px}
 @media(min-width:1051px){.opponent-zone,.player-zone{grid-template-columns:max-content minmax(260px,1fr) minmax(390px,620px);column-gap:24px;padding-inline:16px}.player-row{grid-column:1;grid-row:1}.player-zone>.hand{grid-column:2;grid-row:1/3}.player-capture-panel{grid-column:3;grid-row:1/3}}
 .milestone-overlay[data-effect="flush"] .milestone-title:after{content:'🚽';display:block;font-size:.7em;animation:flush-spin 1.4s ease-in-out}@keyframes flush-spin{50%{transform:rotate(14deg) scale(1.12)}to{transform:rotate(-8deg)}}
+
+/* One capture-panel component; seat selectors above provide positioning only. */
+.game-capture-panel{box-sizing:border-box;width:min(500px,100%)!important;height:116px;min-height:116px;max-height:116px;justify-self:end!important;align-self:center!important;padding:8px 12px!important;background:linear-gradient(180deg,rgba(32,19,13,.94),rgba(18,12,9,.92))!important;border:1px solid rgba(216,175,105,.34)!important;border-radius:12px!important;box-shadow:0 10px 30px rgba(0,0,0,.3)!important;filter:none!important;backdrop-filter:none!important}
+@media(max-width:700px){.game-capture-panel{width:100%!important;height:78px;min-height:78px;max-height:78px;padding:5px!important;justify-self:stretch!important}}
