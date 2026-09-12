@@ -41,7 +41,7 @@
     'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
-    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn'
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
@@ -62,7 +62,8 @@
     recordedTerminal:null,
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
-    locale:'en', firstHand:true, diceRolled:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null
+    locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
+    dicePresentationCount:0,diceSoundCount:0
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -452,7 +453,7 @@
   function goCountLabel(player){return player.go>0?t('currentGo',{count:player.go}).replace(/^[^:：]*[:：]\s*/,''):'';}
   function renderGoIndicator(chip,player){
     if(!chip)return;
-    let badge=chip.querySelector('.go-count-badge');
+    let badge=chip.closest('.player-status-component')?.querySelector('.go-count-badge');
     if(!badge)return;
     badge.textContent=goCountLabel(player);
   }
@@ -1072,7 +1073,7 @@
     const a=el.animate([
       {transform:'translate(0,0) rotate(-3deg)',opacity:.96},
       {transform:`translate(${dx*.5}px,${dy*.5-16}px) rotate(4deg)`,opacity:1},
-      {transform:`translate(${dx}px,${dy}px) rotate(0deg) scale(.8)`,opacity:.95}
+      {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.95}
     ],{duration:460,easing:'cubic-bezier(.25,.7,.2,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.remove();
   }
@@ -1248,8 +1249,12 @@
 
   function rectCenter(r){ return {x:r.left+(r.width||0)/2,y:r.top+(r.height||0)/2}; }
   function cardSize(){
+    const resting=document.querySelector('.floor .floor-card')||document.querySelector('.hand-card-slot .hand-card');
+    if(resting){const rect=resting.getBoundingClientRect();if(rect.width&&rect.height)return {w:rect.width,h:rect.height};}
     const cs=getComputedStyle(document.documentElement);
-    return {w:parseFloat(cs.getPropertyValue('--card-w'))||78,h:parseFloat(cs.getPropertyValue('--card-h'))||127};
+    const stage=document.querySelector('.game-stage');
+    const scale=stage&&typeof innerWidth!=='undefined'&&innerWidth>700?stage.getBoundingClientRect().width/stage.offsetWidth:1;
+    return {w:(parseFloat(cs.getPropertyValue('--card-w'))||78)*scale,h:(parseFloat(cs.getPropertyValue('--card-h'))||127)*scale};
   }
   function approximateAiSource(){ const r=els.aiHand.getBoundingClientRect(); return {left:r.left+r.width*.5-27,top:r.top+r.height*.42-44,width:54,height:88}; }
 
@@ -1280,7 +1285,7 @@
   }
 
   function makePhysicalFace(card,rect,className='physical-card'){
-    const el=document.createElement('div'); el.className=`${className} canonical-card-face`; el.dataset.cardId=card.id;
+    const el=document.createElement('div'); el.className=`${className} canonical-card-face normal-gameplay-card`; el.dataset.cardId=card.id;
     el.appendChild(createCardFaceImage(card)); document.body.appendChild(el);
     normalizeFixed(el,rect); return el;
   }
@@ -1312,11 +1317,11 @@
     const duration=650;
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
     const a=el.animate([
-      {transform:'translate(0,0) rotate(0deg) scale(1)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
-      {transform:`translate(0,-30px) rotate(${sideBias*-2}deg) scale(1)`,filter:'drop-shadow(0 22px 16px rgba(0,0,0,.46))',offset:.24},
-      {transform:`translate(${dx*.62}px,${dy*.62-54}px) rotate(${landing.rotation*.48}deg) scale(1)`,offset:.70},
-      {transform:`translate(${dx}px,${dy-12}px) rotate(${landing.rotation}deg) scale(1)`,offset:.92},
-      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg) scale(1)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
+      {transform:'translate(0,0) rotate(0deg)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
+      {transform:`translate(0,-30px) rotate(${sideBias*-2}deg)`,filter:'drop-shadow(0 22px 16px rgba(0,0,0,.46))',offset:.24},
+      {transform:`translate(${dx*.62}px,${dy*.62-54}px) rotate(${landing.rotation*.48}deg)`,offset:.70},
+      {transform:`translate(${dx}px,${dy-12}px) rotate(${landing.rotation}deg)`,offset:.92},
+      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
     ],{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`;
     impactAt(landing); return el;
@@ -1349,10 +1354,10 @@
       const land={left:tr.left+(i-1)*10,top:tr.top+(i-1)*6,width:w,height:h,rotation:[-13,1,12][i]};
       const dx=land.left-start.left,dy=land.top-start.top;
       return el.animate([
-        {transform:'translate(0,0) rotate(0deg) scale(1)',offset:0},
-        {transform:`translate(${dx*.55}px,${dy*.55-58}px) rotate(${land.rotation*.45}deg) scale(1.03)`,offset:.68},
-        {transform:`translate(${dx}px,${dy-14}px) rotate(${land.rotation}deg) scale(1.03)`,offset:.92},
-        {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg) scale(1)`,offset:1}
+        {transform:'translate(0,0) rotate(0deg)',offset:0},
+        {transform:`translate(${dx*.55}px,${dy*.55-58}px) rotate(${land.rotation*.45}deg)`,offset:.68},
+        {transform:`translate(${dx}px,${dy-14}px) rotate(${land.rotation}deg)`,offset:.92},
+        {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
       ],{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
         el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,land); el.style.transform=`rotate(${land.rotation}deg)`;
       }).catch(()=>{});
@@ -1371,7 +1376,7 @@
     await preloadCardFace(card);
     const deck=els.deckStack.getBoundingClientRect(); const {w,h}=cardSize();
     const start={left:deck.left+deck.width/2-w/2,top:deck.top+deck.height/2-h/2,width:w,height:h};
-    const el=document.createElement('div'); el.className='physical-card deck-draw-card'; el.dataset.cardId=card.id;
+    const el=document.createElement('div'); el.className='physical-card deck-draw-card normal-gameplay-card'; el.dataset.cardId=card.id;
     const inner=document.createElement('div'); inner.className='deck-draw-inner';
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
     const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front canonical-card-face';
@@ -1383,9 +1388,9 @@
     const hover={left:Math.min(tableR.right-w-26,start.left+96),top:Math.max(tableR.top+100,start.top-54),width:w,height:h};
     const dx=hover.left-start.left,dy=hover.top-start.top;
     const lift=el.animate([
-      {transform:'translate(0,0) scale(1)',offset:0},
-      {transform:'translate(0,-18px) scale(1)',offset:.35},
-      {transform:`translate(${dx}px,${dy}px) scale(1)`,offset:1}
+      {transform:'translate(0,0)',offset:0},
+      {transform:'translate(0,-18px)',offset:.35},
+      {transform:`translate(${dx}px,${dy}px)`,offset:1}
     ],{duration:360,easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
     await lift.finished.catch(()=>{});
     const now=el.getBoundingClientRect(); el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,now);
@@ -1403,10 +1408,10 @@
     if(prefersReducedMotion()){normalizeFixed(el,landing);el.style.transform=`rotate(${landing.rotation}deg)`;return;}
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-52));
     const a=el.animate([
-      {transform:'translate(0,0) rotate(0deg) scale(1)',offset:0},
-      {transform:`translate(${dx*.56}px,${dy*.56-42}px) rotate(${landing.rotation*.42}deg) scale(1)`,offset:.58},
-      {transform:`translate(${dx}px,${dy-10}px) rotate(${landing.rotation}deg) scale(1)`,offset:.90},
-      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg) scale(1)`,offset:1}
+      {transform:'translate(0,0) rotate(0deg)',offset:0},
+      {transform:`translate(${dx*.56}px,${dy*.56-42}px) rotate(${landing.rotation*.42}deg)`,offset:.58},
+      {transform:`translate(${dx}px,${dy-10}px) rotate(${landing.rotation}deg)`,offset:.90},
+      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,offset:1}
     ],{duration,easing:'cubic-bezier(.2,.7,.14,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; impactAt(landing);
   }
@@ -1455,9 +1460,9 @@
         const dx=target.left-start.left,dy=target.top-start.top;
         const curve=seatForLegacySide(side)==='bottom'?24:-24;
         const a=entry.el.animate([
-          {transform:'translate(0,0) rotate(0deg) scale(1)',opacity:1,offset:0},
-          {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg) scale(.84)`,opacity:1,offset:.48},
-          {transform:`translate(${dx}px,${dy}px) rotate(0deg) scale(.46)`,opacity:.96,offset:1}
+          {transform:'translate(0,0) rotate(0deg)',opacity:1,offset:0},
+          {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg)`,opacity:1,offset:.48},
+          {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.96,offset:1}
         ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
         presentation.stagedCards.delete(entry.card.id);
@@ -1734,11 +1739,16 @@
   }
   function resetSession(){
     presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};
-    presentation.roundNo=1; presentation.recordedTerminal=null;presentation.firstHand=true;presentation.diceRolled=false;presentation.nextStarterId=null;
+    presentation.roundNo=1; presentation.recordedTerminal=null;presentation.sessionStarted=false;presentation.nextStarterId=null;
+  }
+  function consumeSessionStart(){
+    if(presentation.sessionStarted)return false;
+    presentation.sessionStarted=true;
+    return true;
   }
   function confirmNewGame(accepted){
     if(!accepted){if(els.newGameDialog?.open)els.newGameDialog.close();return false;}
-    if(els.newGameDialog?.open)els.newGameDialog.close();resetSession();startGame();return true;
+    if(els.newGameDialog?.open)els.newGameDialog.close();if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
   }
   function showFirstPoopNotice(side){
     if(!els.firstPpeokDialog)return Promise.resolve();
@@ -1771,6 +1781,8 @@
   function renderTutorialCards(){
     if(TEST_MODE)return;
     document.querySelectorAll('.tutorial-cards[data-card-ids]').forEach(root=>{if(root.childElementCount)return;root.dataset.cardIds.split(',').map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
+    const tutorialQueries={bright:card=>card.type==='bright',animal:card=>card.type==='animal',ribbon:card=>card.type==='ribbon',single:card=>card.type==='pi'&&!card.flags.includes('doublePi'),'doublePi-11':card=>card.month===11&&card.flags.includes('doublePi'),'doublePi-12':card=>card.month===12&&card.flags.includes('doublePi'),switchPi:card=>card.flags.includes('switchPi')};
+    document.querySelectorAll('.tutorial-cards[data-tutorial-query]').forEach(root=>{root.replaceChildren();MASTER_DECK.filter(tutorialQueries[root.dataset.tutorialQuery]||(()=>false)).slice(0,['bright','animal','ribbon','single'].includes(root.dataset.tutorialQuery)?3:1).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
     const monthGuide=document.getElementById('monthGuide');
     if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>{const item=document.createElement('span');item.className='tutorial-month-card';item.appendChild(createCardEl(card,'card tutorial-game-card'));const label=document.createElement('small');label.textContent=t(card.id==='m9-1'?'sakeCup':card.flags.includes('doublePi')?'doubleSingle':card.type==='bright'?'brights':card.type==='animal'?'pictures':card.type==='ribbon'?'stripes':'singles');item.appendChild(label);cards.appendChild(item);});article.append(heading,cards,description);monthGuide.appendChild(article);}}
   }
@@ -1788,17 +1800,23 @@
 
 
   async function presentOpeningSequence(starter,roll){
-    if(TEST_MODE)return;
+    if(!roll)throw new Error('Dice presentation is restricted to the first hand of a session.');
+    presentation.dicePresentationCount++;
+    if(TEST_MODE){presentation.diceSoundCount++;return;}
     els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
     if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=face++%2?'P':'C';},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?'P':'C';}
-    els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});await sleep(650);els.openingDie.hidden=true;await sleep(250);
+    els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    await presentDealSequence();
+  }
+  async function presentDealSequence(){
+    if(TEST_MODE)return;
     presentation.deckDisplayCount=48;render();playShuffleSound();await sleep(480);
     for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();playDealSound(count);await sleep(34);}
-    presentation.deckDisplayCount=null;els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    presentation.deckDisplayCount=null;render();
   }
   function playShuffleSound(){synthNotes(Array.from({length:12},(_,i)=>[i*.025,180+i*17,.045]));}
-  function playDiceSound(){playProceduralNoise('dice');}
+  function playDiceSound(){presentation.diceSoundCount++;playProceduralNoise('dice');}
   function playDealSound(index){if(index%2===0)synthNotes([[0,230+(index%5)*18,.035]]);}
   async function startGame(){
     presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
@@ -1806,13 +1824,13 @@
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
-    const roll=!presentation.diceRolled;
-    if(roll)presentation.diceRolled=true;
-    const starter=presentation.nextStarterId||(roll?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
+    const firstSessionHand=consumeSessionStart();
+    const starter=presentation.nextStarterId||(firstSessionHand?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
     state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
     presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
     els.roundNo.textContent=presentation.roundNo;render();
-    await presentOpeningSequence(starter,roll);presentation.firstHand=false;
+    if(firstSessionHand)await presentOpeningSequence(starter,true);
+    else await presentDealSequence();
     await processOpeningSpecials();
   }
 
@@ -1919,7 +1937,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,
       stableFloorTilt,stableStackAngle,shuffle,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
@@ -1928,17 +1946,15 @@
           stagedCardCount:presentation.stagedCards.size,
           locked:presentation.locked,
           hintCardId:presentation.hintCardId,
-          firstHand:presentation.firstHand,
-          diceRolled:presentation.diceRolled,
+          sessionStarted:presentation.sessionStarted,
+          dicePresentationCount:presentation.dicePresentationCount,
+          diceSoundCount:presentation.diceSoundCount,
           sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
         };
       }
     });
   }else{
     preloadCardFaces();
-    let started=false;
-    const begin=()=>{if(started)return;started=true;unlockAudio();startGame();};
-    document.addEventListener('pointerdown',begin,{once:true});
-    document.addEventListener('keydown',begin,{once:true});
+    els.playSoloBtn.addEventListener('click',()=>{unlockAudio();els.soloStartOverlay.hidden=true;startGame();},{once:true});
   }
 })();

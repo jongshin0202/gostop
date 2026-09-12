@@ -1924,7 +1924,7 @@ test('temporary deck and capture cards reuse the canonical card-face path and st
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.equal(source.includes("front.className='deck-draw-face deck-draw-front canonical-card-face'"),true);
   assert.equal(source.includes('front.appendChild(createCardFaceImage(card))'),true);
-  assert.equal(source.includes("el.className=`${className} canonical-card-face`"),true);
+  assert.equal(source.includes("el.className=`${className} canonical-card-face normal-gameplay-card`"),true);
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg) translateZ(1px);padding:0!important;background:#a92d21!important;border:1px solid #a92d21!important}'),true);
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg);background:#f5efe3'),false);
   assert.equal(source.includes("slot.className='hand-card-slot'"),true);
@@ -1973,7 +1973,8 @@ test('all seven locales explicitly populate every canonical required UI key',()=
 test('visual beginner guide covers every section with canonical GoStop Card evidence',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   for(const section of ['guide-overview','guide-types','guide-turn','guide-matches','guide-specials','guide-scoring','guide-go','guide-hands'])assert.match(html,new RegExp(`id="${section}"`));
-  for(const cards of ['m9-1,m11-2,m12-2','m2-1,m4-1,m8-2','m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3,m2-4'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
+  for(const query of ['bright','animal','ribbon','single','doublePi-11','doublePi-12','switchPi'])assert.equal(html.includes(`data-tutorial-query="${query}"`),true);
+  for(const cards of ['m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3,m2-4'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
   assert.equal(html.includes('data-i18n-vars=\'{"count":1}\''),true);
   assert.equal(html.includes('data-i18n-vars=\'{"points":48}\''),true);
   assert.equal(fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8').includes("createCardEl(card,'card tutorial-game-card')"),true);
@@ -2038,7 +2039,7 @@ test('starter dice remains presentation-only, rolls only for a new session, and 
   assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
   assert.ok(sequence.indexOf('await sleep(900)')<sequence.indexOf("classList.remove('rolling')"));
   assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf("els.openingDie.textContent=starter===PLAYER_A?'P':'C'"));
-  assert.equal(source.includes('const roll=!presentation.diceRolled'),true);assert.equal(source.includes('if(roll)presentation.diceRolled=true'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
+  assert.equal(source.includes('const firstSessionHand=consumeSessionStart()'),true);assert.equal(source.includes('if(firstSessionHand)await presentOpeningSequence(starter,true)'),true);assert.equal(source.includes('else await presentDealSequence()'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
 });
 
 test('opening setup scans both hands, offers floor-aware choices, and preserves starter until declarations finish',()=>{
@@ -2073,9 +2074,11 @@ test('tutorial dismissal distinguishes backdrop from content and keeps an outsid
 
 test('status panels use four stable siblings and horizontal localized identity text',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.equal((html.match(/class="player-status-component/g)||[]).length,2);
   assert.equal((html.match(/class="player-identity"/g)||[]).length,2);
   assert.equal((html.match(/class="status-badges"/g)||[]).length,2);
-  assert.match(css,/grid-template-columns:44px minmax\(110px,1fr\).*minmax\(90px,auto\)/);
+  assert.match(css,/player-status-component\{display:inline-flex.*width:max-content/);
+  assert.match(css,/player-chip\{width:auto;max-width:270px;grid-template-columns:44px minmax\(104px,160px\) 62px/);
   assert.match(css,/writing-mode:horizontal-tb/);
 });
 
@@ -2139,4 +2142,45 @@ test('tutorial month rows contain four canonical labeled cards without overflow 
   assert.match(css,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(css,/month-guide article\{min-width:0;overflow:hidden/);
   assert.match(html,/data-i18n="tutorialCardTypes"/);
+});
+
+test('intentional Play Solo start screen owns the first audio-unlocking gesture',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),i18n=require('../i18n.js');
+  assert.match(html,/id="soloStartOverlay"/);assert.match(html,/id="playSoloBtn"/);assert.match(html,/data-i18n="playSolo"/);
+  assert.match(source,/playSoloBtn\.addEventListener\('click',\(\)=>\{unlockAudio\(\);els\.soloStartOverlay\.hidden=true;startGame\(\);\}/);
+  for(const locale of Object.keys(i18n.dictionaries))assert.ok(i18n.dictionaries[locale].playSolo.trim());
+});
+
+test('session gate invokes dice presentation once across later hands and once after reset',async()=>{
+  api.resetSession();
+  const before=api.getPresentationSnapshot().dicePresentationCount;
+  for(let hand=0;hand<4;hand++){
+    if(api.consumeSessionStart())await api.presentOpeningSequence('playerA',true);
+    else await api.presentDealSequence();
+  }
+  let snapshot=api.getPresentationSnapshot();assert.equal(snapshot.dicePresentationCount,before+1);assert.equal(snapshot.diceSoundCount,before+1);
+  api.resetSession();
+  if(api.consumeSessionStart())await api.presentOpeningSequence('playerB',true);
+  snapshot=api.getPresentationSnapshot();assert.equal(snapshot.dicePresentationCount,before+2);assert.equal(snapshot.diceSoundCount,before+2);
+  assert.equal(api.consumeSessionStart(),false);
+});
+
+test('normal staged and deck cards keep viewport-scaled canonical dimensions without scale transforms',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  const staging=source.slice(source.indexOf('function cardSize'),source.indexOf('function captureTargetRect'));
+  assert.match(staging,/getBoundingClientRect\(\)\.width\/stage\.offsetWidth/);
+  assert.match(staging,/normal-gameplay-card/);assert.doesNotMatch(staging,/magnified-card|tutorial-game-card|scale\(/);
+  assert.match(staging,/deck-draw-front canonical-card-face/);
+  assert.doesNotMatch(css,/targetPulse[^}]*scale\(/);
+  assert.match(css,/hand-card-slot\.is-hovered \.hand-card\{transform:translateY/);
+});
+
+test('tutorial derives category examples from canonical metadata and explains every 2-Single card',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
+  assert.match(source,/card\.type==='bright'/);assert.match(source,/card\.type==='animal'/);assert.match(source,/card\.type==='ribbon'/);assert.match(source,/card\.flags\.includes\('doublePi'\)/);assert.match(source,/card\.flags\.includes\('switchPi'\)/);
+  assert.equal(extractedEngine.masterDeck.find(card=>card.month===11&&card.flags.includes('doublePi')).id,'m11-2');
+  assert.equal(extractedEngine.masterDeck.find(card=>card.month===12&&card.flags.includes('doublePi')).id,'m12-4');
+  assert.equal(extractedEngine.masterDeck.find(card=>card.flags.includes('switchPi')).id,'m9-1');
+  assert.doesNotMatch(html,/m9-1,m11-2,m12-2/);
+  for(const locale of Object.keys(i18n.dictionaries))for(const key of ['twoSingleCards','novemberDoubleHelp','decemberDoubleHelp','sakeCupHelp'])assert.ok(i18n.dictionaries[locale][key].trim());
 });
