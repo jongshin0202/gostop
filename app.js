@@ -63,7 +63,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,audioTrace:[],activeHoveredHandCardId:null
+    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,audioTrace:[],dealMovementCount:0,activeHoveredHandCardId:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -1204,14 +1204,14 @@
           await presentShakeDeclaration(result.events);
         }else if(decision.floorCardId){
           applyNormalAction({type:'declareBomb',actorId:PLAYER_A});
-        }else applyNormalAction({type:'keepShakeSecret',actorId:PLAYER_A});
+        }else applyNormalAction({type:'armOpeningBomb',actorId:PLAYER_A});
       }else{
         const shake=!decision.floorCardId&&Math.random()<.72;
         if(shake){
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_B});
           await presentShakeDeclaration(result.events);
         }else if(decision.floorCardId){applyNormalAction({type:'declareBomb',actorId:PLAYER_B});}
-        else applyNormalAction({type:'keepShakeSecret',actorId:PLAYER_B});
+        else applyNormalAction({type:'armOpeningBomb',actorId:PLAYER_B});
       }
     }
     presentation.locked=false; render(); scheduleTurnStart();
@@ -1302,6 +1302,14 @@
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='1160';
   }
   function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } }
+
+  function resetHandPresentationState(){
+    cleanupTargetChoice();
+    presentation.stagedCards.forEach(el=>{el?.getAnimations?.().forEach(animation=>animation.cancel());el?.remove?.();});
+    presentation.stagedCards.clear();presentation.floorSlotReservations.clear();presentation.activeHoveredHandCardId=null;
+    presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;
+    if(!TEST_MODE){document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
+  }
 
   function fullSizeSourceRect(sourceRect){
     const {w,h}=cardSize();
@@ -1550,6 +1558,11 @@
     if(!presentation.soundEnabled)return;
     try{const c=audioContext();if(!c)return;const duration=kind==='flush'?1.5:kind==='dice'?.9:.55,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const fade=kind==='dice'?.75+.25*Math.sin(i*.08):1-i/length;data[i]=(((seed>>>0)/0xffffffff)*2-1)*fade;}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'||kind==='dice'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:kind==='dice'?620:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:kind==='dice'?.3:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();}catch(_){ }
   }
+  function playSweepSound(){
+    if(!presentation.soundEnabled)return;
+    traceAudio('sweep');if(TEST_MODE)return;
+    try{const c=audioContext();if(!c)return;const now=c.currentTime,duration=1.2,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x5eed1234;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const t=i/length,envelope=Math.sin(Math.PI*Math.min(1,t*1.15))*(1-t*.45),brush=.55+.45*Math.sin(i*.017);data[i]=(((seed>>>0)/0xffffffff)*2-1)*envelope*brush;}const source=c.createBufferSource(),high=c.createBiquadFilter(),band=c.createBiquadFilter(),gain=c.createGain(),pan=typeof c.createStereoPanner==='function'?c.createStereoPanner():null;high.type='highpass';high.frequency.value=850;band.type='bandpass';band.frequency.setValueAtTime(3800,now);band.frequency.exponentialRampToValueAtTime(1700,now+duration);band.Q.value=.45;gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.24,now+.055);gain.gain.setValueAtTime(.2,now+.72);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);source.buffer=buffer;source.connect(high).connect(band).connect(gain);if(pan){gain.connect(pan).connect(c.destination);pan.pan.setValueAtTime(-.8,now);pan.pan.linearRampToValueAtTime(.8,now+duration);}else gain.connect(c.destination);source.start(now);source.stop(now+duration);}catch(_){ }
+  }
   function playTapTapSound(){playProceduralNoise('flush');}
   function playKissSound(){
     if(!presentation.soundEnabled)return;
@@ -1561,7 +1574,6 @@
       playProceduralNoise('kiss');
     }catch(_){ }
   }
-  function playSweepSound(){playProceduralNoise('sweep');}
   function playBirdSound(){synthNotes([[0,1600,.12],[.25,1900,.1],[.5,1450,.14],[.8,2100,.1],[1.15,1750,.14]]);}
   function playSadResultSound(){synthNotes([[0,330,.22],[.23,294,.22],[.46,262,.22],[.69,196,.5]]);}
   function playLaughSound(){/* Pooped-pile capture is intentionally silent. */}
@@ -1569,7 +1581,7 @@
     [0,260,520].forEach(delay=>setTimeout(()=>playSample('shakeBell',.82,1),delay));
   }
   function playChongtongFanfare(){ playSample('chongtongFanfare',.95,1); }
-  function playBombSound(){ playSample('bomb',1,1,1400); }
+  function playBombSound(){if(!presentation.soundEnabled)return;traceAudio('bomb');playSample('bomb',1,1,1400);}
 
   async function animateSweepBroom(){
     if(TEST_MODE||!els.floor)return;
@@ -1646,12 +1658,27 @@
   function aiGoStopDecision(view,sc){
     const me=view.ai,opponent=view.human;
     const opponentScore=scorePlayer({captured:opponent.captured,gukjinMode:opponent.gukjinMode||'animal',firstPpeokPoints:opponent.firstPpeokPoints||0}).total;
-    const remaining=me.hand.length+(me.bombFreeTurns||0),lead=sc.total-opponentScore;
-    const publicThreat=opponentScore>=5||opponent.captured.filter(card=>card.type==='bright').length>=2;
-    return remaining>=2&&!publicThreat&&(lead>=4||sc.total>=12);
+    const remainingTurns=Math.min(me.hand.length+(me.bombFreeTurns||0),Math.ceil((view.deckCount||0)/2));
+    const opponentTurns=Math.min(opponent.handCount??me.hand.length,Math.floor((view.deckCount||0)/2));
+    const lead=sc.total-opponentScore,goCount=me.go||0,shakeMultiplier=me.shakeMultiplier||1,carry=view.matchContext?.nagariCarryPower||0;
+    const stopValue=sc.total*(goCount>=3?2:1)*shakeMultiplier*(2**carry);
+    const counts=cards=>({bright:cards.filter(c=>c.type==='bright').length,animal:cards.filter(c=>c.type==='animal').length,ribbon:cards.filter(c=>c.type==='ribbon').length,pi:score(cards).piCount,godori:cards.filter(c=>c.flags.includes('godori')).length});
+    const mine=counts(me.captured),theirs=counts(opponent.captured);
+    const categoryUpside=(mine.bright>=2?1.2:0)+(mine.animal>=4?1:0)+(mine.ribbon>=4?1:0)+(mine.pi>=8?1:0)+(mine.godori>=2?1.2:0);
+    const proximity=(theirs.bright>=2?.12:0)+(theirs.animal>=4?.1:0)+(theirs.ribbon>=4?.1:0)+(theirs.pi>=8?.12:0)+(theirs.godori>=2?.14:0);
+    const lateRisk=remainingTurns<=1?.42:remainingTurns===2?.2:0;
+    const thresholdRisk=Math.min(.42,opponentScore/14)+proximity+(opponentTurns<=1&&opponentScore>=5?.18:0);
+    const goBakRisk=goCount>0&&opponentScore>=5?.16:0;
+    const riskScore=Math.min(.95,lateRisk+thresholdRisk+goBakRisk);
+    const improvement=(remainingTurns*(1.35+categoryUpside*.35))+Math.max(0,lead)*.18;
+    const nextGoFactor=goCount>=2?2:(goCount+1)*.1+1;
+    const expectedGoValue=(sc.total+improvement)*nextGoFactor*shakeMultiplier*(2**carry)*(1-riskScore);
+    const decision=remainingTurns>0&&expectedGoValue>stopValue*(1.06+(opponentScore>=6?.08:0))?'go':'stop';
+    const reasons=[];if(lead>=4)reasons.push('large lead');if(remainingTurns>=3)reasons.push('multiple turns remaining');if(riskScore<.35)reasons.push('low opponent scoring threat');if(lateRisk)reasons.push('late hand');if(goBakRisk)reasons.push('Go-bak exposure');
+    return {decision,stopValue,expectedGoValue:Number(expectedGoValue.toFixed(2)),riskScore:Number(riskScore.toFixed(3)),remainingTurns,opponentTurns,lead,reasons};
   }
   function aiShouldGo(sc){
-    return aiGoStopDecision(engine.projectStateForViewer(state,PLAYER_B),sc);
+    return aiGoStopDecision(engine.projectStateForViewer(state,PLAYER_B),sc).decision==='go';
   }
 
 
@@ -1827,15 +1854,15 @@
     await presentDealSequence();
   }
   async function presentDealSequence(){
-    if(TEST_MODE){traceAudio('deal');return;}
+    if(TEST_MODE){presentation.dealMovementCount++;traceAudio('deal');return;}
     presentation.deckDisplayCount=48;render();
-    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();playDealSound(count);await sleep(34);}
+    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();presentation.dealMovementCount++;playDealSound(count);await sleep(72);}
     presentation.deckDisplayCount=null;render();
   }
   function playDiceSound(){presentation.diceSoundCount++;traceAudio('dice');playProceduralNoise('dice');}
-  function playDealSound(index){if(index%2===0){traceAudio('deal');synthNotes([[0,230+(index%5)*18,.035]]);}}
+  function playDealSound(){traceAudio('deal');playSample('slam',.2,1.25,90);}
   async function startGame(){
-    presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
+    resetHandPresentationState();hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
@@ -1954,7 +1981,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,setActiveHoveredHandCard,playKissSound,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,setActiveHoveredHandCard,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
@@ -1968,11 +1995,12 @@
           diceSoundCount:presentation.diceSoundCount,
           kissSoundCount:presentation.kissSoundCount,
           audioTrace:[...presentation.audioTrace],
+          dealMovementCount:presentation.dealMovementCount,
           activeHoveredHandCardId:presentation.activeHoveredHandCardId,
           sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
         };
       },
-      resetAudioTrace(){presentation.audioTrace.length=0;},
+      resetAudioTrace(){presentation.audioTrace.length=0;presentation.dealMovementCount=0;},
       setSoundEnabled(value){presentation.soundEnabled=!!value;}
     });
   }else{

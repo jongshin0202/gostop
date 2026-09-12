@@ -1723,9 +1723,9 @@ test('opening triple decisions distinguish KEEP SECRET from immediate BOMB for b
     assert.deepEqual(opened.pendingDecision.choices,['shake','keepSecret']);
     assert.equal(opened.pendingDecision.playerId,actorId);
     assert.equal(extractedEngine.projectStateForViewer(opened.state,actorId==='playerA'?'playerB':'playerA').pendingDecision,undefined);
-    const kept=extractedEngine.applyNormalTurnAction(opened.state,{type:'keepShakeSecret',actorId});
-    const attempted=extractedEngine.applyNormalTurnAction(kept.state,{type:'attemptPlayCard',actorId,cardId:`m${month}-1`});
-    assert.equal(attempted.pendingDecision,null,'the resolved opening choice must not prompt for Shake again');
+    const kept=extractedEngine.applyNormalTurnAction(opened.state,{type:'armOpeningBomb',actorId});
+    assert.deepEqual(kept.state[side].armedBombMonths,[month]);
+    assert.equal(kept.state[side].hand.length,3);
 
     state=stateWith({floor:[card(`m${month}-4`)],[side]:api.makePlayer({hand:cards(`m${month}-1`,`m${month}-2`,`m${month}-3`)})});
     api.initFloorSlots(state);
@@ -1925,7 +1925,7 @@ test('temporary deck and capture cards reuse the canonical card-face path and st
   assert.equal(source.includes("front.className='deck-draw-face deck-draw-front canonical-card-face'"),true);
   assert.equal(source.includes('front.appendChild(createCardFaceImage(card))'),true);
   assert.equal(source.includes("el.className=`${className} canonical-card-face normal-gameplay-card`"),true);
-  assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg) translateZ(1px);padding:0!important;background:#a92d21!important;border:1px solid #a92d21!important}'),true);
+  assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg) translateZ(1px)}'),true);
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg);background:#f5efe3'),false);
   assert.equal(source.includes("slot.className='hand-card-slot'"),true);
   assert.equal(css.includes('.hand-card-slot.is-hovered .hand-card'),true);
@@ -2221,9 +2221,9 @@ test('KISS presentation invokes one dedicated smooch path and respects Sound Off
 
 test('round-start audio trace has dice only on a fresh session and never includes shuffle audio',async()=>{
   api.resetSession();api.resetAudioTrace();
-  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);await api.presentDealSequence();
+  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);assert.equal(api.getPresentationSnapshot().dealMovementCount,0);await api.presentDealSequence();
   assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice','deal']);
-  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);assert.equal(api.getPresentationSnapshot().dealMovementCount,1);
   api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);
   api.resetSession();api.resetAudioTrace();assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerB',true);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice','deal']);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/playShuffleSound|traceAudio\('shuffle'\)/);assert.match(source,/playDealSound\(count\)/);
@@ -2240,6 +2240,54 @@ test('both seats use one capture-panel sizing contract without player-only stret
   assert.match(css,/\.captured-strip\{[^}]*grid-template-columns:repeat\(4,1fr\)/);
   assert.match(css,/\.captured-mini\{[^}]*width:41px!important;height:66px!important/);
   assert.match(css,/@media\(min-width:1051px\)\{\.opponent-zone,\.player-zone\{grid-template-columns:max-content minmax\(260px,1fr\) minmax\(390px,620px\)/);
+});
+
+test('opening Keep for Bomb arms authority and any of the three cards triggers the same Bomb',()=>{
+  for(const trigger of ['m5-1','m5-2','m5-3']){
+    let state=stateWith({startingPlayerId:'playerB',turn:'playerB',human:api.makePlayer({hand:cards('m5-1','m5-2','m5-3')}),ai:api.makePlayer({captured:cards('m1-3','m2-3')})});
+    state=extractedEngine.resolveOpeningState(state).state;
+    const armed=extractedEngine.applyNormalTurnAction(state,{type:'armOpeningBomb',actorId:'playerA'}).state;
+    assert.deepEqual(armed.human.armedBombMonths,[5]);assert.equal(armed.human.hand.length,3);assert.equal(armed.turn,'playerB');assert.equal(armed.startingPlayerId,'playerB');
+    const restored=extractedEngine.deserializeGameState(extractedEngine.serializeGameState(armed));restored.floor=[card('m5-4')];restored.floorSlotByCard={'m5-4':0};restored.floorSlotCount=1;restored.turn='playerA';
+    const pending=extractedEngine.applyNormalTurnAction(restored,{type:'attemptPlayCard',actorId:'playerA',cardId:trigger});
+    assert.deepEqual(new Set(pending.pendingDecision.cardIds),new Set(['m5-1','m5-2','m5-3']));
+    const bomb=extractedEngine.applyNormalTurnAction(pending.state,{type:'declareBomb',actorId:'playerA'}).state;
+    assert.equal(bomb.human.hand.length,0);assert.deepEqual(new Set(bomb.human.captured.map(c=>c.id)),new Set(['m5-1','m5-2','m5-3','m5-4','m1-3']));assert.equal(bomb.human.bombs,1);assert.equal(bomb.human.bombFreeTurns,2);assert.deepEqual(bomb.human.armedBombMonths,[]);assert.deepEqual(bomb.ai.captured.map(c=>c.id),['m2-3']);
+  }
+});
+
+test('deterministic Go Stop risk model goes early with a lead, can stop late, and ignores hidden identities',()=>{
+  const view={deckCount:12,matchContext:{nagariCarryPower:0},ai:api.makePlayer({hand:cards('m1-1','m2-1','m3-1','m4-1'),captured:[]}),human:{...api.makePlayer({captured:[],firstPpeokPoints:3}),handCount:4}};
+  const live=api.aiGoStopDecision(view,{total:9});assert.equal(live.decision,'go');assert.equal(live.lead,6);assert.ok(live.expectedGoValue>live.stopValue);
+  assert.equal(api.aiGoStopDecision({...view,human:{...view.human,firstPpeokPoints:0}},{total:7}).decision,'go');
+  assert.equal(api.aiGoStopDecision({...view,human:{...view.human,firstPpeokPoints:2}},{total:8}).decision,'go');
+  const twoBrights={...view,human:{...view.human,captured:cards('m1-1','m3-1'),firstPpeokPoints:0}};assert.equal(api.aiGoStopDecision(twoBrights,{total:7}).decision,'go');
+  const hiddenVariant={...view,deckCount:view.deckCount,ai:{...view.ai,hand:cards('m8-1','m9-1','m10-1','m11-1')}};assert.deepEqual(api.aiGoStopDecision(hiddenVariant,{total:9}),live);
+  const late={...view,deckCount:2,ai:{...view.ai,hand:[card('m1-1')]},human:{...view.human,handCount:1,firstPpeokPoints:6}};assert.equal(api.aiGoStopDecision(late,{total:7}).decision,'stop');
+});
+
+test('canonical card shell is singular across gameplay and special-event contexts',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  const contract=css.match(/\/\* One canonical face[^]*?\.canonical-card-face\{([^}]+)\}/)?.[1]||'';
+  assert.match(contract,/background:#f5efe3/);assert.match(contract,/border:1px solid #b33226/);assert.doesNotMatch(contract,/!important/);
+  assert.doesNotMatch(css,/\.card,\.physical-card,\.flying-card,\.capture-ghost\{/);
+  assert.doesNotMatch(css,/\.deck-draw-front\{[^}]*(?:background|border):/);
+  assert.match(source,/createCardEl\(card,'card'\)/);assert.match(source,/canonical-card-face normal-gameplay-card/);
+  const reset=source.slice(source.indexOf('function resetHandPresentationState'),source.indexOf('function fullSizeSourceRect'));
+  for(const token of ['stagedCards.clear()','floorSlotReservations.clear()','activeHoveredHandCardId=null','physical-card','floor-slot-proxy'])assert.ok(reset.includes(token),token);
+});
+
+test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>{
+  api.setSoundEnabled(true);api.resetAudioTrace();api.playSweepSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['sweep']);
+  api.resetAudioTrace();api.playBombSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['bomb']);
+  api.setSoundEnabled(false);api.resetAudioTrace();api.playSweepSound();api.playBombSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sweep=source.slice(source.indexOf('function playSweepSound'),source.indexOf('function playTapTapSound'));assert.match(sweep,/duration=1\.2/);assert.match(sweep,/high\.type='highpass'/);assert.match(sweep,/pan\.pan\.linearRampToValueAtTime/);assert.doesNotMatch(sweep,/playBombSound|playSample\('bomb'/);
+});
+
+test('round boundary cleanup is idempotent and does not reset session authority',()=>{
+  api.resetSession();assert.equal(api.consumeSessionStart(),true);api.reserveFloorSlot(card('m1-1'));assert.equal(Object.keys(api.getPresentationSnapshot().floorSlotReservations).length,1);
+  api.resetHandPresentationState();api.resetHandPresentationState();const after=api.getPresentationSnapshot();assert.equal(Object.keys(after.floorSlotReservations).length,0);assert.equal(after.activeHoveredHandCardId,null);assert.equal(api.consumeSessionStart(),false);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/async function startGame\(\)\{\s*resetHandPresentationState\(\)/);
 });
 
 test('authoritative unmatched deck landing keeps its reserved slot after earlier capture cleanup',()=>{

@@ -244,7 +244,7 @@
     if(projected.pendingDecision?.type==='shakeDecision')projected.legalActions.push('declareShake','keepShakeSecret');
     else if(projected.pendingDecision?.type==='bombDecision')projected.legalActions.push('declareBomb','declineBomb');
     else if(projected.pendingDecision?.type==='openingTripleDecision'){
-      projected.legalActions.push('declareShake',projected.pendingDecision.floorCardId?'declareBomb':'keepShakeSecret');
+      projected.legalActions.push('declareShake',projected.pendingDecision.floorCardId?'declareBomb':'armOpeningBomb');
     }
     else if(projected.pendingDecision?.type==='goStopDecision')projected.legalActions.push('declareGo','declareStop');
     else if(!state.winner&&state.turn===viewerId&&!state.pendingTurn&&!state.pendingDecision){
@@ -702,7 +702,7 @@
 
   function applyNormalTurnAction(currentState,action){
     const state=deserializeGameState(currentState);
-    const openingResponse=state.pendingDecision?.type==='openingTripleDecision'&&['declareShake','keepShakeSecret','declareBomb'].includes(action.type);
+    const openingResponse=state.pendingDecision?.type==='openingTripleDecision'&&['declareShake','armOpeningBomb','keepShakeSecret','declareBomb'].includes(action.type);
     const independentPlayerChoice=action.type==='setGukjinMode';
     const side=openingResponse||independentPlayerChoice?legacySideForPlayerId(action.actorId):validateActor(state,action);
     if(openingResponse&&state.pendingDecision.playerId!==action.actorId)throw new Error('The opening triple decision belongs to another player.');
@@ -741,10 +741,12 @@
       return {state,events,pendingDecision:serializeGameState(decision)};
     }
 
-    if(action.type==='declareShake'||action.type==='keepShakeSecret'){
+    if(action.type==='declareShake'||action.type==='keepShakeSecret'||action.type==='armOpeningBomb'){
       const decision=state.pendingDecision;
       if(!decision||!['shakeDecision','openingTripleDecision'].includes(decision.type))throw new Error('No Shake decision is pending.');
       if(decision.playerId!==actorId)throw new Error('The Shake decision belongs to another player.');
+      if(action.type==='armOpeningBomb'&&decision.type!=='openingTripleDecision')throw new Error('Only an opening triple can arm a future Bomb.');
+      if(action.type==='armOpeningBomb'&&decision.floorCardId)throw new Error('A future Bomb is unavailable when the fourth card is already on the floor.');
       if(action.type==='keepShakeSecret'&&decision.type==='openingTripleDecision'&&decision.floorCardId)throw new Error('KEEP SECRET is unavailable when Bomb is immediately available.');
       delete state.pendingDecision;
       if(action.type==='declareShake'){
@@ -759,6 +761,7 @@
         events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,cardIds:[...cardIds],shakeCount:player.shakes,declarationMultiplier,multiplier:player.shakeMultiplier});
       }
       if(decision.type==='openingTripleDecision'){
+        if(action.type!=='declareShake'&&!decision.floorCardId&&!player.armedBombMonths.includes(decision.month))player.armedBombMonths.push(decision.month);
         if(!player.resolvedOpeningTripleMonths.includes(decision.month))player.resolvedOpeningTripleMonths.push(decision.month);
         advanceOpeningTripleDecision(state);
         return {state,events,pendingDecision:state.pendingDecision?serializeGameState(state.pendingDecision):null};
