@@ -119,9 +119,10 @@
       formulaSteps.push(`${winner.go} Go ×${goMultiplier}`);
     }
 
-    let doublePower=winner.shakes;
-    if(winner.shakes){
-      const multiplier=2**winner.shakes;
+    const shakeMultiplier=winner.shakeMultiplier>1?winner.shakeMultiplier:2**(winner.shakes||0);
+    let doublePower=Math.log2(shakeMultiplier);
+    if(shakeMultiplier>1){
+      const multiplier=shakeMultiplier;
       reasons.push(`Shake ×${multiplier}`);
       formulaSteps.push(`Shake ×${multiplier}`);
     }
@@ -186,6 +187,7 @@
         return {month:set.month,cardIds};
       });
       state[side].armedBombMonths=normalizeMonthList(state[side].armedBombMonths||[],`state.${side}.armedBombMonths`);
+      state[side].shakeMultiplier=state[side].shakeMultiplier||2**(state[side].shakes||0);
       state[side].turnsTaken=state[side].turnsTaken||0;
       state[side].firstPpeokPoints=state[side].firstPpeokPoints||0;
       state[side].gukjinMode=state[side].gukjinMode||'animal';
@@ -543,7 +545,8 @@
 
   function applySweepMutation(state,actorId,side,events,rule){
     if(state.floor.length!==0||!(state.deck.length||state.human.hand.length||state.ai.hand.length))return;
-    events.push({type:'sweepTriggered',audience:'public',actorId,rule});
+    const captured=[...events].reverse().find(event=>event.type==='cardsCaptured');
+    events.push({type:'sweepTriggered',audience:'public',actorId,rule,cardIds:[...(captured?.cardIds||captured?.cards?.map(card=>card.id)||[])]});
     const otherSide=side==='human'?'ai':'human';
     transferPi(state,otherSide,side,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'sweep',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
   }
@@ -743,10 +746,12 @@
         const cardIds=decision.cardIds||player.hand.filter(card=>card.month===decision.month).map(card=>card.id);
         if(cardIds.length!==3)throw new Error('Shake declaration requires exactly three revealed cards.');
         player.shakes++;
+        const declarationMultiplier=decision.month>=11?4:2;
+        player.shakeMultiplier=(player.shakeMultiplier||2**(player.shakes-1))*declarationMultiplier;
         if(!player.shakenMonths.includes(decision.month))player.shakenMonths.push(decision.month);
         player.revealedShakeSets.push({month:decision.month,cardIds:[...cardIds]});
         player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
-        events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,cardIds:[...cardIds],shakeCount:player.shakes,multiplier:2**player.shakes});
+        events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,cardIds:[...cardIds],shakeCount:player.shakes,declarationMultiplier,multiplier:player.shakeMultiplier});
       }
       if(decision.type==='openingTripleDecision'){
         if(!player.resolvedOpeningTripleMonths.includes(decision.month))player.resolvedOpeningTripleMonths.push(decision.month);

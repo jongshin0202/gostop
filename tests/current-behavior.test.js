@@ -12,7 +12,7 @@ function fakeElement(){
     textContent:'',innerHTML:'',className:'',style:{},dataset:{},open:false,
     classList:{add(){},remove(){},contains(){return false;}},
     addEventListener(){},removeEventListener(){},appendChild(){},append(){},remove(){},
-    setAttribute(){},removeAttribute(){},querySelector(){return null;},querySelectorAll(){return [];},
+    setAttribute(){},removeAttribute(){},contains(){return false;},querySelector(){return null;},querySelectorAll(){return [];},
     getBoundingClientRect(){return {left:0,top:0,right:500,bottom:300,width:100,height:100};},
     show(){this.open=true;},showModal(){this.open=true;},close(){this.open=false;}
   };
@@ -1003,7 +1003,7 @@ test('declaring Shake mutates authority, emits public neutral event, and resumes
     assert.equal(declared.state[side].shakes,1);
     assert.deepEqual(declared.state[side].shakenMonths,[month]);
     assert.deepEqual(declared.state[side].hiddenTripleMonths,[]);
-    assert.deepEqual(declared.events,[{type:'shakeDeclared',audience:'public',actorId,month,cardIds:triple.map(card=>card.id),shakeCount:1,multiplier:2}]);
+    assert.deepEqual(declared.events,[{type:'shakeDeclared',audience:'public',actorId,month,cardIds:triple.map(card=>card.id),shakeCount:1,declarationMultiplier:2,multiplier:2}]);
     assert.deepEqual(declared.state[side].revealedShakeSets,[{month,cardIds:triple.map(card=>card.id)}]);
     assert.equal(declared.resumePlay.cardId,triple[0].id);
     const played=extractedEngine.applyNormalTurnAction(declared.state,{type:'playCard',actorId,cardId:declared.resumePlay.cardId});
@@ -1912,7 +1912,7 @@ test('milestone detection queues Godori, valid Stripes, and five Brights once wi
   const state=stateWith({human:api.makePlayer({captured})});
   api.setState(state); const before=JSON.stringify(api.getState());
   const milestones=api.detectNewMilestones('playerA');
-  assert.deepEqual(Array.from(milestones,item=>item.title),['3-BIRDIES!','3-STRIPES!','5-BRIGHTS!']);
+  assert.deepEqual(Array.from(milestones,item=>item.titleKey),['birdies','threeStripes','fiveBrights']);
   assert.deepEqual(Array.from(milestones[1].cardIds),['m1-2','m2-2','m3-2']);
   assert.equal(milestones[0].birds,true);
   assert.equal(api.detectNewMilestones('playerA').length,0);
@@ -1989,4 +1989,54 @@ test('desktop fit helper preserves a single aspect scale and never enlarges the 
   assert.equal(api.computeStageScale(1530,976),1);
   assert.equal(api.computeStageScale(765,976),.5);
   assert.ok(api.computeStageScale(1280,720)<=1);
+});
+
+test('November and December Shakes multiply by four and compound with normal Shake',()=>{
+  let state=stateWith({turn:'playerA',human:api.makePlayer({hand:cards('m10-1','m10-2','m10-3','m11-1','m11-2','m11-3','m12-1','m12-2','m12-3')})});
+  state=extractedEngine.resolveOpeningState(state).state;
+  const multipliers=[];
+  for(const month of [10,11,12]){assert.equal(state.pendingDecision.month,month);const result=extractedEngine.applyNormalTurnAction(state,{type:'declareShake',actorId:'playerA'});state=result.state;multipliers.push(result.events[0].declarationMultiplier);}
+  assert.deepEqual(multipliers,[2,4,4]);assert.equal(state.human.shakeMultiplier,32);
+  const settlement=extractedEngine.calculateSettlement({winner:{...state.human,captured:sevenPointPi()},loser:api.makePlayer({captured:[card('m1-3')]})});
+  assert.equal(settlement.reasons.includes('Shake ×32'),true);
+});
+
+test('an armed opening Bomb intercepts any armed card before normal play and executes all three',()=>{
+  let state=stateWith({turn:'playerA',startingPlayerId:'playerA',floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')}),ai:api.makePlayer({captured:[card('m7-3')]})});api.initFloorSlots(state);
+  state=extractedEngine.resolveOpeningState(state).state;state=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerA'}).state;
+  const attempt=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-2'});
+  assert.equal(attempt.pendingDecision.type,'bombDecision');assert.equal(attempt.state.pendingTurn,undefined);
+  const bomb=extractedEngine.applyNormalTurnAction(attempt.state,{type:'declareBomb',actorId:'playerA'});
+  assert.equal(bomb.state.human.hand.length,0);assert.deepEqual(bomb.state.human.captured.slice(0,4).map(card=>card.id),['m6-1','m6-2','m6-3','m6-4']);assert.equal(bomb.state.human.bombFreeTurns,2);assert.equal(bomb.events.filter(event=>event.type==='piTransferred').length,1);
+});
+
+test('Sweep public event carries exact evidence cards and transfers exactly one Single',()=>{
+  const result=specialFixture('playerA',{floor:[],handCard:card('m5-1'),drawCard:card('m5-2'),remainingHand:[card('m9-3')],captured:[card('m7-3'),card('m8-3')]});
+  const sweep=result.events.find(event=>event.type==='sweepTriggered');assert.deepEqual(sweep.cardIds,['m5-1','m5-2']);assert.equal(result.events.filter(event=>event.type==='piTransferred'&&event.reason==='sweep').length,1);
+});
+
+test('dynamic event names are resolved from the active locale keys',()=>{
+  const i18n=require('../i18n.js');assert.equal(i18n.translate('en','tapTap'),'FLUSH!');assert.equal(i18n.translate('ko','tapTap'),'따닥!');assert.equal(i18n.translate('en','birdies'),'5-BIRDIES!');assert.equal(i18n.translate('ko','birdies'),'고도리!');
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes('t(milestone.titleKey)'),true);assert.equal(source.includes("title=t(titleKeys[title]||title)"),true);
+});
+
+test('tutorial Overview renders every four-card month family through canonical cards',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');assert.equal(html.includes('id="monthGuide"'),true);assert.equal(source.includes('for(let month=1;month<=12;month++)'),true);assert.equal(source.includes('MASTER_DECK.filter(card=>card.month===month)'),true);
+});
+
+test('New Game confirmation rejection preserves authority while acceptance resets the session seam',()=>{
+  const original=stateWith({human:api.makePlayer({hand:[card('m1-1')]})});api.setState(original);const before=JSON.stringify(api.getState());assert.equal(api.confirmNewGame(false),false);assert.equal(JSON.stringify(api.getState()),before);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("newGameBtn.addEventListener('click',()=>els.newGameDialog.showModal())"),true);assert.equal(source.includes('resetSession();startGame()'),true);
+});
+
+test('shuffle remains secure rejection-sampled Fisher-Yates with only floor-four retry',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes('cryptoApi.getRandomValues(buf)'),true);assert.equal(source.includes('while(value >= limit)'),true);assert.equal(source.includes('for(let i=a.length-1;i>0;i--)' ),true);assert.equal(source.includes('if (!hasFourOfMonth(floor)) break'),true);assert.equal(extractedEngine.masterDeck.length,48);assert.equal(new Set(extractedEngine.masterDeck.map(card=>card.id)).size,48);
+});
+
+test('starter dice remains presentation-only, rolls only for a new session, and settles after its audio gate',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sequence=source.slice(source.indexOf('async function presentOpeningSequence'),source.indexOf('function playShuffleSound'));
+  assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
+  assert.ok(sequence.indexOf('await sleep(900)')<sequence.indexOf("classList.remove('rolling')"));
+  assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf("els.openingDie.textContent=starter===PLAYER_A?'P':'C'"));
+  assert.equal(source.includes('const roll=presentation.firstHand'),true);assert.equal(source.includes('presentation.firstHand=false'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
 });

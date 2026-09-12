@@ -9,7 +9,7 @@ A hand uses the traditional 48 unique cards, four per month. The two-player fini
 ## Base scoring
 
 - **Brights:** three score 3, except a three-card group containing Rain Bright scores 2; four score 4; all five score 15.
-- **Pictures:** five score 1 and each additional Picture adds 1. The exact February, April, and August birds add 5 (**3-BIRDIES!**).
+- **Pictures:** five score 1 and each additional Picture adds 1. The exact February, April, and August birds add 5 (**5-BIRDIES!**).
 - **Stripes:** five score 1 and each additional Stripe adds 1. Each exact red, blue, or grass three-card set adds 3; December Rain Stripe is not a grass-set card.
 - **Singles:** effective value 10 scores 1 and each additional value adds 1. November Paulownia and December Rain Double-Singles always count 2. September Sake Cup is an explicit Picture or 2-Singles choice.
 - **First Poop:** a player's first-turn Pooped pile adds 7 side-reward points and play continues.
@@ -17,7 +17,7 @@ A hand uses the traditional 48 unique cards, four per month. The two-player fini
 ## Go, Shake, Bomb, and settlement
 
 - One Go adds 1 point; two Go adds 2. Three Go doubles the final score, and every later Go doubles again.
-- Each accepted public Shake doubles the final score. Keep for Bomb remains private and silent.
+- Each accepted public Shake from January through October multiplies the final score by 2. November and December Shakes multiply by 4. Multiple declarations compound; Keep for Bomb remains private and silent.
 - Bomb plays the three matching hand cards against the fourth floor card, steals exactly one Single where available, and grants two optional blank turns. **Bomb deliberately has no score multiplier.** This is a GoStop Online house-rule choice and differs from commercial variants that multiply Bomb.
 - Single Penalty requires the winner to have at least 10 effective Singles and the loser to have 1–7; zero is excluded. Bright, Picture, and Go Penalties retain the engine's selected behavior.
 - Each NO WINNER carry level doubles the next completed hand and is consumed by that completed terminal result.
@@ -32,7 +32,7 @@ A hand uses the traditional 48 unique cards, four per month. The two-player fini
 
 ## Capture specials
 
-KISS, TAP-TAP, CLEAN SWEEP, an initial three-card floor stack capture, and capture of an opponent's Pooped pile each steal one Single. Recapturing one's own Pooped pile retains its established two-Single behavior. These transfers prefer an ordinary Single, then a Double-Single, and never fabricate cards.
+KISS, FLUSH, CLEAN SWEEP, an initial three-card floor stack capture, and capture of an opponent's Pooped pile each steal one Single. Recapturing one's own Pooped pile retains its established two-Single behavior. These transfers prefer an ordinary Single, then a Double-Single, and never fabricate cards.
 
 ## Authority and privacy
 

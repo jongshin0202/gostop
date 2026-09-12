@@ -38,7 +38,7 @@ node --test tests/current-behavior.test.js
 - Two visible blank/pass cards after Bomb
 - Pooped piles (internal rule ID: Ppeok / ssa-da)
 - recapturing your own Pooped pile
-- TAP-TAP!
+- FLUSH!
 - KISS!
 - CLEAN SWEEP!
 - Initial three-card same-month floor stack rule used by this project
