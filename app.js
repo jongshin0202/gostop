@@ -62,7 +62,7 @@
     recordedTerminal:null,
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
-    locale:'en', firstHand:true, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null
+    locale:'en', firstHand:true, diceRolled:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -401,7 +401,7 @@
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
-      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;el=createCardEl(card,'card hand-card');el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
+      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>slot.classList.add('is-hovered'));slot.addEventListener('pointerleave',()=>slot.classList.remove('is-hovered'));el=createCardEl(card,'card hand-card');el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
       el.disabled = presentation.locked || state.turn!==PLAYER_A;
       el.classList.toggle('matchable',card.id===presentation.hintCardId);
       el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
@@ -453,11 +453,7 @@
   function renderGoIndicator(chip,player){
     if(!chip)return;
     let badge=chip.querySelector('.go-count-badge');
-    if(!badge){
-      const holder=document.createElement('span'); holder.className='status-badges';
-      const shake=chip.querySelector('.multiplier-chip'); if(shake)holder.appendChild(shake);
-      badge=document.createElement('span');badge.className='go-count-badge';holder.appendChild(badge);chip.appendChild(holder);
-    }
+    if(!badge)return;
     badge.textContent=goCountLabel(player);
   }
 
@@ -1244,7 +1240,7 @@
     const player=playerStateById(state,playerId);
     els.shakeReviewCards.innerHTML='';
     player.revealedShakeSets.forEach((set,index)=>{
-      const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t('computer')} — ${t('shake')} ${index+1}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
+      const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t('computer')} — ${t('shake')} #${index+1} · ×${set.declarationMultiplier||(set.month>=11?4:2)}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
     });
     els.shakeReviewDialog.showModal();
   }
@@ -1495,6 +1491,7 @@
   };
   const audioBases={};
   function unlockAudio(){
+    if(presentation.soundEnabled)audioContext();
     Object.entries(soundSources).forEach(([name,src])=>{
       if(audioBases[name])return;
       const a=new Audio(src);
@@ -1525,13 +1522,20 @@
   function playPpeokSound(){
     playProceduralNoise('poop');
   }
+  let sharedAudioContext=null;
+  function audioContext(){
+    const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+    if(!sharedAudioContext)sharedAudioContext=new C();
+    if(sharedAudioContext.state==='suspended')sharedAudioContext.resume().catch(()=>{});
+    return sharedAudioContext;
+  }
   function synthNotes(notes){
     if(!presentation.soundEnabled)return;
-    try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),now=c.currentTime;notes.forEach(([delay,freq,duration])=>{const o=c.createOscillator(),g=c.createGain();o.frequency.value=freq;o.type='triangle';g.gain.setValueAtTime(.18,now+delay);g.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);o.connect(g).connect(c.destination);o.start(now+delay);o.stop(now+delay+duration);});setTimeout(()=>c.close(),1200);}catch(_){ }
+    try{const c=audioContext();if(!c)return;const now=c.currentTime;notes.forEach(([delay,freq,duration])=>{const o=c.createOscillator(),g=c.createGain();o.frequency.value=freq;o.type='triangle';g.gain.setValueAtTime(.18,now+delay);g.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);o.connect(g).connect(c.destination);o.start(now+delay);o.stop(now+delay+duration);});}catch(_){ }
   }
   function playProceduralNoise(kind){
     if(!presentation.soundEnabled)return;
-    try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),length=Math.floor(c.sampleRate*(kind==='flush'?1.5:.55)),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const fade=1-i/length;data[i]=(((seed>>>0)/0xffffffff)*2-1)*fade;}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();source.onended=()=>c.close();}catch(_){ }
+    try{const c=audioContext();if(!c)return;const duration=kind==='flush'?1.5:kind==='dice'?.9:.55,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const fade=kind==='dice'?.75+.25*Math.sin(i*.08):1-i/length;data[i]=(((seed>>>0)/0xffffffff)*2-1)*fade;}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'||kind==='dice'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:kind==='dice'?620:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:kind==='dice'?.3:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();}catch(_){ }
   }
   function playTapTapSound(){playProceduralNoise('flush');}
   function playKissSound(){playProceduralNoise('kiss');}
@@ -1545,13 +1549,23 @@
   function playChongtongFanfare(){ playSample('chongtongFanfare',.95,1); }
   function playBombSound(){ playSample('bomb',1,1,1400); }
 
+  async function animateSweepBroom(){
+    if(TEST_MODE||!els.floor)return;
+    document.querySelectorAll('.sweep-broom').forEach(node=>node.remove());
+    const bounds=els.floor.getBoundingClientRect(),broom=document.createElement('div');
+    broom.className='sweep-broom';broom.textContent='🧹';broom.setAttribute('aria-hidden','true');
+    broom.style.top=`${bounds.top+bounds.height*.48}px`;document.body.appendChild(broom);
+    const animation=broom.animate([{transform:`translate(${bounds.left-120}px,-50%) rotate(-22deg)`},{transform:`translate(${bounds.right+120}px,-50%) rotate(18deg)`}],{duration:1200,easing:'ease-in-out'});
+    try{await animation.finished;}catch(_){ }finally{broom.remove();}
+  }
+
   async function showSpecialTransient(title,cardIds=[],effect=''){
     if(!els.milestoneOverlay)return;
     const titleKeys={'POOPED!':'pooped','KISS!':'kiss','FLUSH!':'tapTap','CLEAN SWEEP!':'cleanSweep','5-BIRDIES!':'birdies','3-STRIPES!':'threeStripes','5-BRIGHTS!':'fiveBrights'};
     title=t(titleKeys[title]||title);
     els.milestoneTitle.textContent=title;els.milestoneCards.innerHTML='';els.milestoneBirds.innerHTML='';els.milestoneOverlay.dataset.effect=effect;
     cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
-    els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');await sleep(2000);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
+    els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');const effectDone=effect==='sweep'?animateSweepBroom():Promise.resolve();await Promise.all([sleep(2000),effectDone]);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
   }
   async function presentSemanticEvents(events){
     for(const event of events){
@@ -1720,7 +1734,7 @@
   }
   function resetSession(){
     presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};
-    presentation.roundNo=1; presentation.recordedTerminal=null;presentation.firstHand=true;presentation.nextStarterId=null;
+    presentation.roundNo=1; presentation.recordedTerminal=null;presentation.firstHand=true;presentation.diceRolled=false;presentation.nextStarterId=null;
   }
   function confirmNewGame(accepted){
     if(!accepted){if(els.newGameDialog?.open)els.newGameDialog.close();return false;}
@@ -1758,7 +1772,7 @@
     if(TEST_MODE)return;
     document.querySelectorAll('.tutorial-cards[data-card-ids]').forEach(root=>{if(root.childElementCount)return;root.dataset.cardIds.split(',').map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
     const monthGuide=document.getElementById('monthGuide');
-    if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>cards.appendChild(createCardEl(card,'card tutorial-game-card')));article.append(heading,cards,description);monthGuide.appendChild(article);}}
+    if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>{const item=document.createElement('span');item.className='tutorial-month-card';item.appendChild(createCardEl(card,'card tutorial-game-card'));const label=document.createElement('small');label.textContent=t(card.id==='m9-1'?'sakeCup':card.flags.includes('doublePi')?'doubleSingle':card.type==='bright'?'brights':card.type==='animal'?'pictures':card.type==='ribbon'?'stripes':'singles');item.appendChild(label);cards.appendChild(item);});article.append(heading,cards,description);monthGuide.appendChild(article);}}
   }
 
   function recommendHumanCard(){
@@ -1784,7 +1798,7 @@
     presentation.deckDisplayCount=null;els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
   }
   function playShuffleSound(){synthNotes(Array.from({length:12},(_,i)=>[i*.025,180+i*17,.045]));}
-  function playDiceSound(){synthNotes(Array.from({length:9},(_,i)=>[i*.1,110+i*13,.08]));}
+  function playDiceSound(){playProceduralNoise('dice');}
   function playDealSound(index){if(index%2===0)synthNotes([[0,230+(index%5)*18,.035]]);}
   async function startGame(){
     presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
@@ -1792,7 +1806,8 @@
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
-    const roll=presentation.firstHand;
+    const roll=!presentation.diceRolled;
+    if(roll)presentation.diceRolled=true;
     const starter=presentation.nextStarterId||(roll?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
     state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
     presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
@@ -1914,12 +1929,16 @@
           locked:presentation.locked,
           hintCardId:presentation.hintCardId,
           firstHand:presentation.firstHand,
+          diceRolled:presentation.diceRolled,
           sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
         };
       }
     });
   }else{
     preloadCardFaces();
-    startGame();
+    let started=false;
+    const begin=()=>{if(started)return;started=true;unlockAudio();startGame();};
+    document.addEventListener('pointerdown',begin,{once:true});
+    document.addEventListener('keydown',begin,{once:true});
   }
 })();

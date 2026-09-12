@@ -184,7 +184,9 @@
       state[side].revealedShakeSets=(state[side].revealedShakeSets||[]).map((set,index)=>{
         const cardIds=Array.isArray(set?.cardIds)?[...new Set(set.cardIds)]:[];
         if(!set||!Number.isInteger(set.month)||set.month<1||set.month>12||cardIds.length!==3||cardIds.some(id=>typeof id!=='string'))throw new Error(`state.${side}.revealedShakeSets[${index}] is invalid.`);
-        return {month:set.month,cardIds};
+        const declarationMultiplier=set.declarationMultiplier||(set.month>=11?4:2);
+        if(![2,4].includes(declarationMultiplier))throw new Error(`state.${side}.revealedShakeSets[${index}] has an invalid multiplier.`);
+        return {month:set.month,cardIds,declarationMultiplier};
       });
       state[side].armedBombMonths=normalizeMonthList(state[side].armedBombMonths||[],`state.${side}.armedBombMonths`);
       state[side].shakeMultiplier=state[side].shakeMultiplier||2**(state[side].shakes||0);
@@ -521,17 +523,21 @@
     return {kind,actorId,...details};
   }
 
-  function transferPi(state,fromSide,toSide,count){
-    const transferred=[];
-    for(let index=0;index<count;index++){
-      const ordinary=state[fromSide].captured.find(card=>card.type==='pi'&&!card.flags.includes('doublePi'));
-      const card=ordinary||state[fromSide].captured.find(item=>item.type==='pi');
-      if(!card)break;
-      state[fromSide].captured=state[fromSide].captured.filter(item=>item.id!==card.id);
-      state[toSide].captured.push(card);
-      transferred.push(card.id);
-    }
-    return transferred;
+  function transferSingleCards(state,fromPlayerId,toPlayerId,physicalCardCount){
+    const fromSide=legacySideForPlayerId(fromPlayerId),toSide=legacySideForPlayerId(toPlayerId);
+    const giver=state[fromSide],receiver=state[toSide];
+    const eligible=card=>card.type==='pi'||(card.id==='m9-1'&&giver.gukjinMode==='pi');
+    const isDouble=card=>card.flags.includes('doublePi')||(card.id==='m9-1'&&giver.gukjinMode==='pi');
+    const candidates=[...giver.captured.filter(card=>eligible(card)&&!isDouble(card)),...giver.captured.filter(card=>eligible(card)&&isDouble(card))];
+    const selected=candidates.slice(0,Math.max(0,physicalCardCount));
+    const selectedIds=new Set(selected.map(card=>card.id));
+    const giverBefore=giver.captured.length,receiverBefore=receiver.captured.length;
+    giver.captured=giver.captured.filter(card=>!selectedIds.has(card.id));
+    receiver.captured.push(...selected);
+    if(giverBefore-giver.captured.length!==selected.length||receiver.captured.length-receiverBefore!==selected.length)throw new Error('Single transfer violated physical-card conservation.');
+    const giverIds=new Set(giver.captured.map(card=>card.id));
+    if(receiver.captured.some(card=>giverIds.has(card.id)))throw new Error('Single transfer duplicated a captured card.');
+    return selected.map(card=>card.id);
   }
 
   function removeFloorCardIds(state,cardIds){
@@ -547,8 +553,7 @@
     if(state.floor.length!==0||!(state.deck.length||state.human.hand.length||state.ai.hand.length))return;
     const captured=[...events].reverse().find(event=>event.type==='cardsCaptured');
     events.push({type:'sweepTriggered',audience:'public',actorId,rule,cardIds:[...(captured?.cardIds||captured?.cards?.map(card=>card.id)||[])]});
-    const otherSide=side==='human'?'ai':'human';
-    transferPi(state,otherSide,side,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'sweep',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
+    transferSingleCards(state,otherPlayerId(actorId),actorId,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'sweep',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
   }
 
   function applySweepAction(currentState,action){
@@ -569,9 +574,9 @@
     if(!pending||pending.actorId!==actorId)throw new Error('No turn is in progress for the actor.');
     const outcome=classifyTurnOutcome(state,{actorId});
     const events=[];
-    const actor=state[side],otherSide=side==='human'?'ai':'human';
+    const actor=state[side];
     const emitTransfers=(count,reason)=>{
-      transferPi(state,otherSide,side,count).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason,cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
+      transferSingleCards(state,otherPlayerId(actorId),actorId,count).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason,cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
     };
     const finish=(rule,checkSweep=false)=>{
       if(pending.played)pending.played.resolved=true;
@@ -749,7 +754,7 @@
         const declarationMultiplier=decision.month>=11?4:2;
         player.shakeMultiplier=(player.shakeMultiplier||2**(player.shakes-1))*declarationMultiplier;
         if(!player.shakenMonths.includes(decision.month))player.shakenMonths.push(decision.month);
-        player.revealedShakeSets.push({month:decision.month,cardIds:[...cardIds]});
+        player.revealedShakeSets.push({month:decision.month,cardIds:[...cardIds],declarationMultiplier});
         player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
         events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,cardIds:[...cardIds],shakeCount:player.shakes,declarationMultiplier,multiplier:player.shakeMultiplier});
       }
@@ -793,8 +798,7 @@
       events.push({type:'bombDeclared',audience:'public',actorId,month:decision.month,bombCount:player.bombs});
       events.push({type:'bombCardsPlayed',audience:'public',actorId,cardIds:[...decision.cardIds]});
       events.push({type:'cardsCaptured',audience:'public',actorId,rule:'bomb',cardIds:[...decision.cardIds,floorCard.id]});
-      const otherSide=side==='human'?'ai':'human';
-      transferPi(state,otherSide,side,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'bomb',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
+      transferSingleCards(state,otherPlayerId(actorId),actorId,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'bomb',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
       events.push({type:'bombBlankTurnsGranted',audience:'public',actorId,count:2,remaining:player.bombFreeTurns});
       events.push({type:'specialResolved',audience:'public',actorId,rule:'bomb'});
       state.pendingTurn={phase:'awaitingDraw',mode:'bomb',actorId,nextResolution:null,played:null,drawn:null,sweepResolved:false};

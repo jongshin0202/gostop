@@ -1004,7 +1004,7 @@ test('declaring Shake mutates authority, emits public neutral event, and resumes
     assert.deepEqual(declared.state[side].shakenMonths,[month]);
     assert.deepEqual(declared.state[side].hiddenTripleMonths,[]);
     assert.deepEqual(declared.events,[{type:'shakeDeclared',audience:'public',actorId,month,cardIds:triple.map(card=>card.id),shakeCount:1,declarationMultiplier:2,multiplier:2}]);
-    assert.deepEqual(declared.state[side].revealedShakeSets,[{month,cardIds:triple.map(card=>card.id)}]);
+    assert.deepEqual(declared.state[side].revealedShakeSets,[{month,cardIds:triple.map(card=>card.id),declarationMultiplier:2}]);
     assert.equal(declared.resumePlay.cardId,triple[0].id);
     const played=extractedEngine.applyNormalTurnAction(declared.state,{type:'playCard',actorId,cardId:declared.resumePlay.cardId});
     assert.equal(played.events[0].type,'cardPlayed');
@@ -1819,9 +1819,9 @@ test('declared Shake card identities are public, projected, and serializable whi
   const declared=extractedEngine.applyNormalTurnAction(pending,{type:'declareShake',actorId:'playerA'});
   const ids=triple.map(item=>item.id);
   assert.deepEqual(declared.events[0].cardIds,ids);
-  assert.deepEqual(wireRoundTrip(declared.state).human.revealedShakeSets,[{month:6,cardIds:ids}]);
+  assert.deepEqual(wireRoundTrip(declared.state).human.revealedShakeSets,[{month:6,cardIds:ids,declarationMultiplier:2}]);
   for(const viewerId of ['playerA','playerB']){
-    assert.deepEqual(extractedEngine.projectStateForViewer(declared.state,viewerId).human.revealedShakeSets,[{month:6,cardIds:ids}]);
+    assert.deepEqual(extractedEngine.projectStateForViewer(declared.state,viewerId).human.revealedShakeSets,[{month:6,cardIds:ids,declarationMultiplier:2}]);
   }
 
   const secret=extractedEngine.applyNormalTurnAction(pending,{type:'keepShakeSecret',actorId:'playerA'});
@@ -1928,7 +1928,7 @@ test('temporary deck and capture cards reuse the canonical card-face path and st
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg) translateZ(1px);padding:0!important;background:#a92d21!important;border:1px solid #a92d21!important}'),true);
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg);background:#f5efe3'),false);
   assert.equal(source.includes("slot.className='hand-card-slot'"),true);
-  assert.equal(css.includes('.hand-card-slot:hover .hand-card'),true);
+  assert.equal(css.includes('.hand-card-slot.is-hovered .hand-card'),true);
   assert.equal(source.includes('SpeechSynthesisUtterance'),false);
   assert.equal(source.includes("laugh:'https://"),false);
 });
@@ -2038,7 +2038,7 @@ test('starter dice remains presentation-only, rolls only for a new session, and 
   assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
   assert.ok(sequence.indexOf('await sleep(900)')<sequence.indexOf("classList.remove('rolling')"));
   assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf("els.openingDie.textContent=starter===PLAYER_A?'P':'C'"));
-  assert.equal(source.includes('const roll=presentation.firstHand'),true);assert.equal(source.includes('presentation.firstHand=false'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
+  assert.equal(source.includes('const roll=!presentation.diceRolled'),true);assert.equal(source.includes('if(roll)presentation.diceRolled=true'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
 });
 
 test('opening setup scans both hands, offers floor-aware choices, and preserves starter until declarations finish',()=>{
@@ -2060,7 +2060,7 @@ test('non-Sweep special presentation is awaited before threshold evaluation and 
 });
 
 test('Clean Sweep presentation includes actor-independent broom animation, sound, and exact event cards',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');const semantic=source.slice(source.indexOf('async function presentSemanticEvents'),source.indexOf('function detectNewMilestones'));assert.equal(semantic.includes('playSweepSound()'),true);assert.equal(semantic.includes("event.cardIds||[],'sweep'"),true);assert.equal(semantic.includes("actorId===PLAYER_A"),false);assert.equal(css.includes('data-effect="sweep"'),true);assert.equal(css.includes('@keyframes sweep-across'),true);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');const semantic=source.slice(source.indexOf('async function presentSemanticEvents'),source.indexOf('function detectNewMilestones'));assert.equal(semantic.includes('playSweepSound()'),true);assert.equal(semantic.includes("event.cardIds||[],'sweep'"),true);assert.equal(semantic.includes("actorId===PLAYER_A"),false);assert.equal(source.includes("broom.className='sweep-broom'"),true);assert.equal(source.includes("finally{broom.remove();}"),true);assert.equal(css.includes('data-effect="sweep"'),false);
 });
 
 test('5-Birdies presentation flies exactly five birds with synchronized chirps and exact three scoring cards',()=>{
@@ -2069,4 +2069,74 @@ test('5-Birdies presentation flies exactly five birds with synchronized chirps a
 
 test('tutorial dismissal distinguishes backdrop from content and keeps an outside sticky close control visible',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);assert.equal(css.includes('.tutorial-card>.dialog-close{position:sticky;top:0;float:right;transform:translate(22px,-22px)'),true);assert.equal(css.includes('max-height:90vh;overflow:auto'),true);
+});
+
+test('status panels use four stable siblings and horizontal localized identity text',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.equal((html.match(/class="player-identity"/g)||[]).length,2);
+  assert.equal((html.match(/class="status-badges"/g)||[]).length,2);
+  assert.match(css,/grid-template-columns:44px minmax\(110px,1fr\).*minmax\(90px,auto\)/);
+  assert.match(css,/writing-mode:horizontal-tb/);
+});
+
+test('Shake review records one evidence group and its own multiplier per declaration',()=>{
+  let state=stateWith({human:api.makePlayer({hand:cards('m11-1','m11-2','m11-3','m10-1','m10-2','m10-3')})});
+  state=extractedEngine.resolveOpeningState(state).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'declareShake',actorId:'playerA'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'declareShake',actorId:'playerA'}).state;
+  assert.equal(state.human.shakeMultiplier,8);
+  assert.deepEqual(state.human.revealedShakeSets.map(set=>[set.declarationMultiplier,set.cardIds.length]),[[2,3],[4,3]]);
+  const restored=extractedEngine.deserializeGameState(extractedEngine.serializeGameState(state));
+  assert.deepEqual(restored.human.revealedShakeSets,state.human.revealedShakeSets);
+});
+
+test('all authoritative Single steals transfer physical cards with normal-first priority',()=>{
+  const cases=[
+    {name:'Kiss',floor:[card('m8-1')],handCard:card('m5-1'),drawCard:card('m5-2'),reason:'jjok'},
+    {name:'Flush',floor:cards('m3-1','m3-2'),handCard:card('m3-3'),drawCard:card('m3-4'),targetId:'m3-1',reason:'ttadak'}
+  ];
+  for(const fixture of cases){
+    const result=specialFixture('playerA',{...fixture,captured:cards('m12-4','m7-3')});
+    assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.cardId),['m7-3'],fixture.name);
+    assert.equal(result.state.human.captured.some(card=>card.id==='m7-3'),true);
+    assert.equal(result.state.ai.captured.some(card=>card.id==='m12-4'),true);
+  }
+  const sweep=specialFixture('playerA',{floor:[],handCard:card('m5-1'),drawCard:card('m5-2'),remainingHand:[card('m9-3')],captured:[card('m12-4')]});
+  assert.equal(sweep.events.filter(event=>event.type==='piTransferred').length,1);
+  assert.equal(sweep.events[1].cardId,'m12-4');
+});
+
+test('opponent Pooped capture plus Sweep transfers exactly two physical Singles once each',()=>{
+  const stack=cards('m2-1','m2-2','m2-3');
+  const result=specialFixture('playerA',{floor:[...stack,card('m8-2')],handCard:card('m2-4'),drawCard:card('m8-1'),targetId:'m2-3',remainingHand:[card('m9-3')],captured:cards('m12-4','m7-3','m8-3','m10-3'),floorStacks:{2:{month:2,cardIds:stack.map(card=>card.id),source:'ppeok',owner:'playerB'}}});
+  const transfers=result.events.filter(event=>event.type==='piTransferred');
+  assert.deepEqual(transfers.map(event=>[event.reason,event.cardId]),[['opponentPpeok','m7-3'],['sweep','m8-3']]);
+  assert.equal(new Set(transfers.map(event=>event.cardId)).size,2);
+  assert.equal(result.state.ai.captured.length,2);
+  assert.equal(result.state.human.captured.filter(card=>['m7-3','m8-3'].includes(card.id)).length,2);
+});
+
+test('Sweep broom is floor-relative, unique, and removed when its animation finishes',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const broom=source.slice(source.indexOf('async function animateSweepBroom'),source.indexOf('async function showSpecialTransient'));
+  assert.match(broom,/els\.floor\.getBoundingClientRect\(\)/);
+  assert.match(broom,/document\.querySelectorAll\('\.sweep-broom'\).*remove/);
+  assert.match(broom,/finally\{broom\.remove\(\);\}/);
+});
+
+test('unchanged hand cards retain keyed node identity and explicit hover state across renders',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(source,/existing=new Map\(\[\.\.\.els\.playerHand\.querySelectorAll/);
+  assert.match(source,/pointerenter.*is-hovered/);
+  assert.match(source,/pointerleave.*is-hovered/);
+  assert.match(css,/hand-card-slot\.is-hovered \.hand-card/);
+});
+
+test('tutorial month rows contain four canonical labeled cards without overflow layout',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.match(source,/MASTER_DECK\.filter\(card=>card\.month===month\)/);
+  assert.match(source,/className='tutorial-month-card'/);
+  assert.match(css,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css,/month-guide article\{min-width:0;overflow:hidden/);
+  assert.match(html,/data-i18n="tutorialCardTypes"/);
 });
