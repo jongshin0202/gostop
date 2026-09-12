@@ -1301,6 +1301,11 @@
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='1160';
   }
+  function concealImpactTarget(targetCard){
+    if(!targetCard)return;
+    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || presentation.stagedCards.get(targetCard.id);
+    if(targetEl)targetEl.style.visibility='hidden';
+  }
   function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } }
 
   function resetHandPresentationState(){
@@ -1325,11 +1330,12 @@
     const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); presentation.stagedCards.set(card.id,el);
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     if(!landing)return el;
-    if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; return el; }
+    if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; concealImpactTarget(target); return el; }
 
     const dx=landing.left-sourceRect.left, dy=landing.top-sourceRect.top;
     const sideBias=seatForLegacySide(side)==='bottom'?-1:1;
     const duration=650;
+    if(target)setTimeout(()=>concealImpactTarget(target),Math.max(0,duration*.90));
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
     const a=el.animate([
       {transform:'translate(0,0) rotate(0deg)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
@@ -1420,7 +1426,8 @@
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     const dx=landing.left-start.left,dy=landing.top-start.top; const duration=500;
-    if(prefersReducedMotion()){normalizeFixed(el,landing);el.style.transform=`rotate(${landing.rotation}deg)`;return;}
+    if(prefersReducedMotion()){normalizeFixed(el,landing);el.style.transform=`rotate(${landing.rotation}deg)`;concealImpactTarget(target);return;}
+    if(target)setTimeout(()=>concealImpactTarget(target),Math.max(0,duration*.90));
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-52));
     const a=el.animate([
       {transform:'translate(0,0) rotate(0deg)',offset:0},
@@ -1455,7 +1462,7 @@
     const entries=[];
     unique.forEach(card=>{
       const staged=presentation.stagedCards.get(card.id);
-      if(staged){staged.classList.add('capture-flight-card');entries.push({el:staged,card,placeholder:null,staged:true});}
+      if(staged){staged.style.visibility='';staged.classList.add('capture-flight-card');entries.push({el:staged,card,placeholder:null,staged:true});}
       else {
         const e=detachFloorCard(card);
         if(e)entries.push({...e,staged:false});
