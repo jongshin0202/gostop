@@ -63,7 +63,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,audioTrace:[],dealMovementCount:0,activeHoveredHandCardId:null
+    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,audioTrace:[],activeHoveredHandCardId:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -1854,13 +1854,12 @@
     await presentDealSequence();
   }
   async function presentDealSequence(){
-    if(TEST_MODE){presentation.dealMovementCount++;traceAudio('deal');return;}
+    if(TEST_MODE)return;
     presentation.deckDisplayCount=48;render();
-    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();presentation.dealMovementCount++;playDealSound(count);await sleep(72);}
+    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();await sleep(72);}
     presentation.deckDisplayCount=null;render();
   }
   function playDiceSound(){presentation.diceSoundCount++;traceAudio('dice');playProceduralNoise('dice');}
-  function playDealSound(){traceAudio('deal');playSample('slam',.2,1.25,90);}
   async function startGame(){
     resetHandPresentationState();hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
@@ -1995,12 +1994,11 @@
           diceSoundCount:presentation.diceSoundCount,
           kissSoundCount:presentation.kissSoundCount,
           audioTrace:[...presentation.audioTrace],
-          dealMovementCount:presentation.dealMovementCount,
           activeHoveredHandCardId:presentation.activeHoveredHandCardId,
           sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
         };
       },
-      resetAudioTrace(){presentation.audioTrace.length=0;presentation.dealMovementCount=0;},
+      resetAudioTrace(){presentation.audioTrace.length=0;},
       setSoundEnabled(value){presentation.soundEnabled=!!value;}
     });
   }else{

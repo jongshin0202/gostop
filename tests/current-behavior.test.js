@@ -2219,14 +2219,13 @@ test('KISS presentation invokes one dedicated smooch path and respects Sound Off
   assert.doesNotMatch(source,/SpeechSynthesisUtterance/);
 });
 
-test('round-start audio trace has dice only on a fresh session and never includes shuffle audio',async()=>{
+test('deck countdown is silent in every round and fresh sessions retain only dice audio',async()=>{
   api.resetSession();api.resetAudioTrace();
-  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);assert.equal(api.getPresentationSnapshot().dealMovementCount,0);await api.presentDealSequence();
-  assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice','deal']);
-  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);assert.equal(api.getPresentationSnapshot().dealMovementCount,1);
-  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['deal']);
-  api.resetSession();api.resetAudioTrace();assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerB',true);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice','deal']);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/playShuffleSound|traceAudio\('shuffle'\)/);assert.match(source,/playDealSound\(count\)/);
+  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);
+  api.resetSession();api.resetAudioTrace();assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerB',true);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const deal=source.slice(source.indexOf('async function presentDealSequence'),source.indexOf('function playDiceSound'));assert.doesNotMatch(deal,/playDealSound|playSample|playHitSound|playProceduralNoise|traceAudio/);assert.doesNotMatch(source,/playShuffleSound|function playDealSound|traceAudio\('shuffle'\)|traceAudio\('deal'\)/);
 });
 
 test('both seats use one capture-panel sizing contract without player-only stretching',()=>{
@@ -2238,7 +2237,7 @@ test('both seats use one capture-panel sizing contract without player-only stret
   for(const declaration of ['width:min(500px,100%)','height:116px','min-height:116px','max-height:116px','padding:8px 12px'])assert.ok(contract.includes(declaration),declaration);
   assert.doesNotMatch(css,/\.player-capture-panel\{[^}]*(?:width|height|padding):/);
   assert.match(css,/\.captured-strip\{[^}]*grid-template-columns:repeat\(4,1fr\)/);
-  assert.match(css,/\.captured-mini\{[^}]*width:41px!important;height:66px!important/);
+  assert.match(css,/\.captured-mini\{[^}]*width:41px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)/);
   assert.match(css,/@media\(min-width:1051px\)\{\.opponent-zone,\.player-zone\{grid-template-columns:max-content minmax\(260px,1fr\) minmax\(390px,620px\)/);
 });
 
@@ -2269,12 +2268,23 @@ test('deterministic Go Stop risk model goes early with a lead, can stop late, an
 test('canonical card shell is singular across gameplay and special-event contexts',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   const contract=css.match(/\/\* One canonical face[^]*?\.canonical-card-face\{([^}]+)\}/)?.[1]||'';
-  assert.match(contract,/background:#f5efe3/);assert.match(contract,/border:1px solid #b33226/);assert.doesNotMatch(contract,/!important/);
+  assert.match(contract,/aspect-ratio:var\(--card-aspect\)/);assert.match(contract,/background:#f5efe3/);assert.match(contract,/border:1px solid #b33226/);assert.doesNotMatch(contract,/!important/);
   assert.doesNotMatch(css,/\.card,\.physical-card,\.flying-card,\.capture-ghost\{/);
   assert.doesNotMatch(css,/\.deck-draw-front\{[^}]*(?:background|border):/);
   assert.match(source,/createCardEl\(card,'card'\)/);assert.match(source,/canonical-card-face normal-gameplay-card/);
   const reset=source.slice(source.indexOf('function resetHandPresentationState'),source.indexOf('function fullSizeSourceRect'));
   for(const token of ['stagedCards.clear()','floorSlotReservations.clear()','activeHoveredHandCardId=null','physical-card','floor-slot-proxy'])assert.ok(reset.includes(token),token);
+});
+
+test('every face-up dialog and event card preserves the canonical 76 by 123 ratio',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(css,/--card-aspect:76 \/ 123/);
+  for(const selector of ['.milestone-cards .card','.magnified-card','.shake-cards .magnified-card','.shake-mini-card','.breakdown-cards .card,.result-cards .card','.tutorial-game-card','.single-card-choice .card']){
+    const escaped=selector.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');assert.match(css,new RegExp(escaped+'\\{[^}]*aspect-ratio:var\\(--card-aspect\\)'));
+  }
+  assert.doesNotMatch(css,/\.milestone-cards \.card\{[^}]*(?:height:134px|height:90px)/);
+  assert.doesNotMatch(css,/\.breakdown-cards \.card,\.result-cards \.card\{[^}]*height:78px/);
+  assert.doesNotMatch(css,/\.physical-card(?:\.moving-card)?>img\{/);
 });
 
 test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>{
