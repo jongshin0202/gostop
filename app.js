@@ -1,37 +1,36 @@
 (() => {
   'use strict';
 
+  // Characterization tests opt in before this script loads. Production never
+  // sets this flag, so the browser startup and gameplay path remain unchanged.
+  const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
+
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const monthShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const engine = globalThis.GoStopEngine;
+  if(!engine)throw new Error('GoStopEngine must load before app.js.');
+  const {
+    monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
+    hasFourOfMonth,matchingCards,score,scorePlayer,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
+    evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome,isHandExhausted
+  }=engine;
+  const MASTER_DECK = engine.masterDeck;
+  const faceImagePromises=new Map();
   const finishThreshold = 7;
+  const PLAYER_A = 'playerA';
+  const PLAYER_B = 'playerB';
+  const SOLO_VIEWER_ID = PLAYER_A;
 
-  const defs = [
-    [1,'Hikari','bright',null,''], [1,'Tanzaku','ribbon','red',''], [1,'Kasu 1','pi',null,''], [1,'Kasu 2','pi',null,''],
-    [2,'Tane','animal',null,'godori'], [2,'Tanzaku','ribbon','red',''], [2,'Kasu 1','pi',null,''], [2,'Kasu 2','pi',null,''],
-    [3,'Hikari','bright',null,''], [3,'Tanzaku','ribbon','red',''], [3,'Kasu 1','pi',null,''], [3,'Kasu 2','pi',null,''],
-    [4,'Tane','animal',null,'godori'], [4,'Tanzaku','ribbon','grass',''], [4,'Kasu 1','pi',null,''], [4,'Kasu 2','pi',null,''],
-    [5,'Tane','animal',null,''], [5,'Tanzaku','ribbon','grass',''], [5,'Kasu 1','pi',null,''], [5,'Kasu 2','pi',null,''],
-    [6,'Tane','animal',null,''], [6,'Tanzaku','ribbon','blue',''], [6,'Kasu 1','pi',null,''], [6,'Kasu 2','pi',null,''],
-    [7,'Tane','animal',null,''], [7,'Tanzaku','ribbon','grass',''], [7,'Kasu 1','pi',null,''], [7,'Kasu 2','pi',null,''],
-    [8,'Hikari','bright',null,''], [8,'Tane','animal',null,'godori'], [8,'Kasu 1','pi',null,''], [8,'Kasu 2','pi',null,''],
-    [9,'Tane','animal',null,'switchPi'], [9,'Tanzaku','ribbon','blue',''], [9,'Kasu 1','pi',null,''], [9,'Kasu 2','pi',null,''],
-    [10,'Tane','animal',null,''], [10,'Tanzaku','ribbon','blue',''], [10,'Kasu 1','pi',null,''], [10,'Kasu 2','pi',null,''],
-    [11,'Hikari','bright',null,''], [11,'Kasu 1','pi',null,'doublePi'], [11,'Kasu 2','pi',null,''], [11,'Kasu 3','pi',null,''],
-    [12,'Hikari','bright',null,'rain'], [12,'Tane','animal',null,''], [12,'Tanzaku','ribbon',null,''], [12,'Kasu','pi',null,'doublePi']
-  ];
-
-  function cardFilename(month, suffix) { return `Hwatu ${monthNames[month-1]} ${suffix}.svg`; }
   function artUrl(filename) { return COMMONS + encodeURIComponent(filename).replace(/%2F/g,'/'); }
-
-  const MASTER_DECK = defs.map((d, i) => ({
-    id: `m${d[0]}-${i%4+1}`,
-    month: d[0],
-    type: d[2],
-    ribbonSet: d[3],
-    flags: d[4] ? d[4].split(',') : [],
-    file: cardFilename(d[0], d[1])
-  }));
+  function preloadCardFace(card){
+    if(TEST_MODE)return Promise.resolve();
+    if(!faceImagePromises.has(card.id)){
+      const image=new Image(); image.src=artUrl(card.file);
+      const ready=image.decode?image.decode():new Promise(resolve=>{image.onload=resolve;image.onerror=resolve;});
+      faceImagePromises.set(card.id,ready.catch(()=>{}));
+    }
+    return faceImagePromises.get(card.id);
+  }
+  function preloadCardFaces(){MASTER_DECK.forEach(preloadCardFace);}
 
   const ids = [
     'playerHand','aiHand','floor','playerCaptured','aiCaptured','deckCount','deckCountTop','deckCorner','roundCorner',
@@ -39,33 +38,106 @@
     'howToDialog','decisionDialog','decisionText','goBtn','stopBtn','resultDialog','resultTitle','resultScore','resultBreakdown',
     'playAgainBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
     'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeCards','shakeBtn','keepSecretBtn',
-    'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier'
+    'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
+    'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
+    'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
   let state = null;
-  let roundNo = 1;
-  let locked = false;
-  let lastHumanScore = 0;
-  let lastAiScore = 0;
-  let hintCardId = null;
-  let soundEnabled = true;
-  let targetChoiceCleanup = null;
-  let pendingHumanCardId = null;
-  let queuedHumanCardSwitch = null;
-  let nagariCarryPower = 0;
-  let shakeResolver = null;
-  let bombResolver = null;
-  let aiTurnInProgress = false;
-  const stagedCards = new Map();
+  const presentation = {
+    roundNo:1,
+    locked:false,
+    hintCardId:null,
+    soundEnabled:true,
+    targetChoiceCleanup:null,
+    pendingHumanCardId:null,
+    queuedHumanCardSwitch:null,
+    shakeResolver:null,
+    bombResolver:null,
+    aiTurnInProgress:false,
+    sessionStats:{playerA:{wins:0,points:0},playerB:{wins:0,points:0}},
+    milestoneHistory:{playerA:new Set(),playerB:new Set()},
+    recordedTerminal:null,
+    stagedCards:new Map(),
+    floorSlotReservations:new Map(),
+    locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
+    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null
+  };
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
+  const i18n=globalThis.GoStopI18n;
+  function t(key,vars){return i18n?i18n.translate(presentation.locale,key,vars):key;}
+  function localizedMonths(){return t('monthNames').split(',');}
+  function localizedMonth(month){return localizedMonths()[month-1]||monthNames[month-1];}
+  function deckVisualBackCount(count){return count<=0?0:count<=5?count:Math.max(3,Math.ceil(count/4));}
+  function computeStageScale(width,height){return Math.min(1,width/1530,Math.max(0.5,(height-76)/900));}
+  function updateStageScale(){
+    const stage=document.querySelector('.game-stage');if(!stage)return;
+    if(innerWidth<=700){stage.style.removeProperty('--stage-scale');stage.style.removeProperty('--scaled-height');stage.style.marginBottom='';return;}
+    stage.style.setProperty('--stage-scale','1');
+    const header=document.querySelector('.topbar'),availableHeight=Math.max(420,innerHeight-(header?.getBoundingClientRect().height||70)-12);
+    const scale=Math.min(1,(innerWidth-20)/Math.max(1,stage.scrollWidth),availableHeight/Math.max(1,stage.scrollHeight));
+    stage.style.setProperty('--stage-scale',String(scale));stage.style.marginBottom=`${stage.scrollHeight*(scale-1)}px`;
+  }
+
+  function otherPlayerId(playerId){
+    if(playerId===PLAYER_A)return PLAYER_B;
+    if(playerId===PLAYER_B)return PLAYER_A;
+    throw new Error(`Unknown player ID: ${playerId}`);
+  }
+  function legacySideForPlayerId(playerId){
+    if(playerId===PLAYER_A)return 'human';
+    if(playerId===PLAYER_B)return 'ai';
+    throw new Error(`Unknown player ID: ${playerId}`);
+  }
+  function playerIdForLegacySide(side){
+    if(side==='human')return PLAYER_A;
+    if(side==='ai')return PLAYER_B;
+    throw new Error(`Unknown legacy side: ${side}`);
+  }
+  function viewerSeatMap(viewerId){
+    return {bottom:viewerId,top:otherPlayerId(viewerId),me:viewerId,opponent:otherPlayerId(viewerId)};
+  }
+  function playerStateById(gameState,playerId){ return gameState[legacySideForPlayerId(playerId)]; }
+  function viewerRelativePlayers(gameState,viewerId){
+    const seats=viewerSeatMap(viewerId);
+    return {
+      bottom:{id:seats.bottom,player:playerStateById(gameState,seats.bottom)},
+      top:{id:seats.top,player:playerStateById(gameState,seats.top)}
+    };
+  }
+  function seatForLegacySide(side,viewerId=SOLO_VIEWER_ID){
+    return playerIdForLegacySide(side)===viewerId?'bottom':'top';
+  }
+  function monthListHas(player,field,month){ return player[field].includes(month); }
+  function monthListAdd(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');if(!monthListHas(player,field,month))player[field].push(month); }
+  function monthListDelete(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');player[field]=player[field].filter(value=>value!==month); }
+  function applyNormalAction(action){
+    const result=applyNormalTurnAction(state,action);
+    state=result.state;
+    return result;
+  }
+  function applySpecialAction(action){
+    const result=applySpecialTurnAction(state,action);
+    state=result.state;
+    return result;
+  }
+
+  function applyGoStopDecision(action){
+    const result=applyGoStopAction(state,action); state=result.state; return result;
+  }
+  function normalAction(side,action){ return {...action,actorId:playerIdForLegacySide(side)}; }
+  function classifyNormalTurn(side,details={}){
+    return classifyTurnOutcome(state,{actorId:playerIdForLegacySide(side),...details});
+  }
 
 
-  function freshState() {
+  function freshState(nagariCarryPower=0,startingPlayerId=PLAYER_A) {
     let deck, human, ai, floor, auditId='';
     for (let attempt=0; attempt<200; attempt++) {
       deck = shuffle(MASTER_DECK.map(c => ({...c})));
@@ -84,22 +156,21 @@
       if (!hasFourOfMonth(floor)) break;
     }
     const makePlayer = hand => ({
-      hand, captured:[], go:0, shakes:0, bombs:0, bombFreeTurns:0,
-      ppeoks:0, hiddenTripleMonths:new Set(), shakenMonths:new Set(),
-      lastGoScore:0
+      hand, captured:[], go:0, shakes:0, shakeMultiplier:1, bombs:0, bombFreeTurns:0,
+      ppeoks:0, hiddenTripleMonths:[], shakenMonths:[],
+      resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0
     });
-    const next = {
+    let next = {
       deck, floor,
       human:makePlayer(human),
       ai:makePlayer(ai),
       floorStacks:{},
-      turn:'human', winner:null, specialWinner:null
+      startingPlayerId,turn:startingPlayerId, winner:null, specialWinner:null,
+      matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower}
     };
     markInitialFloorStacks(next);
     initFloorSlots(next);
-    [next.human,next.ai].forEach(player => {
-      tripleMonths(player.hand).forEach(m => player.hiddenTripleMonths.add(m));
-    });
+    next=initializeShakeEligibility(next);
     logShuffleAudit(auditId,next);
     return next;
   }
@@ -130,16 +201,6 @@
     return Array.from(a,v=>v.toString(16).padStart(8,'0')).join('-');
   }
 
-  function assertDeckIntegrity(deck){
-    if(deck.length!==48) throw new Error(`Deck integrity failure: expected 48 cards, got ${deck.length}.`);
-    const ids=new Set(deck.map(c=>c.id));
-    if(ids.size!==48) throw new Error(`Deck integrity failure: duplicate card IDs detected (${ids.size}/48 unique).`);
-    for(let m=1;m<=12;m++){
-      const count=deck.filter(c=>c.month===m).length;
-      if(count!==4) throw new Error(`Deck integrity failure: month ${m} has ${count} cards instead of 4.`);
-    }
-  }
-
   function logShuffleAudit(id,st){
     const summarize=cards=>{
       const counts=countsByMonth(cards);
@@ -168,22 +229,6 @@
     }
     return a;
   }
-  function hasFourOfMonth(cards){
-    const n={}; cards.forEach(c=>n[c.month]=(n[c.month]||0)+1);
-    return Object.values(n).some(v=>v===4);
-  }
-
-  function countsByMonth(cards){
-    const out={}; cards.forEach(c=>out[c.month]=(out[c.month]||0)+1); return out;
-  }
-  function tripleMonths(cards){
-    const n=countsByMonth(cards);
-    return Object.keys(n).map(Number).filter(m=>n[m]===3);
-  }
-  function fourMonths(cards){
-    const n=countsByMonth(cards);
-    return Object.keys(n).map(Number).filter(m=>n[m]===4);
-  }
   function markInitialFloorStacks(st){
     const n=countsByMonth(st.floor);
     Object.keys(n).map(Number).filter(m=>n[m]===3).forEach(month=>{
@@ -193,6 +238,7 @@
   }
   function initFloorSlots(st){
     // Fixed table positions: cards never compact or shift after a capture.
+    presentation.floorSlotReservations.clear();
     st.floorSlotCount=12;
     st.floorSlotByCard={};
     st.floor.forEach((card,i)=>{ st.floorSlotByCard[card.id]=i; });
@@ -206,38 +252,53 @@
   function occupiedFloorSlots(st=state){
     const used=new Set();
     if(!st || !st.floorSlotByCard)return used;
-    // Include reserved landing slots for cards that are mid-animation and not
-    // yet committed to state.floor. This prevents two cards in the same turn
-    // from being assigned to the same blank space.
     Object.values(st.floorSlotByCard).forEach(slot=>{ if(Number.isFinite(slot))used.add(slot); });
+    // In-flight landing reservations are local presentation state. They block
+    // duplicate visual occupancy without becoming authoritative floor cards.
+    presentation.floorSlotReservations.forEach(slot=>{if(Number.isFinite(slot))used.add(slot);});
     return used;
   }
-  function firstFreeFloorSlot(st=state){
-    if(!st.floorSlotByCard)st.floorSlotByCard={};
-    if(!Number.isFinite(st.floorSlotCount))st.floorSlotCount=12;
+  function firstFreeFloorSlot(st=state,commitCapacity=true){
+    if(!st.floorSlotByCard||!Number.isFinite(st.floorSlotCount))throw new Error('Canonical floor slots must be initialized with the hand.');
     const used=occupiedFloorSlots(st);
     for(let i=0;i<st.floorSlotCount;i++) if(!used.has(i)) return i;
-    const slot=st.floorSlotCount;
-    st.floorSlotCount+=4;
+    let slot=st.floorSlotCount;
+    while(used.has(slot))slot++;
+    if(commitCapacity){if(!TEST_MODE)throw new Error('Canonical floor capacity is engine-owned after hand creation.');st.floorSlotCount=slot+4;}
     return slot;
   }
   function reserveFloorSlot(card,preferredSlot=null){
-    if(!state.floorSlotByCard)state.floorSlotByCard={};
+    if(!state.floorSlotByCard)throw new Error('Canonical floor slots must be initialized with the hand.');
     if(Number.isFinite(state.floorSlotByCard[card.id]))return state.floorSlotByCard[card.id];
-    const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state);
-    state.floorSlotByCard[card.id]=slot;
+    if(Number.isFinite(presentation.floorSlotReservations.get(card.id)))return presentation.floorSlotReservations.get(card.id);
+    const slot=Number.isFinite(preferredSlot)?preferredSlot:firstFreeFloorSlot(state,false);
+    presentation.floorSlotReservations.set(card.id,slot);
     return slot;
   }
+  function commitFloorSlot(card,preferredSlot=null){
+    if(!TEST_MODE)throw new Error('Canonical floor-slot commits are engine-owned after hand creation.');
+    const reserved=presentation.floorSlotReservations.get(card.id);
+    const slot=Number.isFinite(preferredSlot)?preferredSlot:Number.isFinite(reserved)?reserved:firstFreeFloorSlot(state);
+    if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
+    state.floorSlotByCard[card.id]=slot;
+    presentation.floorSlotReservations.delete(card.id);
+    return slot;
+  }
+  function visualHash(value){
+    let hash=0; for(const char of value)hash=(hash*31+char.charCodeAt(0))>>>0; return hash;
+  }
   function stableFloorTilt(card){
-    let h=0; for(const ch of card.id)h=(h*31+ch.charCodeAt(0))>>>0;
-    return ((h%61)-30)/10; // stable -3.0..+3.0 degrees
+    return ((visualHash(card.id)%61)-30)/10; // stable -3.0..+3.0 degrees
+  }
+  function stableStackAngle(stack,card,index){
+    const base=[-10,2,12][index]||0;
+    return base+((visualHash(`${stack.source}:${stack.month}:${card.id}`)%41)-20)/10;
   }
   function makeStackInfo(cards,source,owner){
     return {
       month:cards[0]?.month,
       cardIds:cards.map(c=>c.id),
-      source, owner,
-      angles:cards.map((_,i)=>[-10,2,12][i] + (Math.random()*4-2))
+      source, owner
     };
   }
   function floorStackForMonth(month){ return state.floorStacks[month] || null; }
@@ -246,27 +307,33 @@
     return stack.cardIds.map(id=>state.floor.find(c=>c.id===id)).filter(Boolean);
   }
   function removeFloorCards(cards){
+    if(!TEST_MODE)throw new Error('Legacy floor mutation is characterization-only.');
     const idsSet=new Set(cards.map(c=>c.id));
     const affectedMonths=new Set(cards.map(c=>c.month));
     state.floor=state.floor.filter(c=>!idsSet.has(c.id));
-    idsSet.forEach(id=>{ if(state.floorSlotByCard) delete state.floorSlotByCard[id]; });
+    idsSet.forEach(id=>{
+      if(state.floorSlotByCard)delete state.floorSlotByCard[id];
+      presentation.floorSlotReservations.delete(id);
+    });
     affectedMonths.forEach(month=>{
       const st=state.floorStacks[month];
       if(st && st.cardIds.some(id=>idsSet.has(id))) delete state.floorStacks[month];
     });
   }
   function addFloorCard(card,preferredSlot=null){
-    reserveFloorSlot(card,preferredSlot);
+    if(!TEST_MODE)throw new Error('Legacy floor mutation is characterization-only.');
+    commitFloorSlot(card,preferredSlot);
     if(!state.floor.some(c=>c.id===card.id)) state.floor.push(card);
   }
   function makePpeokStack(side,cards){
+    if(!TEST_MODE)throw new Error('Legacy Ppeok mutation is characterization-only.');
     const existing=cards.find(c=>state.floor.some(f=>f.id===c.id));
     const stackSlot=existing && Number.isFinite(state.floorSlotByCard?.[existing.id])
       ? state.floorSlotByCard[existing.id]
       : firstFreeFloorSlot(state);
     cards.forEach(c=>addFloorCard(c,stackSlot));
-    cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; });
-    state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',side);
+    cards.forEach(c=>{ state.floorSlotByCard[c.id]=stackSlot; presentation.floorSlotReservations.delete(c.id); });
+    state.floorStacks[cards[0].month]=makeStackInfo(cards,'ppeok',playerIdForLegacySide(side));
     state[side].ppeoks++;
   }
   function effectiveFloorMatchCards(card){
@@ -275,7 +342,7 @@
       const cs=cardsInStack(st);
       return cs.length ? [cs[cs.length-1]] : [];
     }
-    return state.floor.filter(c=>c.month===card.month);
+    return matchingCards(state.floor,card);
   }
   function expandedTargetCards(targetCard){
     if(!targetCard)return[];
@@ -288,41 +355,8 @@
     const st=floorStackForMonth(targetCard.month);
     if(!st || !st.cardIds.includes(targetCard.id)) return 0;
     if(st.source==='initial') return 1;
-    if(st.source==='ppeok') return st.owner===side ? 2 : 1;
+    if(st.source==='ppeok') return st.owner===playerIdForLegacySide(side) ? 2 : 1;
     return 0;
-  }
-
-
-  function score(cards) {
-    const normal=scoreWithGukjinMode(cards,false);
-    const asPi=scoreWithGukjinMode(cards,true);
-    return asPi.total>normal.total ? asPi : normal;
-  }
-
-  function scoreWithGukjinMode(cards,gukjinAsPi) {
-    const isGukjin=c=>c.month===9 && c.type==='animal' && c.flags.includes('switchPi');
-    const bright = cards.filter(c=>c.type==='bright');
-    const animals = cards.filter(c=>c.type==='animal' && !(gukjinAsPi&&isGukjin(c)));
-    const ribbons = cards.filter(c=>c.type==='ribbon');
-    const piCards = cards.filter(c=>c.type==='pi');
-    let brightPts=0;
-    if(bright.length===3) brightPts=bright.some(c=>c.flags.includes('rain'))?2:3;
-    else if(bright.length===4) brightPts=4;
-    else if(bright.length>=5) brightPts=15;
-    let animalPts = animals.length>=5 ? animals.length-4 : 0;
-    const godori = [2,4,8].every(m=>animals.some(c=>c.month===m && c.flags.includes('godori')));
-    if(godori) animalPts += 5;
-    let ribbonPts = ribbons.length>=5 ? ribbons.length-4 : 0;
-    const setBonus = (name, months) => months.every(m=>ribbons.some(c=>c.month===m && c.ribbonSet===name)) ? 3 : 0;
-    ribbonPts += setBonus('red',[1,2,3]) + setBonus('blue',[6,9,10]) + setBonus('grass',[4,5,7]);
-    let piCount = piCards.reduce((sum,c)=>sum+(c.flags.includes('doublePi')?2:1),0);
-    if(gukjinAsPi && cards.some(isGukjin)) piCount += 2;
-    const piPts = piCount>=10 ? piCount-9 : 0;
-    return {
-      total:brightPts+animalPts+ribbonPts+piPts,
-      brightPts,animalPts,ribbonPts,piPts,bright:bright.length,animals:animals.length,
-      ribbons:ribbons.length,piCount,godori,gukjinAsPi
-    };
   }
 
   function createCardEl(card, className='card') {
@@ -332,64 +366,109 @@
     btn.dataset.cardId=card.id;
     btn.dataset.month=card.month;
     btn.title=`${monthShort[card.month-1]} · ${card.type}`;
-    const img=document.createElement('img');
-    img.src=artUrl(card.file); img.alt=`Hwatu ${monthShort[card.month-1]} card`; img.draggable=false;
+    btn.classList.add('canonical-card-face');
+    const img=createCardFaceImage(card,`GoStop Card, ${monthShort[card.month-1]}`);
     img.addEventListener('error',()=>{ img.alt='Card art unavailable'; btn.classList.add('art-error'); });
     btn.appendChild(img);
     return btn;
   }
+  function createCardFaceImage(card,alt=''){
+    const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=alt; img.draggable=false; return img;
+  }
 
   function render() {
-    const hScore=score(state.human.captured), aScore=score(state.ai.captured);
-    els.playerScore.textContent=hScore.total; els.aiScore.textContent=aScore.total;
-    if(els.goCount) els.goCount.textContent=state.human.go;
-    [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=state.deck.length);
-    if(els.roundCorner) els.roundCorner.textContent=roundNo;
+    if(TEST_MODE)return;
+    const view=viewerRelativePlayers(state,SOLO_VIEWER_ID);
+    const bottomPlayer=view.bottom.player,topPlayer=view.top.player;
+    const bottomScore=scorePlayer(bottomPlayer),topScore=scorePlayer(topPlayer);
+    els.playerScore.textContent=bottomScore.total; els.aiScore.textContent=topScore.total;
+    if(els.goCount) els.goCount.textContent=bottomPlayer.go;
+    const shownDeck=presentation.deckDisplayCount??state.deck.length;
+    [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=shownDeck);
+    if(els.deckStack){els.deckStack.replaceChildren();for(let i=0;i<deckVisualBackCount(shownDeck);i++){const back=document.createElement('div');back.className='back-card';back.style.setProperty('--deck-layer',String(i));els.deckStack.appendChild(back);}}
+    if(els.roundCorner) els.roundCorner.textContent=presentation.roundNo;
     // Keep the table visually clean: animation itself communicates whose turn it is.
     els.turnLabel.textContent = '';
     els.aiThinking.textContent = '';
     if(els.promptText) els.promptText.textContent='';
+    const decisionOwner=state.pendingDecision?.playerId||state.turn;
+    document.querySelector('.human-chip')?.classList.toggle('active-turn',decisionOwner===PLAYER_A&&!state.winner);
+    document.querySelector('.cpu-chip')?.classList.toggle('active-turn',decisionOwner===PLAYER_B&&!state.winner);
+    const stats=id=>`${presentation.sessionStats[id].wins} ${t('wins')} · ${presentation.sessionStats[id].points} ${t('points')}`;
+    if(els.playerSessionStats)els.playerSessionStats.textContent=stats(PLAYER_A);
+    if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
-    els.playerHand.innerHTML='';
-    state.human.hand.sort(sortCards).forEach(card=>{
-      const el=createCardEl(card,'card hand-card');
-      el.disabled = locked || state.turn!=='human';
-      if(card.id===hintCardId) el.classList.add('matchable');
-      el.addEventListener('click',()=>humanPlay(card.id, el));
-      els.playerHand.appendChild(el);
+    const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
+    const desired=[];
+    [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
+      let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
+      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
+      el.disabled = presentation.locked || state.turn!==PLAYER_A;
+      el.classList.toggle('matchable',card.id===presentation.hintCardId);
+      el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
+      desired.push(slot);existing.delete(card.id);
     });
-    for(let i=0;i<state.human.bombFreeTurns;i++){
+    for(let i=0;i<bottomPlayer.bombFreeTurns;i++){
       const blank=document.createElement('button');
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
-      blank.disabled=locked || state.turn!=='human';
+      blank.disabled=presentation.locked || state.turn!==PLAYER_A;
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
-      els.playerHand.appendChild(blank);
+      const slot=document.createElement('div'); slot.className='hand-card-slot';slot.dataset.handKey=`blank-${i}`; slot.appendChild(blank); desired.push(slot);
     }
+    existing.forEach(node=>node.remove());desired.forEach(node=>els.playerHand.appendChild(node));
+    setActiveHoveredHandCard(desired.some(node=>node.dataset.handKey===presentation.activeHoveredHandCardId)?presentation.activeHoveredHandCardId:null);
 
     els.aiHand.innerHTML='';
-    state.ai.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
+    topPlayer.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
 
     renderFloor();
 
-    if(els.playerMultiplier) els.playerMultiplier.textContent=playerDoubleLabel(state.human);
-    if(els.aiMultiplier) els.aiMultiplier.textContent=playerDoubleLabel(state.ai);
+    renderShakeIndicator(els.playerMultiplier,bottomPlayer,view.bottom.id);
+    renderShakeIndicator(els.aiMultiplier,topPlayer,view.top.id);
+    renderGoIndicator(document.querySelector('.human-chip'),bottomPlayer);
+    renderGoIndicator(document.querySelector('.cpu-chip'),topPlayer);
 
-    renderCaptured(els.playerCaptured,state.human.captured,'human');
-    renderCaptured(els.aiCaptured,state.ai.captured,'ai');
+    renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
+    renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
+  }
+
+  function setActiveHoveredHandCard(cardId){
+    presentation.activeHoveredHandCardId=cardId;
+    els.playerHand.querySelectorAll('.hand-card-slot').forEach(slot=>{
+      const active=!!cardId&&slot.dataset.handKey===cardId;slot.classList.toggle('is-hovered',active);
+      const card=slot.querySelector('.hand-card');if(card)card.title=active?(card.dataset.hoverTitle||''):'';
+    });
   }
 
 
   function playerDoubleLabel(player){
-    const power=player.shakes+player.bombs;
-    return power ? `×${2**power}` : '';
+    const multiplier=player.shakeMultiplier>1?player.shakeMultiplier:2**player.shakes;
+    return multiplier>1 ? `${t('shake')} ×${multiplier}` : '';
+  }
+  function renderShakeIndicator(element,player,playerId){
+    if(!element)return;
+    element.textContent=playerDoubleLabel(player);
+    const reviewable=player.revealedShakeSets?.length>0;
+    element.classList.toggle('reviewable',reviewable);
+    element.tabIndex=reviewable?0:-1;
+    element.setAttribute('role',reviewable?'button':'status');
+    element.setAttribute('aria-label',reviewable?`${element.textContent}; review revealed cards`:'');
+    element.onclick=reviewable?()=>openShakeReview(playerId):null;
+    element.onkeydown=reviewable?event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openShakeReview(playerId);}}:null;
+  }
+  function goCountLabel(player){return player.go>0?t('currentGo',{count:player.go}).replace(/^[^:：]*[:：]\s*/,''):'';}
+  function renderGoIndicator(chip,player){
+    if(!chip)return;
+    let badge=chip.closest('.player-status-component')?.querySelector('.go-count-badge');
+    if(!badge)return;
+    badge.textContent=goCountLabel(player);
   }
 
   function renderFloor(){
     els.floor.innerHTML='';
-    if(!state.floorSlotByCard)initFloorSlots(state);
     const stackBySlot=new Map();
     Object.values(state.floorStacks).forEach(st=>{
       const cards=cardsInStack(st);
@@ -397,7 +476,9 @@
       if(Number.isFinite(slot))stackBySlot.set(slot,st);
     });
 
-    for(let slot=0; slot<state.floorSlotCount; slot++){
+    const reservedSlots=[...presentation.floorSlotReservations.values()];
+    const visibleSlotCount=Math.max(state.floorSlotCount,reservedSlots.length?Math.max(...reservedSlots)+1:0);
+    for(let slot=0; slot<visibleSlotCount; slot++){
       const slotEl=document.createElement('div');
       slotEl.className='floor-slot';
       slotEl.dataset.floorSlot=String(slot);
@@ -408,7 +489,7 @@
         wrap.dataset.stackMonth=String(stack.month);
         cardsInStack(stack).forEach((c,i)=>{
           const el=createCardEl(c,'card floor-card stacked-floor-card');
-          el.style.setProperty('--stack-angle',`${stack.angles[i]||0}deg`);
+          el.style.setProperty('--stack-angle',`${stableStackAngle(stack,c,i)}deg`);
           el.style.setProperty('--stack-x',`${i*5}px`);
           el.style.setProperty('--stack-y',`${i*3}px`);
           el.style.zIndex=String(i+1);
@@ -432,38 +513,78 @@
   function typeRank(t){ return {bright:4,animal:3,ribbon:2,pi:1}[t]||0; }
 
   const captureGroups = [
-    {type:'bright',en:'Brights'},
-    {type:'animal',en:'Pictures'},
-    {type:'ribbon',en:'Stripes'},
-    {type:'pi',en:'Singles'}
+    {type:'bright',key:'brights',en:'Brights'},
+    {type:'animal',key:'pictures',en:'Pictures'},
+    {type:'ribbon',key:'stripes',en:'Stripes'},
+    {type:'pi',key:'singles',en:'Singles'}
   ];
 
-  function renderCaptured(root,cards,owner){
-    root.innerHTML=''; root.dataset.owner=owner;
+  function renderCaptured(root,cards,ownerId){
+    root.innerHTML=''; root.dataset.owner=ownerId;
+    const isViewer=ownerId===SOLO_VIEWER_ID;
     captureGroups.forEach(group=>{
-      const groupCards=cards.filter(c=>c.type===group.type).sort((a,b)=>a.month-b.month);
+      const owner=playerStateById(state,ownerId);
+      const groupCards=cards.filter(c=>(c.month===9&&c.flags.includes('switchPi'))?(owner.gukjinMode==='pi'?'pi':'animal')===group.type:c.type===group.type).sort((a,b)=>a.month-b.month);
       const btn=document.createElement('button'); btn.type='button'; btn.className='capture-group'; btn.dataset.captureType=group.type;
-      btn.setAttribute('aria-label',`${owner==='human'?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
+      btn.setAttribute('aria-label',`${isViewer?t('yourCaptured'):t('computerCaptured')}: ${t(group.key)} ${groupCards.length}`);
       const head=document.createElement('span'); head.className='capture-group-head';
-      head.innerHTML=`<b>${group.en}</b><em>${groupCards.length}</em>`;
+      const displayedCount=group.type==='pi'?scorePlayer(owner).piCount:groupCards.length;
+      head.innerHTML=`<b>${t(group.key)}</b><em>${displayedCount}</em>`;
       const stack=document.createElement('span'); stack.className='capture-stack';
       groupCards.forEach((c,i)=>{
         const img=document.createElement('img'); img.className='captured-mini'; img.src=artUrl(c.file); img.alt='';
         img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
+        if((c.flags.includes('doublePi')||(c.id==='m9-1'&&owner.gukjinMode==='pi'))){const badge=document.createElement('span');badge.className='double-single-badge';badge.textContent='×2';stack.appendChild(badge);}
+        if(isViewer&&c.id==='m9-1'){
+          img.classList.add('gukjin-review-card'); img.tabIndex=0; img.setAttribute('role','button');
+          img.setAttribute('aria-label','Change how to use the Sake Cup');
+          const review=event=>{event.stopPropagation();openGukjinChoice(false);};
+          img.addEventListener('click',review); img.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();review(event);}});
+        }
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
-      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(owner,group,groupCards)); root.appendChild(btn);
+      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(ownerId,group,groupCards)); root.appendChild(btn);
     });
   }
 
-  function openCapturedGroup(owner,group,cards){
-    els.captureOwner.textContent=owner==='human'?'YOUR CAPTURED CARDS':'COMPUTER CAPTURED CARDS';
-    els.captureTitle.textContent=group.en; els.captureMagnified.innerHTML='';
+  function openCapturedGroup(ownerId,group,cards){
+    const isViewer=ownerId===SOLO_VIEWER_ID;
+    els.captureOwner.textContent=isViewer?t('yourCaptured'):t('computerCaptured');
+    els.captureTitle.textContent=t(group.key); els.captureMagnified.innerHTML='';
     cards.forEach(c=>els.captureMagnified.appendChild(createCardEl(c,'card magnified-card')));
-    if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent='No cards captured in this group yet.'; els.captureMagnified.appendChild(empty); }
-    const s=score(owner==='human'?state.human.captured:state.ai.captured);
-    const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} picture / animal cards${s.godori?' · Godori complete':''}`:group.type==='ribbon'?`${cards.length} stripe cards`:`${s.piCount} Singles value${s.piCount===1?'':'s'} (${cards.length} cards)`;
-    els.captureSummary.textContent=detail; els.captureDialog.showModal();
+    if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent=t('noCards'); els.captureMagnified.appendChild(empty); }
+    const s=scorePlayer(playerStateById(state,ownerId));
+    const detail=group.type==='pi'?`${s.piCount} ${t('singlesValue')} (${cards.length} ${t('physicalCards')})`:`${cards.length} ${t(group.key)}${s.godori&&group.type==='animal'?` · ${t('birdies')}`:''}`;
+    els.captureSummary.textContent=detail;
+    if(!els.captureDialog.open)els.captureDialog.showModal();
+  }
+  function effectiveCapturedGroup(player,group){
+    return player.captured.filter(card=>(card.month===9&&card.flags.includes('switchPi'))?(player.gukjinMode==='pi'?'pi':'animal')===group.type:card.type===group.type);
+  }
+  function scoreBreakdownData(playerId){
+    const player=playerStateById(state,playerId),scored=scorePlayer(player);
+    const groups=captureGroups.map(group=>({label:t(group.key),type:group.type,points:group.type==='bright'?scored.brightPts:group.type==='animal'?scored.animalPts:group.type==='ribbon'?scored.ribbonPts:scored.piPts,cards:effectiveCapturedGroup(player,group).map(card=>({id:card.id,double:card.flags.includes('doublePi')||(card.id==='m9-1'&&player.gukjinMode==='pi')}))}));
+    return {playerId,total:scored.total,singlesValue:scored.piCount,physicalSingles:groups.find(group=>group.type==='pi').cards.length,firstPoopBonus:player.firstPpeokPoints||0,groups};
+  }
+  function openScoreBreakdown(playerId){
+    presentation.scoreBreakdownPlayerId=playerId;
+    const data=scoreBreakdownData(playerId);els.scoreBreakdownContent.replaceChildren();
+    const total=document.createElement('strong');total.className='breakdown-total';total.textContent=`${data.total} ${t('points')}`;els.scoreBreakdownContent.appendChild(total);
+    data.groups.forEach(group=>{const section=document.createElement('section'),heading=document.createElement('h3'),note=document.createElement('p'),cards=document.createElement('div');heading.textContent=group.label;note.textContent=`${group.points} ${t('points')}${group.type==='pi'?` · ${data.singlesValue} ${t('singlesValue')} · ${data.physicalSingles} ${t('physicalCards')}`:''}`;cards.className='breakdown-cards';group.cards.forEach(item=>{const holder=document.createElement('span');holder.appendChild(createCardEl(MASTER_DECK.find(card=>card.id===item.id),'card'));if(item.double){const badge=document.createElement('b');badge.textContent='×2';holder.appendChild(badge);}cards.appendChild(holder);});section.append(heading,note,cards);els.scoreBreakdownContent.appendChild(section);});
+    if(data.firstPoopBonus){const bonus=document.createElement('p');bonus.textContent=`${t('firstPoopBonus')} +${data.firstPoopBonus} ${t('points')}`;els.scoreBreakdownContent.appendChild(bonus);}
+    if(!els.scoreDialog.open)els.scoreDialog.showModal();
+  }
+  async function promptGukjinChoice(side,events){
+    const revealed=events.some(event=>(event.cards||event.cardIds||[]).some(card=>(typeof card==='string'?card:card.id)==='m9-1'));
+    if(side!=='human'||!revealed||!state.human.captured.some(card=>card.id==='m9-1'))return;
+    await openGukjinChoice(true);
+  }
+  function openGukjinChoice(waitForChoice=false){
+    const gukjin=state.human.captured.find(card=>card.id==='m9-1');
+    if(!gukjin)return Promise.resolve();
+    els.gukjinChoiceCard.innerHTML=''; els.gukjinChoiceCard.appendChild(createCardEl(gukjin,'card magnified-card'));
+    if(!els.gukjinDialog.open)els.gukjinDialog.showModal();
+    return waitForChoice?new Promise(resolve=>els.gukjinDialog.addEventListener('close',resolve,{once:true})):Promise.resolve();
   }
 
   function showActionCue(){ /* No turn/action text overlays; the animation is the cue. */ }
@@ -482,14 +603,14 @@
   async function chooseFloorTarget(matches, message='Choose which card to hit'){
     if(matches.length<=1) return matches[0]||null;
     cleanupTargetChoice();
-    locked=true;
+    presentation.locked=true;
     showActionCue('human','choose a floor card');
 
     return new Promise(resolve=>{
       const handlers=[];
       const finish=card=>{
         handlers.forEach(({el,click,key})=>{el.removeEventListener('click',click);el.removeEventListener('keydown',key);el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');});
-        targetChoiceCleanup=null;
+        presentation.targetChoiceCleanup=null;
         resolve(card);
       };
       matches.forEach(card=>{
@@ -499,10 +620,10 @@
         const key=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();finish(card);}};
         el.addEventListener('click',click); el.addEventListener('keydown',key); handlers.push({el,click,key});
       });
-      targetChoiceCleanup=()=>finish(null);
+      presentation.targetChoiceCleanup=()=>finish(null);
     });
   }
-  function cleanupTargetChoice(){ if(targetChoiceCleanup){ const fn=targetChoiceCleanup; targetChoiceCleanup=null; fn(); } }
+  function cleanupTargetChoice(){ if(presentation.targetChoiceCleanup){ const fn=presentation.targetChoiceCleanup; presentation.targetChoiceCleanup=null; fn(); } }
 
   async function previewAiTarget(target){
     if(!target)return;
@@ -513,53 +634,63 @@
 
 
   function virtualHandCount(player){ return player.hand.length + player.bombFreeTurns; }
+  // Characterization compatibility helper; production blank consumption is engine-owned.
+  function consumeBombBlank(player){ player.bombFreeTurns=Math.max(0,player.bombFreeTurns-1); }
+  function canDeclareShake(player,month){
+    // Characterization compatibility helper; production eligibility is engine-owned.
+    return player.hand.filter(c=>c.month===month).length===3 && monthListHas(player,'hiddenTripleMonths',month);
+  }
+  function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
-    if(locked || state.turn!=='human' || state.winner || state.human.bombFreeTurns<=0)return;
-    locked=true; hintCardId=null; render();
+    if(presentation.locked || state.turn!==PLAYER_A || state.winner || state.human.bombFreeTurns<=0)return;
+    presentation.locked=true; presentation.hintCardId=null; render();
     await executeDeckOnlyTurn('human');
   }
 
   async function humanPlay(cardId, clickedEl){
-    if(state.turn!=='human' || state.winner)return;
+    if(state.turn!==PLAYER_A || state.winner)return;
 
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
-    if(locked){
-      if(targetChoiceCleanup && pendingHumanCardId && cardId!==pendingHumanCardId){
-        queuedHumanCardSwitch={cardId,clickedEl};
-        targetChoiceCleanup();
+    if(presentation.locked){
+      if(presentation.targetChoiceCleanup && presentation.pendingHumanCardId && cardId!==presentation.pendingHumanCardId){
+        presentation.queuedHumanCardSwitch={cardId,clickedEl};
+        presentation.targetChoiceCleanup();
       }
       return;
     }
 
     const card=state.human.hand.find(c=>c.id===cardId); if(!card)return;
-    locked=true; hintCardId=null;
+    presentation.locked=true; presentation.hintCardId=null;
 
-    const sameMonth=state.human.hand.filter(c=>c.month===card.month);
-    const floorSame=state.floor.filter(c=>c.month===card.month);
-    if(sameMonth.length===3 && state.human.hiddenTripleMonths.has(card.month)){
+    const attempted=applyNormalAction(normalAction('human',{type:'attemptPlayCard',cardId:card.id}));
+    if(attempted.pendingDecision?.type==='bombDecision'){
+      if(await executeBombTurn('human',card.month))return;
+    }
+    if(attempted.pendingDecision?.type==='shakeDecision'){
       const shake=await chooseShake(card.month);
       if(shake){
-        state.human.shakes++;
-        state.human.shakenMonths.add(card.month);
-        state.human.hiddenTripleMonths.delete(card.month);
+        const declared=applyNormalAction(normalAction('human',{type:'declareShake'}));
+        await presentShakeDeclaration(declared.events);
         render();
         await sleep(180);
-      }else if(floorSame.length===1 && !floorStackForMonth(card.month)){
-        const useBomb=await chooseBomb(card.month);
-        if(useBomb){
-          pendingHumanCardId=null;
-          queuedHumanCardSwitch=null;
-          await executeBombTurn('human',card.month);
-          return;
+      }else{
+        const kept=applyNormalAction(normalAction('human',{type:'keepShakeSecret'}));
+        if(kept.pendingDecision?.type==='bombDecision'){
+          const useBomb=await chooseBomb(card.month);
+          if(useBomb){
+            presentation.pendingHumanCardId=null;
+            presentation.queuedHumanCardSwitch=null;
+            if(await executeBombTurn('human',card.month))return;
+          }else applyNormalAction(normalAction('human',{type:'declineBomb'}));
         }
       }
     }
 
     const matches=matchesFor(card);
     clickedEl.classList.add('pending-card');
-    pendingHumanCardId=card.id;
+    presentation.pendingHumanCardId=card.id;
     let target=null;
     if(matches.length===1) target=matches[0];
     else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which floor card to hit');
@@ -570,10 +701,10 @@
     // moving or consuming the original card.
     if(matches.length===2 && !target){
       clickedEl.classList.remove('pending-card');
-      pendingHumanCardId=null;
-      locked=false;
-      const next=queuedHumanCardSwitch;
-      queuedHumanCardSwitch=null;
+      presentation.pendingHumanCardId=null;
+      presentation.locked=false;
+      const next=presentation.queuedHumanCardSwitch;
+      presentation.queuedHumanCardSwitch=null;
       if(next){
         await nextFrame();
         return humanPlay(next.cardId,next.clickedEl);
@@ -581,25 +712,27 @@
       return;
     }
 
-    queuedHumanCardSwitch=null;
-    pendingHumanCardId=null;
+    presentation.queuedHumanCardSwitch=null;
+    presentation.pendingHumanCardId=null;
     clickedEl.classList.remove('pending-card');
     const sourceRect=clickedEl.getBoundingClientRect();
     clickedEl.style.visibility='hidden';
-    const idx=state.human.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.human.hand.splice(idx,1);
-    state.human.hiddenTripleMonths.delete(card.month);
-    await playFullTurn('human',card,sourceRect,target,matches.length);
+    const playResult=applyNormalAction(normalAction('human',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
+    const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
+    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true);
   }
 
   async function aiTurn(){
-    if(state.turn!=='ai'||state.winner||aiTurnInProgress)return;
-    aiTurnInProgress=true;
-    locked=true;
+    if(state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
+    presentation.aiTurnInProgress=true;
+    presentation.locked=true;
     try {
       render(); await sleep(520);
 
       const bombMonth=bestAiBombMonth();
       if(bombMonth!=null){
+        const card=state.ai.hand.find(item=>item.month===bombMonth);
+        applyNormalAction(normalAction('ai',{type:'requestBombDecision',cardId:card.id}));
         await executeBombTurn('ai',bombMonth);
         return;
       }
@@ -611,17 +744,15 @@
       }
       // The computer also decides whether to Shake only when it is about to use
       // one of the three matching-month cards, never at the opening deal.
-      if(state.ai.hiddenTripleMonths.has(card.month)){
-        const sameMonth=state.ai.hand.filter(c=>c.month===card.month);
+      const attempted=applyNormalAction(normalAction('ai',{type:'attemptPlayCard',cardId:card.id}));
+      if(attempted.pendingDecision?.type==='shakeDecision'){
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
-        if(sameMonth.length===3 && !fourthOnFloor && Math.random()<.72){
-          state.ai.shakes++;
-          state.ai.shakenMonths.add(card.month);
-          state.ai.hiddenTripleMonths.delete(card.month);
-          await revealAiShake(card.month);
+        if(!fourthOnFloor && Math.random()<.72){
+          const declared=applyNormalAction(normalAction('ai',{type:'declareShake'}));
+          await presentShakeDeclaration(declared.events);
           render();
           await sleep(220);
-        }
+        }else applyNormalAction(normalAction('ai',{type:'keepShakeSecret'}));
       }
       const backs=[...els.aiHand.querySelectorAll('.mini-back')];
       const sourceEl=backs[Math.floor(backs.length*.45)]||backs[0];
@@ -633,12 +764,79 @@
       else if(matches.length===2)target=chooseBestMatch(matches);
       else if(matches.length>2)target=chooseBestMatch(matches);
       if(target && matches.length>1) await previewAiTarget(target);
-      const idx=state.ai.hand.findIndex(c=>c.id===card.id); if(idx>=0)state.ai.hand.splice(idx,1);
-      state.ai.hiddenTripleMonths.delete(card.month);
-      await playFullTurn('ai',card,sourceRect,target,matches.length);
+      const playResult=applyNormalAction(normalAction('ai',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
+      const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
+      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true);
     } finally {
-      aiTurnInProgress=false;
+      presentation.aiTurnInProgress=false;
     }
+  }
+
+  async function presentNormalResolution(side,result){
+    const event=result.events[0];
+    if(event.type==='cardLanded'){
+      presentation.floorSlotReservations.delete(event.card.id);
+      removeStage(event.card.id);
+      render();
+      await sleep(180);
+      return;
+    }
+    if(event.type==='cardsCaptured'){
+      await animateCaptureBatch(event.cards,side);
+      render();
+      await sleep(190);
+    }
+    await promptGukjinChoice(side,result.events);
+  }
+
+  async function resolveNormalEngineTurn(side,play,draw){
+    let result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'played'}));
+    await presentNormalResolution(side,result);
+    if(draw){
+      result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
+      await presentNormalResolution(side,result);
+    }
+    const completion=applyNormalAction(normalAction(side,{type:'completeTurn'}));
+    await presentPiTransferEvents(side,completion.events);
+    await presentSemanticEvents(completion.events);
+  }
+
+  async function presentPiTransferEvents(side,events){
+    for(const event of events.filter(item=>item.type==='piTransferred')){
+      const card=MASTER_DECK.find(item=>item.id===event.cardId);
+      await animatePiTransfer(card,legacySideForPlayerId(event.fromPlayerId),side);
+    }
+    if(events.some(event=>event.type==='piTransferred'))render();
+  }
+
+  async function resolveExtractedSpecialTurn(side,classification,play,draw){
+    const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
+    if(classification.kind==='ppeokSsaDaCandidate'){
+      removeStage(play.card.id); if(draw)removeStage(draw.card.id);
+      playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[]);
+      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side);
+      if(result.events.some(event=>event.type==='threePpeokDeclared')){
+        await sleep(450); presentThreePpeok(result);
+      }
+    }else{
+      for(const event of result.events){
+        if(event.type==='cardsCaptured'){
+          const captured=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
+          await animateCaptureBatch(captured,side);
+          if(classification.kind==='jjokCandidate'){playKissSound();await showSpecialTransient('KISS!',event.cardIds,'kiss');}
+          if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('FLUSH!',event.cardIds,'flush');}
+        }else if(event.type==='cardLanded'){
+          presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await sleep(180);
+        }else if(event.type==='piTransferred'){
+          const card=MASTER_DECK.find(item=>item.id===event.cardId);
+          await animatePiTransfer(card,legacySideForPlayerId(event.fromPlayerId),side);
+        }
+      }
+      render(); await sleep(190);
+      await promptGukjinChoice(side,result.events);
+      await presentSemanticEvents(result.events);
+    }
+    if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
   }
 
   async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
@@ -646,12 +844,19 @@
     await sleep(330);
 
     if(!state.deck.length){
-      await resolveCombinedTurn(side,{card:playedCard,stage:playedStage,target,matchCount:playMatchCount},null);
+      const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+      applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+      const classification=classifyNormalTurn(side);
+      if(classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
+      else if(['selfPpeokCandidate','floorStackInteraction'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
+      else throw new Error(`Unhandled authoritative turn classification: ${classification.kind}`);
       await concludeTurn(side);
       return;
     }
 
-    const draw=state.deck.shift();
+    const drawResult=applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+    const draw=drawResult.events.find(event=>event.type==='deckCardRevealed').card;
+    let turnClassification=classifyNormalTurn(side);
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
 
@@ -659,7 +864,7 @@
     let drawMatches=matchesFor(draw);
     let drawMatchCount=drawMatches.length;
 
-    const sameMonthSpecial=draw.month===playedCard.month && !floorStackForMonth(playedCard.month);
+    const sameMonthSpecial=turnClassification&&['jjokCandidate','ppeokSsaDaCandidate','ttadakCandidate'].includes(turnClassification.kind);
     if(sameMonthSpecial && playMatchCount<=2){
       drawTarget=playedCard;
     }else if(drawMatches.length===1){
@@ -672,22 +877,38 @@
       if(side==='ai')await previewAiTarget(drawTarget);
     }
 
+    if(drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
+      applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:drawTarget.id}));
+      turnClassification=classifyNormalTurn(side);
+    }
+
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
-    await resolveCombinedTurn(
-      side,
-      {card:playedCard,stage:playedStage,target,matchCount:playMatchCount},
-      {card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount}
-    );
+    const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
+    const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
+    const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate','floorStackInteraction'];
+    if(turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
+    else if(extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
+    else throw new Error(`Unhandled authoritative turn classification: ${turnClassification.kind}`);
     await concludeTurn(side);
   }
 
   async function executeDeckOnlyTurn(side){
     if(state.winner)return;
-    locked=true;
-    const actor=state[side];
-    actor.bombFreeTurns=Math.max(0,actor.bombFreeTurns-1);
-    if(!state.deck.length){ await finishNagari(); return; }
-    const draw=state.deck.shift();
+    presentation.locked=true;
+    applyNormalAction(normalAction(side,{type:'useBombBlank'}));
+    await executePendingDrawTurn(side);
+  }
+
+  async function executePendingDrawTurn(side){
+    if(!state.deck.length){
+      applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+      const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
+      await presentPiTransferEvents(side,completed.events);
+      await presentSemanticEvents(completed.events);
+      await finishNagari(); return;
+    }
+    const drawResult=applyNormalAction(normalAction(side,{type:'drawNextCard'}));
+    const draw=drawResult.events.find(event=>event.type==='deckCardRevealed').card;
     render();
     const stage=await animateDeckLiftFlip(side,draw);
     const matches=matchesFor(draw);
@@ -697,60 +918,62 @@
       if(side==='human')target=await chooseFloorTarget(matches,'Choose which floor card to hit');
       else{target=chooseBestMatch(matches);await previewAiTarget(target);}
     }else if(matches.length>2)target=chooseBestMatch(matches);
+    if(target&&state.pendingTurn?.drawn?.matchIds.includes(target.id)&&state.pendingTurn.drawn.targetId!==target.id){
+      applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:target.id}));
+    }
     await animateStagedSlap(stage,draw,target,'flip');
-    await resolveSingleCard(side,{card:draw,stage,target,matchCount:matches.length},true);
-    await applySweepIfNeeded(side);
+    const classification=classifyNormalTurn(side);
+    if(classification.kind==='normal'){
+      const resolved=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
+      await presentNormalResolution(side,resolved);
+      const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
+      await presentPiTransferEvents(side,completed.events);
+      await presentSemanticEvents(completed.events);
+    }else{
+      if(classification.kind==='floorStackInteraction')await resolveExtractedSpecialTurn(side,classification,null,{card:draw,stage,target,matchCount:matches.length});
+      else throw new Error(`Unhandled authoritative deck-only classification: ${classification.kind}`);
+    }
     await concludeTurn(side);
   }
 
   async function executeBombTurn(side,month){
-    const actor=state[side];
-    const bombCards=actor.hand.filter(c=>c.month===month).slice(0,3);
-    const floorTarget=state.floor.find(c=>c.month===month);
-    if(bombCards.length!==3 || !floorTarget){ locked=false; render(); return; }
+    // Presentation wrapper: declareBomb performs every authoritative Bomb mutation.
+    const decision=state.pendingDecision;
+    const bombCards=decision?.cardIds.map(id=>state[side].hand.find(card=>card.id===id)).filter(Boolean)||[];
+    const floorTarget=state.floor.find(c=>c.id===decision?.floorCardId);
+    if(bombCards.length!==3 || !floorTarget){
+      if(decision?.type==='bombDecision')applyNormalAction(normalAction(side,{type:'declineBomb'}));
+      presentation.locked=false; render(); return false;
+    }
 
     const bombSourceRects=bombCards.map((c,i)=>{
-      if(side==='human'){
+      if(seatForLegacySide(side)==='bottom'){
         const el=els.playerHand.querySelector(`[data-card-id="${c.id}"]`);
         if(el) return el.getBoundingClientRect();
       }
-      return side==='human'?approximateHumanSource(i,bombCards.length):approximateAiSource();
+      return seatForLegacySide(side)==='bottom'?approximateHumanSource(i,bombCards.length):approximateAiSource();
     });
-    actor.hand=actor.hand.filter(c=>!bombCards.some(b=>b.id===c.id));
-    actor.hiddenTripleMonths.delete(month);
-    actor.bombs++;
-    actor.bombFreeTurns+=2;
-    render();
+    if(seatForLegacySide(side)==='bottom'){
+      bombCards.forEach(card=>{const el=els.playerHand.querySelector(`[data-card-id="${card.id}"]`);if(el)el.style.visibility='hidden';});
+    }else [...els.aiHand.querySelectorAll('.mini-back')].slice(0,3).forEach(el=>el.style.visibility='hidden');
+    const result=applyNormalAction(normalAction(side,{type:'declareBomb'}));
+    if(!result.events.some(event=>event.type==='bombDeclared'))return;
 
     await animateBombSlap(side,bombCards,floorTarget,bombSourceRects);
     await sleep(180);
 
     await animateCaptureBatch([...bombCards,floorTarget],side);
-    removeFloorCards([floorTarget]);
-    actor.captured.push(...bombCards,floorTarget);
-    await stealPiAnimated(side,1);
+    await presentPiTransferEvents(side,result.events);
     render();
     await sleep(260);
-
-    if(state.deck.length){
-      const draw=state.deck.shift();
-      render();
-      const stage=await animateDeckLiftFlip(side,draw);
-      const matches=matchesFor(draw);
-      let target=null;
-      if(matches.length===1)target=matches[0];
-      else if(matches.length===2){
-        if(side==='human')target=await chooseFloorTarget(matches,'Deck card: choose which floor card to hit');
-        else{target=chooseBestMatch(matches);await previewAiTarget(target);}
-      }else if(matches.length>2)target=chooseBestMatch(matches);
-      await animateStagedSlap(stage,draw,target,'flip');
-      await resolveSingleCard(side,{card:draw,stage,target,matchCount:matches.length},true);
-    }
-    await applySweepIfNeeded(side);
-    await concludeTurn(side);
+    await executePendingDrawTurn(side);
+    return true;
   }
 
   async function resolveCombinedTurn(side,play,draw){
+    if(!TEST_MODE)throw new Error('Legacy combined-turn mutation is characterization-only.');
+    // Legacy fallback and characterization oracle. Production routes Ppeok/Ssa-da,
+    // Jjok, Ttadak, and Self-Ppeok through applySpecialTurnAction before reaching here.
     const sameMonth=draw && draw.card.month===play.card.month && !floorStackForMonth(play.card.month);
 
     if(draw && sameMonth && play.matchCount===0){
@@ -769,9 +992,9 @@
         makePpeokStack(side,three);
         playPpeokSound();
         render();
-        if(state[side].ppeoks>=3){
-          await sleep(450);
-          finishSpecial(side,7,'Three ppeoks in one hand');
+        const terminal=resolveThreePpeok(state,{actorId:playerIdForLegacySide(side)}); state=terminal.state;
+        if(terminal.events.some(event=>event.type==='threePpeokDeclared')){
+          await sleep(450); presentThreePpeok(terminal);
         }
         return;
       }
@@ -793,6 +1016,7 @@
   }
 
   async function resolveSingleCard(side,action,isDeck){
+    if(!TEST_MODE)throw new Error('Legacy single-card mutation is characterization-only.');
     if(!action)return;
     const {card,stage,target,matchCount}=action;
     if(!matchCount){
@@ -828,14 +1052,15 @@
   }
 
   async function applySweepIfNeeded(side){
-    if(state.floor.length===0 && (state.deck.length || state.human.hand.length || state.ai.hand.length)){
-      await stealPiAnimated(side,1);
-      render();
-      await sleep(160);
-    }
+    // Legacy resolver bridge only: authoritative Sweep detection/mutation is engine-owned.
+    const result=applySweepAction(state,normalAction(side,{type:'resolveSweep',rule:'legacyContinuation'}));
+    state=result.state;
+    await presentPiTransferEvents(side,result.events);
+    await presentSemanticEvents(result.events);
   }
 
   async function stealPiAnimated(side,count){
+    if(!TEST_MODE)throw new Error('Legacy Pi mutation is characterization-only.');
     const other=side==='human'?'ai':'human';
     for(let n=0;n<count;n++){
       const ordinary=state[other].captured.find(c=>c.type==='pi'&&!c.flags.includes('doublePi'));
@@ -848,6 +1073,8 @@
   }
 
   async function animatePiTransfer(card,fromSide,toSide){
+    presentation.piTransferAnimationCount++;
+    if(TEST_MODE)return;
     const fromRect=captureTargetRect(fromSide,'pi');
     const toRect=captureTargetRect(toSide,'pi');
     if(!fromRect.width||!toRect.width||prefersReducedMotion())return;
@@ -858,60 +1085,68 @@
     const a=el.animate([
       {transform:'translate(0,0) rotate(-3deg)',opacity:.96},
       {transform:`translate(${dx*.5}px,${dy*.5-16}px) rotate(4deg)`,opacity:1},
-      {transform:`translate(${dx}px,${dy}px) rotate(0deg) scale(.8)`,opacity:.95}
+      {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.95}
     ],{duration:460,easing:'cubic-bezier(.25,.7,.2,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.remove();
   }
 
   async function concludeTurn(side){
     if(state.winner)return;
+    await presentNewMilestones(playerIdForLegacySide(side));
     render();
+    if(state.pendingDecision?.type==='openingTripleDecision'){await processOpeningSpecials();return;}
+    const actorId=playerIdForLegacySide(side);
     const actor=state[side];
-    const sc=score(actor.captured);
-    const previous=side==='human'?lastHumanScore:lastAiScore;
-    if(side==='human')lastHumanScore=sc.total;else lastAiScore=sc.total;
-
-    if(sc.total>=finishThreshold && sc.total>previous){
-      if(side==='human'){ locked=true; await humanGoStop(sc); return; }
-      if(aiShouldGo(sc)){
-        actor.go++; actor.lastGoScore=sc.total; showGoCallout('ai'); await sleep(980);
+    if(side==='ai'&&actor.captured.some(card=>card.id==='m9-1')){
+      const mode=score(actor.captured,'pi').total>score(actor.captured,'animal').total?'pi':'animal';
+      if(actor.gukjinMode!==mode)applyNormalAction({type:'setGukjinMode',actorId,mode});
+    }
+    let result=evaluateGoStop(state,{actorId}); state=result.state;
+    if(result.autoStop){ presentStopResult(result); return; }
+    if(result.pendingDecision){
+      const sc=scorePlayer(state[side]);
+      if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
+      const action={type:aiShouldGo(sc)?'declareGo':'declareStop',actorId};
+      result=applyGoStopDecision(action);
+      if(action.type==='declareGo'){
+        if(result.events.some(event=>event.type==='goDeclared'))showGoCallout('ai');
+        await sleep(980);
       }else{
-        finishGame('ai',sc,'Computer chose STOP.');
-        return;
+        presentStopResult(result); return;
       }
     }
 
-    if(virtualHandCount(actor)===0 || state.deck.length===0){
+    if(result.requiresNagari){
       await finishNagari(); return;
     }
 
     await sleep(760);
-    state.turn=side==='human'?'ai':'human';
     render();
     scheduleTurnStart();
   }
 
   function scheduleTurnStart(){
+    if(TEST_MODE)return;
     if(state.winner)return;
-    const side=state.turn, actor=state[side];
+    const side=legacySideForPlayerId(state.turn), actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
-      locked=true;
+      presentation.locked=true;
       setTimeout(()=>executeDeckOnlyTurn(side),760);
       return;
     }
     if(side==='ai'){
-      locked=true;
+      presentation.locked=true;
       setTimeout(aiTurn,820);
     }else{
       // Human Bomb credits are visible blank cards; the player explicitly clicks one.
-      locked=false;
+      presentation.locked=false;
       render();
     }
   }
 
   function bestAiBombMonth(){
     const counts=countsByMonth(state.ai.hand);
-    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && state.ai.hiddenTripleMonths.has(m) && state.floor.filter(c=>c.month===m).length===1 && !floorStackForMonth(m));
+    const months=Object.keys(counts).map(Number).filter(m=>counts[m]===3 && classifyNormalTurn('ai',{cardId:state.ai.hand.find(card=>card.month===m).id}).kind==='bombEligible');
     if(!months.length)return null;
     return months.sort((a,b)=>{
       const av=state.floor.filter(c=>c.month===a).reduce((x,c)=>x+captureValue(c),0);
@@ -928,94 +1163,138 @@
 
   async function chooseBomb(month){
     if(!els.bombDialog)return true;
-    els.bombText.textContent=`You hold three ${monthNames[month-1]} cards and the fourth is on the floor. Use BOMB to play all three, take the set, steal 1 Pi, and earn a ×2 win multiplier.`;
+    els.bombText.textContent=`${localizedMonth(month)} — ${t('bomb')}`;
     els.bombDialog.showModal();
-    return new Promise(resolve=>{ bombResolver=resolve; });
+    return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
 
   async function chooseShake(month){
     if(!els.shakeDialog)return false;
     const cards=state.human.hand.filter(c=>c.month===month);
     const bombReady=state.floor.some(c=>c.month===month) && !floorStackForMonth(month);
-    els.shakeText.textContent=bombReady
-      ? `You have three ${monthNames[month-1]} cards. Reveal them now to SHAKE for a ×2 win multiplier, or keep them secret so you can use them as a BOMB.`
-      : `You have three ${monthNames[month-1]} cards. Reveal them now to SHAKE for a ×2 win multiplier, or keep them secret.`;
-    if(els.keepSecretBtn) els.keepSecretBtn.textContent=bombReady?'KEEP SECRET FOR BOMB':'KEEP SECRET';
+    els.shakeText.textContent=`${localizedMonth(month)} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
+    if(els.keepSecretBtn) els.keepSecretBtn.textContent=t('keepBomb');
     els.shakeCards.innerHTML='';
     cards.forEach(c=>els.shakeCards.appendChild(createCardEl(c,'card magnified-card')));
     els.shakeDialog.showModal();
-    return new Promise(resolve=>{ shakeResolver=resolve; });
+    return new Promise(resolve=>{ presentation.shakeResolver=resolve; });
+  }
+
+  async function chooseOpeningTriple(decision){
+    const cards=decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean);
+    els.shakeText.textContent=decision.floorCardId
+      ? `${localizedMonth(decision.month)}: ${t('shake')} / ${t('bomb')}`
+      : `${localizedMonth(decision.month)}: ${t('shake')} / ${t('keepBomb')}`;
+    els.keepSecretBtn.textContent=decision.floorCardId?t('bomb'):t('keepBomb');
+    els.shakeCards.innerHTML=''; cards.forEach(card=>els.shakeCards.appendChild(createCardEl(card,'card magnified-card')));
+    els.shakeDialog.showModal();
+    return new Promise(resolve=>{presentation.shakeResolver=resolve;});
   }
 
   async function processOpeningSpecials(){
     if(state.winner)return;
-    const hFour=fourMonths(state.human.hand);
-    const aFour=fourMonths(state.ai.hand);
-    if(hFour.length){
-      playChongtongFanfare();
-      finishSpecial('human',10,`총통! You won because you were dealt all 4 cards from the same month (${monthNames[hFour[0]-1]}).`);
-      return;
+    if(state.pendingDecision?.type!=='openingTripleDecision'){
+      const opening=resolveOpeningState(state); state=opening.state;
+      const chongtong=opening.events.find(event=>event.type==='chongtongDeclared');
+      if(chongtong){ presentChongtong(chongtong); return; }
     }
-    if(aFour.length){
-      finishSpecial('ai',10,`총통! Computer won by holding all 4 cards from the same month (${monthNames[aFour[0]-1]}).`);
-      return;
+    while(state.pendingDecision?.type==='openingTripleDecision'){
+      const decision=state.pendingDecision;
+      if(decision.playerId===PLAYER_A){
+        const shake=await chooseOpeningTriple(decision);
+        if(shake){
+          const result=applyNormalAction({type:'declareShake',actorId:PLAYER_A});
+          await presentShakeDeclaration(result.events);
+        }else if(decision.floorCardId){
+          applyNormalAction({type:'declareBomb',actorId:PLAYER_A});
+        }else applyNormalAction({type:'armOpeningBomb',actorId:PLAYER_A});
+      }else{
+        const shake=!decision.floorCardId&&Math.random()<.72;
+        if(shake){
+          const result=applyNormalAction({type:'declareShake',actorId:PLAYER_B});
+          await presentShakeDeclaration(result.events);
+        }else if(decision.floorCardId){applyNormalAction({type:'declareBomb',actorId:PLAYER_B});}
+        else applyNormalAction({type:'armOpeningBomb',actorId:PLAYER_B});
+      }
     }
-
-    // Do not interrupt the opening deal with a Shake prompt. A three-of-a-month
-    // stays hidden until that player actually tries to use one of those cards.
-    // This is both less intrusive and closer to table play: the declaration is
-    // made at the moment the triple becomes relevant, not as a startup modal.
-    locked=false; render(); scheduleTurnStart();
+    presentation.locked=false; render(); scheduleTurnStart();
   }
 
-  async function revealAiShake(month){
-    const cards=state.ai.hand.filter(c=>c.month===month);
-    if(!cards.length)return;
-    const rack=els.aiHand;
-    const overlay=document.createElement('div'); overlay.className='ai-shake-reveal';
-    cards.forEach(c=>overlay.appendChild(createCardEl(c,'card shake-mini-card')));
-    rack.appendChild(overlay);
-    await sleep(1050); overlay.remove();
+  function presentChongtong(event){
+    // Preserve the established Solo presentation: only the local-player branch
+    // played the Chongtong fanfare before authority extraction.
+    if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
+    const playerWon=event.actorId===PLAYER_A;
+    const reason=`${playerWon?t('player'):t('computer')}: ${t('conquer')} — ${localizedMonth(event.month)}`;
+    const terminal=state.terminalResult;
+    recordTerminalResult(terminal);
+    if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
+    setGrandResult(t('conquer'),playerWon?t('playerWins'):t('computerWins'),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
+    els.resultDialog.showModal(); render();
+  }
+
+  async function presentShakeDeclaration(events){
+    const event=events.find(item=>item.type==='shakeDeclared');
+    if(!event)return;
+    playShakeSound(); render();
+    const cards=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean);
+    if(event.actorId===PLAYER_B){
+      els.shakeRevealTitle.textContent=t('computerShakes');
+      els.shakeRevealText.textContent=t('shakeAck');
+      els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
+      els.shakeRevealDialog.showModal();
+      await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
+      return;
+    }
+    await showSpecialTransient(t('shake'),event.cardIds);
+  }
+
+  function openShakeReview(playerId){
+    const player=playerStateById(state,playerId);
+    els.shakeReviewCards.innerHTML='';
+    player.revealedShakeSets.forEach((set,index)=>{
+      const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t('computer')} — ${t('shake')} #${index+1} · ×${set.declarationMultiplier||(set.month>=11?4:2)}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
+    });
+    els.shakeReviewDialog.showModal();
   }
 
 
   function rectCenter(r){ return {x:r.left+(r.width||0)/2,y:r.top+(r.height||0)/2}; }
   function cardSize(){
     const cs=getComputedStyle(document.documentElement);
-    return {w:parseFloat(cs.getPropertyValue('--card-w'))||78,h:parseFloat(cs.getPropertyValue('--card-h'))||127};
+    const stage=document.querySelector('.game-stage');
+    const scale=stage&&typeof innerWidth!=='undefined'&&innerWidth>700?stage.getBoundingClientRect().width/stage.offsetWidth:1;
+    return {w:(parseFloat(cs.getPropertyValue('--card-w'))||78)*scale,h:(parseFloat(cs.getPropertyValue('--card-h'))||127)*scale};
   }
   function approximateAiSource(){ const r=els.aiHand.getBoundingClientRect(); return {left:r.left+r.width*.5-27,top:r.top+r.height*.42-44,width:54,height:88}; }
 
   async function freeFloorLanding(card){
-    const {w,h}=cardSize();
-    const slot=reserveFloorSlot(card);
+    const pendingEntries=[state.pendingTurn?.played,state.pendingTurn?.drawn].filter(Boolean);
+    const authoritativeSlot=pendingEntries.find(entry=>entry.card.id===card.id)?.landingSlot;
+    const slot=reserveFloorSlot(card,authoritativeSlot);
     let slotEl=els.floor.querySelector(`[data-floor-slot="${slot}"]`);
     if(!slotEl){
       renderFloor();
       await nextFrame();
       slotEl=els.floor.querySelector(`[data-floor-slot="${slot}"]`);
     }
-    const r=slotEl?.getBoundingClientRect();
-    if(!r)return {left:0,top:0,width:w,height:h,rotation:stableFloorTilt(card)};
-    return {
-      left:r.left+(r.width-w)/2,
-      top:r.top+(r.height-h)/2,
-      width:w,height:h,rotation:stableFloorTilt(card)
-    };
+    if(!slotEl){const {w,h}=cardSize();return {left:0,top:0,width:w,height:h,rotation:stableFloorTilt(card)};}
+    const proxy=document.createElement('div');proxy.className='card floor-card floor-slot-proxy canonical-card-face';slotEl.appendChild(proxy);await nextFrame();
+    const r=proxy.getBoundingClientRect(),{w,h}=cardSize(),center=rectCenter(r);proxy.remove();
+    return {left:center.x-w/2,top:center.y-h/2,width:w,height:h,rotation:stableFloorTilt(card)};
   }
 
   function overlapLanding(targetCard){
-    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || stagedCards.get(targetCard.id);
+    const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || presentation.stagedCards.get(targetCard.id);
     if(!targetEl)return null;
-    const r=targetEl.getBoundingClientRect(); const sign=Math.random()<.5?-1:1;
-    const x=r.width*(0.22+Math.random()*.24)*sign;
-    const y=r.height*(-.08+Math.random()*.18);
-    return {left:r.left+x,top:r.top+y,width:r.width,height:r.height,rotation:sign*(7+Math.random()*10)};
+    const r=targetEl.getBoundingClientRect(),size=cardSize(),sign=Math.random()<.5?-1:1;
+    const center=rectCenter(r),x=size.w*(0.22+Math.random()*.24)*sign,y=size.h*(-.08+Math.random()*.18);
+    return {left:center.x-size.w/2+x,top:center.y-size.h/2+y,width:size.w,height:size.h,rotation:sign*(7+Math.random()*10)};
   }
 
   function makePhysicalFace(card,rect,className='physical-card'){
-    const el=document.createElement('div'); el.className=className; el.dataset.cardId=card.id;
-    const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=''; el.appendChild(img); document.body.appendChild(el);
+    const el=document.createElement('div'); el.className=`${className} card canonical-card-face normal-gameplay-card`; el.dataset.cardId=card.id;
+    el.appendChild(createCardFaceImage(card)); document.body.appendChild(el);
     normalizeFixed(el,rect); return el;
   }
   function normalizeFixed(el,rect){
@@ -1023,7 +1302,15 @@
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='1160';
   }
-  function removeStage(id){ const el=stagedCards.get(id); if(el){ stagedCards.delete(id); el.remove(); } }
+  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } }
+
+  function resetHandPresentationState(){
+    cleanupTargetChoice();
+    presentation.stagedCards.forEach(el=>{el?.getAnimations?.().forEach(animation=>animation.cancel());el?.remove?.();});
+    presentation.stagedCards.clear();presentation.floorSlotReservations.clear();presentation.activeHoveredHandCardId=null;
+    presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;
+    if(!TEST_MODE){document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
+  }
 
   function fullSizeSourceRect(sourceRect){
     const {w,h}=cardSize();
@@ -1032,39 +1319,43 @@
   }
 
   async function animateHandCardSlap(side,card,sourceRect,target){
-    // CPU backs are intentionally smaller in the rack, but the card entering play is always full Hwatu size.
+    // CPU backs are intentionally smaller in the rack, but the card entering play is always full GoStop Card size.
     sourceRect=fullSizeSourceRect(sourceRect);
-    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); stagedCards.set(card.id,el);
+    document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{node.style.visibility='hidden';});
+    await preloadCardFace(card);
+    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); presentation.stagedCards.set(card.id,el);
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     if(!landing)return el;
     if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; return el; }
 
     const dx=landing.left-sourceRect.left, dy=landing.top-sourceRect.top;
-    const sideBias=side==='human'?-1:1;
+    const sideBias=seatForLegacySide(side)==='bottom'?-1:1;
     const duration=650;
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
     const a=el.animate([
-      {transform:'translate(0,0) rotate(0deg) scale(1)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
-      {transform:`translate(0,-30px) rotate(${sideBias*-2}deg) scale(1)`,filter:'drop-shadow(0 22px 16px rgba(0,0,0,.46))',offset:.24},
-      {transform:`translate(${dx*.62}px,${dy*.62-54}px) rotate(${landing.rotation*.48}deg) scale(1)`,offset:.70},
-      {transform:`translate(${dx}px,${dy-12}px) rotate(${landing.rotation}deg) scale(1)`,offset:.92},
-      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg) scale(1)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
+      {transform:'translate(0,0) rotate(0deg)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
+      {transform:`translate(0,-30px) rotate(${sideBias*-2}deg)`,filter:'drop-shadow(0 22px 16px rgba(0,0,0,.46))',offset:.24},
+      {transform:`translate(${dx*.62}px,${dy*.62-54}px) rotate(${landing.rotation*.48}deg)`,offset:.70},
+      {transform:`translate(${dx}px,${dy-12}px) rotate(${landing.rotation}deg)`,offset:.92},
+      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
     ],{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`;
     impactAt(landing); return el;
   }
 
   async function animateBombSlap(side,cards,target,sourceRects=[]){
+    if(TEST_MODE)return;
+    await Promise.all(cards.map(preloadCardFace));
     const landingBase=overlapLanding(target);
     if(!landingBase)return;
     const {w,h}=cardSize();
     const targetEl=els.floor.querySelector(`[data-card-id="${target.id}"]`);
     const tr=targetEl?targetEl.getBoundingClientRect():landingBase;
     const starts=cards.map((card,i)=>{
-      const src=sourceRects[i] || (side==='human'?approximateHumanSource(i,cards.length):approximateAiSource());
+      const src=sourceRects[i] || (seatForLegacySide(side)==='bottom'?approximateHumanSource(i,cards.length):approximateAiSource());
       const full=fullSizeSourceRect(src);
       const el=makePhysicalFace(card,full,'physical-card moving-card bomb-moving-card');
-      stagedCards.set(card.id,el);
+      presentation.stagedCards.set(card.id,el);
       return {card,el,start:full,i};
     });
     if(prefersReducedMotion()){
@@ -1079,10 +1370,10 @@
       const land={left:tr.left+(i-1)*10,top:tr.top+(i-1)*6,width:w,height:h,rotation:[-13,1,12][i]};
       const dx=land.left-start.left,dy=land.top-start.top;
       return el.animate([
-        {transform:'translate(0,0) rotate(0deg) scale(1)',offset:0},
-        {transform:`translate(${dx*.55}px,${dy*.55-58}px) rotate(${land.rotation*.45}deg) scale(1.03)`,offset:.68},
-        {transform:`translate(${dx}px,${dy-14}px) rotate(${land.rotation}deg) scale(1.03)`,offset:.92},
-        {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg) scale(1)`,offset:1}
+        {transform:'translate(0,0) rotate(0deg)',offset:0},
+        {transform:`translate(${dx*.55}px,${dy*.55-58}px) rotate(${land.rotation*.45}deg)`,offset:.68},
+        {transform:`translate(${dx}px,${dy-14}px) rotate(${land.rotation}deg)`,offset:.92},
+        {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
       ],{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
         el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,land); el.style.transform=`rotate(${land.rotation}deg)`;
       }).catch(()=>{});
@@ -1093,23 +1384,29 @@
   }
 
   async function animateDeckLiftFlip(side,card){
+    if(TEST_MODE){
+      const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
+      presentation.stagedCards.set(card.id,el);
+      return el;
+    }
+    await preloadCardFace(card);
     const deck=els.deckStack.getBoundingClientRect(); const {w,h}=cardSize();
     const start={left:deck.left+deck.width/2-w/2,top:deck.top+deck.height/2-h/2,width:w,height:h};
-    const el=document.createElement('div'); el.className='physical-card deck-draw-card'; el.dataset.cardId=card.id;
+    const el=document.createElement('div'); el.className='physical-card deck-draw-card normal-gameplay-card'; el.dataset.cardId=card.id;
     const inner=document.createElement('div'); inner.className='deck-draw-inner';
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
-    const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front';
-    const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=''; front.appendChild(img); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
-    stagedCards.set(card.id,el);
+    const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front card canonical-card-face';
+    front.appendChild(createCardFaceImage(card)); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
+    presentation.stagedCards.set(card.id,el);
     if(prefersReducedMotion()){ inner.style.transform='rotateY(180deg)'; return el; }
 
     const tableR=els.table.getBoundingClientRect();
     const hover={left:Math.min(tableR.right-w-26,start.left+96),top:Math.max(tableR.top+100,start.top-54),width:w,height:h};
     const dx=hover.left-start.left,dy=hover.top-start.top;
     const lift=el.animate([
-      {transform:'translate(0,0) scale(1)',offset:0},
-      {transform:'translate(0,-18px) scale(1)',offset:.35},
-      {transform:`translate(${dx}px,${dy}px) scale(1)`,offset:1}
+      {transform:'translate(0,0)',offset:0},
+      {transform:'translate(0,-18px)',offset:.35},
+      {transform:`translate(${dx}px,${dy}px)`,offset:1}
     ],{duration:360,easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
     await lift.finished.catch(()=>{});
     const now=el.getBoundingClientRect(); el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,now);
@@ -1119,6 +1416,7 @@
   }
 
   async function animateStagedSlap(el,card,target,kind='flip'){
+    if(TEST_MODE)return;
     const start=el.getBoundingClientRect(); normalizeFixed(el,start);
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
@@ -1126,24 +1424,27 @@
     if(prefersReducedMotion()){normalizeFixed(el,landing);el.style.transform=`rotate(${landing.rotation}deg)`;return;}
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-52));
     const a=el.animate([
-      {transform:'translate(0,0) rotate(0deg) scale(1)',offset:0},
-      {transform:`translate(${dx*.56}px,${dy*.56-42}px) rotate(${landing.rotation*.42}deg) scale(1)`,offset:.58},
-      {transform:`translate(${dx}px,${dy-10}px) rotate(${landing.rotation}deg) scale(1)`,offset:.90},
-      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg) scale(1)`,offset:1}
+      {transform:'translate(0,0) rotate(0deg)',offset:0},
+      {transform:`translate(${dx*.56}px,${dy*.56-42}px) rotate(${landing.rotation*.42}deg)`,offset:.58},
+      {transform:`translate(${dx}px,${dy-10}px) rotate(${landing.rotation}deg)`,offset:.90},
+      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,offset:1}
     ],{duration,easing:'cubic-bezier(.2,.7,.14,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; impactAt(landing);
   }
 
   function captureTargetRect(side,type){
-    const root=side==='human'?els.playerCaptured:els.aiCaptured;
+    const root=seatForLegacySide(side)==='bottom'?els.playerCaptured:els.aiCaptured;
     const group=root.querySelector(`[data-capture-type="${type}"] .capture-stack`) || root.querySelector(`[data-capture-type="${type}"]`) || root;
     return group.getBoundingClientRect();
   }
 
   function detachFloorCard(card){
     const el=els.floor.querySelector(`[data-card-id="${card.id}"]`); if(!el)return null;
-    const r=el.getBoundingClientRect(); const ph=document.createElement('div'); ph.className='floor-slot-proxy'; ph.style.width=`${r.width}px`; ph.style.height=`${r.height}px`;
-    el.parentNode.insertBefore(ph,el); document.body.appendChild(el); el.classList.add('physical-card','sliding-capture'); normalizeFixed(el,r); return {el,card,placeholder:ph};
+    const r=el.getBoundingClientRect(),size=cardSize(),center=rectCenter(r);
+    const ph=document.createElement('div'); ph.className='floor-slot-proxy'; ph.style.width=`${r.width}px`; ph.style.height=`${r.height}px`;
+    el.parentNode.insertBefore(ph,el); el.style.visibility='hidden';
+    const flight=makePhysicalFace(card,{left:center.x-size.w/2,top:center.y-size.h/2,width:size.w,height:size.h},'physical-card capture-flight-card sliding-capture');
+    return {el:flight,card,placeholder:ph,sourceEl:el};
   }
 
 
@@ -1151,10 +1452,11 @@
     const unique=[];
     const seen=new Set();
     cards.filter(Boolean).forEach(c=>{if(!seen.has(c.id)){seen.add(c.id);unique.push(c);}});
+    if(TEST_MODE){unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));return;}
     const entries=[];
     unique.forEach(card=>{
-      const staged=stagedCards.get(card.id);
-      if(staged) entries.push({el:staged,card,placeholder:null,staged:true});
+      const staged=presentation.stagedCards.get(card.id);
+      if(staged){staged.classList.add('capture-flight-card');entries.push({el:staged,card,placeholder:null,staged:true});}
       else {
         const e=detachFloorCard(card);
         if(e)entries.push({...e,staged:false});
@@ -1162,7 +1464,8 @@
     });
     if(!entries.length)return;
     if(prefersReducedMotion()){
-      entries.forEach(e=>{ stagedCards.delete(e.card.id); e.el.remove(); if(e.placeholder)e.placeholder.remove(); });
+      entries.forEach(e=>{ presentation.stagedCards.delete(e.card.id); e.el.remove(); if(e.sourceEl)e.sourceEl.remove(); if(e.placeholder)e.placeholder.remove(); });
+      unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
       return;
     }
     const jobs=entries.map((entry,i)=>new Promise(resolve=>{
@@ -1171,21 +1474,21 @@
         const dest=captureTargetRect(side,entry.card.type); const dc=rectCenter(dest);
         const target={left:dc.x-start.width*.24,top:dc.y-start.height*.24,width:start.width,height:start.height};
         const dx=target.left-start.left,dy=target.top-start.top;
-        const curve=side==='human'?24:-24;
+        const curve=seatForLegacySide(side)==='bottom'?24:-24;
         const a=entry.el.animate([
-          {transform:'translate(0,0) rotate(0deg) scale(1)',opacity:1,offset:0},
-          {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg) scale(.84)`,opacity:1,offset:.48},
-          {transform:`translate(${dx}px,${dy}px) rotate(0deg) scale(.46)`,opacity:.96,offset:1}
+          {transform:'translate(0,0) rotate(0deg)',opacity:1,offset:0},
+          {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg)`,opacity:1,offset:.48},
+          {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.96,offset:1}
         ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
-        stagedCards.delete(entry.card.id);
-        entry.el.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
+        presentation.stagedCards.delete(entry.card.id);
+        entry.el.remove(); if(entry.sourceEl)entry.sourceEl.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
       },i*70);
     }));
     await Promise.all(jobs);
-    // These exact physical cards have left the floor/table. Release any fixed
-    // slot reservations only after their slide-to-capture animation completes.
-    unique.forEach(card=>{ if(state.floorSlotByCard) delete state.floorSlotByCard[card.id]; });
+    // These in-flight cards have left the table. Canonical occupied slots are
+    // released by removeFloorCards when the authoritative capture is applied.
+    unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
   }
 
   async function animateCaptureSlides(playedCard,captured,side,stage){
@@ -1203,13 +1506,13 @@
     slam:'https://raw.githubusercontent.com/itsent-lab/hwatu/main/apps/web/public/audio/card-contact.mp3',
     // Event cues generated locally for this prototype.
     ppeok:window.GOSTOP_AUDIO_PPEOK,
-    laugh:'https://raw.githubusercontent.com/gynura/to_you/main/assets/sound/fx/Evil_Laugh.wav',
     shakeBell:window.GOSTOP_AUDIO_SHAKE,
     chongtongFanfare:window.GOSTOP_AUDIO_FANFARE,
     bomb:'https://raw.githubusercontent.com/gynura/to_you/main/assets/sound/fx/Explosion.wav'
   };
   const audioBases={};
-  function unlockAudio(){
+  async function unlockAudio(){
+    const context=presentation.soundEnabled?audioContext():null;
     Object.entries(soundSources).forEach(([name,src])=>{
       if(audioBases[name])return;
       const a=new Audio(src);
@@ -1217,9 +1520,10 @@
       if(src.startsWith('http'))a.crossOrigin='anonymous';
       audioBases[name]=a;
     });
+    if(context?.state==='suspended')await context.resume().catch(()=>{});
   }
   function playSample(name,volume=1,playbackRate=1,maxMs=0){
-    if(!soundEnabled)return;
+    if(!presentation.soundEnabled)return;
     try{
       unlockAudio();
       const base=audioBases[name];
@@ -1232,18 +1536,118 @@
     }catch(_){ }
   }
   function playHitSound(){
-    if(!soundEnabled)return;
+    if(!presentation.soundEnabled)return;
     // Floor impact only: loud, dry card-on-card crack. No pile/deck sounds.
     playSample('slam',1,1);
     playSample('slam',.72,1);
   }
-  function playPpeokSound(){ playSample('ppeok',1,1); }
-  function playLaughSound(){ playSample('laugh',1,1.65,900); }
+  function playPpeokSound(){
+    playProceduralNoise('poop');
+  }
+  let sharedAudioContext=null;
+  function audioContext(){
+    const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+    if(!sharedAudioContext)sharedAudioContext=new C();
+    return sharedAudioContext;
+  }
+  function synthNotes(notes){
+    if(!presentation.soundEnabled)return;
+    try{const c=audioContext();if(!c)return;const now=c.currentTime;notes.forEach(([delay,freq,duration])=>{const o=c.createOscillator(),g=c.createGain();o.frequency.value=freq;o.type='triangle';g.gain.setValueAtTime(.18,now+delay);g.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);o.connect(g).connect(c.destination);o.start(now+delay);o.stop(now+delay+duration);});}catch(_){ }
+  }
+  function traceAudio(name){presentation.audioTrace.push(name);}
+  function playProceduralNoise(kind){
+    if(!presentation.soundEnabled)return;
+    try{const c=audioContext();if(!c)return;const duration=kind==='flush'?1.5:.55,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;data[i]=(((seed>>>0)/0xffffffff)*2-1)*(1-i/length);}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();}catch(_){ }
+  }
+  let activeDiceSources=[];
+  function stopDiceSound(){activeDiceSources.forEach(source=>{try{source.stop();}catch(_){ }});activeDiceSources=[];}
+  function playDiceClatter(){
+    if(!presentation.soundEnabled)return;
+    try{
+      const c=audioContext();if(!c||c.state!=='running')return;stopDiceSound();const now=c.currentTime,master=c.createGain();master.gain.value=.9;master.connect(c.destination);
+      const impacts=[[0,.026,1850,.13],[.07,.021,2200,.1],[.14,.028,1550,.14],[.23,.02,2450,.09],[.32,.03,1750,.13],[.43,.024,2100,.1],[.55,.032,1450,.14],[.68,.026,1900,.12],[.77,.035,1250,.18],[.84,.055,980,.28]];
+      impacts.forEach(([delay,duration,frequency,volume],index)=>{
+        const length=Math.max(1,Math.floor(c.sampleRate*duration)),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0xd1ce0000+index;
+        for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const decay=(1-i/length)**3;data[i]=(((seed>>>0)/0xffffffff)*2-1)*decay;}
+        const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=.7;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(Math.min(.72,volume*2.8),now+delay+.003);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(filter).connect(gain).connect(master);source.start(now+delay);source.stop(now+delay+duration);activeDiceSources.push(source);
+      });
+      setTimeout(()=>{activeDiceSources=[];},920);
+    }catch(_){stopDiceSound();}
+  }
+  function playSweepSound(){
+    if(!presentation.soundEnabled)return;
+    traceAudio('sweep');if(TEST_MODE)return;
+    try{const c=audioContext();if(!c)return;const now=c.currentTime;[[0,-.75,.55],[.48,.55,-.65]].forEach(([delay,panFrom,panTo],stroke)=>{const duration=.38,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x5eed1234+stroke;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const t=i/length,envelope=Math.sin(Math.PI*t)**.7,bristles=.45+.55*Math.abs(Math.sin(i*.043));data[i]=(((seed>>>0)/0xffffffff)*2-1)*envelope*bristles;}const source=c.createBufferSource(),high=c.createBiquadFilter(),band=c.createBiquadFilter(),gain=c.createGain(),pan=typeof c.createStereoPanner==='function'?c.createStereoPanner():null;high.type='highpass';high.frequency.value=1400;band.type='bandpass';band.frequency.setValueAtTime(5200,now+delay);band.frequency.exponentialRampToValueAtTime(2600,now+delay+duration);band.Q.value=.6;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(.2,now+delay+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(high).connect(band).connect(gain);if(pan){gain.connect(pan).connect(c.destination);pan.pan.setValueAtTime(panFrom,now+delay);pan.pan.linearRampToValueAtTime(panTo,now+delay+duration);}else gain.connect(c.destination);source.start(now+delay);source.stop(now+delay+duration);});}catch(_){ }
+  }
+  function playTapTapSound(){playProceduralNoise('flush');}
+  function playKissSound(){
+    if(!presentation.soundEnabled)return;
+    presentation.kissSoundCount++;traceAudio('kiss');
+    if(TEST_MODE)return;
+    try{
+      const c=audioContext();if(!c)return;const now=c.currentTime;
+      const tone=c.createOscillator(),gain=c.createGain();tone.type='sine';tone.frequency.setValueAtTime(260,now);tone.frequency.exponentialRampToValueAtTime(720,now+.18);tone.frequency.exponentialRampToValueAtTime(380,now+.34);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.3,now+.035);gain.gain.exponentialRampToValueAtTime(.0001,now+.38);tone.connect(gain).connect(c.destination);tone.start(now);tone.stop(now+.4);
+      playProceduralNoise('kiss');
+    }catch(_){ }
+  }
+  function playBirdSound(){synthNotes([[0,1600,.12],[.25,1900,.1],[.5,1450,.14],[.8,2100,.1],[1.15,1750,.14]]);}
+  function playSadResultSound(){synthNotes([[0,330,.22],[.23,294,.22],[.46,262,.22],[.69,196,.5]]);}
+  function playLaughSound(){/* Pooped-pile capture is intentionally silent. */}
   function playShakeSound(){
     [0,260,520].forEach(delay=>setTimeout(()=>playSample('shakeBell',.82,1),delay));
   }
   function playChongtongFanfare(){ playSample('chongtongFanfare',.95,1); }
-  function playBombSound(){ playSample('bomb',1,1,1400); }
+  function playBombSound(){if(!presentation.soundEnabled)return;traceAudio('bomb');playSample('bomb',1,1,1400);}
+
+  async function animateSweepBroom(){
+    if(TEST_MODE||!els.floor)return;
+    document.querySelectorAll('.sweep-broom').forEach(node=>node.remove());
+    const bounds=els.floor.getBoundingClientRect(),broom=document.createElement('div');
+    broom.className='sweep-broom';broom.textContent='🧹';broom.setAttribute('aria-hidden','true');
+    broom.style.top=`${bounds.top+bounds.height*.48}px`;document.body.appendChild(broom);
+    const animation=broom.animate([{transform:`translate(${bounds.left-120}px,-50%) rotate(-22deg)`},{transform:`translate(${bounds.right+120}px,-50%) rotate(18deg)`}],{duration:1200,easing:'ease-in-out'});
+    try{await animation.finished;}catch(_){ }finally{broom.remove();}
+  }
+
+  async function showSpecialTransient(title,cardIds=[],effect=''){
+    if(!els.milestoneOverlay)return;
+    const titleKeys={'POOPED!':'pooped','KISS!':'kiss','FLUSH!':'tapTap','CLEAN SWEEP!':'cleanSweep','5-BIRDIES!':'birdies','3-STRIPES!':'threeStripes','5-BRIGHTS!':'fiveBrights'};
+    title=t(titleKeys[title]||title);
+    els.milestoneTitle.textContent=title;els.milestoneCards.innerHTML='';els.milestoneBirds.innerHTML='';els.milestoneOverlay.dataset.effect=effect;
+    cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
+    els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');const effectDone=effect==='sweep'?animateSweepBroom():Promise.resolve();await Promise.all([sleep(2000),effectDone]);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
+  }
+  async function presentSemanticEvents(events){
+    for(const event of events){
+      if(event.type==='sweepTriggered'){playSweepSound();await showSpecialTransient('CLEAN SWEEP!',event.cardIds||[],'sweep');}
+    }
+  }
+
+  function detectNewMilestones(playerId){
+    const player=playerStateById(state,playerId),history=presentation.milestoneHistory[playerId],found=[];
+    const add=(key,titleKey,cards,birds=false)=>{if(cards.length&&!history.has(key)){history.add(key);found.push({key,titleKey,cardIds:cards.map(card=>card.id),birds});}};
+    const godori=[2,4,8].map(month=>player.captured.find(card=>card.month===month&&card.flags.includes('godori'))).filter(Boolean);
+    if(godori.length===3)add('godori','birdies',godori,true);
+    for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]})){
+      const cards=months.map(month=>player.captured.find(card=>card.month===month&&card.ribbonSet===set)).filter(Boolean);
+      if(cards.length===3)add(`stripes-${set}`,'threeStripes',cards);
+    }
+    const brights=player.captured.filter(card=>card.type==='bright');
+    if(brights.length>=5)add('five-brights','fiveBrights',brights.slice(0,5));
+    return found;
+  }
+  async function presentNewMilestones(playerId){
+    for(const milestone of detectNewMilestones(playerId)){
+      els.milestoneTitle.textContent=t(milestone.titleKey); els.milestoneCards.innerHTML=''; els.milestoneBirds.innerHTML='';
+      milestone.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
+      if(milestone.birds)for(let index=0;index<5;index++){const bird=document.createElement('span');bird.textContent='🐦';els.milestoneBirds.appendChild(bird);}
+      if(milestone.birds)playBirdSound();
+      els.milestoneOverlay.classList.add('show'); els.milestoneOverlay.setAttribute('aria-hidden','false');
+      await sleep(2000);
+      els.milestoneOverlay.classList.remove('show'); els.milestoneOverlay.setAttribute('aria-hidden','true');
+      await sleep(120);
+    }
+  }
 
 
   function bestAiCard(){
@@ -1267,20 +1671,42 @@
     if(card.flags.includes('godori')&&hc.filter(c=>c.flags.includes('godori')).length>=2)v+=9;
     return v;
   }
+  function aiGoStopDecision(view,sc){
+    const me=view.ai,opponent=view.human;
+    const opponentScore=scorePlayer({captured:opponent.captured,gukjinMode:opponent.gukjinMode||'animal',firstPpeokPoints:opponent.firstPpeokPoints||0}).total;
+    const remainingTurns=Math.min(me.hand.length+(me.bombFreeTurns||0),Math.ceil((view.deckCount||0)/2));
+    const opponentTurns=Math.min(opponent.handCount??me.hand.length,Math.floor((view.deckCount||0)/2));
+    const lead=sc.total-opponentScore,goCount=me.go||0,shakeMultiplier=me.shakeMultiplier||1,carry=view.matchContext?.nagariCarryPower||0;
+    const stopValue=sc.total*(goCount>=3?2:1)*shakeMultiplier*(2**carry);
+    const counts=cards=>({bright:cards.filter(c=>c.type==='bright').length,animal:cards.filter(c=>c.type==='animal').length,ribbon:cards.filter(c=>c.type==='ribbon').length,pi:score(cards).piCount,godori:cards.filter(c=>c.flags.includes('godori')).length});
+    const mine=counts(me.captured),theirs=counts(opponent.captured);
+    const categoryUpside=(mine.bright>=2?1.2:0)+(mine.animal>=4?1:0)+(mine.ribbon>=4?1:0)+(mine.pi>=8?1:0)+(mine.godori>=2?1.2:0);
+    const proximity=(theirs.bright>=2?.12:0)+(theirs.animal>=4?.1:0)+(theirs.ribbon>=4?.1:0)+(theirs.pi>=8?.12:0)+(theirs.godori>=2?.14:0);
+    const lateRisk=remainingTurns<=1?.42:remainingTurns===2?.2:0;
+    const thresholdRisk=Math.min(.42,opponentScore/14)+proximity+(opponentTurns<=1&&opponentScore>=5?.18:0);
+    const goBakRisk=goCount>0&&opponentScore>=5?.16:0;
+    const riskScore=Math.min(.95,lateRisk+thresholdRisk+goBakRisk);
+    const improvement=(remainingTurns*(1.35+categoryUpside*.35))+Math.max(0,lead)*.18;
+    const nextGoFactor=goCount>=2?2:(goCount+1)*.1+1;
+    const expectedGoValue=(sc.total+improvement)*nextGoFactor*shakeMultiplier*(2**carry)*(1-riskScore);
+    const decision=remainingTurns>0&&expectedGoValue>stopValue*(1.06+(opponentScore>=6?.08:0))?'go':'stop';
+    const reasons=[];if(lead>=4)reasons.push('large lead');if(remainingTurns>=3)reasons.push('multiple turns remaining');if(riskScore<.35)reasons.push('low opponent scoring threat');if(lateRisk)reasons.push('late hand');if(goBakRisk)reasons.push('Go-bak exposure');
+    return {decision,stopValue,expectedGoValue:Number(expectedGoValue.toFixed(2)),riskScore:Number(riskScore.toFixed(3)),remainingTurns,opponentTurns,lead,reasons};
+  }
   function aiShouldGo(sc){
-    const human=score(state.human.captured).total,remaining=state.ai.hand.length,lead=sc.total-human,risk=human>=5?2.2:human>=3?1.2:.5;
-    return remaining>2&&(lead+sc.total/4-risk+Math.random()*1.2)>3.6;
+    return aiGoStopDecision(engine.projectStateForViewer(state,PLAYER_B),sc).decision==='go';
   }
 
 
   function showGoCallout(side){
     if(!els.goCallout)return;
-    const anchor=side==='ai'?document.querySelector('.opponent-zone'):document.querySelector('.player-zone');
+    const seat=seatForLegacySide(side);
+    const anchor=seat==='top'?document.querySelector('.opponent-zone'):document.querySelector('.player-zone');
     const r=anchor?anchor.getBoundingClientRect():null;
-    els.goCallout.className=`go-callout ${side==='ai'?'go-callout-ai':'go-callout-human'}`;
+    els.goCallout.className=`go-callout ${seat==='top'?'go-callout-ai':'go-callout-human'}`;
     if(r){
       els.goCallout.style.left=`${r.left+r.width/2}px`;
-      els.goCallout.style.top=side==='ai'?`${r.bottom-20}px`:`${r.top+24}px`;
+      els.goCallout.style.top=seat==='top'?`${r.bottom-20}px`:`${r.top+24}px`;
     }
     els.goCallout.textContent='GO!';
     void els.goCallout.offsetWidth;
@@ -1296,145 +1722,229 @@
     els.resultTitle.textContent=winnerLabel;
     els.resultScore.textContent=scoreText;
     els.resultBreakdown.textContent=breakdown||'';
+    if(call!==t('conquer')&&els.resultCards&&typeof els.resultCards.replaceChildren==='function')els.resultCards.replaceChildren();
   }
 
   function calculateFinalScore(winnerSide){
     const actor=state[winnerSide];
     const loser=state[winnerSide==='human'?'ai':'human'];
-    const sc=score(actor.captured), lsc=score(loser.captured);
-    const baseTotal=sc.total;
-    const goBonus=Math.min(actor.go,2);
-    let total=baseTotal + goBonus;
-    const reasons=[];
-    const formulaSteps=[`Base ${baseTotal}`];
-
-    if(goBonus>0){
-      formulaSteps.push(`Go bonus +${goBonus}`);
-    }
-    if(actor.go>=3){
-      const p=actor.go-2;
-      const goMult=2**p;
-      total*=goMult;
-      reasons.push(`${actor.go} Go ×${goMult}`);
-      formulaSteps.push(`${actor.go} Go ×${goMult}`);
-    }
-
-    let doublePower=actor.shakes+actor.bombs;
-    if(actor.shakes){
-      const m=2**actor.shakes;
-      reasons.push(`Shake ×${m}`);
-      formulaSteps.push(`Shake ×${m}`);
-    }
-    if(actor.bombs){
-      const m=2**actor.bombs;
-      reasons.push(`Bomb ×${m}`);
-      formulaSteps.push(`Bomb ×${m}`);
-    }
-    if(sc.animals>=7){doublePower++;reasons.push('Meong-bak ×2');formulaSteps.push('Meong-bak ×2');}
-    if(sc.piCount>=10 && lsc.piCount<=7){doublePower++;reasons.push('Pi-bak ×2');formulaSteps.push('Pi-bak ×2');}
-    if(sc.bright>=3 && lsc.bright===0){doublePower++;reasons.push('Gwang-bak ×2');formulaSteps.push('Gwang-bak ×2');}
-    if(loser.go>0 && score(loser.captured).total<=loser.lastGoScore){doublePower++;reasons.push('Go-bak ×2');formulaSteps.push('Go-bak ×2');}
-    if(nagariCarryPower>0){
-      const m=2**nagariCarryPower;
-      doublePower+=nagariCarryPower;
-      reasons.push(`Nagari carry ×${m}`);
-      formulaSteps.push(`Nagari carry ×${m}`);
-    }
-    total*=2**doublePower;
-    return {base:sc,total,reasons,baseTotal,goBonus,formulaSteps};
+    return engine.calculateSettlement({winner:actor,loser,nagariCarryPower:state.matchContext.nagariCarryPower});
   }
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
-    const parts=[...(settled.formulaSteps||[`Base ${settled.base.total}`])];
+    const englishLabel=step=>step
+      .replace('First Ppeok','First Poop')
+      .replace('Meong-bak',t('picturePenalty'))
+      .replace('Pi-bak',t('singlePenalty'))
+      .replace('Gwang-bak',t('brightPenalty'))
+      .replace('Go-bak',t('goPenalty'))
+      .replace('Nagari carry',t('noWinnerCarry'));
+    const parts=(settled.formulaSteps||[`Base ${settled.base.total}`]).map(englishLabel);
     if(includeFinal)parts.push(`Final ${settled.total}`);
     return parts.join('  →  ');
   }
 
   async function humanGoStop(sc){
     const preview=calculateFinalScore('human');
-    els.decisionText.textContent=`${formatScoreFormula(preview)}. STOP takes ${preview.total} points now. GO continues the hand but risks Go-bak.`;
+    els.decisionText.textContent=`${t('currentGo',{count:state.human.go})}. ${formatScoreFormula(preview)}.`;
+    if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
+    els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
     els.decisionDialog.show();
+  }
+
+  function presentStopResult(result){
+    const ended=result.events.find(event=>event.type==='handEnded');
+    if(!ended)return;
+    const side=legacySideForPlayerId(ended.winnerId);
+    recordTerminalResult(state.terminalResult);
+    presentation.locked=true; hideActionCue();
+    setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):t('computerWins'),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
+    if(side==='human')playChongtongFanfare();else playSadResultSound();
+    els.resultDialog.showModal(); render();
   }
 
   async function finishNagari(){
     if(state.winner)return;
-    state.winner='nagari'; locked=true;
-    nagariCarryPower=Math.min(3,nagariCarryPower+1);
-    setGrandResult('NAGARI!','No Winner',`Next Hand ×${2**nagariCarryPower}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
+    const result=resolveNagari(state,{actorId:state.turn}); state=result.state;
+    const event=result.events.find(item=>item.type==='nagariDeclared');
+    recordTerminalResult(state.terminalResult);
+    presentation.locked=true;
+    setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');
     els.resultDialog.showModal(); render();
   }
 
-  function finishSpecial(winner,points,reason){
-    if(state.winner)return;
-    state.winner=winner; locked=true;
-    const final=points*(2**nagariCarryPower);
-    const specialCall=reason.startsWith('총통!')?'CHONGTONG!':'WIN!';
-    setGrandResult(specialCall,winner==='human'?'Player Wins!':'Computer Wins!',`${final} Points`,`${reason}${nagariCarryPower?` · Nagari ×${2**nagariCarryPower}`:''}`,'special');
-    nagariCarryPower=0;
+  function presentThreePpeok(result){
+    const event=result.events.find(item=>item.type==='threePpeokDeclared');
+    if(!event)return;
+    const terminal=state.terminalResult;
+    const side=legacySideForPlayerId(event.actorId);
+    recordTerminalResult(terminal);
+    presentation.locked=true;
+    setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):t('computerWins'),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
   function finishByScore(){ finishNagari(); }
 
-  function finishGame(winner,sc,reason){
-    if(winner==='draw'){ finishNagari(); return; }
-    state.winner=winner;locked=true;hideActionCue();
-    const settled=calculateFinalScore(winner);
-    const breakdown=formatScoreFormula(settled);
-    setGrandResult('STOP!',winner==='human'?'Player Wins!':'Computer Wins!',`${settled.total} Points`,breakdown,'stop');
-    nagariCarryPower=0;
-    els.resultDialog.showModal();render();
+  function recordTerminalResult(terminal){
+    if(!terminal)return;
+    const key=`${presentation.roundNo}:${terminal.type}:${terminal.winnerId||'none'}`;
+    if(presentation.recordedTerminal===key)return;
+    presentation.recordedTerminal=key;
+    presentation.nextStarterId=terminal.winnerId||state.startingPlayerId;
+    if(terminal.winnerId){
+      presentation.sessionStats[terminal.winnerId].wins++;
+      presentation.sessionStats[terminal.winnerId].points+=terminal.finalPoints??terminal.score??terminal.settlement?.total??0;
+    }
+  }
+  function resetSession(){
+    presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};
+    presentation.roundNo=1; presentation.recordedTerminal=null;presentation.sessionStarted=false;presentation.nextStarterId=null;
+  }
+  function consumeSessionStart(){
+    if(presentation.sessionStarted)return false;
+    presentation.sessionStarted=true;
+    return true;
+  }
+  function confirmNewGame(accepted){
+    if(!accepted){if(els.newGameDialog?.open)els.newGameDialog.close();return false;}
+    if(els.newGameDialog?.open)els.newGameDialog.close();if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
+  }
+  function showFirstPoopNotice(side){
+    if(!els.firstPpeokDialog)return Promise.resolve();
+    els.firstPoopTitle.textContent=t('firstPoop');
+    els.firstPoopText.textContent=`${side==='human'?t('you'):t('computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
+    els.firstPpeokDialog.showModal();
+    return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
+  }
+  function setLocale(locale){
+    presentation.locale=i18n?.dictionaries?.[locale]?locale:'en';
+    try{localStorage.setItem('gostop-language',presentation.locale);}catch(_){ }
+    document.documentElement.lang=presentation.locale;
+    if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
+    document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
+    document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
+    renderTutorialCards();
+    if(els.scoreDialog?.open&&presentation.scoreBreakdownPlayerId)openScoreBreakdown(presentation.scoreBreakdownPlayerId);
+    if(els.decisionDialog?.open&&state)humanGoStop(scorePlayer(state.human));
+    if(state)render();
+  }
+  function setupLanguageMenu(){
+    if(!els.languageBtn||!els.languageMenu||!i18n)return;
+    Object.entries(i18n.names).forEach(([locale,name])=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('click',()=>{setLocale(locale);els.languageMenu.hidden=true;});els.languageMenu.appendChild(button);});
+    els.languageBtn.addEventListener('click',()=>{els.languageMenu.hidden=!els.languageMenu.hidden;});
+    document.addEventListener('pointerdown',event=>{if(!els.languageMenu.hidden&&!els.languageMenu.contains(event.target)&&event.target!==els.languageBtn)els.languageMenu.hidden=true;});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape')els.languageMenu.hidden=true;});
+    try{presentation.locale=localStorage.getItem('gostop-language')||'en';}catch(_){presentation.locale='en';}
+    setLocale(presentation.locale);
+  }
+  function renderTutorialCards(){
+    if(TEST_MODE)return;
+    document.querySelectorAll('.tutorial-cards[data-card-ids]').forEach(root=>{if(root.childElementCount)return;root.dataset.cardIds.split(',').map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
+    const tutorialQueries={bright:card=>card.type==='bright',animal:card=>card.type==='animal',ribbon:card=>card.type==='ribbon',single:card=>card.type==='pi'&&!card.flags.includes('doublePi'),'doublePi-11':card=>card.month===11&&card.flags.includes('doublePi'),'doublePi-12':card=>card.month===12&&card.flags.includes('doublePi'),switchPi:card=>card.flags.includes('switchPi')};
+    document.querySelectorAll('.tutorial-cards[data-tutorial-query]').forEach(root=>{root.replaceChildren();MASTER_DECK.filter(tutorialQueries[root.dataset.tutorialQuery]||(()=>false)).slice(0,['bright','animal','ribbon','single'].includes(root.dataset.tutorialQuery)?3:1).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
+    const monthGuide=document.getElementById('monthGuide');
+    if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>{const item=document.createElement('span');item.className='tutorial-month-card';item.appendChild(createCardEl(card,'card tutorial-game-card'));const label=document.createElement('small');label.textContent=t(card.id==='m9-1'?'sakeCup':card.flags.includes('doublePi')?'doubleSingle':card.type==='bright'?'brights':card.type==='animal'?'pictures':card.type==='ribbon'?'stripes':'singles');item.appendChild(label);cards.appendChild(item);});article.append(heading,cards,description);monthGuide.appendChild(article);}}
   }
 
-
   function recommendHumanCard(){
-    if(!state||state.turn!=='human'||locked)return;
+    if(!state||state.turn!==PLAYER_A||presentation.locked)return;
     let best=state.human.hand[0],val=-Infinity;
     state.human.hand.forEach(c=>{
       const matches=matchesFor(c),cv=matches.length?captureValue(c)+Math.max(...matches.map(captureValue)):0;
       const combo=(c.flags.includes('godori')?2:0)+(c.ribbonSet?1:0)+(c.type==='bright'?2:0),v=cv*1.4+combo+Math.random()*.1;
       if(v>val){val=v;best=c;}
     });
-    hintCardId=best.id;render();
+    presentation.hintCardId=best.id;render();
   }
 
 
-  function startGame(){
-    queuedHumanCardSwitch=null; pendingHumanCardId=null; cleanupTargetChoice(); stagedCards.forEach(el=>el.remove()); stagedCards.clear(); hideActionCue();
-    if(shakeResolver){shakeResolver(false);shakeResolver=null;}
-    if(bombResolver){bombResolver(false);bombResolver=null;}
+  async function presentOpeningSequence(starter,roll){
+    if(!roll)throw new Error('Dice presentation is restricted to the first hand of a session.');
+    presentation.dicePresentationCount++;
+    if(TEST_MODE){presentation.diceSoundCount++;traceAudio('dice');return;}
+    els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
+    els.openingMessage.textContent='';els.openingDie.hidden=!roll;
+    if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=face++%2?'P':'C';},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?'P':'C';}
+    els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    await presentDealSequence();
+  }
+  async function presentDealSequence(){
+    if(TEST_MODE)return;
+    presentation.deckDisplayCount=48;render();
+    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();await sleep(72);}
+    presentation.deckDisplayCount=null;render();
+  }
+  function playDiceSound(){if(!presentation.soundEnabled)return;presentation.diceSoundCount++;traceAudio('dice');if(!TEST_MODE)playDiceClatter();}
+  async function startGame(){
+    resetHandPresentationState();hideActionCue();
+    if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
+    if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
-    state=freshState();locked=true;aiTurnInProgress=false;hintCardId=null;lastHumanScore=0;lastAiScore=0;
-    els.roundNo.textContent=roundNo;render();
-    setTimeout(processOpeningSpecials,420);
+    const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
+    const firstSessionHand=consumeSessionStart();
+    if(firstSessionHand&&!TEST_MODE)await unlockAudio();
+    const starter=presentation.nextStarterId||(firstSessionHand?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
+    state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
+    presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
+    els.roundNo.textContent=presentation.roundNo;render();
+    if(firstSessionHand)await presentOpeningSequence(starter,true);
+    else await presentDealSequence();
+    await processOpeningSpecials();
   }
 
 
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
+  if(!TEST_MODE){addEventListener('resize',updateStageScale);updateStageScale();}
+  setupLanguageMenu();
+  document.querySelector('.human-chip .score-pill')?.addEventListener('click',()=>openScoreBreakdown(PLAYER_A));
+  document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',()=>openScoreBreakdown(PLAYER_B));
+  if(els.scoreDialog)els.scoreDialog.addEventListener('click',event=>{if(event.target===els.scoreDialog)els.scoreDialog.close();});
   els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
+  els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});
+  if(els.shakeReviewDialog)els.shakeReviewDialog.addEventListener('click',()=>els.shakeReviewDialog.close());
   if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
-  if(els.railNewGame)els.railNewGame.addEventListener('click',()=>{roundNo++;startGame();});
-  if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{soundEnabled=!soundEnabled;els.soundToggle.querySelector('span').textContent=soundEnabled?'Sound On':'Sound Off';if(soundEnabled)unlockAudio();});
-  els.newGameBtn.addEventListener('click',()=>{roundNo++;startGame();});
-  els.playAgainBtn.addEventListener('click',()=>{roundNo++;startGame();});
+  if(els.railNewGame)els.railNewGame.addEventListener('click',()=>els.newGameDialog.showModal());
+  els.playerHand.addEventListener('pointerleave',()=>setActiveHoveredHandCard(null));
+  if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
+  els.newGameBtn.addEventListener('click',()=>els.newGameDialog.showModal());
+  els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
+  els.newGameNoBtn.addEventListener('click',()=>confirmNewGame(false));
+  els.playAgainBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
+  const chooseGukjinMode=mode=>{
+    applyNormalAction({type:'setGukjinMode',actorId:PLAYER_A,mode});
+    els.gukjinDialog.close(); render();
+  };
+  els.gukjinPictureBtn.addEventListener('click',()=>chooseGukjinMode('animal'));
+  els.gukjinSingleBtn.addEventListener('click',()=>chooseGukjinMode('pi'));
   els.hintBtn.addEventListener('click',recommendHumanCard);
-  els.goBtn.addEventListener('click',()=>{if(!state||state.turn!=='human')return;state.human.go++;state.human.lastGoScore=score(state.human.captured).total;els.decisionDialog.close();showGoCallout('human');locked=true;state.turn='ai';render();setTimeout(aiTurn,1150);});
-  els.stopBtn.addEventListener('click',()=>{if(!state)return;els.decisionDialog.close();finishGame('human',score(state.human.captured),'You chose STOP.');});
+  els.goBtn.addEventListener('click',()=>{
+    if(!state||state.turn!==PLAYER_A)return;
+    const result=applyGoStopDecision({type:'declareGo',actorId:PLAYER_A});
+    els.decisionDialog.close();
+    if(result.events.some(event=>event.type==='goDeclared'))showGoCallout('human');
+    presentation.locked=true; render();
+    if(result.requiresNagari)setTimeout(finishNagari,0); else setTimeout(scheduleTurnStart,1150);
+  });
+  els.stopBtn.addEventListener('click',()=>{
+    if(!state||state.turn!==PLAYER_A)return;
+    const result=applyGoStopDecision({type:'declareStop',actorId:PLAYER_A});
+    els.decisionDialog.close(); presentStopResult(result);
+  });
 
 
   if(els.shakeBtn)els.shakeBtn.addEventListener('click',()=>{
-    if(!shakeResolver)return;
-    playShakeSound();
-    const r=shakeResolver; shakeResolver=null; els.shakeDialog.close(); r(true);
+    if(!presentation.shakeResolver)return;
+    const r=presentation.shakeResolver; presentation.shakeResolver=null; els.shakeDialog.close(); r(true);
   });
   if(els.keepSecretBtn)els.keepSecretBtn.addEventListener('click',()=>{
-    if(!shakeResolver)return; const r=shakeResolver; shakeResolver=null; els.shakeDialog.close(); r(false);
+    if(!presentation.shakeResolver)return; const r=presentation.shakeResolver; presentation.shakeResolver=null; els.shakeDialog.close(); r(false);
   });
   if(els.bombBtn)els.bombBtn.addEventListener('click',()=>{
-    if(!bombResolver)return; const r=bombResolver; bombResolver=null; els.bombDialog.close(); r(true);
+    if(!presentation.bombResolver)return; const r=presentation.bombResolver; presentation.bombResolver=null; els.bombDialog.close(); r(true);
   });
   if(els.playOneBtn)els.playOneBtn.addEventListener('click',()=>{
-    if(!bombResolver)return; const r=bombResolver; bombResolver=null; els.bombDialog.close(); r(false);
+    if(!presentation.bombResolver)return; const r=presentation.bombResolver; presentation.bombResolver=null; els.bombDialog.close(); r(false);
   });
 
 
@@ -1443,11 +1953,75 @@
   });
 
   if(els.shakeDialog)els.shakeDialog.addEventListener('cancel',e=>{
-    if(shakeResolver){e.preventDefault();const r=shakeResolver;shakeResolver=null;els.shakeDialog.close();r(false);}
+    if(presentation.shakeResolver){e.preventDefault();const r=presentation.shakeResolver;presentation.shakeResolver=null;els.shakeDialog.close();r(false);}
   });
   if(els.bombDialog)els.bombDialog.addEventListener('cancel',e=>{
-    if(bombResolver){e.preventDefault();const r=bombResolver;bombResolver=null;els.bombDialog.close();r(false);}
+    if(presentation.bombResolver){e.preventDefault();const r=presentation.bombResolver;presentation.bombResolver=null;els.bombDialog.close();r(false);}
   });
 
-  startGame();
+  if(TEST_MODE){
+    const cloneCard=card=>({...card,flags:[...card.flags]});
+    const makeTestPlayer=(overrides={})=>({
+      hand:[],captured:[],go:0,shakes:0,shakeMultiplier:1,bombs:0,bombFreeTurns:0,ppeoks:0,
+      hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0,
+      ...overrides
+    });
+    const makeTestState=(overrides={})=>{
+      const next={
+        deck:[],floor:[],human:makeTestPlayer(),ai:makeTestPlayer(),
+        floorStacks:{},startingPlayerId:PLAYER_A,turn:PLAYER_A,winner:null,specialWinner:null,
+        matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0},
+        ...overrides
+      };
+      if(!next.floorSlotByCard)initFloorSlots(next);
+      return next;
+    };
+    globalThis.GOSTOP_TEST_API=Object.freeze({
+      playerIds:Object.freeze({playerA:PLAYER_A,playerB:PLAYER_B}),
+      soloViewerId:SOLO_VIEWER_ID,
+      otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
+      viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
+      monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
+      masterDeck:()=>MASTER_DECK.map(cloneCard),
+      card:id=>cloneCard(MASTER_DECK.find(c=>c.id===id)),
+      makePlayer:makeTestPlayer,
+      makeState:makeTestState,
+      setState(next){state=next;},
+      getState(){return state;},
+      setNagariCarryPower(value){state.matchContext.nagariCarryPower=value;},
+      getNagariCarryPower(){return state.matchContext.nagariCarryPower;},
+      setPreviousScores(human,ai){state.matchContext.lastScoreBySide.playerA=human;state.matchContext.lastScoreBySide.playerB=ai;},
+      assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
+      markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
+      commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
+      calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
+      stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
+      stableFloorTilt,stableStackAngle,shuffle,
+      getLocked(){return presentation.locked;},
+      getPresentationSnapshot(){
+        return {
+          floorSlotReservations:Object.fromEntries(presentation.floorSlotReservations),
+          stagedCardCount:presentation.stagedCards.size,
+          locked:presentation.locked,
+          hintCardId:presentation.hintCardId,
+          sessionStarted:presentation.sessionStarted,
+          dicePresentationCount:presentation.dicePresentationCount,
+          diceSoundCount:presentation.diceSoundCount,
+          kissSoundCount:presentation.kissSoundCount,
+          piTransferAnimationCount:presentation.piTransferAnimationCount,
+          audioTrace:[...presentation.audioTrace],
+          activeHoveredHandCardId:presentation.activeHoveredHandCardId,
+          sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
+        };
+      },
+      resetAudioTrace(){presentation.audioTrace.length=0;},
+      resetPiTransferAnimationCount(){presentation.piTransferAnimationCount=0;},
+      setSoundEnabled(value){presentation.soundEnabled=!!value;}
+    });
+  }else{
+    preloadCardFaces();
+    els.playSoloBtn.addEventListener('click',async()=>{await unlockAudio();els.soloStartOverlay.hidden=true;startGame();},{once:true});
+  }
 })();

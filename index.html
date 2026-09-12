@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#17110d" />
-  <title>Go-Stop: Korean Card Game</title>
+  <title>GoStop Online</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,24 +12,24 @@
     <div class="ambient-room" aria-hidden="true"></div>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark">Go-Stop</span>
-        <span class="brand-sub">KOREAN CARD GAME · MATGO</span>
+        <span class="brand-mark">GoStop Online</span>
       </div>
-      <div class="round-status" aria-label="Game controls">
-        <button id="howToBtn" class="glass-btn" type="button">How to Play</button>
-        <button id="newGameBtn" class="glass-btn strong" type="button">New Game</button>
+      <div class="round-status" data-i18n-aria="language" aria-label="Game controls">
+        <button data-i18n="howTo" id="howToBtn" class="glass-btn" type="button">How to Play</button>
+        <button id="languageBtn" class="glass-btn" type="button" aria-haspopup="true">English ▾</button>
+        <div id="languageMenu" class="language-menu" hidden></div>
+        <button data-i18n="newGame" id="newGameBtn" class="glass-btn strong" type="button">New Game</button>
       </div>
     </header>
 
     <main class="game-stage">
-      <section class="opponent-zone" aria-label="Computer player">
-        <div class="player-chip cpu-chip">
-          <div class="avatar cpu-avatar">AI</div>
-          <div><strong>Computer</strong><span id="aiThinking"></span></div>
-          <div class="score-pill"><b id="aiScore">0</b><small>pts</small></div><span id="aiMultiplier" class="multiplier-chip"></span>
+      <section class="opponent-zone" data-i18n-aria="computer" aria-label="Computer player">
+        <div class="player-status-component cpu-status-component">
+          <div class="player-chip cpu-chip"><div class="avatar cpu-avatar">AI</div><div class="player-identity"><strong data-i18n="computer">Computer</strong><span id="aiSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="aiThinking"></span></div><div class="score-pill"><b id="aiScore">0</b><small data-i18n="points">Points</small></div></div>
+          <div class="status-badges"><span id="aiMultiplier" class="multiplier-chip"></span><span class="go-count-badge"></span></div>
         </div>
-        <div id="aiHand" class="opponent-hand" aria-label="Computer cards"></div>
-        <div class="capture-panel cpu-capture-panel"><div class="capture-panel-title">Computer Captured Cards</div><div id="aiCaptured" class="captured-strip" aria-label="Computer captured cards"></div></div>
+        <div id="aiHand" class="opponent-hand" data-i18n-aria="computerCards" aria-label="Computer cards"></div>
+        <div class="capture-panel game-capture-panel cpu-capture-panel"><div class="capture-panel-title" data-i18n="computerCaptured">Computer Captured Cards</div><div id="aiCaptured" class="captured-strip" data-i18n-aria="computerCaptured" aria-label="Computer captured cards"></div></div>
       </section>
 
       <section class="table" id="table" aria-label="Go-Stop table">
@@ -37,15 +37,15 @@
         <div class="table-pattern"></div>
 
         <div class="table-center">
-          <div class="deck-zone" id="deckZone" aria-label="Draw pile">
+          <div class="deck-zone" id="deckZone" data-i18n-aria="drawPile" aria-label="Draw pile">
             <div class="deck-stack" id="deckStack">
               <div class="back-card back-3"></div>
               <div class="back-card back-2"></div>
               <div class="back-card back-1"></div>
             </div>
-            <span class="deck-label">DECK <b id="deckCount">20</b></span>
+            <span class="deck-label"><span data-i18n="deck">Deck</span> <b id="deckCount">20</b></span>
           </div>
-          <div class="floor" id="floor" aria-label="Cards on the floor"></div>
+          <div class="floor" id="floor" data-i18n-aria="floorCards" aria-label="Cards on the floor"></div>
         </div>
 
         <div id="impactLayer" class="impact-layer" aria-hidden="true"></div>
@@ -54,48 +54,50 @@
 
       </section>
 
-      <section class="player-zone" aria-label="Your player area">
-        <div class="capture-panel player-capture-panel"><div class="capture-panel-title">Your Captured Cards</div><div id="playerCaptured" class="captured-strip player-captured" aria-label="Your captured cards"></div></div>
+      <section class="player-zone" data-i18n-aria="you" aria-label="Your player area">
+        <div class="capture-panel game-capture-panel player-capture-panel"><div class="capture-panel-title" data-i18n="yourCaptured">Your Captured Cards</div><div id="playerCaptured" class="captured-strip player-captured" data-i18n-aria="yourCaptured" aria-label="Your captured cards"></div></div>
         <div class="player-row">
-          <div class="player-chip human-chip">
-            <div class="avatar human-avatar">YOU</div>
-            <div><strong>You</strong><span id="turnLabel"></span></div>
-            <div class="score-pill"><b id="playerScore">0</b><small>pts</small></div><span id="playerMultiplier" class="multiplier-chip"></span>
+          <div class="player-status-component human-status-component">
+            <div class="player-chip human-chip"><div class="avatar human-avatar">YOU</div><div class="player-identity"><strong data-i18n="you">You</strong><span id="playerSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="turnLabel"></span></div><div class="score-pill"><b id="playerScore">0</b><small data-i18n="points">Points</small></div></div>
+            <div class="status-badges"><span id="playerMultiplier" class="multiplier-chip"></span><span class="go-count-badge"></span></div>
           </div>
 
         </div>
-        <div class="hand" id="playerHand" aria-label="Your cards"></div>
+        <div class="hand" id="playerHand" data-i18n-aria="yourCards" aria-label="Your cards"></div>
       </section>
     </main>
   </div>
 
-  <dialog id="howToDialog">
-    <form method="dialog" class="dialog-card">
-      <button class="dialog-close" aria-label="Close">×</button>
-      <div class="eyebrow">QUICK START</div>
-      <h2>How to Play Matgo</h2>
-      <p>Play one Hwatu card from your hand. Cards match by <b>month</b>. If the floor has a card from the same month, you capture a matching pair. Then the top deck card flips and resolves the same way.</p>
-      <div class="rules-grid">
-        <div><b>Brights</b><span>3+ Bright cards score; the Rain Bright changes the 3-Bright score.</span></div>
-        <div><b>Pictures</b><span>5 picture cards = 1 point, then +1 each. Godori adds 5.</span></div>
-        <div><b>Stripes</b><span>5 Stripes = 1 point, then +1 each. Stripe sets can add bonuses.</span></div>
-        <div><b>Singles</b><span>10 Singles value = 1 point, then +1 each.</span></div>
+  <dialog id="howToDialog" class="tutorial-dialog">
+    <form method="dialog" class="dialog-card tutorial-card">
+      <button class="dialog-close" data-i18n-aria="close" aria-label="Close">×</button>
+      <h2>GoStop Online</h2>
+      <nav class="tutorial-nav" aria-label="Tutorial sections">
+        <a href="#guide-overview" data-i18n="overview">Overview</a><a href="#guide-types" data-i18n="cardTypes">Card Types</a><a href="#guide-turn" data-i18n="turnBasics">Turn Basics</a><a href="#guide-matches" data-i18n="matchExamples">Match Examples</a><a href="#guide-specials" data-i18n="specialEvents">Special Events</a><a href="#guide-scoring" data-i18n="scoring">Scoring</a><a href="#guide-go" data-i18n="goStop">Go / Stop</a><a href="#guide-hands" data-i18n="exampleHands">Example Hands</a>
+      </nav>
+      <div class="tutorial-sections">
+        <section id="guide-overview"><h3 data-i18n="overview">Overview</h3><p data-i18n="history"></p><p data-i18n="matchingGuide"></p><p data-i18n="tutorialCardTypes"></p><p data-i18n="tutorialOverview"></p><div id="monthGuide" class="month-guide"></div></section>
+        <section id="guide-types"><h3 data-i18n="cardTypes">Card Types</h3><p data-i18n="tutorialCardTypes"></p><div class="tutorial-example"><b data-i18n="brights">Brights</b><div class="tutorial-cards" data-tutorial-query="bright"></div></div><div class="tutorial-example"><b data-i18n="pictures">Pictures</b><div class="tutorial-cards" data-tutorial-query="animal"></div></div><div class="tutorial-example"><b data-i18n="stripes">Stripes</b><div class="tutorial-cards" data-tutorial-query="ribbon"></div></div><div class="tutorial-example"><b data-i18n="singles">Singles</b><div class="tutorial-cards" data-tutorial-query="single"></div></div><div class="tutorial-example two-single-examples"><b data-i18n="twoSingleCards">2-Single Cards</b><article><span data-i18n="novemberDoubleHelp"></span><div class="tutorial-cards" data-tutorial-query="doublePi-11"></div></article><article><span data-i18n="decemberDoubleHelp"></span><div class="tutorial-cards" data-tutorial-query="doublePi-12"></div></article><article><span data-i18n="sakeCupHelp"></span><div class="tutorial-cards" data-tutorial-query="switchPi"></div></article></div></section>
+        <section id="guide-turn"><h3 data-i18n="turnBasics">Turn Basics</h3><p data-i18n="tutorialTurn"></p><div class="tutorial-flow"><div class="tutorial-cards" data-card-ids="m4-3"></div><span>→</span><div class="tutorial-cards" data-card-ids="m4-4"></div><span>→</span><div class="tutorial-card-back"></div><span>→</span><div class="tutorial-cards" data-card-ids="m8-3"></div></div></section>
+        <section id="guide-matches"><h3 data-i18n="matchExamples">Match Examples</h3><p data-i18n="tutorialMatches"></p><div class="tutorial-grid"><div class="tutorial-cards" data-card-ids="m5-3,m5-4"></div><div class="tutorial-cards" data-card-ids="m6-3,m7-3"></div><div class="tutorial-cards" data-card-ids="m8-3,m8-2,m8-4"></div><div class="tutorial-cards" data-card-ids="m10-2,m11-3,m12-3"></div></div></section>
+        <section id="guide-specials"><h3 data-i18n="specialEvents">Special Events</h3><p data-i18n="tutorialSpecials"></p><div class="tutorial-special-grid"><article><b data-i18n="shake">Shake</b><div class="tutorial-cards" data-card-ids="m1-1,m1-2,m1-3"></div></article><article><b data-i18n="bomb">Bomb!</b><div class="tutorial-cards" data-card-ids="m2-1,m2-2,m2-3,m2-4"></div></article><article><b data-i18n="pooped">POOPED!</b><div class="tutorial-cards" data-card-ids="m3-2,m3-3,m3-4"></div></article><article><b data-i18n="firstPoop">FIRST POOP!</b><div class="tutorial-cards" data-card-ids="m3-2,m3-3,m3-4"></div></article><article><b data-i18n="kiss">KISS!</b><div class="tutorial-cards" data-card-ids="m4-3,m4-4"></div></article><article><b data-i18n="tapTap">FLUSH!</b><div class="tutorial-cards" data-card-ids="m5-1,m5-2,m5-3,m5-4"></div></article><article><b data-i18n="cleanSweep">CLEAN SWEEP!</b><div class="tutorial-cards" data-card-ids="m6-1,m7-2,m8-3"></div></article><article><b data-i18n="conquer">CONQUER!</b><div class="tutorial-cards" data-card-ids="m7-1,m7-2,m7-3,m7-4"></div></article><article><b data-i18n="birdies">5-BIRDIES!</b><div class="tutorial-cards" data-card-ids="m2-1,m4-1,m8-2"></div></article><article><b data-i18n="threeStripes">3-STRIPES!</b><div class="tutorial-cards" data-card-ids="m1-2,m2-2,m3-2"></div></article><article><b data-i18n="fiveBrights">5-BRIGHTS!</b><div class="tutorial-cards" data-card-ids="m1-1,m3-1,m8-1,m11-1,m12-1"></div></article><article><b data-i18n="noWinner">NO WINNER!</b><p data-i18n="noWinnerHelp"></p></article></div></section>
+        <section id="guide-scoring"><h3 data-i18n="scoring">Scoring</h3><p data-i18n="tutorialScoring"></p><div class="tutorial-cards" data-card-ids="m1-1,m3-1,m8-1,m2-1,m4-1,m8-2,m1-2,m2-2,m3-2,m9-1,m11-2,m12-4"></div></section>
+        <section id="guide-go"><h3 data-i18n="goStop">Go / Stop</h3><div class="tutorial-stop-example"><b data-i18n="currentGo" data-i18n-vars='{"count":1}'>Current: 1 Go</b><strong data-i18n="stopValue" data-i18n-vars='{"points":48}'>Stop : 48 Points</strong></div><p data-i18n="tutorialGoStop"></p></section>
+        <section id="guide-hands"><h3 data-i18n="exampleHands">Example Hands</h3><p data-i18n="tutorialExamples"></p><div class="tutorial-before-after"><div class="tutorial-cards" data-card-ids="m9-3,m10-3,m11-3"></div><span>→</span><div class="tutorial-cards" data-card-ids="m9-3,m9-4,m10-3,m10-4"></div></div></section>
       </div>
-      <p>When you reach the finish threshold, choose <b>STOP</b> to end the hand or <b>GO</b> to keep playing for a higher payout.</p>
-      <p class="muted">This build uses the Korean Matgo rule engine: Chongtong, Shake, Bomb, Ppeok/Jabbeok, Ttadak, Jjok, Sweep, Go multipliers, Pi-bak, Gwang-bak, Meong-bak, Go-bak, and Nagari carry.</p>
     </form>
   </dialog>
-
 
 
   <dialog id="decisionDialog">
     <div class="dialog-card decision-card">
       <div class="eyebrow">YOU CAN FINISH</div>
-      <h2>Go or Stop?</h2>
+      <h2 data-i18n="goStop">Go or Stop?</h2>
+      <strong id="stopPreviewValue" class="stop-preview-value">Stop : 0 Points</strong>
       <p id="decisionText"></p>
       <div class="decision-actions">
         <button id="goBtn" class="go-btn" type="button">GO</button>
-        <button id="stopBtn" class="stop-btn" type="button">STOP</button>
+        <button id="stopBtn" class="stop-btn" type="button" data-i18n="stop">STOP</button>
       </div>
     </div>
   </dialog>
@@ -106,7 +108,8 @@
       <div class="final-score" id="resultScore">0</div>
       <h2 id="resultTitle" class="result-winner">Player Wins!</h2>
       <p id="resultBreakdown" class="result-breakdown"></p>
-      <button id="playAgainBtn" class="play-again-grand" type="button">Play Again?</button>
+      <div id="resultCards" class="result-cards"></div>
+      <button id="playAgainBtn" class="play-again-grand" type="button" data-i18n="playAgain">Play Again?</button>
     </div>
   </dialog>
 
@@ -116,32 +119,87 @@
     <form method="dialog" class="dialog-card capture-dialog-card">
       <button class="dialog-close" aria-label="Close">×</button>
       <div class="eyebrow" id="captureOwner">CAPTURED CARDS</div>
-      <h2 id="captureTitle">Gwang</h2>
+      <h2 id="captureTitle">Brights</h2>
       <div id="captureMagnified" class="capture-magnified" aria-label="Magnified captured cards"></div>
       <p id="captureSummary" class="muted"></p>
     </form>
   </dialog>
 
-  <dialog id="shakeDialog">
-    <div class="dialog-card special-rule-card">
-      <div class="eyebrow">SHAKE</div>
-      <h2>Reveal three matching-month cards?</h2>
-      <p id="shakeText"></p>
-      <div id="shakeCards" class="shake-cards" aria-label="Three same-month cards"></div>
+  <dialog id="scoreDialog"><form method="dialog" class="dialog-card score-breakdown-card"><button class="dialog-close" aria-label="Close">×</button><h2 data-i18n="scoreBreakdown">Score Breakdown</h2><div id="scoreBreakdownContent"></div></form></dialog>
+  <dialog id="newGameDialog"><div class="dialog-card"><p data-i18n="restartWarning"></p><div class="decision-actions"><button id="newGameYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="newGameNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
+
+  <dialog id="gukjinDialog">
+    <div class="dialog-card compact-choice-card">
+      <h2 data-i18n="sakeCupChoice">Choose how to use this card</h2>
+      <div id="gukjinChoiceCard" class="single-card-choice"></div>
+      <p class="muted" data-i18n="doubleSingleHelp">Single counts as 2 Singles.</p>
       <div class="decision-actions">
-        <button id="shakeBtn" class="go-btn" type="button">SHAKE ×2</button>
-        <button id="keepSecretBtn" class="stop-btn" type="button">KEEP SECRET</button>
+        <button id="gukjinPictureBtn" class="go-btn" type="button" data-i18n="usePicture">Use as Picture</button>
+        <button id="gukjinSingleBtn" class="stop-btn" type="button" data-i18n="useSingle">Use as Single</button>
       </div>
     </div>
   </dialog>
 
+  <dialog id="shakeReviewDialog">
+    <form method="dialog" class="dialog-card compact-choice-card">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <h2 data-i18n="revealedShakeCards">Revealed Shake Cards</h2>
+      <div id="shakeReviewCards" class="shake-cards"></div>
+    </form>
+  </dialog>
+
+  <dialog id="firstPpeokDialog">
+    <form method="dialog" class="dialog-card special-rule-card">
+      <div class="eyebrow" data-i18n="firstPoop">FIRST POOP!</div>
+      <h2 id="firstPoopTitle" data-i18n="firstPoop">FIRST POOP!</h2>
+      <p id="firstPoopText"></p>
+      <button class="go-btn" type="submit" data-i18n="ok">OK</button>
+    </form>
+  </dialog>
+
+  <dialog id="shakeRevealDialog">
+    <form method="dialog" class="dialog-card special-rule-card">
+      <h2 id="shakeRevealTitle" data-i18n="computerShakes">Computer Shakes!</h2>
+      <p id="shakeRevealText"></p>
+      <div id="shakeRevealCards" class="shake-cards"></div>
+      <button class="go-btn" type="submit" data-i18n="ok">OK</button>
+    </form>
+  </dialog>
+
+  <dialog id="shakeDialog">
+    <div class="dialog-card special-rule-card">
+      <div class="eyebrow" data-i18n="shake">Shake</div>
+      <h2>Reveal three matching-month cards?</h2>
+      <p id="shakeText"></p>
+      <div id="shakeCards" class="shake-cards" aria-label="Three same-month cards"></div>
+      <div class="decision-actions">
+        <button id="shakeBtn" class="go-btn" type="button" data-i18n="shake">Shake</button>
+        <button id="keepSecretBtn" class="stop-btn" type="button" data-i18n="keepBomb">Keep for Bomb</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="milestoneOverlay" class="milestone-overlay" aria-live="polite" aria-hidden="true">
+    <div id="milestoneBirds" class="milestone-birds" aria-hidden="true"></div>
+    <div id="milestoneTitle" class="milestone-title"></div>
+    <div id="milestoneCards" class="milestone-cards"></div>
+  </div>
+  <div id="soloStartOverlay" class="solo-start-overlay">
+    <strong>GoStop Online</strong>
+    <button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button>
+  </div>
+  <div id="openingOverlay" class="opening-overlay" aria-live="polite" aria-hidden="true">
+    <div id="openingDie" class="opening-die">●</div>
+    <div id="openingMessage" class="opening-message"></div>
+  </div>
+
   <dialog id="bombDialog">
     <div class="dialog-card special-rule-card">
-      <div class="eyebrow">BOMB</div>
+      <div class="eyebrow" data-i18n="bomb">Bomb!</div>
       <h2>Play all three?</h2>
       <p id="bombText"></p>
       <div class="decision-actions">
-        <button id="bombBtn" class="go-btn" type="button">BOMB ×2</button>
+        <button id="bombBtn" class="go-btn" type="button" data-i18n="bomb">Bomb!</button>
         <button id="playOneBtn" class="stop-btn" type="button">PLAY ONE</button>
       </div>
     </div>
@@ -156,6 +214,8 @@
   <script src="audio-ppeok.js"></script>
   <script src="audio-shake.js"></script>
   <script src="audio-fanfare.js"></script>
+  <script src="i18n.js"></script>
+  <script src="game-engine.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
