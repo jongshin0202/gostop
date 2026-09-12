@@ -73,6 +73,8 @@
     return {...scored,capturedTotal:scored.total,bonusPoints,total:scored.total+bonusPoints};
   }
 
+  function conquerMinimumPoints(playerCount=2){return playerCount===2?7:3;}
+
   function scoreWithGukjinMode(cards,gukjinAsPi){
     const isGukjin=card=>card.month===9&&card.type==='animal'&&card.flags.includes('switchPi');
     const bright=cards.filter(card=>card.type==='bright');
@@ -183,6 +185,7 @@
         if(!set||!Number.isInteger(set.month)||set.month<1||set.month>12||cardIds.length!==3||cardIds.some(id=>typeof id!=='string'))throw new Error(`state.${side}.revealedShakeSets[${index}] is invalid.`);
         return {month:set.month,cardIds};
       });
+      state[side].armedBombMonths=normalizeMonthList(state[side].armedBombMonths||[],`state.${side}.armedBombMonths`);
       state[side].turnsTaken=state[side].turnsTaken||0;
       state[side].firstPpeokPoints=state[side].firstPpeokPoints||0;
       state[side].gukjinMode=state[side].gukjinMode||'animal';
@@ -193,6 +196,8 @@
       throw new Error('state.matchContext.lastScoreBySide is required.');
     }
     if(state.turn!=='playerA'&&state.turn!=='playerB')throw new Error('state.turn must be playerA or playerB.');
+    state.startingPlayerId=state.startingPlayerId||state.turn;
+    if(state.startingPlayerId!=='playerA'&&state.startingPlayerId!=='playerB')throw new Error('state.startingPlayerId must be playerA or playerB.');
     if(Object.hasOwn(state.matchContext.lastScoreBySide,'human')||Object.hasOwn(state.matchContext.lastScoreBySide,'ai')){
       throw new Error('state.matchContext.lastScoreBySide must use neutral player IDs.');
     }
@@ -314,19 +319,24 @@
     ];
     const winner=candidates.find(candidate=>candidate.months.length);
     if(!winner){ state.openingOutcome=null; return {state,events:[],pendingDecision:advanceOpeningTripleDecision(state)}; }
-    const month=winner.months[0],points=10;
+    const month=winner.months[0],points=conquerMinimumPoints(2);
     const nagariCarryPower=state.matchContext.nagariCarryPower;
     const multiplier=2**nagariCarryPower;
     state.winner=winner.actorId;
     state.specialWinner=winner.actorId;
-    state.openingOutcome={type:'chongtong',actorId:winner.actorId,month,points};
-    state.terminalResult={type:'chongtong',winnerId:winner.actorId,basePoints:points,nagariCarryPower,multiplier,finalPoints:points*multiplier};
+    const cardIds=state[winner.side].hand.filter(card=>card.month===month).map(card=>card.id);
+    state.openingOutcome={type:'chongtong',actorId:winner.actorId,month,points,cardIds};
+    state.terminalResult={type:'chongtong',winnerId:winner.actorId,basePoints:points,nagariCarryPower,multiplier,finalPoints:points*multiplier,cardIds};
     state.matchContext.nagariCarryPower=0;
-    return {state,events:[{type:'chongtongDeclared',audience:'public',actorId:winner.actorId,month,points}]};
+    return {state,events:[{type:'chongtongDeclared',audience:'public',actorId:winner.actorId,month,points,cardIds}]};
   }
 
   function cannotContinueTurn(state,side){
     return state[side].hand.length+state[side].bombFreeTurns===0||state.deck.length===0;
+  }
+
+  function isHandExhausted(state){
+    return !state.pendingTurn&&!state.pendingDecision&&state.human.hand.length+state.human.bombFreeTurns===0&&state.ai.hand.length+state.ai.bombFreeTurns===0;
   }
 
   function resolveNagari(currentState,{actorId}={}){
@@ -334,7 +344,7 @@
     const side=validateActor(state,{actorId});
     if(state.pendingDecision)throw new Error('A private decision must be resolved before Nagari.');
     if(state.pendingTurn)throw new Error('The current turn must be completed before Nagari.');
-    if(!cannotContinueTurn(state,side))throw new Error('Nagari is not available while play can continue.');
+    if(!isHandExhausted(state))throw new Error('No Winner is not available while either player can continue.');
     const carryPower=Math.min(3,state.matchContext.nagariCarryPower+1);
     const terminalResult={type:'nagari',winnerId:null,carryPower,nextHandMultiplier:2**carryPower};
     state.winner='nagari';
@@ -389,7 +399,7 @@
       }
       return {state,events:[],pendingDecision:serializeGameState(state.pendingDecision),requiresNagari:false};
     }
-    const requiresNagari=cannotContinueTurn(state,side);
+    const requiresNagari=isHandExhausted(state);
     const events=[];
     if(!requiresNagari){
       state.turn=otherPlayerId(actorId);
@@ -414,7 +424,7 @@
       state[side].lastGoScore=currentScore;
       state.matchContext.lastScoreBySide[action.actorId]=currentScore;
       events.push({type:'goDeclared',audience:'public',actorId:action.actorId,goCount:state[side].go,score:currentScore});
-      const requiresNagari=cannotContinueTurn(state,side);
+      const requiresNagari=isHandExhausted(state);
       if(!requiresNagari){
         state.turn=otherPlayerId(action.actorId);
         events.push({type:'turnHandedOff',audience:'public',actorId:action.actorId,toPlayerId:state.turn});
@@ -704,6 +714,12 @@
       if(state.pendingTurn||state.pendingDecision)throw new Error('A turn or decision is already in progress.');
       const card=player.hand.find(item=>item.id===action.cardId);
       if(!card)throw new Error('Attempted card is not owned by the actor.');
+      if(player.armedBombMonths.includes(card.month)){
+        const bombDecision=bombDecisionFor(state,side,actorId,card.id);
+        if(!bombDecision)throw new Error('Armed Bomb is stale.');
+        state.pendingDecision=bombDecision;
+        return {state,events,pendingDecision:serializeGameState(bombDecision)};
+      }
       const eligible=player.hand.filter(item=>item.month===card.month).length===3&&player.hiddenTripleMonths.includes(card.month)&&!player.shakenMonths.includes(card.month)&&!player.resolvedOpeningTripleMonths.includes(card.month);
       if(eligible)state.pendingDecision={type:'shakeDecision',audience:'player-private',playerId:actorId,month:card.month,cardId:card.id,choices:['shake','keepSecret']};
       return {state,events,pendingDecision:state.pendingDecision?serializeGameState(state.pendingDecision):null};
@@ -751,8 +767,10 @@
         if(!player.resolvedOpeningTripleMonths.includes(decision.month))player.resolvedOpeningTripleMonths.push(decision.month);
         decision={type:'bombDecision',audience:'player-private',playerId:actorId,month:decision.month,cardIds:[...decision.cardIds],floorCardId:decision.floorCardId,choices:['bomb','playNormally']};
         state.pendingDecision=decision;
-        state.turn=actorId;
-        state.resumeOpeningAfterTurn=true;
+        if(!player.armedBombMonths.includes(decision.month))player.armedBombMonths.push(decision.month);
+        delete state.pendingDecision;
+        advanceOpeningTripleDecision(state);
+        return {state,events:[{type:'bombArmed',audience:'player-private',playerId:actorId,month:decision.month,cardIds:[...decision.cardIds]}],pendingDecision:state.pendingDecision?serializeGameState(state.pendingDecision):null};
       }
       if(!decision||decision.type!=='bombDecision')throw new Error('No Bomb decision is pending.');
       if(decision.playerId!==actorId)throw new Error('The Bomb decision belongs to another player.');
@@ -762,6 +780,7 @@
       const floorCard=state.floor.find(card=>card.id===decision.floorCardId);
       if(bombCards.some(card=>!card)||!floorCard)throw new Error('Bomb decision is stale.');
       player.hand=player.hand.filter(card=>!decision.cardIds.includes(card.id));
+      player.armedBombMonths=player.armedBombMonths.filter(month=>month!==decision.month);
       player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
       removeFloorCardIds(state,[floorCard.id]);
       player.captured.push(...bombCards,floorCard);
@@ -878,7 +897,6 @@
       if(!pending.sweepResolved)applySweepMutation(state,actorId,side,events,'normal');
       delete state.pendingTurn;
       player.turnsTaken++;
-      if(state.resumeOpeningAfterTurn){delete state.resumeOpeningAfterTurn;advanceOpeningTripleDecision(state);}
       events.push({type:'turnCompleted',audience:'public',actorId});
       return {state,events,pendingDecision:null};
     }
@@ -895,7 +913,7 @@
     monthNames,monthShort,masterDeck,
     assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scorePlayer,scoreWithGukjinMode,calculateSettlement,
-    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome,isHandExhausted,conquerMinimumPoints
   });
 
   globalThis.GoStopEngine=api;

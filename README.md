@@ -1,6 +1,6 @@
-# Go-Stop / Matgo
+# GoStop Online
 
-English-first playable Korean **Matgo / Go-Stop** prototype.
+English-first playable **GoStop Online** prototype.
 
 Current baseline: **V1.10.2**
 
@@ -8,7 +8,7 @@ Current baseline: **V1.10.2**
 
 Open `index.html` in a modern desktop browser.
 
-The Hwatu card artwork and several CC0 sound effects are loaded from public web sources, so an internet connection is recommended.
+The GoStop Card artwork and several CC0 sound effects are loaded from public web sources, so an internet connection is recommended.
 
 ## Test
 
@@ -20,8 +20,8 @@ node --test tests/current-behavior.test.js
 
 ## Current gameplay
 
-- 48-card Hwatu deck
-- 2-player Matgo: Player vs Computer AI
+- 48-card GoStop Card deck
+- 2-player GoStop Online: Player vs Computer AI
 - 10 cards per player, 8 cards on the floor
 - Persistent floor positions: captured cards leave blank spaces; new unmatched cards fill blank spaces
 - Matching-month target choice when more than one floor card is available
@@ -30,26 +30,26 @@ node --test tests/current-behavior.test.js
 - Captured groups are clickable for enlarged inspection
 - Go / Stop flow and settlement formula
 
-## Korean rule support currently implemented
+## Special-rule support currently implemented
 
-- Chongtong / four-of-a-month opening win
-- Shake / keep secret
+- CONQUER! / four-of-a-month opening win
+- Shake / Keep for Bomb
 - Bomb
 - Two visible blank/pass cards after Bomb
 - Pooped piles (internal rule ID: Ppeok / ssa-da)
 - recapturing your own Pooped pile
-- Ttadak
-- Jjok
-- Sweep
+- TAP-TAP!
+- KISS!
+- CLEAN SWEEP!
 - Initial three-card same-month floor stack rule used by this project
-- Singles/Pi transfer
+- Singles transfer
 - Go multipliers
-- Pi-bak
-- Gwang-bak
-- Meong-bak
-- Go-bak
-- Nagari carry
-- explicit Gukjin Picture / Double-Pi choice
+- Single Penalty
+- Bright Penalty
+- Picture Penalty
+- Go Penalty
+- NO WINNER carry
+- explicit Sake Cup Picture / Double-Single choice
 
 ## Shuffle
 
@@ -57,7 +57,7 @@ node --test tests/current-behavior.test.js
 - Unbiased rejection sampling + Fisher-Yates
 - No anti-streak logic or hand shaping
 - Validates a 48-card deck with four unique cards per month before dealing
-- Uses a two-pass Matgo deal sequence: 5/5/4, then 5/5/4
+- Uses a two-pass deal sequence: 5/5/4, then 5/5/4
 
 ## Scoring display
 
@@ -69,7 +69,7 @@ Decision and result screens show the actual settlement formula rather than only 
 
 - Complete rule verification against Korean expert rule sources
 - Stronger AI / simulation-based AI
-- 3-player Go-Stop
+- 3-player GoStop Online
 - 4–6 player rooms with 3 active players and Gwang selling
 - Online multiplayer
 - Additional sound/animation polish
@@ -77,9 +77,9 @@ Decision and result screens show the actual settlement formula rather than only 
 
 ## Third-party assets
 
-This repository does not claim ownership of third-party Hwatu artwork or sound assets.
+This repository does not claim ownership of third-party GoStop Card artwork or sound assets.
 
-- Hwatu card SVGs are loaded from Wikimedia Commons.
+- GoStop Card card SVGs are loaded from Wikimedia Commons.
 - Normal card-contact sound is loaded from the public `itsent-lab/hwatu` project; its attribution file identifies the source as a CC0 Freesound recording.
 - Explosion and evil-laugh samples are loaded from `gynura/to_you`, whose repository is released under CC0.
 - Three prototype event sounds are stored as base64 data URIs in `audio-*.js` so the current browser build works without binary asset commits.

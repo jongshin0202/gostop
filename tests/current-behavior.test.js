@@ -310,7 +310,7 @@ test('Chongtong recognizes four of a month and awards the current opening win',a
   const opened=api.getState();
   assert.equal(opened.winner,'playerA');
   assert.equal(opened.specialWinner,'playerA');
-  assert.equal(elements.get('resultScore').textContent,'10 Points');
+  assert.equal(elements.get('resultScore').textContent,'7 Points');
 });
 
 test('Go/Stop eligibility requires threshold and a strict score increase',()=>{
@@ -1216,15 +1216,15 @@ test('opening without Chongtong remains non-terminal and initializes hidden trip
   assertBombWireSafe(result.state);
 });
 
-test('Chongtong gives Player A an immediate neutral 10-point terminal result',()=>{
+test('Conquer gives Player A an immediate neutral 7-point terminal result',()=>{
   const unrelated=card('m9-1');
   const result=extractedEngine.resolveOpeningState(openingState({
     humanHand:cards('m6-1','m6-2','m6-3','m6-4'),aiHand:[unrelated]
   }));
   assert.equal(result.state.winner,'playerA');
   assert.equal(result.state.specialWinner,'playerA');
-  assert.deepEqual(result.state.openingOutcome,{type:'chongtong',actorId:'playerA',month:6,points:10});
-  assert.deepEqual(result.events,[{type:'chongtongDeclared',audience:'public',actorId:'playerA',month:6,points:10}]);
+  assert.deepEqual(result.state.openingOutcome,{type:'chongtong',actorId:'playerA',month:6,points:7,cardIds:['m6-1','m6-2','m6-3','m6-4']});
+  assert.deepEqual(result.events,[{type:'chongtongDeclared',audience:'public',actorId:'playerA',month:6,points:7,cardIds:['m6-1','m6-2','m6-3','m6-4']}]);
   assert.equal(JSON.stringify(result.events).includes(unrelated.id),false);
   assertBombWireSafe(result.state);
 });
@@ -1235,7 +1235,7 @@ test('Chongtong gives Player B the equivalent immediate terminal result',()=>{
   }));
   assert.equal(result.state.winner,'playerB');
   assert.equal(result.state.specialWinner,'playerB');
-  assert.deepEqual(result.events,[{type:'chongtongDeclared',audience:'public',actorId:'playerB',month:7,points:10}]);
+  assert.deepEqual(result.events,[{type:'chongtongDeclared',audience:'public',actorId:'playerB',month:7,points:7,cardIds:['m7-1','m7-2','m7-3','m7-4']}]);
 });
 
 test('simultaneous representable Chongtong preserves current Player A precedence',()=>{
@@ -1253,9 +1253,9 @@ test('terminal Chongtong exposes no normal, Shake, or Bomb actions',()=>{
     const view=extractedEngine.projectStateForViewer(result.state,viewerId);
     assert.equal(view.winner,'playerA');
     assert.equal(view.specialWinner,'playerA');
-    assert.deepEqual(view.openingOutcome,{type:'chongtong',actorId:'playerA',month:6,points:10});
+    assert.deepEqual(view.openingOutcome,{type:'chongtong',actorId:'playerA',month:6,points:7,cardIds:['m6-1','m6-2','m6-3','m6-4']});
     assert.deepEqual(view.legalActions,[]);
-    if(viewerId==='playerB')for(const id of ['m6-1','m6-2','m6-3','m6-4'])assert.equal(JSON.stringify(view).includes(id),false);
+    for(const id of ['m6-1','m6-2','m6-3','m6-4'])assert.equal(view.openingOutcome.cardIds.includes(id),true);
   }
   assert.throws(()=>extractedEngine.applyNormalTurnAction(result.state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-1'}),/already complete/);
   assert.throws(()=>extractedEngine.applyNormalTurnAction(result.state,{type:'requestBombDecision',actorId:'playerA',cardId:'m6-1'}),/already complete/);
@@ -1432,7 +1432,7 @@ test('Nagari exhaustion preserves hand-plus-blanks and empty-deck rules',()=>{
   assert.equal(continuing.requiresNagari,false);
   assert.equal(continuing.state.turn,'playerB');
   state=stateWith({turn:'playerA',deck:[],human:api.makePlayer({hand:[card('m11-3')],bombFreeTurns:2})});
-  assert.equal(extractedEngine.evaluateGoStop(state,{actorId:'playerA'}).requiresNagari,true);
+  assert.equal(extractedEngine.evaluateGoStop(state,{actorId:'playerA'}).requiresNagari,false);
 });
 
 test('authoritative Nagari resolves for both players with public no-winner events',()=>{
@@ -1502,11 +1502,11 @@ test('equal or lower post-GO exhausted scores become Nagari without another deci
   }
 });
 
-test('Chongtong consumes carry authoritatively and preserves its ten-point base',()=>{
+test('Conquer consumes carry authoritatively and preserves its seven-point base',()=>{
   const opening=openingState({humanHand:cards('m6-1','m6-2','m6-3','m6-4')});
   opening.matchContext.nagariCarryPower=2;
   const result=extractedEngine.resolveOpeningState(opening);
-  assert.deepEqual(result.state.terminalResult,{type:'chongtong',winnerId:'playerA',basePoints:10,nagariCarryPower:2,multiplier:4,finalPoints:40});
+  assert.deepEqual(result.state.terminalResult,{type:'chongtong',winnerId:'playerA',basePoints:7,nagariCarryPower:2,multiplier:4,finalPoints:28,cardIds:['m6-1','m6-2','m6-3','m6-4']});
   assert.equal(result.state.matchContext.nagariCarryPower,0);
   assert.deepEqual(wireRoundTrip(result.state),result.state);
 });
@@ -1516,7 +1516,7 @@ test('Bomb empty-deck paths preserve their direct Nagari boundary while last-car
   bomb=extractedEngine.applyNormalTurnAction(bomb,{type:'declareBomb',actorId:'playerA'}).state;
   bomb=extractedEngine.applyNormalTurnAction(bomb,{type:'drawNextCard',actorId:'playerA'}).state;
   bomb=extractedEngine.applyNormalTurnAction(bomb,{type:'completeTurn',actorId:'playerA'}).state;
-  assert.equal(extractedEngine.resolveNagari(bomb,{actorId:'playerA'}).state.winner,'nagari');
+  assert.throws(()=>extractedEngine.resolveNagari(bomb,{actorId:'playerA'}),/either player can continue/);
 
   let blank=stateWith({turn:'playerA',deck:[],human:api.makePlayer({bombFreeTurns:1})});
   blank=extractedEngine.applyNormalTurnAction(blank,{type:'useBombBlank',actorId:'playerA'}).state;
@@ -1739,9 +1739,10 @@ test('opening Bomb executes in one choice while opening Shake suppresses Bomb',(
   let state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')}),ai:api.makePlayer({captured:[card('m7-3')]})});
   api.initFloorSlots(state); state=extractedEngine.resolveOpeningState(state).state;
   const bomb=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerA'});
-  assert.deepEqual(bomb.events.map(event=>event.type),['bombDeclared','bombCardsPlayed','cardsCaptured','piTransferred','bombBlankTurnsGranted','specialResolved']);
-  assert.equal(bomb.state.human.hand.length,0); assert.equal(bomb.state.human.bombFreeTurns,2);
-  assert.equal(bomb.state.ai.captured.length,0); assert.equal(bomb.state.human.captured.length,5);
+  assert.deepEqual(bomb.events.map(event=>event.type),['bombArmed']);
+  assert.equal(bomb.state.human.hand.length,3); assert.equal(bomb.state.human.bombFreeTurns,0);
+  assert.equal(bomb.state.ai.captured.length,1); assert.equal(bomb.state.human.captured.length,0);
+  assert.deepEqual(bomb.state.human.armedBombMonths,[6]);
 
   state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')})});
   api.initFloorSlots(state); state=extractedEngine.resolveOpeningState(state).state;
@@ -1801,8 +1802,8 @@ test('presentation regressions are wired without browser-side rule mutation',()=
   assert.equal(source.includes('preloadCardFaces()'),true);
   assert.equal(source.includes('await preloadCardFace(card)'),true);
   assert.equal(source.includes('document.querySelectorAll(`[data-card-id="${card.id}"]`)'),true);
-  assert.equal(source.includes("classification.kind==='ttadakCandidate')playTtadakHappySound()"),true);
-  assert.equal(source.includes("utterance.lang='ko-KR'"),true);
+  assert.equal(source.includes("classification.kind==='ttadakCandidate'){playTapTapSound()"),true);
+  assert.equal(source.includes('SpeechSynthesisUtterance'),false);
   assert.equal(source.includes("classList.toggle('active-turn'"),true);
   assert.equal(source.includes('sessionStats:{playerA:'),true);
   assert.equal(css.includes('object-fit:contain!important'),true);
@@ -1830,9 +1831,9 @@ test('declared Shake card identities are public, projected, and serializable whi
 test('dedicated Gukjin choices map Picture and Single buttons to authoritative modes',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
-  assert.equal(html.includes('<h2>Choose how to use this card</h2>'),true);
-  assert.equal(html.includes('>Use as Picture</button>'),true);
-  assert.equal(html.includes('>Use as Single</button>'),true);
+  assert.equal(html.includes('Choose how to use this card</h2>'),true);
+  assert.equal(html.includes('>Use as Picture</button>') || html.includes('data-i18n="usePicture">Use as Picture</button>'),true);
+  assert.equal(html.includes('>Use as Single</button>') || html.includes('data-i18n="useSingle">Use as Single</button>'),true);
   assert.equal(source.includes("gukjinPictureBtn.addEventListener('click',()=>chooseGukjinMode('animal'))"),true);
   assert.equal(source.includes("gukjinSingleBtn.addEventListener('click',()=>chooseGukjinMode('pi'))"),true);
   assert.equal(source.includes('Gukjin: ${player.gukjinMode'),false);
@@ -1907,7 +1908,7 @@ test('milestone detection queues Godori, valid Stripes, and five Brights once wi
   const state=stateWith({human:api.makePlayer({captured})});
   api.setState(state); const before=JSON.stringify(api.getState());
   const milestones=api.detectNewMilestones('playerA');
-  assert.deepEqual(Array.from(milestones,item=>item.title),['GODORI!','3-STRIPES!','5-BRIGHTS!']);
+  assert.deepEqual(Array.from(milestones,item=>item.title),['3-BIRDIES!','3-STRIPES!','5-BRIGHTS!']);
   assert.deepEqual(Array.from(milestones[1].cardIds),['m1-2','m2-2','m3-2']);
   assert.equal(milestones[0].birds,true);
   assert.equal(api.detectNewMilestones('playerA').length,0);
@@ -1924,6 +1925,51 @@ test('temporary deck and capture cards reuse the canonical card-face path and st
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg);background:#f5efe3'),false);
   assert.equal(source.includes("slot.className='hand-card-slot'"),true);
   assert.equal(css.includes('.hand-card-slot:hover .hand-card'),true);
-  assert.equal(source.includes("new SpeechSynthesisUtterance('eh-heh-heh!')"),true);
+  assert.equal(source.includes('SpeechSynthesisUtterance'),false);
   assert.equal(source.includes("laugh:'https://"),false);
+});
+
+test('GoStop Online Conquer minimum is seven for two players and three for future larger tables',()=>{
+  assert.equal(extractedEngine.conquerMinimumPoints(2),7);
+  assert.equal(extractedEngine.conquerMinimumPoints(3),3);
+  assert.equal(extractedEngine.conquerMinimumPoints(4),3);
+});
+
+test('opening Bomb arms without moving cards or changing the selected starter',()=>{
+  let state=stateWith({startingPlayerId:'playerB',turn:'playerB',floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')})});
+  api.initFloorSlots(state);state=extractedEngine.resolveOpeningState(state).state;
+  const before=JSON.stringify({hand:state.human.hand,floor:state.floor,turn:state.turn});
+  const result=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerA'});
+  assert.equal(JSON.stringify({hand:result.state.human.hand,floor:result.state.floor,turn:result.state.turn}),before);
+  assert.deepEqual(result.state.human.armedBombMonths,[6]);
+  assert.equal(result.state.startingPlayerId,'playerB');
+});
+
+test('No Winner authority requires both hands, blank opportunities, turns, and decisions to be exhausted',()=>{
+  let state=exhaustedState();
+  assert.equal(extractedEngine.isHandExhausted(state),true);
+  state.ai.hand=[card('m1-1')];assert.equal(extractedEngine.isHandExhausted(state),false);
+  state.ai.hand=[];state.human.bombFreeTurns=1;assert.equal(extractedEngine.isHandExhausted(state),false);
+  state.human.bombFreeTurns=0;state.pendingDecision={type:'goStopDecision'};assert.equal(extractedEngine.isHandExhausted(state),false);
+});
+
+test('all seven translation dictionaries are key complete and unknown keys fall back to English',()=>{
+  const i18n=require('../i18n.js');
+  const keys=Object.keys(i18n.dictionaries.en).sort();
+  assert.deepEqual(Object.keys(i18n.dictionaries).sort(),['de','en','es','fr','ja','ko','zh']);
+  for(const dictionary of Object.values(i18n.dictionaries))assert.deepEqual(Object.keys(dictionary).sort(),keys);
+  assert.equal(i18n.translate('xx','newGame'),i18n.dictionaries.en.newGame);
+  assert.equal(i18n.brand,'GoStop Online');
+});
+
+test('dynamic deck backs are exact at five through zero and proportional above five',()=>{
+  assert.deepEqual([5,4,3,2,1,0].map(api.deckVisualBackCount),[5,4,3,2,1,0]);
+  assert.equal(api.deckVisualBackCount(48),12);
+  assert.equal(api.deckVisualBackCount(20),5);
+});
+
+test('desktop fit helper preserves a single aspect scale and never enlarges the design',()=>{
+  assert.equal(api.computeStageScale(1530,976),1);
+  assert.equal(api.computeStageScale(765,976),.5);
+  assert.ok(api.computeStageScale(1280,720)<=1);
 });

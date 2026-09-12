@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#17110d" />
-  <title>Go-Stop: Korean Card Game</title>
+  <title>GoStop Online</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,12 +12,13 @@
     <div class="ambient-room" aria-hidden="true"></div>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark">Go-Stop</span>
-        <span class="brand-sub">KOREAN CARD GAME · MATGO</span>
+        <span class="brand-mark">GoStop Online</span>
       </div>
       <div class="round-status" aria-label="Game controls">
-        <button id="howToBtn" class="glass-btn" type="button">How to Play</button>
-        <button id="newGameBtn" class="glass-btn strong" type="button">New Game</button>
+        <button data-i18n="howTo" id="howToBtn" class="glass-btn" type="button">How to Play</button>
+        <button id="languageBtn" class="glass-btn" type="button" aria-haspopup="true">English ▾</button>
+        <div id="languageMenu" class="language-menu" hidden></div>
+        <button data-i18n="newGame" id="newGameBtn" class="glass-btn strong" type="button">New Game</button>
       </div>
     </header>
 
@@ -25,11 +26,11 @@
       <section class="opponent-zone" aria-label="Computer player">
         <div class="player-chip cpu-chip">
           <div class="avatar cpu-avatar">AI</div>
-          <div><strong>Computer</strong><span id="aiSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="aiThinking"></span></div>
+          <div><strong data-i18n="computer">Computer</strong><span id="aiSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="aiThinking"></span></div>
           <div class="score-pill"><b id="aiScore">0</b><small>pts</small></div><span id="aiMultiplier" class="multiplier-chip"></span>
         </div>
         <div id="aiHand" class="opponent-hand" aria-label="Computer cards"></div>
-        <div class="capture-panel cpu-capture-panel"><div class="capture-panel-title">Computer Captured Cards</div><div id="aiCaptured" class="captured-strip" aria-label="Computer captured cards"></div></div>
+        <div class="capture-panel cpu-capture-panel"><div class="capture-panel-title" data-i18n="computerCaptured">Computer Captured Cards</div><div id="aiCaptured" class="captured-strip" aria-label="Computer captured cards"></div></div>
       </section>
 
       <section class="table" id="table" aria-label="Go-Stop table">
@@ -55,11 +56,11 @@
       </section>
 
       <section class="player-zone" aria-label="Your player area">
-        <div class="capture-panel player-capture-panel"><div class="capture-panel-title">Your Captured Cards</div><div id="playerCaptured" class="captured-strip player-captured" aria-label="Your captured cards"></div></div>
+        <div class="capture-panel player-capture-panel"><div class="capture-panel-title" data-i18n="yourCaptured">Your Captured Cards</div><div id="playerCaptured" class="captured-strip player-captured" aria-label="Your captured cards"></div></div>
         <div class="player-row">
           <div class="player-chip human-chip">
             <div class="avatar human-avatar">YOU</div>
-            <div><strong>You</strong><span id="playerSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="turnLabel"></span></div>
+            <div><strong data-i18n="you">You</strong><span id="playerSessionStats" class="session-stats">0 Wins · 0 Pts</span><span id="turnLabel"></span></div>
             <div class="score-pill"><b id="playerScore">0</b><small>pts</small></div><span id="playerMultiplier" class="multiplier-chip"></span>
           </div>
 
@@ -73,17 +74,22 @@
     <form method="dialog" class="dialog-card">
       <button class="dialog-close" aria-label="Close">×</button>
       <div class="eyebrow">QUICK START</div>
-      <h2>How to Play Matgo</h2>
-      <p>Play one Hwatu card from your hand. Cards match by <b>month</b>. If the floor has a card from the same month, you capture a matching pair. Then the top deck card flips and resolves the same way.</p>
+      <h2>How to Play GoStop Online</h2>
+      <p>Play one GoStop Card from your hand. Cards match by <b>month</b>. Capture matching cards, flip the top deck card, and reach 7 points to choose GO or STOP.</p>
       <div class="rules-grid">
         <div><b>Brights</b><span>3+ Bright cards score; the Rain Bright changes the 3-Bright score.</span></div>
-        <div><b>Pictures</b><span>5 picture cards = 1 point, then +1 each. Godori adds 5.</span></div>
+        <div><b>Pictures</b><span>5 Pictures = 1 point, then +1 each. The exact February, April, and August bird set adds 5.</span></div>
         <div><b>Stripes</b><span>5 Stripes = 1 point, then +1 each. Stripe sets can add bonuses.</span></div>
         <div><b>Singles</b><span>10 Singles value = 1 point, then +1 each.</span></div>
       </div>
       <p>When your played card matches a floor card and the deck flip matches that same month, the three cards remain together as a <b>Pooped pile</b>. Capture an opponent's Pooped pile to steal 1 Single; recapturing your own pile uses its separate two-Single rule.</p>
       <p>When you reach the finish threshold, choose <b>STOP</b> to end the hand or <b>GO</b> to keep playing for a higher payout.</p>
-      <p class="muted">This build includes Chongtong, Shake, Bomb, Pooped piles, Ttadak, Jjok, Sweep, Go multipliers, Single, Bright, Picture, and Go penalties, plus Nagari carry.</p>
+      <div class="tutorial-guide">
+        <h3>Turn Basics</h3><ol><li>Play one GoStop Card</li><li>Capture matching floor cards</li><li>Flip the top deck card</li><li>Resolve that card</li></ol>
+        <h3>Special Events</h3><p>Shake, Bomb, POOPED!, KISS!, TAP-TAP!, CLEAN SWEEP!, CONQUER!, 3-BIRDIES!, 3-STRIPES!, 5-BRIGHTS!, and NO WINNER each use the exact cards involved.</p>
+        <h3>Singles Value</h3><p>Physical Singles cards can differ from Singles value because Double-Single cards count ×2. The Sake Cup can be used as a Picture or as 2 Singles.</p>
+        <h3>Go / Stop</h3><p>STOP banks the displayed settlement. GO continues for a potentially larger payout while risking a Go Penalty.</p>
+      </div>
     </form>
   </dialog>
 
@@ -92,11 +98,12 @@
   <dialog id="decisionDialog">
     <div class="dialog-card decision-card">
       <div class="eyebrow">YOU CAN FINISH</div>
-      <h2>Go or Stop?</h2>
+      <h2 data-i18n="goStop">Go or Stop?</h2>
+      <strong id="stopPreviewValue" class="stop-preview-value">Stop : 0 Points</strong>
       <p id="decisionText"></p>
       <div class="decision-actions">
         <button id="goBtn" class="go-btn" type="button">GO</button>
-        <button id="stopBtn" class="stop-btn" type="button">STOP</button>
+        <button id="stopBtn" class="stop-btn" type="button" data-i18n="stop">STOP</button>
       </div>
     </div>
   </dialog>
@@ -107,7 +114,8 @@
       <div class="final-score" id="resultScore">0</div>
       <h2 id="resultTitle" class="result-winner">Player Wins!</h2>
       <p id="resultBreakdown" class="result-breakdown"></p>
-      <button id="playAgainBtn" class="play-again-grand" type="button">Play Again?</button>
+      <div id="resultCards" class="result-cards"></div>
+      <button id="playAgainBtn" class="play-again-grand" type="button" data-i18n="playAgain">Play Again?</button>
     </div>
   </dialog>
 
@@ -117,20 +125,22 @@
     <form method="dialog" class="dialog-card capture-dialog-card">
       <button class="dialog-close" aria-label="Close">×</button>
       <div class="eyebrow" id="captureOwner">CAPTURED CARDS</div>
-      <h2 id="captureTitle">Gwang</h2>
+      <h2 id="captureTitle">Brights</h2>
       <div id="captureMagnified" class="capture-magnified" aria-label="Magnified captured cards"></div>
       <p id="captureSummary" class="muted"></p>
     </form>
   </dialog>
 
+  <dialog id="scoreDialog"><form method="dialog" class="dialog-card score-breakdown-card"><button class="dialog-close" aria-label="Close">×</button><h2>Score Breakdown</h2><div id="scoreBreakdownContent"></div></form></dialog>
+
   <dialog id="gukjinDialog">
     <div class="dialog-card compact-choice-card">
-      <h2>Choose how to use this card</h2>
+      <h2 data-i18n="sakeCupChoice">Choose how to use this card</h2>
       <div id="gukjinChoiceCard" class="single-card-choice"></div>
-      <p class="muted">Single counts as 2 Singles.</p>
+      <p class="muted" data-i18n="doubleSingleHelp">Single counts as 2 Singles.</p>
       <div class="decision-actions">
-        <button id="gukjinPictureBtn" class="go-btn" type="button">Use as Picture</button>
-        <button id="gukjinSingleBtn" class="stop-btn" type="button">Use as Single</button>
+        <button id="gukjinPictureBtn" class="go-btn" type="button" data-i18n="usePicture">Use as Picture</button>
+        <button id="gukjinSingleBtn" class="stop-btn" type="button" data-i18n="useSingle">Use as Single</button>
       </div>
     </div>
   </dialog>
@@ -179,6 +189,10 @@
     <div id="milestoneTitle" class="milestone-title"></div>
     <div id="milestoneCards" class="milestone-cards"></div>
   </div>
+  <div id="openingOverlay" class="opening-overlay" aria-live="polite" aria-hidden="true">
+    <div id="openingDie" class="opening-die">●</div>
+    <div id="openingMessage" class="opening-message"></div>
+  </div>
 
   <dialog id="bombDialog">
     <div class="dialog-card special-rule-card">
@@ -201,6 +215,7 @@
   <script src="audio-ppeok.js"></script>
   <script src="audio-shake.js"></script>
   <script src="audio-fanfare.js"></script>
+  <script src="i18n.js"></script>
   <script src="game-engine.js"></script>
   <script src="app.js"></script>
 </body>

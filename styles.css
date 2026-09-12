@@ -504,3 +504,17 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
   .game-stage{grid-template-rows:auto 350px auto}.table{height:350px;min-height:350px}.table-center{inset:24px 12px 20px}.floor{min-height:290px;grid-auto-rows:91px}.floor-slot{height:91px}
   dialog,.dialog-card{max-height:calc(100dvh - 10px)}
 }
+
+/* Consolidated GoStop Online presentation additions. */
+.language-menu{position:absolute;right:110px;top:58px;z-index:80;display:grid;min-width:150px;padding:6px;background:#211914;border:1px solid #806b43;border-radius:10px;box-shadow:0 12px 30px #0009}
+.language-menu[hidden]{display:none}.language-menu button{border:0;background:transparent;color:#fff;text-align:left;padding:9px;border-radius:6px}.language-menu button:hover{background:#ffffff18}
+.score-pill{cursor:pointer}.score-pill:focus-visible{outline:2px solid #f6c84a}.double-single-badge{position:absolute;right:2px;bottom:2px;z-index:30;background:#f6c84a;color:#211000;font:bold 10px/1 sans-serif;padding:3px;border-radius:8px}.capture-stack{overflow:visible!important}
+.stop-preview-value{display:block;color:#ffd84c;font-size:clamp(1.35rem,3vw,2.25rem);text-align:right;text-shadow:0 2px 8px #000;margin:-1.5rem 0 .75rem}
+.score-breakdown-card{width:min(760px,calc(100vw - 24px));max-height:88vh;overflow:auto}.breakdown-total{font-size:2rem;color:#ffd84c}.score-breakdown-card section{border-top:1px solid #ffffff24;padding:.6rem 0}.score-breakdown-card h3,.score-breakdown-card p{margin:.25rem 0}.breakdown-cards,.result-cards{display:flex;gap:6px;flex-wrap:wrap}.breakdown-cards>span{position:relative}.breakdown-cards .card,.result-cards .card{width:54px;height:78px}
+.opening-overlay{position:fixed;inset:0;z-index:95;display:none;place-content:center;justify-items:center;gap:22px;background:#100b08d9}.opening-overlay.show{display:grid}.opening-die{display:grid;place-items:center;width:120px;aspect-ratio:1;background:#f8f3e8;color:#26180c;border-radius:20px;font:bold 3.2rem system-ui;box-shadow:inset -12px -12px 20px #bdb5a7,0 25px 45px #000;animation:die-roll .8s ease-out}.opening-message{font:900 clamp(2rem,7vw,4rem)/1 system-ui;color:#ffd84c;text-shadow:0 4px 12px #000}@keyframes die-roll{from{transform:rotateX(720deg) rotateY(540deg) scale(.5)}to{transform:none}}
+.deck-stack .back-card{position:absolute;inset:0;transform:translate(calc(var(--deck-layer)*.65px),calc(var(--deck-layer)*-.45px))}
+.milestone-title{font-size:clamp(3rem,10vw,7rem)!important;text-shadow:0 5px 0 #271003,0 0 22px #000!important}.milestone-cards .card{width:92px;height:134px}
+.armed-bomb-card{box-shadow:0 0 0 3px #ffcf33,0 0 20px #ff9d00!important}
+html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto Sans SC",sans-serif}
+@media (min-width:1051px){.game-stage{transform:scale(var(--stage-scale,1));transform-origin:top center}}
+@media (max-width:700px){.language-menu{position:fixed;top:58px;right:8px}.stop-preview-value{text-align:center;margin:0}.score-breakdown-card{max-height:92dvh}.milestone-cards .card{width:62px;height:90px}}

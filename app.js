@@ -11,7 +11,7 @@
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
     hasFourOfMonth,matchingCards,score,scorePlayer,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
-    evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome
+    evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome,isHandExhausted
   }=engine;
   const MASTER_DECK = engine.masterDeck;
   const faceImagePromises=new Map();
@@ -41,7 +41,7 @@
     'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
-    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards'
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
@@ -61,13 +61,23 @@
     milestoneHistory:{playerA:new Set(),playerB:new Set()},
     recordedTerminal:null,
     stagedCards:new Map(),
-    floorSlotReservations:new Map()
+    floorSlotReservations:new Map(),
+    locale:'en', firstHand:true, nextStarterId:null, deckDisplayCount:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
+  const i18n=globalThis.GoStopI18n;
+  function t(key,vars){return i18n?i18n.translate(presentation.locale,key,vars):key;}
+  function deckVisualBackCount(count){return count<=0?0:count<=5?count:Math.max(3,Math.ceil(count/4));}
+  function computeStageScale(width,height){return Math.min(1,width/1530,Math.max(0.5,(height-76)/900));}
+  function updateStageScale(){
+    const stage=document.querySelector('.game-stage');if(!stage)return;
+    if(innerWidth<=700){stage.style.removeProperty('--stage-scale');return;}
+    stage.style.setProperty('--stage-scale',String(computeStageScale(innerWidth,innerHeight)));
+  }
 
   function otherPlayerId(playerId){
     if(playerId===PLAYER_A)return PLAYER_B;
@@ -121,7 +131,7 @@
   }
 
 
-  function freshState(nagariCarryPower=0) {
+  function freshState(nagariCarryPower=0,startingPlayerId=PLAYER_A) {
     let deck, human, ai, floor, auditId='';
     for (let attempt=0; attempt<200; attempt++) {
       deck = shuffle(MASTER_DECK.map(c => ({...c})));
@@ -142,14 +152,14 @@
     const makePlayer = hand => ({
       hand, captured:[], go:0, shakes:0, bombs:0, bombFreeTurns:0,
       ppeoks:0, hiddenTripleMonths:[], shakenMonths:[],
-      resolvedOpeningTripleMonths:[],revealedShakeSets:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0
+      resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0
     });
     let next = {
       deck, floor,
       human:makePlayer(human),
       ai:makePlayer(ai),
       floorStacks:{},
-      turn:PLAYER_A, winner:null, specialWinner:null,
+      startingPlayerId,turn:startingPlayerId, winner:null, specialWinner:null,
       matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower}
     };
     markInitialFloorStacks(next);
@@ -351,7 +361,7 @@
     btn.dataset.month=card.month;
     btn.title=`${monthShort[card.month-1]} · ${card.type}`;
     btn.classList.add('canonical-card-face');
-    const img=createCardFaceImage(card,`Hwatu ${monthShort[card.month-1]} card`);
+    const img=createCardFaceImage(card,`GoStop Card, ${monthShort[card.month-1]}`);
     img.addEventListener('error',()=>{ img.alt='Card art unavailable'; btn.classList.add('art-error'); });
     btn.appendChild(img);
     return btn;
@@ -367,7 +377,9 @@
     const bottomScore=scorePlayer(bottomPlayer),topScore=scorePlayer(topPlayer);
     els.playerScore.textContent=bottomScore.total; els.aiScore.textContent=topScore.total;
     if(els.goCount) els.goCount.textContent=bottomPlayer.go;
-    [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=state.deck.length);
+    const shownDeck=presentation.deckDisplayCount??state.deck.length;
+    [els.deckCount,els.deckCountTop,els.deckCorner].filter(Boolean).forEach(el=>el.textContent=shownDeck);
+    if(els.deckStack){els.deckStack.replaceChildren();for(let i=0;i<deckVisualBackCount(shownDeck);i++){const back=document.createElement('div');back.className='back-card';back.style.setProperty('--deck-layer',String(i));els.deckStack.appendChild(back);}}
     if(els.roundCorner) els.roundCorner.textContent=presentation.roundNo;
     // Keep the table visually clean: animation itself communicates whose turn it is.
     els.turnLabel.textContent = '';
@@ -380,14 +392,15 @@
     if(els.playerSessionStats)els.playerSessionStats.textContent=stats(PLAYER_A);
     if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
-    els.playerHand.innerHTML='';
+    const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
+    const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
-      const slot=document.createElement('div'); slot.className='hand-card-slot';
-      const el=createCardEl(card,'card hand-card');
+      let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
+      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;el=createCardEl(card,'card hand-card');el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
       el.disabled = presentation.locked || state.turn!==PLAYER_A;
-      if(card.id===presentation.hintCardId) el.classList.add('matchable');
-      el.addEventListener('click',()=>humanPlay(card.id, el));
-      slot.appendChild(el); els.playerHand.appendChild(slot);
+      el.classList.toggle('matchable',card.id===presentation.hintCardId);
+      el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
+      desired.push(slot);existing.delete(card.id);
     });
     for(let i=0;i<bottomPlayer.bombFreeTurns;i++){
       const blank=document.createElement('button');
@@ -397,8 +410,9 @@
       blank.disabled=presentation.locked || state.turn!==PLAYER_A;
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
-      const slot=document.createElement('div'); slot.className='hand-card-slot'; slot.appendChild(blank); els.playerHand.appendChild(slot);
+      const slot=document.createElement('div'); slot.className='hand-card-slot';slot.dataset.handKey=`blank-${i}`; slot.appendChild(blank); desired.push(slot);
     }
+    existing.forEach(node=>node.remove());desired.forEach(node=>els.playerHand.appendChild(node));
 
     els.aiHand.innerHTML='';
     topPlayer.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
@@ -503,14 +517,16 @@
       const btn=document.createElement('button'); btn.type='button'; btn.className='capture-group'; btn.dataset.captureType=group.type;
       btn.setAttribute('aria-label',`${isViewer?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
       const head=document.createElement('span'); head.className='capture-group-head';
-      head.innerHTML=`<b>${group.en}</b><em>${groupCards.length}</em>`;
+      const displayedCount=group.type==='pi'?scorePlayer(owner).piCount:groupCards.length;
+      head.innerHTML=`<b>${group.en}</b><em>${displayedCount}</em>`;
       const stack=document.createElement('span'); stack.className='capture-stack';
       groupCards.forEach((c,i)=>{
         const img=document.createElement('img'); img.className='captured-mini'; img.src=artUrl(c.file); img.alt='';
         img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
+        if((c.flags.includes('doublePi')||(c.id==='m9-1'&&owner.gukjinMode==='pi'))){const badge=document.createElement('span');badge.className='double-single-badge';badge.textContent='×2';stack.appendChild(badge);}
         if(isViewer&&c.id==='m9-1'){
           img.classList.add('gukjin-review-card'); img.tabIndex=0; img.setAttribute('role','button');
-          img.setAttribute('aria-label','Change how to use Gukjin');
+          img.setAttribute('aria-label','Change how to use the Sake Cup');
           const review=event=>{event.stopPropagation();openGukjinChoice(false);};
           img.addEventListener('click',review); img.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();review(event);}});
         }
@@ -527,12 +543,24 @@
     cards.forEach(c=>els.captureMagnified.appendChild(createCardEl(c,'card magnified-card')));
     if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent='No cards captured in this group yet.'; els.captureMagnified.appendChild(empty); }
     const s=scorePlayer(playerStateById(state,ownerId));
-    const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} picture / animal cards${s.godori?' · Godori complete':''}`:group.type==='ribbon'?`${cards.length} stripe cards`:`${s.piCount} Singles value${s.piCount===1?'':'s'} (${cards.length} cards)`;
+    const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} Picture cards${s.godori?' · 3-Birdies complete':''}`:group.type==='ribbon'?`${cards.length} Stripe cards`:`${s.piCount} Singles value (${cards.length} physical cards)`;
     els.captureSummary.textContent=detail;
     if(!els.captureDialog.open)els.captureDialog.showModal();
   }
   function effectiveCapturedGroup(player,group){
     return player.captured.filter(card=>(card.month===9&&card.flags.includes('switchPi'))?(player.gukjinMode==='pi'?'pi':'animal')===group.type:card.type===group.type);
+  }
+  function scoreBreakdownData(playerId){
+    const player=playerStateById(state,playerId),scored=scorePlayer(player);
+    const groups=captureGroups.map(group=>({label:group.en,points:group.type==='bright'?scored.brightPts:group.type==='animal'?scored.animalPts:group.type==='ribbon'?scored.ribbonPts:scored.piPts,cards:effectiveCapturedGroup(player,group).map(card=>({id:card.id,double:card.flags.includes('doublePi')||(card.id==='m9-1'&&player.gukjinMode==='pi')}))}));
+    return {playerId,total:scored.total,singlesValue:scored.piCount,physicalSingles:groups.find(group=>group.label==='Singles').cards.length,firstPoopBonus:player.firstPpeokPoints||0,groups};
+  }
+  function openScoreBreakdown(playerId){
+    const data=scoreBreakdownData(playerId);els.scoreBreakdownContent.replaceChildren();
+    const total=document.createElement('strong');total.className='breakdown-total';total.textContent=`${data.total} Points`;els.scoreBreakdownContent.appendChild(total);
+    data.groups.forEach(group=>{const section=document.createElement('section'),heading=document.createElement('h3'),note=document.createElement('p'),cards=document.createElement('div');heading.textContent=group.label;note.textContent=`${group.points} points${group.label==='Singles'?` · ${data.singlesValue} Singles value · ${data.physicalSingles} physical cards`:''}`;cards.className='breakdown-cards';group.cards.forEach(item=>{const holder=document.createElement('span');holder.appendChild(createCardEl(MASTER_DECK.find(card=>card.id===item.id),'card'));if(item.double){const badge=document.createElement('b');badge.textContent='×2';holder.appendChild(badge);}cards.appendChild(holder);});section.append(heading,note,cards);els.scoreBreakdownContent.appendChild(section);});
+    if(data.firstPoopBonus){const bonus=document.createElement('p');bonus.textContent=`First Poop Bonus +${data.firstPoopBonus} points`;els.scoreBreakdownContent.appendChild(bonus);}
+    els.scoreDialog.showModal();
   }
   async function promptGukjinChoice(side,events){
     const revealed=events.some(event=>(event.cards||event.cardIds||[]).some(card=>(typeof card==='string'?card:card.id)==='m9-1'));
@@ -625,6 +653,9 @@
     presentation.locked=true; presentation.hintCardId=null;
 
     const attempted=applyNormalAction(normalAction('human',{type:'attemptPlayCard',cardId:card.id}));
+    if(attempted.pendingDecision?.type==='bombDecision'){
+      await executeBombTurn('human',card.month); return;
+    }
     if(attempted.pendingDecision?.type==='shakeDecision'){
       const shake=await chooseShake(card.month);
       if(shake){
@@ -771,20 +802,18 @@
     const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
     if(classification.kind==='ppeokSsaDaCandidate'){
       removeStage(play.card.id); if(draw)removeStage(draw.card.id);
-      playPpeokSound(); render(); await showPoopedCallout();
+      playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[]);
       if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side);
       if(result.events.some(event=>event.type==='threePpeokDeclared')){
         await sleep(450); presentThreePpeok(result);
       }
     }else{
-      let laughed=false;
-      const capturedPpeok=result.events.some(event=>event.type==='floorStackRemoved'&&event.stackSource==='ppeok');
       for(const event of result.events){
         if(event.type==='cardsCaptured'){
           const captured=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
           await animateCaptureBatch(captured,side);
-          if(classification.kind==='ttadakCandidate')playTtadakHappySound();
-          if((classification.kind==='selfPpeokCandidate'||capturedPpeok)&&!laughed){playLaughSound();laughed=true;}
+          if(classification.kind==='jjokCandidate'){playKissSound();await showSpecialTransient('KISS!',event.cardIds,'kiss');}
+          if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('TAP-TAP!',event.cardIds);}
         }else if(event.type==='cardLanded'){
           presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await sleep(180);
         }else if(event.type==='piTransferred'){
@@ -1160,14 +1189,14 @@
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_A});
           await presentShakeDeclaration(result.events);
         }else if(decision.floorCardId){
-          await executeBombTurn('human',decision.month); return;
+          applyNormalAction({type:'declareBomb',actorId:PLAYER_A});
         }else applyNormalAction({type:'keepShakeSecret',actorId:PLAYER_A});
       }else{
         const shake=!decision.floorCardId&&Math.random()<.72;
         if(shake){
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_B});
           await presentShakeDeclaration(result.events);
-        }else if(decision.floorCardId){await executeBombTurn('ai',decision.month);return;}
+        }else if(decision.floorCardId){applyNormalAction({type:'declareBomb',actorId:PLAYER_B});}
         else applyNormalAction({type:'keepShakeSecret',actorId:PLAYER_B});
       }
     }
@@ -1180,11 +1209,12 @@
     if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
     const playerWon=event.actorId===PLAYER_A;
     const reason=playerWon
-      ? `총통! You won because you were dealt all 4 cards from the same month (${monthNames[event.month-1]}).`
-      : `총통! Computer won by holding all 4 cards from the same month (${monthNames[event.month-1]}).`;
+      ? `You held all four ${monthNames[event.month-1]} cards.`
+      : `Computer held all four ${monthNames[event.month-1]} cards.`;
     const terminal=state.terminalResult;
     recordTerminalResult(terminal);
-    setGrandResult('CHONGTONG!',playerWon?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`${reason}${terminal.nagariCarryPower?` · Nagari ×${terminal.multiplier}`:''}`,'special');
+    if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
+    setGrandResult('CONQUER!',playerWon?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`${reason}${terminal.nagariCarryPower?` · No Winner Carry ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1269,7 +1299,7 @@
   }
 
   async function animateHandCardSlap(side,card,sourceRect,target){
-    // CPU backs are intentionally smaller in the rack, but the card entering play is always full Hwatu size.
+    // CPU backs are intentionally smaller in the rack, but the card entering play is always full GoStop Card size.
     sourceRect=fullSizeSourceRect(sourceRect);
     document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{node.style.visibility='hidden';});
     await preloadCardFace(card);
@@ -1500,35 +1530,32 @@
       oscillator.connect(gain).connect(context.destination); oscillator.start(now); oscillator.stop(now+.25); oscillator.onended=()=>context.close();
     }catch(_){ }
   }
-  function playLaughSound(){
-    if(!presentation.soundEnabled||!('speechSynthesis' in window))return;
-    const utterance=new SpeechSynthesisUtterance('eh-heh-heh!');
-    utterance.lang='en-US'; utterance.volume=.6; utterance.rate=1.25; utterance.pitch=1.08;
-    speechSynthesis.speak(utterance);
+  function synthNotes(notes){
+    if(!presentation.soundEnabled)return;
+    try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),now=c.currentTime;notes.forEach(([delay,freq,duration])=>{const o=c.createOscillator(),g=c.createGain();o.frequency.value=freq;o.type='triangle';g.gain.setValueAtTime(.18,now+delay);g.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);o.connect(g).connect(c.destination);o.start(now+delay);o.stop(now+delay+duration);});setTimeout(()=>c.close(),1200);}catch(_){ }
   }
-  function playTtadakHappySound(){
-    if(!presentation.soundEnabled||!('speechSynthesis' in window))return;
-    const utterance=new SpeechSynthesisUtterance('앗싸!');
-    utterance.lang='ko-KR'; utterance.volume=.58; utterance.rate=1.3; utterance.pitch=1.18;
-    speechSynthesis.speak(utterance);
-  }
+  function playTapTapSound(){synthNotes([[0,520,.07],[.11,470,.07]]);}
+  function playKissSound(){synthNotes([[0,300,.16],[.12,520,.28]]);}
+  function playSadResultSound(){synthNotes([[0,330,.22],[.23,294,.22],[.46,262,.22],[.69,196,.5]]);}
+  function playLaughSound(){/* Pooped-pile capture is intentionally silent. */}
   function playShakeSound(){
     [0,260,520].forEach(delay=>setTimeout(()=>playSample('shakeBell',.82,1),delay));
   }
   function playChongtongFanfare(){ playSample('chongtongFanfare',.95,1); }
   function playBombSound(){ playSample('bomb',1,1,1400); }
 
-  async function showPoopedCallout(){
-    if(!els.eventBanner)return;
-    els.eventBanner.textContent='POOPED!'; els.eventBanner.classList.add('show');
-    await sleep(720); els.eventBanner.classList.remove('show');
+  async function showSpecialTransient(title,cardIds=[],effect=''){
+    if(!els.milestoneOverlay)return;
+    els.milestoneTitle.textContent=title;els.milestoneCards.innerHTML='';els.milestoneBirds.innerHTML='';els.milestoneOverlay.dataset.effect=effect;
+    cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
+    els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');await sleep(2000);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
   }
 
   function detectNewMilestones(playerId){
     const player=playerStateById(state,playerId),history=presentation.milestoneHistory[playerId],found=[];
     const add=(key,title,cards,birds=false)=>{if(cards.length&&!history.has(key)){history.add(key);found.push({key,title,cardIds:cards.map(card=>card.id),birds});}};
     const godori=[2,4,8].map(month=>player.captured.find(card=>card.month===month&&card.flags.includes('godori'))).filter(Boolean);
-    if(godori.length===3)add('godori','GODORI!',godori,true);
+    if(godori.length===3)add('godori','3-BIRDIES!',godori,true);
     for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]})){
       const cards=months.map(month=>player.captured.find(card=>card.month===month&&card.ribbonSet===set)).filter(Boolean);
       if(cards.length===3)add(`stripes-${set}`,'3-STRIPES!',cards);
@@ -1543,7 +1570,7 @@
       milestone.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
       if(milestone.birds)for(let index=0;index<5;index++){const bird=document.createElement('span');bird.textContent='🐦';els.milestoneBirds.appendChild(bird);}
       els.milestoneOverlay.classList.add('show'); els.milestoneOverlay.setAttribute('aria-hidden','false');
-      await sleep(3000);
+      await sleep(2000);
       els.milestoneOverlay.classList.remove('show'); els.milestoneOverlay.setAttribute('aria-hidden','true');
       await sleep(120);
     }
@@ -1571,9 +1598,15 @@
     if(card.flags.includes('godori')&&hc.filter(c=>c.flags.includes('godori')).length>=2)v+=9;
     return v;
   }
+  function aiGoStopDecision(view,sc){
+    const me=view.ai,opponent=view.human;
+    const opponentScore=scorePlayer({captured:opponent.captured,gukjinMode:opponent.gukjinMode||'animal',firstPpeokPoints:opponent.firstPpeokPoints||0}).total;
+    const remaining=me.hand.length+(me.bombFreeTurns||0),lead=sc.total-opponentScore;
+    const publicThreat=opponentScore>=5||opponent.captured.filter(card=>card.type==='bright').length>=2;
+    return remaining>=2&&!publicThreat&&(lead>=4||sc.total>=12);
+  }
   function aiShouldGo(sc){
-    const human=scorePlayer(state.human).total,remaining=state.ai.hand.length,lead=sc.total-human,risk=human>=5?2.2:human>=3?1.2:.5;
-    return remaining>2&&(lead+sc.total/4-risk+Math.random()*1.2)>3.6;
+    return aiGoStopDecision(engine.projectStateForViewer(state,PLAYER_B),sc);
   }
 
 
@@ -1601,6 +1634,7 @@
     els.resultTitle.textContent=winnerLabel;
     els.resultScore.textContent=scoreText;
     els.resultBreakdown.textContent=breakdown||'';
+    if(call!=='CONQUER!'&&els.resultCards&&typeof els.resultCards.replaceChildren==='function')els.resultCards.replaceChildren();
   }
 
   function calculateFinalScore(winnerSide){
@@ -1615,7 +1649,8 @@
       .replace('Meong-bak','Picture Penalty')
       .replace('Pi-bak','Single Penalty')
       .replace('Gwang-bak','Bright Penalty')
-      .replace('Go-bak','Go Penalty');
+      .replace('Go-bak','Go Penalty')
+      .replace('Nagari carry','No Winner Carry');
     const parts=(settled.formulaSteps||[`Base ${settled.base.total}`]).map(englishLabel);
     if(includeFinal)parts.push(`Final ${settled.total}`);
     return parts.join('  →  ');
@@ -1623,7 +1658,9 @@
 
   async function humanGoStop(sc){
     const preview=calculateFinalScore('human');
-    els.decisionText.textContent=`Current: ${state.human.go} Go. ${formatScoreFormula(preview)}. STOP takes ${preview.total} points now. GO continues the hand but risks a Go Penalty.`;
+    els.decisionText.textContent=`Current: ${state.human.go} Go. ${formatScoreFormula(preview)}. GO continues the hand but risks a Go Penalty.`;
+    if(els.stopPreviewValue)els.stopPreviewValue.textContent=`Stop : ${preview.total} Points`;
+    els.goBtn.textContent=state.human.go===0?'GO':`${state.human.go+1} GO`;
     els.decisionDialog.show();
   }
 
@@ -1634,6 +1671,7 @@
     recordTerminalResult(state.terminalResult);
     presentation.locked=true; hideActionCue();
     setGrandResult('STOP!',side==='human'?'Player Wins!':'Computer Wins!',`${ended.settlement.total} Points`,formatScoreFormula(ended.settlement),'stop');
+    if(side==='human')playChongtongFanfare();else playSadResultSound();
     els.resultDialog.showModal(); render();
   }
 
@@ -1643,7 +1681,7 @@
     const event=result.events.find(item=>item.type==='nagariDeclared');
     recordTerminalResult(state.terminalResult);
     presentation.locked=true;
-    setGrandResult('NAGARI!','No Winner',`Next Hand ×${event.nextHandMultiplier}`,'No one completed the hand with STOP. The next completed hand carries the Nagari multiplier.','special');
+    setGrandResult('NO WINNER!','',`Next Hand ×${event.nextHandMultiplier}`,'No one won before the hand ended. The next completed hand is doubled.','special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1654,7 +1692,7 @@
     const side=legacySideForPlayerId(event.actorId);
     recordTerminalResult(terminal);
     presentation.locked=true;
-    setGrandResult('TRIPLE POOP!',side==='human'?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`Three Poops in one hand${terminal.nagariCarryPower?` · Nagari ×${terminal.multiplier}`:''}`,'special');
+    setGrandResult('TRIPLE POOP!',side==='human'?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`Three Poops in one hand${terminal.nagariCarryPower?` · No Winner Carry ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1665,6 +1703,7 @@
     const key=`${presentation.roundNo}:${terminal.type}:${terminal.winnerId||'none'}`;
     if(presentation.recordedTerminal===key)return;
     presentation.recordedTerminal=key;
+    presentation.nextStarterId=terminal.winnerId||state.startingPlayerId;
     if(terminal.winnerId){
       presentation.sessionStats[terminal.winnerId].wins++;
       presentation.sessionStats[terminal.winnerId].points+=terminal.finalPoints??terminal.score??terminal.settlement?.total??0;
@@ -1672,7 +1711,7 @@
   }
   function resetSession(){
     presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};
-    presentation.roundNo=1; presentation.recordedTerminal=null;
+    presentation.roundNo=1; presentation.recordedTerminal=null;presentation.firstHand=true;presentation.nextStarterId=null;
   }
   function showFirstPoopNotice(side){
     if(!els.firstPpeokDialog)return Promise.resolve();
@@ -1680,6 +1719,21 @@
     els.firstPoopText.textContent=side==='human'?'You pooped on your first turn and get +7 points.':'Computer pooped on its first turn and gets +7 points.';
     els.firstPpeokDialog.showModal();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
+  }
+  function setLocale(locale){
+    presentation.locale=i18n?.dictionaries?.[locale]?locale:'en';
+    try{localStorage.setItem('gostop-language',presentation.locale);}catch(_){ }
+    document.documentElement.lang=presentation.locale;
+    if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
+    document.querySelectorAll('[data-i18n]').forEach(node=>{node.textContent=t(node.dataset.i18n);});
+    if(state)render();
+  }
+  function setupLanguageMenu(){
+    if(!els.languageBtn||!els.languageMenu||!i18n)return;
+    Object.entries(i18n.names).forEach(([locale,name])=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('click',()=>{setLocale(locale);els.languageMenu.hidden=true;});els.languageMenu.appendChild(button);});
+    els.languageBtn.addEventListener('click',()=>{els.languageMenu.hidden=!els.languageMenu.hidden;});
+    try{presentation.locale=localStorage.getItem('gostop-language')||'en';}catch(_){presentation.locale='en';}
+    setLocale(presentation.locale);
   }
 
   function recommendHumanCard(){
@@ -1694,20 +1748,39 @@
   }
 
 
-  function startGame(){
+  async function presentOpeningSequence(starter,roll){
+    if(TEST_MODE)return;
+    els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
+    els.openingDie.hidden=!roll;els.openingDie.textContent=starter===PLAYER_A?'P':'C';els.openingMessage.textContent=`${starter===PLAYER_A?'Player':'Computer'} goes first!`;
+    await sleep(roll?950:650);els.openingDie.hidden=true;await sleep(350);
+    presentation.deckDisplayCount=48;render();playShuffleSound();await sleep(480);
+    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();playDealSound(count);await sleep(34);}
+    presentation.deckDisplayCount=null;els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+  }
+  function playShuffleSound(){synthNotes(Array.from({length:12},(_,i)=>[i*.025,180+i*17,.045]));}
+  function playDealSound(index){if(index%2===0)synthNotes([[0,230+(index%5)*18,.035]]);}
+  async function startGame(){
     presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
-    state=freshState(nagariCarryPower);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
+    const roll=presentation.firstHand;
+    const starter=presentation.nextStarterId||(roll?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
+    state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
     presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
     els.roundNo.textContent=presentation.roundNo;render();
-    setTimeout(processOpeningSpecials,420);
+    await presentOpeningSequence(starter,roll);presentation.firstHand=false;
+    await processOpeningSpecials();
   }
 
 
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
+  if(!TEST_MODE){addEventListener('resize',updateStageScale);updateStageScale();}
+  setupLanguageMenu();
+  document.querySelector('.human-chip .score-pill')?.addEventListener('click',()=>openScoreBreakdown(PLAYER_A));
+  document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',()=>openScoreBreakdown(PLAYER_B));
+  if(els.scoreDialog)els.scoreDialog.addEventListener('click',event=>{if(event.target===els.scoreDialog)els.scoreDialog.close();});
   els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
   if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
   if(els.railNewGame)els.railNewGame.addEventListener('click',()=>{resetSession();startGame();});
@@ -1766,13 +1839,13 @@
     const cloneCard=card=>({...card,flags:[...card.flags]});
     const makeTestPlayer=(overrides={})=>({
       hand:[],captured:[],go:0,shakes:0,bombs:0,bombFreeTurns:0,ppeoks:0,
-      hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0,
+      hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0,
       ...overrides
     });
     const makeTestState=(overrides={})=>{
       const next={
         deck:[],floor:[],human:makeTestPlayer(),ai:makeTestPlayer(),
-        floorStacks:{},turn:PLAYER_A,winner:null,specialWinner:null,
+        floorStacks:{},startingPlayerId:PLAYER_A,turn:PLAYER_A,winner:null,specialWinner:null,
         matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0},
         ...overrides
       };
@@ -1797,7 +1870,7 @@
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
-      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,
