@@ -124,7 +124,7 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 
 /* V1.6 — card-only choreography; no hands/arms */
 .hand-actor{display:none!important}
-.hand-card.pending-card{outline:2px solid rgba(255,220,145,.72);outline-offset:3px;box-shadow:0 13px 22px rgba(0,0,0,.34),0 0 0 4px rgba(255,201,96,.12)}
+.hand-card.pending-card{outline:2px solid #9b2f24;outline-offset:2px;box-shadow:0 13px 22px rgba(0,0,0,.34),0 0 0 3px rgba(143,34,24,.2)}
 .floor .floor-card.target-option{cursor:pointer;z-index:20;outline:3px solid rgba(255,213,117,.98);outline-offset:4px;box-shadow:0 0 0 7px rgba(255,188,70,.14),0 10px 20px rgba(0,0,0,.42);animation:targetPulse .78s ease-in-out infinite alternate}
 .floor .floor-card.ai-target-preview{z-index:19;outline:3px solid rgba(159,198,255,.96);outline-offset:4px;box-shadow:0 0 0 7px rgba(128,180,255,.12),0 10px 20px rgba(0,0,0,.42)}
 @keyframes targetPulse{from{transform:rotate(var(--tilt)) translateY(0)}to{transform:rotate(var(--tilt)) translateY(-5px)}}

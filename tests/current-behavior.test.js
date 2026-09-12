@@ -1922,9 +1922,9 @@ test('milestone detection queues Godori, valid Stripes, and five Brights once wi
 test('temporary deck and capture cards reuse the canonical card-face path and stable hover shell',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
-  assert.equal(source.includes("front.className='deck-draw-face deck-draw-front canonical-card-face'"),true);
+  assert.equal(source.includes("front.className='deck-draw-face deck-draw-front card canonical-card-face'"),true);
   assert.equal(source.includes('front.appendChild(createCardFaceImage(card))'),true);
-  assert.equal(source.includes("el.className=`${className} canonical-card-face normal-gameplay-card`"),true);
+  assert.equal(source.includes("el.className=`${className} card canonical-card-face normal-gameplay-card`"),true);
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg) translateZ(1px)}'),true);
   assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg);background:#f5efe3'),false);
   assert.equal(source.includes("slot.className='hand-card-slot'"),true);
@@ -2170,7 +2170,7 @@ test('normal staged and deck cards keep viewport-scaled canonical dimensions wit
   const staging=source.slice(source.indexOf('function cardSize'),source.indexOf('function captureTargetRect'));
   assert.match(staging,/getBoundingClientRect\(\)\.width\/stage\.offsetWidth/);
   assert.match(staging,/normal-gameplay-card/);assert.doesNotMatch(staging,/magnified-card|tutorial-game-card|scale\(/);
-  assert.match(staging,/deck-draw-front canonical-card-face/);
+  assert.match(staging,/deck-draw-front card canonical-card-face/);
   assert.doesNotMatch(css,/targetPulse[^}]*scale\(/);
   assert.match(css,/hand-card-slot\.is-hovered \.hand-card\{transform:translateY/);
 });
@@ -2271,7 +2271,7 @@ test('canonical card shell is singular across gameplay and special-event context
   assert.match(contract,/aspect-ratio:var\(--card-aspect\)/);assert.match(contract,/background:#f5efe3/);assert.match(contract,/border:1px solid #b33226/);assert.doesNotMatch(contract,/!important/);
   assert.doesNotMatch(css,/\.card,\.physical-card,\.flying-card,\.capture-ghost\{/);
   assert.doesNotMatch(css,/\.deck-draw-front\{[^}]*(?:background|border):/);
-  assert.match(source,/createCardEl\(card,'card'\)/);assert.match(source,/canonical-card-face normal-gameplay-card/);
+  assert.match(source,/createCardEl\(card,'card'\)/);assert.match(source,/card canonical-card-face normal-gameplay-card/);
   const reset=source.slice(source.indexOf('function resetHandPresentationState'),source.indexOf('function fullSizeSourceRect'));
   for(const token of ['stagedCards.clear()','floorSlotReservations.clear()','activeHoveredHandCardId=null','physical-card','floor-slot-proxy'])assert.ok(reset.includes(token),token);
 });
@@ -2298,6 +2298,19 @@ test('all semantic and scoring milestones share a transparent halo-free presente
   for(const declaration of ['background:transparent','border-color:transparent','box-shadow:none','outline:0','filter:none'])assert.ok(cards.includes(declaration),`cards ${declaration}`);
   assert.match(css,/\.milestone-cards \.card>img\{background:transparent\}/);assert.match(css,/\.milestone-cards \.card::before,\.milestone-cards \.card::after\{content:none\}/);
   assert.doesNotMatch(source,/milestone[^\n]+\.(?:png|webp)/i);
+});
+
+test('played and deck-drawn temporary cards retain the settled card class without a white shell',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  const maker=source.slice(source.indexOf('function makePhysicalFace'),source.indexOf('function normalizeFixed'));
+  const deck=source.slice(source.indexOf('async function animateDeckLiftFlip'),source.indexOf('async function animateStagedSlap'));
+  assert.match(maker,/\$\{className\} card canonical-card-face normal-gameplay-card/);
+  assert.match(deck,/deck-draw-face deck-draw-front card canonical-card-face/);
+  assert.doesNotMatch(maker,/cloneNode|background|border|outline|boxShadow|filter/);
+  const moving=css.match(/\.physical-card\.moving-card\{([^}]+)\}/)?.[1]||'',draw=css.match(/\.physical-card\.deck-draw-card\{([^}]+)\}/)?.[1]||'';
+  assert.doesNotMatch(moving,/(?:background|border|outline|rgba\(255|#fff|white)/i);assert.doesNotMatch(draw,/(?:border|outline|rgba\(255|#fff|white)/i);
+  assert.doesNotMatch(css,/\.physical-card(?:\.moving-card)?>img\{/);
+  const selected=css.match(/\.hand-card\.pending-card\{([^}]+)\}/)?.[1]||'';assert.doesNotMatch(selected,/(?:rgba\(255|#fff|white)/i);
 });
 
 test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>{

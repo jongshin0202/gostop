@@ -1292,7 +1292,7 @@
   }
 
   function makePhysicalFace(card,rect,className='physical-card'){
-    const el=document.createElement('div'); el.className=`${className} canonical-card-face normal-gameplay-card`; el.dataset.cardId=card.id;
+    const el=document.createElement('div'); el.className=`${className} card canonical-card-face normal-gameplay-card`; el.dataset.cardId=card.id;
     el.appendChild(createCardFaceImage(card)); document.body.appendChild(el);
     normalizeFixed(el,rect); return el;
   }
@@ -1394,7 +1394,7 @@
     const el=document.createElement('div'); el.className='physical-card deck-draw-card normal-gameplay-card'; el.dataset.cardId=card.id;
     const inner=document.createElement('div'); inner.className='deck-draw-inner';
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
-    const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front canonical-card-face';
+    const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front card canonical-card-face';
     front.appendChild(createCardFaceImage(card)); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
     presentation.stagedCards.set(card.id,el);
     if(prefersReducedMotion()){ inner.style.transform='rotateY(180deg)'; return el; }
