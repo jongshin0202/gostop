@@ -2034,6 +2034,22 @@ test('shuffle remains secure rejection-sampled Fisher-Yates with only floor-four
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes('cryptoApi.getRandomValues(buf)'),true);assert.equal(source.includes('while(value >= limit)'),true);assert.equal(source.includes('for(let i=a.length-1;i>0;i--)' ),true);assert.equal(source.includes('if (!hasFourOfMonth(floor)) break'),true);assert.equal(extractedEngine.masterDeck.length,48);assert.equal(new Set(extractedEngine.masterDeck.map(card=>card.id)).size,48);
 });
 
+test('each production shuffle starts from a fresh complete deck and deals disjoint 10/10/8/20 partitions',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const fresh=source.slice(source.indexOf('function freshState'),source.indexOf('function requireCrypto'));
+  assert.match(fresh,/deck = shuffle\(MASTER_DECK\.map\(c => \(\{\.\.\.c\}\)\)\)/);
+  assert.match(fresh,/human\.push\(\.\.\.deck\.splice\(0,5\)\).*ai\.push\(\.\.\.deck\.splice\(0,5\)\).*floor\.push\(\.\.\.deck\.splice\(0,4\)\)/s);
+  assert.doesNotMatch(source,/(?:localStorage|sessionStorage)\.(?:getItem|setItem)\([^)]*(?:deck|shuffle)/i);
+  const orders=new Set();
+  for(let sample=0;sample<128;sample++){
+    const deck=api.shuffle(api.masterDeck()),human=[],computer=[],floor=[];
+    for(let pass=0;pass<2;pass++){human.push(...deck.splice(0,5));computer.push(...deck.splice(0,5));floor.push(...deck.splice(0,4));}
+    const partitions=[human,computer,floor,deck];assert.deepEqual(partitions.map(part=>part.length),[10,10,8,20]);
+    const all=partitions.flat(),ids=all.map(item=>item.id);assert.equal(new Set(ids).size,48);api.assertDeckIntegrity(all);orders.add(ids.join(','));
+  }
+  assert.equal(orders.size,128);
+});
+
 test('starter dice remains presentation-only, rolls only for a new session, and settles after its audio gate',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sequence=source.slice(source.indexOf('async function presentOpeningSequence'),source.indexOf('function playDiceSound'));
   assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
