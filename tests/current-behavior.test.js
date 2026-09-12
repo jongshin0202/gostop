@@ -2189,7 +2189,8 @@ test('normal gameplay semantic class leaves the approved card shell untouched',(
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.doesNotMatch(css,/\.normal-gameplay-card\s*\{/);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
-  assert.match(source,/const resting=document\.querySelector\('\.floor \.floor-card'\)/);
+  assert.match(source,/getPropertyValue\('--card-w'\)/);
+  assert.doesNotMatch(source,/const resting=document\.querySelector\('\.floor \.floor-card'\)/);
   assert.match(source,/el\.style\.width=`\$\{rect\.width\}px`.*el\.style\.height=`\$\{rect\.height\}px`/s);
 });
 
@@ -2313,20 +2314,18 @@ test('played and deck-drawn temporary cards retain the settled card class withou
   const selected=css.match(/\.hand-card\.pending-card\{([^}]+)\}/)?.[1]||'';assert.doesNotMatch(selected,/(?:rgba\(255|#fff|white)/i);
 });
 
-test('player-played and deck-drawn hit frames conceal the underlying target before impact',()=>{
+test('player-played and deck-drawn cards use untransformed canonical dimensions for every moving frame',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
-  const helper=source.slice(source.indexOf('function concealImpactTarget'),source.indexOf('function removeStage'));
-  assert.match(helper,/els\.floor\.querySelector\(`\[data-card-id="\$\{targetCard\.id\}"\]`\)/);
-  assert.match(helper,/targetEl\.style\.visibility='hidden'/);
+  const sizing=source.slice(source.indexOf('function cardSize'),source.indexOf('function approximateAiSource'));
+  assert.match(sizing,/getPropertyValue\('--card-w'\)/);
+  assert.match(sizing,/getPropertyValue\('--card-h'\)/);
+  assert.match(sizing,/stage\.getBoundingClientRect\(\)\.width\/stage\.offsetWidth/);
+  assert.doesNotMatch(sizing,/resting|getBoundingClientRect\(\).*floor-card|getBoundingClientRect\(\).*hand-card/);
   const hand=source.slice(source.indexOf('async function animateHandCardSlap'),source.indexOf('async function animateBombSlap'));
   const deckHit=source.slice(source.indexOf('async function animateStagedSlap'),source.indexOf('function captureTargetRect'));
-  for(const flow of [hand,deckHit]){
-    assert.match(flow,/setTimeout\(\(\)=>concealImpactTarget\(target\),Math\.max\(0,duration\*\.90\)\)/);
-    assert.match(flow,/concealImpactTarget\(target\);\s*return/);
-  }
-  const capture=source.slice(source.indexOf('async function animateCaptureBatch'),source.indexOf('async function animateCaptureSlides'));
-  assert.match(capture,/if\(staged\)\{staged\.style\.visibility='';staged\.classList\.add\('capture-flight-card'\)/);
-  assert.doesNotMatch(helper,/createElement|appendChild|cloneNode/);
+  assert.match(hand,/sourceRect=fullSizeSourceRect\(sourceRect\)/);
+  assert.match(deckHit,/const landing=target \? overlapLanding\(target\) : await freeFloorLanding\(card\)/);
+  assert.doesNotMatch(source,/concealImpactTarget/);
 });
 
 test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>{
