@@ -25,7 +25,7 @@ function loadCurrentGame(){
       if(!elements.has(id))elements.set(id,fakeElement());
       return elements.get(id);
     },
-    addEventListener(){},querySelector(){return fakeElement();},createElement(){return fakeElement();},
+    addEventListener(){},querySelector(){return fakeElement();},querySelectorAll(){return [];},createElement(){return fakeElement();},
     body:fakeElement(),documentElement:fakeElement()
   };
   const context = {
@@ -40,6 +40,8 @@ function loadCurrentGame(){
   context.window=context;
   context.globalThis=context;
   vm.createContext(context);
+  const i18nSource=fs.readFileSync(path.join(__dirname,'..','i18n.js'),'utf8');
+  vm.runInContext(i18nSource,context,{filename:'i18n.js'});
   const engineSource=fs.readFileSync(path.join(__dirname,'..','game-engine.js'),'utf8');
   vm.runInContext(engineSource,context,{filename:'game-engine.js'});
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
@@ -1859,9 +1861,9 @@ test('responsive CSS defines non-overlapping phone, landscape, tablet, and deskt
 test('Keep for Bomb is silent while accepted Shake alone enters the acknowledgment presenter',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
-  assert.equal(html.includes('id="shakeBtn" class="go-btn" type="button">Shake</button>'),true);
-  assert.equal(html.includes('id="keepSecretBtn" class="stop-btn" type="button">Keep for Bomb</button>'),true);
-  assert.equal(source.includes('Choose Shake or Keep for Bomb.'),true);
+  assert.equal(html.includes('id="shakeBtn"') && html.includes('data-i18n="shake">Shake</button>'),true);
+  assert.equal(html.includes('id="keepSecretBtn"') && html.includes('data-i18n="keepBomb">Keep for Bomb</button>'),true);
+  assert.equal(source.includes("t('shake')")&&source.includes("t('keepBomb')"),true);
   assert.equal((source.match(/playShakeSound\(/g)||[]).length,2,'only the semantic presenter and function declaration may reference Shake audio');
   const presenter=source.slice(source.indexOf('async function presentShakeDeclaration'),source.indexOf('function openShakeReview'));
   assert.equal(presenter.includes("events.find(item=>item.type==='shakeDeclared')"),true);
@@ -1873,10 +1875,11 @@ test('Keep for Bomb is silent while accepted Shake alone enters the acknowledgme
 test('First Poop notices cover both players while First and Triple Poop semantics stay distinct',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const i18n=require('../i18n.js');
   assert.equal(source.includes("if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side)"),true);
-  assert.equal(source.includes("'You pooped on your first turn and get +7 points.'"),true);
-  assert.equal(source.includes("'Computer pooped on its first turn and gets +7 points.'"),true);
-  assert.equal(source.includes("setGrandResult('TRIPLE POOP!'"),true);
+  assert.equal(i18n.dictionaries.en.firstPoop,'FIRST POOP!');
+  assert.equal(i18n.dictionaries.en.triplePoop,'TRIPLE POOP!');
+  assert.equal(source.includes("setGrandResult(t('triplePoop')"),true);
   const poopPath=source.slice(source.indexOf("if(classification.kind==='ppeokSsaDaCandidate')"),source.indexOf("}else{",source.indexOf("if(classification.kind==='ppeokSsaDaCandidate')")));
   assert.equal(poopPath.includes('playPpeokSound()'),true);
   assert.equal(poopPath.includes('playShakeSound()'),false);
@@ -1888,8 +1891,9 @@ test('First Poop notices cover both players while First and Triple Poop semantic
 
 test('normal visible English UI uses Poop terminology and not internal Korean-derived labels',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const i18n=require('../i18n.js');
   const visible=html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ');
-  assert.match(visible,/Pooped pile/);
+  assert.match(i18n.dictionaries.en.tutorialSpecials,/POOPED/);
   assert.match(visible,/FIRST POOP!/);
   assert.doesNotMatch(visible,/Ppeok|PPEOK|Ssa-da|Meong-bak|Pi-bak|Gwang-bak|Go-bak/);
 });
@@ -1899,7 +1903,7 @@ test('Go badges hide zero and label one or three while the decision copy is expl
   assert.equal(api.goCountLabel(api.makePlayer({go:1})),'1 Go');
   assert.equal(api.goCountLabel(api.makePlayer({go:3})),'3 Go');
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
-  assert.equal(source.includes('Current: ${state.human.go} Go.'),true);
+  assert.equal(source.includes("t('currentGo',{count:state.human.go})"),true);
   assert.equal(source.includes("renderGoIndicator(document.querySelector('.cpu-chip'),topPlayer)"),true);
 });
 
@@ -1953,13 +1957,26 @@ test('No Winner authority requires both hands, blank opportunities, turns, and d
   state.human.bombFreeTurns=0;state.pendingDecision={type:'goStopDecision'};assert.equal(extractedEngine.isHandExhausted(state),false);
 });
 
-test('all seven translation dictionaries are key complete and unknown keys fall back to English',()=>{
+test('all seven locales explicitly populate every canonical required UI key',()=>{
   const i18n=require('../i18n.js');
-  const keys=Object.keys(i18n.dictionaries.en).sort();
+  const keys=[...i18n.REQUIRED_UI_KEYS].sort();
   assert.deepEqual(Object.keys(i18n.dictionaries).sort(),['de','en','es','fr','ja','ko','zh']);
-  for(const dictionary of Object.values(i18n.dictionaries))assert.deepEqual(Object.keys(dictionary).sort(),keys);
+  for(const [locale,dictionary] of Object.entries(i18n.dictionaries)){
+    assert.deepEqual(Object.keys(dictionary).sort(),keys,`${locale} must explicitly define exactly the required keys`);
+    assert.equal(keys.every(key=>typeof dictionary[key]==='string'&&dictionary[key].trim().length>0),true);
+  }
+  for(const locale of ['es','fr','de','ko','ja','zh'])for(const key of ['language','howTo','newGame','wins','captured','brights','pictures','stripes','singles','pooped','kiss','cleanSweep','birdies','conquer','noWinner','tutorialOverview'])assert.notEqual(i18n.dictionaries[locale][key],i18n.dictionaries.en[key],`${locale}.${key} must not rely on English`);
   assert.equal(i18n.translate('xx','newGame'),i18n.dictionaries.en.newGame);
   assert.equal(i18n.brand,'GoStop Online');
+});
+
+test('visual beginner guide covers every section with canonical GoStop Card evidence',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  for(const section of ['guide-overview','guide-types','guide-turn','guide-matches','guide-specials','guide-scoring','guide-go','guide-hands'])assert.match(html,new RegExp(`id="${section}"`));
+  for(const cards of ['m9-1,m11-2,m12-2','m2-1,m4-1,m8-2','m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3,m2-4'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
+  assert.equal(html.includes('data-i18n-vars=\'{"count":1}\''),true);
+  assert.equal(html.includes('data-i18n-vars=\'{"points":48}\''),true);
+  assert.equal(fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8').includes("createCardEl(card,'card tutorial-game-card')"),true);
 });
 
 test('dynamic deck backs are exact at five through zero and proportional above five',()=>{

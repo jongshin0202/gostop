@@ -62,7 +62,7 @@
     recordedTerminal:null,
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
-    locale:'en', firstHand:true, nextStarterId:null, deckDisplayCount:null
+    locale:'en', firstHand:true, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -71,6 +71,8 @@
   const clampVolume = v => Math.max(0, Math.min(1, v));
   const i18n=globalThis.GoStopI18n;
   function t(key,vars){return i18n?i18n.translate(presentation.locale,key,vars):key;}
+  function localizedMonths(){return t('monthNames').split(',');}
+  function localizedMonth(month){return localizedMonths()[month-1]||monthNames[month-1];}
   function deckVisualBackCount(count){return count<=0?0:count<=5?count:Math.max(3,Math.ceil(count/4));}
   function computeStageScale(width,height){return Math.min(1,width/1530,Math.max(0.5,(height-76)/900));}
   function updateStageScale(){
@@ -388,7 +390,7 @@
     const decisionOwner=state.pendingDecision?.playerId||state.turn;
     document.querySelector('.human-chip')?.classList.toggle('active-turn',decisionOwner===PLAYER_A&&!state.winner);
     document.querySelector('.cpu-chip')?.classList.toggle('active-turn',decisionOwner===PLAYER_B&&!state.winner);
-    const stats=id=>`${presentation.sessionStats[id].wins} Wins · ${presentation.sessionStats[id].points} Pts`;
+    const stats=id=>`${presentation.sessionStats[id].wins} ${t('wins')} · ${presentation.sessionStats[id].points} ${t('points')}`;
     if(els.playerSessionStats)els.playerSessionStats.textContent=stats(PLAYER_A);
     if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
@@ -431,7 +433,7 @@
 
   function playerDoubleLabel(player){
     const power=player.shakes;
-    return power ? `Shake ×${2**power}` : '';
+    return power ? `${t('shake')} ×${2**power}` : '';
   }
   function renderShakeIndicator(element,player,playerId){
     if(!element)return;
@@ -444,7 +446,7 @@
     element.onclick=reviewable?()=>openShakeReview(playerId):null;
     element.onkeydown=reviewable?event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openShakeReview(playerId);}}:null;
   }
-  function goCountLabel(player){return player.go>0?`${player.go} Go`:'';}
+  function goCountLabel(player){return player.go>0?t('currentGo',{count:player.go}).replace(/^[^:：]*[:：]\s*/,''):'';}
   function renderGoIndicator(chip,player){
     if(!chip)return;
     let badge=chip.querySelector('.go-count-badge');
@@ -502,10 +504,10 @@
   function typeRank(t){ return {bright:4,animal:3,ribbon:2,pi:1}[t]||0; }
 
   const captureGroups = [
-    {type:'bright',en:'Brights'},
-    {type:'animal',en:'Pictures'},
-    {type:'ribbon',en:'Stripes'},
-    {type:'pi',en:'Singles'}
+    {type:'bright',key:'brights',en:'Brights'},
+    {type:'animal',key:'pictures',en:'Pictures'},
+    {type:'ribbon',key:'stripes',en:'Stripes'},
+    {type:'pi',key:'singles',en:'Singles'}
   ];
 
   function renderCaptured(root,cards,ownerId){
@@ -515,10 +517,10 @@
       const owner=playerStateById(state,ownerId);
       const groupCards=cards.filter(c=>(c.month===9&&c.flags.includes('switchPi'))?(owner.gukjinMode==='pi'?'pi':'animal')===group.type:c.type===group.type).sort((a,b)=>a.month-b.month);
       const btn=document.createElement('button'); btn.type='button'; btn.className='capture-group'; btn.dataset.captureType=group.type;
-      btn.setAttribute('aria-label',`${isViewer?'Your':'Computer'} ${group.en} captured cards: ${groupCards.length}`);
+      btn.setAttribute('aria-label',`${isViewer?t('yourCaptured'):t('computerCaptured')}: ${t(group.key)} ${groupCards.length}`);
       const head=document.createElement('span'); head.className='capture-group-head';
       const displayedCount=group.type==='pi'?scorePlayer(owner).piCount:groupCards.length;
-      head.innerHTML=`<b>${group.en}</b><em>${displayedCount}</em>`;
+      head.innerHTML=`<b>${t(group.key)}</b><em>${displayedCount}</em>`;
       const stack=document.createElement('span'); stack.className='capture-stack';
       groupCards.forEach((c,i)=>{
         const img=document.createElement('img'); img.className='captured-mini'; img.src=artUrl(c.file); img.alt='';
@@ -538,12 +540,12 @@
 
   function openCapturedGroup(ownerId,group,cards){
     const isViewer=ownerId===SOLO_VIEWER_ID;
-    els.captureOwner.textContent=isViewer?'YOUR CAPTURED CARDS':'COMPUTER CAPTURED CARDS';
-    els.captureTitle.textContent=group.en; els.captureMagnified.innerHTML='';
+    els.captureOwner.textContent=isViewer?t('yourCaptured'):t('computerCaptured');
+    els.captureTitle.textContent=t(group.key); els.captureMagnified.innerHTML='';
     cards.forEach(c=>els.captureMagnified.appendChild(createCardEl(c,'card magnified-card')));
-    if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent='No cards captured in this group yet.'; els.captureMagnified.appendChild(empty); }
+    if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent=t('noCards'); els.captureMagnified.appendChild(empty); }
     const s=scorePlayer(playerStateById(state,ownerId));
-    const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} Picture cards${s.godori?' · 3-Birdies complete':''}`:group.type==='ribbon'?`${cards.length} Stripe cards`:`${s.piCount} Singles value (${cards.length} physical cards)`;
+    const detail=group.type==='pi'?`${s.piCount} ${t('singlesValue')} (${cards.length} ${t('physicalCards')})`:`${cards.length} ${t(group.key)}${s.godori&&group.type==='animal'?` · ${t('birdies')}`:''}`;
     els.captureSummary.textContent=detail;
     if(!els.captureDialog.open)els.captureDialog.showModal();
   }
@@ -552,15 +554,16 @@
   }
   function scoreBreakdownData(playerId){
     const player=playerStateById(state,playerId),scored=scorePlayer(player);
-    const groups=captureGroups.map(group=>({label:group.en,points:group.type==='bright'?scored.brightPts:group.type==='animal'?scored.animalPts:group.type==='ribbon'?scored.ribbonPts:scored.piPts,cards:effectiveCapturedGroup(player,group).map(card=>({id:card.id,double:card.flags.includes('doublePi')||(card.id==='m9-1'&&player.gukjinMode==='pi')}))}));
-    return {playerId,total:scored.total,singlesValue:scored.piCount,physicalSingles:groups.find(group=>group.label==='Singles').cards.length,firstPoopBonus:player.firstPpeokPoints||0,groups};
+    const groups=captureGroups.map(group=>({label:t(group.key),type:group.type,points:group.type==='bright'?scored.brightPts:group.type==='animal'?scored.animalPts:group.type==='ribbon'?scored.ribbonPts:scored.piPts,cards:effectiveCapturedGroup(player,group).map(card=>({id:card.id,double:card.flags.includes('doublePi')||(card.id==='m9-1'&&player.gukjinMode==='pi')}))}));
+    return {playerId,total:scored.total,singlesValue:scored.piCount,physicalSingles:groups.find(group=>group.type==='pi').cards.length,firstPoopBonus:player.firstPpeokPoints||0,groups};
   }
   function openScoreBreakdown(playerId){
+    presentation.scoreBreakdownPlayerId=playerId;
     const data=scoreBreakdownData(playerId);els.scoreBreakdownContent.replaceChildren();
-    const total=document.createElement('strong');total.className='breakdown-total';total.textContent=`${data.total} Points`;els.scoreBreakdownContent.appendChild(total);
-    data.groups.forEach(group=>{const section=document.createElement('section'),heading=document.createElement('h3'),note=document.createElement('p'),cards=document.createElement('div');heading.textContent=group.label;note.textContent=`${group.points} points${group.label==='Singles'?` · ${data.singlesValue} Singles value · ${data.physicalSingles} physical cards`:''}`;cards.className='breakdown-cards';group.cards.forEach(item=>{const holder=document.createElement('span');holder.appendChild(createCardEl(MASTER_DECK.find(card=>card.id===item.id),'card'));if(item.double){const badge=document.createElement('b');badge.textContent='×2';holder.appendChild(badge);}cards.appendChild(holder);});section.append(heading,note,cards);els.scoreBreakdownContent.appendChild(section);});
-    if(data.firstPoopBonus){const bonus=document.createElement('p');bonus.textContent=`First Poop Bonus +${data.firstPoopBonus} points`;els.scoreBreakdownContent.appendChild(bonus);}
-    els.scoreDialog.showModal();
+    const total=document.createElement('strong');total.className='breakdown-total';total.textContent=`${data.total} ${t('points')}`;els.scoreBreakdownContent.appendChild(total);
+    data.groups.forEach(group=>{const section=document.createElement('section'),heading=document.createElement('h3'),note=document.createElement('p'),cards=document.createElement('div');heading.textContent=group.label;note.textContent=`${group.points} ${t('points')}${group.type==='pi'?` · ${data.singlesValue} ${t('singlesValue')} · ${data.physicalSingles} ${t('physicalCards')}`:''}`;cards.className='breakdown-cards';group.cards.forEach(item=>{const holder=document.createElement('span');holder.appendChild(createCardEl(MASTER_DECK.find(card=>card.id===item.id),'card'));if(item.double){const badge=document.createElement('b');badge.textContent='×2';holder.appendChild(badge);}cards.appendChild(holder);});section.append(heading,note,cards);els.scoreBreakdownContent.appendChild(section);});
+    if(data.firstPoopBonus){const bonus=document.createElement('p');bonus.textContent=`${t('firstPoopBonus')} +${data.firstPoopBonus} ${t('points')}`;els.scoreBreakdownContent.appendChild(bonus);}
+    if(!els.scoreDialog.open)els.scoreDialog.showModal();
   }
   async function promptGukjinChoice(side,events){
     const revealed=events.some(event=>(event.cards||event.cardIds||[]).some(card=>(typeof card==='string'?card:card.id)==='m9-1'));
@@ -1144,7 +1147,7 @@
 
   async function chooseBomb(month){
     if(!els.bombDialog)return true;
-    els.bombText.textContent=`You hold three ${monthNames[month-1]} cards and the fourth is on the floor. Use BOMB to play all three, take the set, steal 1 Pi, and gain two optional blank turns.`;
+    els.bombText.textContent=`${localizedMonth(month)} — ${t('bomb')}`;
     els.bombDialog.showModal();
     return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
@@ -1153,10 +1156,8 @@
     if(!els.shakeDialog)return false;
     const cards=state.human.hand.filter(c=>c.month===month);
     const bombReady=state.floor.some(c=>c.month===month) && !floorStackForMonth(month);
-    els.shakeText.textContent=bombReady
-      ? `You have three ${monthNames[month-1]} cards. Choose Shake or Keep for Bomb. Shake reveals these three cards and doubles your final score.`
-      : `You have three ${monthNames[month-1]} cards. Choose Shake or Keep for Bomb. Shake reveals these three cards and doubles your final score.`;
-    if(els.keepSecretBtn) els.keepSecretBtn.textContent='Keep for Bomb';
+    els.shakeText.textContent=`${localizedMonth(month)} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
+    if(els.keepSecretBtn) els.keepSecretBtn.textContent=t('keepBomb');
     els.shakeCards.innerHTML='';
     cards.forEach(c=>els.shakeCards.appendChild(createCardEl(c,'card magnified-card')));
     els.shakeDialog.showModal();
@@ -1166,9 +1167,9 @@
   async function chooseOpeningTriple(decision){
     const cards=decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean);
     els.shakeText.textContent=decision.floorCardId
-      ? `You have three ${monthNames[decision.month-1]} cards and the fourth is on the floor. Choose Shake or Bomb! Shake reveals these cards and doubles your final score.`
-      : `You have three ${monthNames[decision.month-1]} cards. Choose Shake or Keep for Bomb. Shake reveals these three cards and doubles your final score.`;
-    els.keepSecretBtn.textContent=decision.floorCardId?'Bomb!':'Keep for Bomb';
+      ? `${localizedMonth(decision.month)}: ${t('shake')} / ${t('bomb')}`
+      : `${localizedMonth(decision.month)}: ${t('shake')} / ${t('keepBomb')}`;
+    els.keepSecretBtn.textContent=decision.floorCardId?t('bomb'):t('keepBomb');
     els.shakeCards.innerHTML=''; cards.forEach(card=>els.shakeCards.appendChild(createCardEl(card,'card magnified-card')));
     els.shakeDialog.showModal();
     return new Promise(resolve=>{presentation.shakeResolver=resolve;});
@@ -1208,13 +1209,11 @@
     // played the Chongtong fanfare before authority extraction.
     if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
     const playerWon=event.actorId===PLAYER_A;
-    const reason=playerWon
-      ? `You held all four ${monthNames[event.month-1]} cards.`
-      : `Computer held all four ${monthNames[event.month-1]} cards.`;
+    const reason=`${playerWon?t('player'):t('computer')}: ${t('conquer')} — ${localizedMonth(event.month)}`;
     const terminal=state.terminalResult;
     recordTerminalResult(terminal);
     if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
-    setGrandResult('CONQUER!',playerWon?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`${reason}${terminal.nagariCarryPower?` · No Winner Carry ×${terminal.multiplier}`:''}`,'special');
+    setGrandResult(t('conquer'),playerWon?t('playerWins'):t('computerWins'),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1224,8 +1223,8 @@
     playShakeSound(); render();
     const cards=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean);
     if(event.actorId===PLAYER_B){
-      els.shakeRevealTitle.textContent='Computer Shakes!';
-      els.shakeRevealText.textContent='Computer revealed these three cards. Acknowledgment is required before play continues.';
+      els.shakeRevealTitle.textContent=t('computerShakes');
+      els.shakeRevealText.textContent=t('shakeAck');
       els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
       els.shakeRevealDialog.showModal();
       await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
@@ -1546,6 +1545,8 @@
 
   async function showSpecialTransient(title,cardIds=[],effect=''){
     if(!els.milestoneOverlay)return;
+    const titleKeys={'POOPED!':'pooped','KISS!':'kiss','TAP-TAP!':'tapTap','CLEAN SWEEP!':'cleanSweep','3-BIRDIES!':'birdies','3-STRIPES!':'threeStripes','5-BRIGHTS!':'fiveBrights'};
+    title=t(titleKeys[title]||title);
     els.milestoneTitle.textContent=title;els.milestoneCards.innerHTML='';els.milestoneBirds.innerHTML='';els.milestoneOverlay.dataset.effect=effect;
     cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
     els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');await sleep(2000);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
@@ -1634,7 +1635,7 @@
     els.resultTitle.textContent=winnerLabel;
     els.resultScore.textContent=scoreText;
     els.resultBreakdown.textContent=breakdown||'';
-    if(call!=='CONQUER!'&&els.resultCards&&typeof els.resultCards.replaceChildren==='function')els.resultCards.replaceChildren();
+    if(call!==t('conquer')&&els.resultCards&&typeof els.resultCards.replaceChildren==='function')els.resultCards.replaceChildren();
   }
 
   function calculateFinalScore(winnerSide){
@@ -1646,11 +1647,11 @@
   function formatScoreFormula(settled,{includeFinal=true}={}){
     const englishLabel=step=>step
       .replace('First Ppeok','First Poop')
-      .replace('Meong-bak','Picture Penalty')
-      .replace('Pi-bak','Single Penalty')
-      .replace('Gwang-bak','Bright Penalty')
-      .replace('Go-bak','Go Penalty')
-      .replace('Nagari carry','No Winner Carry');
+      .replace('Meong-bak',t('picturePenalty'))
+      .replace('Pi-bak',t('singlePenalty'))
+      .replace('Gwang-bak',t('brightPenalty'))
+      .replace('Go-bak',t('goPenalty'))
+      .replace('Nagari carry',t('noWinnerCarry'));
     const parts=(settled.formulaSteps||[`Base ${settled.base.total}`]).map(englishLabel);
     if(includeFinal)parts.push(`Final ${settled.total}`);
     return parts.join('  →  ');
@@ -1658,9 +1659,9 @@
 
   async function humanGoStop(sc){
     const preview=calculateFinalScore('human');
-    els.decisionText.textContent=`Current: ${state.human.go} Go. ${formatScoreFormula(preview)}. GO continues the hand but risks a Go Penalty.`;
-    if(els.stopPreviewValue)els.stopPreviewValue.textContent=`Stop : ${preview.total} Points`;
-    els.goBtn.textContent=state.human.go===0?'GO':`${state.human.go+1} GO`;
+    els.decisionText.textContent=`${t('currentGo',{count:state.human.go})}. ${formatScoreFormula(preview)}.`;
+    if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
+    els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
     els.decisionDialog.show();
   }
 
@@ -1670,7 +1671,7 @@
     const side=legacySideForPlayerId(ended.winnerId);
     recordTerminalResult(state.terminalResult);
     presentation.locked=true; hideActionCue();
-    setGrandResult('STOP!',side==='human'?'Player Wins!':'Computer Wins!',`${ended.settlement.total} Points`,formatScoreFormula(ended.settlement),'stop');
+    setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):t('computerWins'),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
     if(side==='human')playChongtongFanfare();else playSadResultSound();
     els.resultDialog.showModal(); render();
   }
@@ -1681,7 +1682,7 @@
     const event=result.events.find(item=>item.type==='nagariDeclared');
     recordTerminalResult(state.terminalResult);
     presentation.locked=true;
-    setGrandResult('NO WINNER!','',`Next Hand ×${event.nextHandMultiplier}`,'No one won before the hand ended. The next completed hand is doubled.','special');
+    setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1692,7 +1693,7 @@
     const side=legacySideForPlayerId(event.actorId);
     recordTerminalResult(terminal);
     presentation.locked=true;
-    setGrandResult('TRIPLE POOP!',side==='human'?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`Three Poops in one hand${terminal.nagariCarryPower?` · No Winner Carry ×${terminal.multiplier}`:''}`,'special');
+    setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):t('computerWins'),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1715,8 +1716,8 @@
   }
   function showFirstPoopNotice(side){
     if(!els.firstPpeokDialog)return Promise.resolve();
-    els.firstPoopTitle.textContent='FIRST POOP!';
-    els.firstPoopText.textContent=side==='human'?'You pooped on your first turn and get +7 points.':'Computer pooped on its first turn and gets +7 points.';
+    els.firstPoopTitle.textContent=t('firstPoop');
+    els.firstPoopText.textContent=`${side==='human'?t('you'):t('computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
     els.firstPpeokDialog.showModal();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
   }
@@ -1725,7 +1726,11 @@
     try{localStorage.setItem('gostop-language',presentation.locale);}catch(_){ }
     document.documentElement.lang=presentation.locale;
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
-    document.querySelectorAll('[data-i18n]').forEach(node=>{node.textContent=t(node.dataset.i18n);});
+    document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
+    document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
+    renderTutorialCards();
+    if(els.scoreDialog?.open&&presentation.scoreBreakdownPlayerId)openScoreBreakdown(presentation.scoreBreakdownPlayerId);
+    if(els.decisionDialog?.open&&state)humanGoStop(scorePlayer(state.human));
     if(state)render();
   }
   function setupLanguageMenu(){
@@ -1734,6 +1739,10 @@
     els.languageBtn.addEventListener('click',()=>{els.languageMenu.hidden=!els.languageMenu.hidden;});
     try{presentation.locale=localStorage.getItem('gostop-language')||'en';}catch(_){presentation.locale='en';}
     setLocale(presentation.locale);
+  }
+  function renderTutorialCards(){
+    if(TEST_MODE)return;
+    document.querySelectorAll('.tutorial-cards[data-card-ids]').forEach(root=>{if(root.childElementCount)return;root.dataset.cardIds.split(',').map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
   }
 
   function recommendHumanCard(){
@@ -1751,7 +1760,7 @@
   async function presentOpeningSequence(starter,roll){
     if(TEST_MODE)return;
     els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
-    els.openingDie.hidden=!roll;els.openingDie.textContent=starter===PLAYER_A?'P':'C';els.openingMessage.textContent=`${starter===PLAYER_A?'Player':'Computer'} goes first!`;
+    els.openingDie.hidden=!roll;els.openingDie.textContent=starter===PLAYER_A?'P':'C';els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});
     await sleep(roll?950:650);els.openingDie.hidden=true;await sleep(350);
     presentation.deckDisplayCount=48;render();playShuffleSound();await sleep(480);
     for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();playDealSound(count);await sleep(34);}
