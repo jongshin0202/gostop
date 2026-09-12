@@ -900,6 +900,7 @@
       applyNormalAction(normalAction(side,{type:'drawNextCard'}));
       const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
       await presentPiTransferEvents(side,completed.events);
+      await presentSemanticEvents(completed.events);
       await finishNagari(); return;
     }
     const drawResult=applyNormalAction(normalAction(side,{type:'drawNextCard'}));
@@ -923,6 +924,7 @@
       await presentNormalResolution(side,resolved);
       const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
       await presentPiTransferEvents(side,completed.events);
+      await presentSemanticEvents(completed.events);
     }else{
       if(classification.kind==='floorStackInteraction')await resolveExtractedSpecialTurn(side,classification,null,{card:draw,stage,target,matchCount:matches.length});
       else throw new Error(`Unhandled authoritative deck-only classification: ${classification.kind}`);

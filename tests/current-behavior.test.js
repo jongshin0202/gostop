@@ -2040,3 +2040,33 @@ test('starter dice remains presentation-only, rolls only for a new session, and 
   assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf("els.openingDie.textContent=starter===PLAYER_A?'P':'C'"));
   assert.equal(source.includes('const roll=presentation.firstHand'),true);assert.equal(source.includes('presentation.firstHand=false'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
 });
+
+test('opening setup scans both hands, offers floor-aware choices, and preserves starter until declarations finish',()=>{
+  let state=stateWith({startingPlayerId:'playerB',turn:'playerB',floor:[card('m4-4')],human:api.makePlayer({hand:cards('m4-1','m4-2','m4-3')}),ai:api.makePlayer({hand:cards('m7-1','m7-2','m7-3')})});api.initFloorSlots(state);
+  let opened=extractedEngine.resolveOpeningState(state);assert.equal(opened.pendingDecision.playerId,'playerA');assert.deepEqual(opened.pendingDecision.choices,['shake','bomb']);
+  opened=extractedEngine.applyNormalTurnAction(opened.state,{type:'declareBomb',actorId:'playerA'});assert.equal(opened.pendingDecision.playerId,'playerB');assert.deepEqual(opened.pendingDecision.choices,['shake','keepSecret']);
+  opened=extractedEngine.applyNormalTurnAction(opened.state,{type:'keepShakeSecret',actorId:'playerB'});assert.equal(opened.state.openingSpecialsComplete,true);assert.equal(opened.state.turn,'playerB');assert.equal(opened.state.startingPlayerId,'playerB');
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const start=source.slice(source.indexOf('async function startGame'),source.indexOf("document.addEventListener('pointerdown',unlockAudio"));assert.ok(start.indexOf('await presentOpeningSequence')<start.indexOf('await processOpeningSpecials'));
+});
+
+test('opponent Pooped-pile capture transfers one available Single and zero when none exists',()=>{
+  for(const captured of [cards('m7-3','m8-3'),[]]){const stack=cards('m2-1','m2-2','m2-3');const result=specialFixture('playerA',{floor:stack,handCard:card('m2-4'),drawCard:card('m9-3'),captured,floorStacks:{2:{month:2,cardIds:stack.map(card=>card.id),source:'ppeok',owner:'playerB'}},targetId:'m2-3'});const transfers=result.events.filter(event=>event.type==='piTransferred'&&event.reason==='opponentPpeok');assert.equal(transfers.length,captured.length?1:0);}
+});
+
+test('non-Sweep special presentation is awaited before threshold evaluation and handoff',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const presenter=source.slice(source.indexOf('async function resolveExtractedSpecialTurn'),source.indexOf('async function playFullTurn'));assert.ok(presenter.includes("await showSpecialTransient('KISS!'"));assert.ok(presenter.includes("await showSpecialTransient('FLUSH!'"));
+  const turn=source.slice(source.indexOf('async function playFullTurn'),source.indexOf('async function executeDeckOnlyTurn'));assert.ok(turn.indexOf('await resolveExtractedSpecialTurn')<turn.indexOf('await concludeTurn(side)'));
+  const conclude=source.slice(source.indexOf('async function concludeTurn'),source.indexOf('function scheduleTurnStart'));assert.ok(conclude.indexOf('await presentNewMilestones')<conclude.indexOf('evaluateGoStop'));
+});
+
+test('Clean Sweep presentation includes actor-independent broom animation, sound, and exact event cards',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');const semantic=source.slice(source.indexOf('async function presentSemanticEvents'),source.indexOf('function detectNewMilestones'));assert.equal(semantic.includes('playSweepSound()'),true);assert.equal(semantic.includes("event.cardIds||[],'sweep'"),true);assert.equal(semantic.includes("actorId===PLAYER_A"),false);assert.equal(css.includes('data-effect="sweep"'),true);assert.equal(css.includes('@keyframes sweep-across'),true);
+});
+
+test('5-Birdies presentation flies exactly five birds with synchronized chirps and exact three scoring cards',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),i18n=require('../i18n.js');assert.equal(i18n.translate('en','birdies'),'5-BIRDIES!');assert.equal(i18n.translate('ko','birdies'),'고도리!');assert.equal(source.includes('for(let index=0;index<5;index++)'),true);assert.equal(source.includes('if(milestone.birds)playBirdSound()'),true);assert.equal(css.includes('animation:birdFly 2s'),true);const state=stateWith({ai:api.makePlayer({captured:cards('m2-1','m4-1','m8-2')})});api.setState(state);const event=api.detectNewMilestones('playerB')[0];assert.equal(event.cardIds.length,3);
+});
+
+test('tutorial dismissal distinguishes backdrop from content and keeps an outside sticky close control visible',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);assert.equal(css.includes('.tutorial-card>.dialog-close{position:sticky;top:0;float:right;transform:translate(22px,-22px)'),true);assert.equal(css.includes('max-height:90vh;overflow:auto'),true);
+});
