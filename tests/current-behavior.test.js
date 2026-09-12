@@ -2287,6 +2287,19 @@ test('every face-up dialog and event card preserves the canonical 76 by 123 rati
   assert.doesNotMatch(css,/\.physical-card(?:\.moving-card)?>img\{/);
 });
 
+test('all semantic and scoring milestones share a transparent halo-free presenter',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  const special=source.slice(source.indexOf('async function showSpecialTransient'),source.indexOf('async function presentSemanticEvents'));
+  const scoring=source.slice(source.indexOf('async function presentNewMilestones'),source.indexOf('function bestAiCard'));
+  assert.match(special,/els\.milestoneCards\.appendChild\(createCardEl\(card,'card'\)\)/);assert.match(scoring,/els\.milestoneCards\.appendChild\(createCardEl\(card,'card'\)\)/);
+  const overlay=css.match(/\.milestone-overlay\{([^}]+)\}/)?.[1]||'',title=css.match(/\.milestone-title\{([^}]+)\}/)?.[1]||'',cards=css.match(/\.milestone-cards \.card\{([^}]+)\}/)?.[1]||'';
+  for(const declaration of ['background:transparent','border:0','box-shadow:none','outline:0','filter:none'])assert.ok(overlay.includes(declaration),`overlay ${declaration}`);
+  assert.match(title,/-webkit-text-stroke:0/);assert.match(title,/background:transparent/);assert.doesNotMatch(title,/(?:#fff|rgba\(255|white)/i);
+  for(const declaration of ['background:transparent','border-color:transparent','box-shadow:none','outline:0','filter:none'])assert.ok(cards.includes(declaration),`cards ${declaration}`);
+  assert.match(css,/\.milestone-cards \.card>img\{background:transparent\}/);assert.match(css,/\.milestone-cards \.card::before,\.milestone-cards \.card::after\{content:none\}/);
+  assert.doesNotMatch(source,/milestone[^\n]+\.(?:png|webp)/i);
+});
+
 test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>{
   api.setSoundEnabled(true);api.resetAudioTrace();api.playSweepSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['sweep']);
   api.resetAudioTrace();api.playBombSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['bomb']);
