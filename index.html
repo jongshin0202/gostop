@@ -81,8 +81,9 @@
         <div><b>Stripes</b><span>5 Stripes = 1 point, then +1 each. Stripe sets can add bonuses.</span></div>
         <div><b>Singles</b><span>10 Singles value = 1 point, then +1 each.</span></div>
       </div>
+      <p>When your played card matches a floor card and the deck flip matches that same month, the three cards remain together as a <b>Pooped pile</b>. Capture an opponent's Pooped pile to steal 1 Single; recapturing your own pile uses its separate two-Single rule.</p>
       <p>When you reach the finish threshold, choose <b>STOP</b> to end the hand or <b>GO</b> to keep playing for a higher payout.</p>
-      <p class="muted">This build includes Chongtong, Shake, Bomb, Ppeok/Jabbeok, Ttadak, Jjok, Sweep, Go multipliers, Single, Bright, Picture, and Go penalties, plus Nagari carry.</p>
+      <p class="muted">This build includes Chongtong, Shake, Bomb, Pooped piles, Ttadak, Jjok, Sweep, Go multipliers, Single, Bright, Picture, and Go penalties, plus Nagari carry.</p>
     </form>
   </dialog>
 
@@ -144,10 +145,19 @@
 
   <dialog id="firstPpeokDialog">
     <form method="dialog" class="dialog-card special-rule-card">
-      <div class="eyebrow">첫뻑 · FIRST PPEOK!</div>
-      <h2>First-turn Ppeok reward</h2>
-      <p>First-turn Ppeok reward: +7 points</p>
-      <button class="go-btn" type="submit">CONTINUE</button>
+      <div class="eyebrow">FIRST POOP!</div>
+      <h2 id="firstPoopTitle">FIRST POOP!</h2>
+      <p id="firstPoopText"></p>
+      <button class="go-btn" type="submit">OK</button>
+    </form>
+  </dialog>
+
+  <dialog id="shakeRevealDialog">
+    <form method="dialog" class="dialog-card special-rule-card">
+      <h2 id="shakeRevealTitle">Computer Shakes!</h2>
+      <p id="shakeRevealText"></p>
+      <div id="shakeRevealCards" class="shake-cards"></div>
+      <button class="go-btn" type="submit">OK</button>
     </form>
   </dialog>
 
@@ -158,11 +168,17 @@
       <p id="shakeText"></p>
       <div id="shakeCards" class="shake-cards" aria-label="Three same-month cards"></div>
       <div class="decision-actions">
-        <button id="shakeBtn" class="go-btn" type="button">SHAKE ×2</button>
-        <button id="keepSecretBtn" class="stop-btn" type="button">KEEP SECRET</button>
+        <button id="shakeBtn" class="go-btn" type="button">Shake</button>
+        <button id="keepSecretBtn" class="stop-btn" type="button">Keep for Bomb</button>
       </div>
     </div>
   </dialog>
+
+  <div id="milestoneOverlay" class="milestone-overlay" aria-live="polite" aria-hidden="true">
+    <div id="milestoneBirds" class="milestone-birds" aria-hidden="true"></div>
+    <div id="milestoneTitle" class="milestone-title"></div>
+    <div id="milestoneCards" class="milestone-cards"></div>
+  </div>
 
   <dialog id="bombDialog">
     <div class="dialog-card special-rule-card">

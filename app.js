@@ -39,7 +39,9 @@
     'playAgainBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
     'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeCards','shakeBtn','keepSecretBtn',
     'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
-    'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards'
+    'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
+    'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
@@ -56,6 +58,7 @@
     bombResolver:null,
     aiTurnInProgress:false,
     sessionStats:{playerA:{wins:0,points:0},playerB:{wins:0,points:0}},
+    milestoneHistory:{playerA:new Set(),playerB:new Set()},
     recordedTerminal:null,
     stagedCards:new Map(),
     floorSlotReservations:new Map()
@@ -347,11 +350,14 @@
     btn.dataset.cardId=card.id;
     btn.dataset.month=card.month;
     btn.title=`${monthShort[card.month-1]} · ${card.type}`;
-    const img=document.createElement('img');
-    img.src=artUrl(card.file); img.alt=`Hwatu ${monthShort[card.month-1]} card`; img.draggable=false;
+    btn.classList.add('canonical-card-face');
+    const img=createCardFaceImage(card,`Hwatu ${monthShort[card.month-1]} card`);
     img.addEventListener('error',()=>{ img.alt='Card art unavailable'; btn.classList.add('art-error'); });
     btn.appendChild(img);
     return btn;
+  }
+  function createCardFaceImage(card,alt=''){
+    const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=alt; img.draggable=false; return img;
   }
 
   function render() {
@@ -376,11 +382,12 @@
 
     els.playerHand.innerHTML='';
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
+      const slot=document.createElement('div'); slot.className='hand-card-slot';
       const el=createCardEl(card,'card hand-card');
       el.disabled = presentation.locked || state.turn!==PLAYER_A;
       if(card.id===presentation.hintCardId) el.classList.add('matchable');
       el.addEventListener('click',()=>humanPlay(card.id, el));
-      els.playerHand.appendChild(el);
+      slot.appendChild(el); els.playerHand.appendChild(slot);
     });
     for(let i=0;i<bottomPlayer.bombFreeTurns;i++){
       const blank=document.createElement('button');
@@ -390,7 +397,7 @@
       blank.disabled=presentation.locked || state.turn!==PLAYER_A;
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
-      els.playerHand.appendChild(blank);
+      const slot=document.createElement('div'); slot.className='hand-card-slot'; slot.appendChild(blank); els.playerHand.appendChild(slot);
     }
 
     els.aiHand.innerHTML='';
@@ -400,6 +407,8 @@
 
     renderShakeIndicator(els.playerMultiplier,bottomPlayer,view.bottom.id);
     renderShakeIndicator(els.aiMultiplier,topPlayer,view.top.id);
+    renderGoIndicator(document.querySelector('.human-chip'),bottomPlayer);
+    renderGoIndicator(document.querySelector('.cpu-chip'),topPlayer);
 
     renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
     renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
@@ -420,6 +429,17 @@
     element.setAttribute('aria-label',reviewable?`${element.textContent}; review revealed cards`:'');
     element.onclick=reviewable?()=>openShakeReview(playerId):null;
     element.onkeydown=reviewable?event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openShakeReview(playerId);}}:null;
+  }
+  function goCountLabel(player){return player.go>0?`${player.go} Go`:'';}
+  function renderGoIndicator(chip,player){
+    if(!chip)return;
+    let badge=chip.querySelector('.go-count-badge');
+    if(!badge){
+      const holder=document.createElement('span'); holder.className='status-badges';
+      const shake=chip.querySelector('.multiplier-chip'); if(shake)holder.appendChild(shake);
+      badge=document.createElement('span');badge.className='go-count-badge';holder.appendChild(badge);chip.appendChild(holder);
+    }
+    badge.textContent=goCountLabel(player);
   }
 
   function renderFloor(){
@@ -751,8 +771,8 @@
     const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
     if(classification.kind==='ppeokSsaDaCandidate'){
       removeStage(play.card.id); if(draw)removeStage(draw.card.id);
-      playPpeokSound(); render();
-      if(result.events.some(event=>event.type==='firstPpeokAwarded')&&side==='human')await showFirstPpeokNotice();
+      playPpeokSound(); render(); await showPoopedCallout();
+      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side);
       if(result.events.some(event=>event.type==='threePpeokDeclared')){
         await sleep(450); presentThreePpeok(result);
       }
@@ -1024,6 +1044,7 @@
 
   async function concludeTurn(side){
     if(state.winner)return;
+    await presentNewMilestones(playerIdForLegacySide(side));
     render();
     if(state.pendingDecision?.type==='openingTripleDecision'){await processOpeningSpecials();return;}
     const actorId=playerIdForLegacySide(side);
@@ -1104,9 +1125,9 @@
     const cards=state.human.hand.filter(c=>c.month===month);
     const bombReady=state.floor.some(c=>c.month===month) && !floorStackForMonth(month);
     els.shakeText.textContent=bombReady
-      ? `You have three ${monthNames[month-1]} cards. Reveal them now to SHAKE for a ×2 win multiplier, or keep them secret so you can use them as a BOMB.`
-      : `You have three ${monthNames[month-1]} cards. Reveal them now to SHAKE for a ×2 win multiplier, or keep them secret.`;
-    if(els.keepSecretBtn) els.keepSecretBtn.textContent=bombReady?'KEEP SECRET FOR BOMB':'KEEP SECRET';
+      ? `You have three ${monthNames[month-1]} cards. Choose Shake or Keep for Bomb. Shake reveals these three cards and doubles your final score.`
+      : `You have three ${monthNames[month-1]} cards. Choose Shake or Keep for Bomb. Shake reveals these three cards and doubles your final score.`;
+    if(els.keepSecretBtn) els.keepSecretBtn.textContent='Keep for Bomb';
     els.shakeCards.innerHTML='';
     cards.forEach(c=>els.shakeCards.appendChild(createCardEl(c,'card magnified-card')));
     els.shakeDialog.showModal();
@@ -1116,9 +1137,9 @@
   async function chooseOpeningTriple(decision){
     const cards=decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean);
     els.shakeText.textContent=decision.floorCardId
-      ? `You have three ${monthNames[decision.month-1]} cards and the fourth is on the floor. Choose SHAKE ×2 or play BOMB now.`
-      : `You have three ${monthNames[decision.month-1]} cards. Choose SHAKE ×2 or KEEP SECRET.`;
-    els.keepSecretBtn.textContent=decision.floorCardId?'BOMB!':'KEEP SECRET';
+      ? `You have three ${monthNames[decision.month-1]} cards and the fourth is on the floor. Choose Shake or Bomb! Shake reveals these cards and doubles your final score.`
+      : `You have three ${monthNames[decision.month-1]} cards. Choose Shake or Keep for Bomb. Shake reveals these three cards and doubles your final score.`;
+    els.keepSecretBtn.textContent=decision.floorCardId?'Bomb!':'Keep for Bomb';
     els.shakeCards.innerHTML=''; cards.forEach(card=>els.shakeCards.appendChild(createCardEl(card,'card magnified-card')));
     els.shakeDialog.showModal();
     return new Promise(resolve=>{presentation.shakeResolver=resolve;});
@@ -1172,11 +1193,17 @@
     if(!event)return;
     playShakeSound(); render();
     const cards=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean);
-    const rack=event.actorId===PLAYER_A?document.querySelector('.human-chip'):els.aiHand;
-    const overlay=document.createElement('div'); overlay.className='shake-public-reveal';
-    cards.forEach(c=>overlay.appendChild(createCardEl(c,'card shake-mini-card')));
-    rack.appendChild(overlay);
-    await sleep(1050); overlay.remove();
+    if(event.actorId===PLAYER_B){
+      els.shakeRevealTitle.textContent='Computer Shakes!';
+      els.shakeRevealText.textContent='Computer revealed these three cards. Acknowledgment is required before play continues.';
+      els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
+      els.shakeRevealDialog.showModal();
+      await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
+      return;
+    }
+    const rack=document.querySelector('.human-chip'),overlay=document.createElement('div');
+    overlay.className='shake-public-reveal'; cards.forEach(card=>overlay.appendChild(createCardEl(card,'card shake-mini-card')));
+    rack.appendChild(overlay); await sleep(1050); overlay.remove();
   }
 
   function openShakeReview(playerId){
@@ -1224,8 +1251,8 @@
   }
 
   function makePhysicalFace(card,rect,className='physical-card'){
-    const el=document.createElement('div'); el.className=className; el.dataset.cardId=card.id;
-    const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=''; el.appendChild(img); document.body.appendChild(el);
+    const el=document.createElement('div'); el.className=`${className} canonical-card-face`; el.dataset.cardId=card.id;
+    el.appendChild(createCardFaceImage(card)); document.body.appendChild(el);
     normalizeFixed(el,rect); return el;
   }
   function normalizeFixed(el,rect){
@@ -1318,8 +1345,8 @@
     const el=document.createElement('div'); el.className='physical-card deck-draw-card'; el.dataset.cardId=card.id;
     const inner=document.createElement('div'); inner.className='deck-draw-inner';
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
-    const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front';
-    const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=''; front.appendChild(img); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
+    const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front canonical-card-face';
+    front.appendChild(createCardFaceImage(card)); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
     presentation.stagedCards.set(card.id,el);
     if(prefersReducedMotion()){ inner.style.transform='rotateY(180deg)'; return el; }
 
@@ -1429,7 +1456,6 @@
     slam:'https://raw.githubusercontent.com/itsent-lab/hwatu/main/apps/web/public/audio/card-contact.mp3',
     // Event cues generated locally for this prototype.
     ppeok:window.GOSTOP_AUDIO_PPEOK,
-    laugh:'https://raw.githubusercontent.com/gynura/to_you/main/assets/sound/fx/Evil_Laugh.wav',
     shakeBell:window.GOSTOP_AUDIO_SHAKE,
     chongtongFanfare:window.GOSTOP_AUDIO_FANFARE,
     bomb:'https://raw.githubusercontent.com/gynura/to_you/main/assets/sound/fx/Explosion.wav'
@@ -1463,8 +1489,23 @@
     playSample('slam',1,1);
     playSample('slam',.72,1);
   }
-  function playPpeokSound(){ playSample('ppeok',1,1); }
-  function playLaughSound(){ playSample('laugh',1,1.65,900); }
+  function playPpeokSound(){
+    if(!presentation.soundEnabled)return;
+    try{
+      const Context=window.AudioContext||window.webkitAudioContext;
+      if(!Context)return;
+      const context=new Context(),oscillator=context.createOscillator(),gain=context.createGain(),now=context.currentTime;
+      oscillator.type='sine'; oscillator.frequency.setValueAtTime(170,now); oscillator.frequency.exponentialRampToValueAtTime(58,now+.2);
+      gain.gain.setValueAtTime(.0001,now); gain.gain.exponentialRampToValueAtTime(.42,now+.012); gain.gain.exponentialRampToValueAtTime(.0001,now+.24);
+      oscillator.connect(gain).connect(context.destination); oscillator.start(now); oscillator.stop(now+.25); oscillator.onended=()=>context.close();
+    }catch(_){ }
+  }
+  function playLaughSound(){
+    if(!presentation.soundEnabled||!('speechSynthesis' in window))return;
+    const utterance=new SpeechSynthesisUtterance('eh-heh-heh!');
+    utterance.lang='en-US'; utterance.volume=.6; utterance.rate=1.25; utterance.pitch=1.08;
+    speechSynthesis.speak(utterance);
+  }
   function playTtadakHappySound(){
     if(!presentation.soundEnabled||!('speechSynthesis' in window))return;
     const utterance=new SpeechSynthesisUtterance('앗싸!');
@@ -1476,6 +1517,37 @@
   }
   function playChongtongFanfare(){ playSample('chongtongFanfare',.95,1); }
   function playBombSound(){ playSample('bomb',1,1,1400); }
+
+  async function showPoopedCallout(){
+    if(!els.eventBanner)return;
+    els.eventBanner.textContent='POOPED!'; els.eventBanner.classList.add('show');
+    await sleep(720); els.eventBanner.classList.remove('show');
+  }
+
+  function detectNewMilestones(playerId){
+    const player=playerStateById(state,playerId),history=presentation.milestoneHistory[playerId],found=[];
+    const add=(key,title,cards,birds=false)=>{if(cards.length&&!history.has(key)){history.add(key);found.push({key,title,cardIds:cards.map(card=>card.id),birds});}};
+    const godori=[2,4,8].map(month=>player.captured.find(card=>card.month===month&&card.flags.includes('godori'))).filter(Boolean);
+    if(godori.length===3)add('godori','GODORI!',godori,true);
+    for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]})){
+      const cards=months.map(month=>player.captured.find(card=>card.month===month&&card.ribbonSet===set)).filter(Boolean);
+      if(cards.length===3)add(`stripes-${set}`,'3-STRIPES!',cards);
+    }
+    const brights=player.captured.filter(card=>card.type==='bright');
+    if(brights.length>=5)add('five-brights','5-BRIGHTS!',brights.slice(0,5));
+    return found;
+  }
+  async function presentNewMilestones(playerId){
+    for(const milestone of detectNewMilestones(playerId)){
+      els.milestoneTitle.textContent=milestone.title; els.milestoneCards.innerHTML=''; els.milestoneBirds.innerHTML='';
+      milestone.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
+      if(milestone.birds)for(let index=0;index<5;index++){const bird=document.createElement('span');bird.textContent='🐦';els.milestoneBirds.appendChild(bird);}
+      els.milestoneOverlay.classList.add('show'); els.milestoneOverlay.setAttribute('aria-hidden','false');
+      await sleep(3000);
+      els.milestoneOverlay.classList.remove('show'); els.milestoneOverlay.setAttribute('aria-hidden','true');
+      await sleep(120);
+    }
+  }
 
 
   function bestAiCard(){
@@ -1539,6 +1611,7 @@
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
     const englishLabel=step=>step
+      .replace('First Ppeok','First Poop')
       .replace('Meong-bak','Picture Penalty')
       .replace('Pi-bak','Single Penalty')
       .replace('Gwang-bak','Bright Penalty')
@@ -1550,7 +1623,7 @@
 
   async function humanGoStop(sc){
     const preview=calculateFinalScore('human');
-    els.decisionText.textContent=`${formatScoreFormula(preview)}. STOP takes ${preview.total} points now. GO continues the hand but risks a Go Penalty.`;
+    els.decisionText.textContent=`Current: ${state.human.go} Go. ${formatScoreFormula(preview)}. STOP takes ${preview.total} points now. GO continues the hand but risks a Go Penalty.`;
     els.decisionDialog.show();
   }
 
@@ -1581,7 +1654,7 @@
     const side=legacySideForPlayerId(event.actorId);
     recordTerminalResult(terminal);
     presentation.locked=true;
-    setGrandResult('WIN!',side==='human'?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`${terminal.reason}${terminal.nagariCarryPower?` · Nagari ×${terminal.multiplier}`:''}`,'special');
+    setGrandResult('TRIPLE POOP!',side==='human'?'Player Wins!':'Computer Wins!',`${terminal.finalPoints} Points`,`Three Poops in one hand${terminal.nagariCarryPower?` · Nagari ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1601,8 +1674,10 @@
     presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};
     presentation.roundNo=1; presentation.recordedTerminal=null;
   }
-  function showFirstPpeokNotice(){
+  function showFirstPoopNotice(side){
     if(!els.firstPpeokDialog)return Promise.resolve();
+    els.firstPoopTitle.textContent='FIRST POOP!';
+    els.firstPoopText.textContent=side==='human'?'You pooped on your first turn and get +7 points.':'Computer pooped on its first turn and gets +7 points.';
     els.firstPpeokDialog.showModal();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
   }
@@ -1626,6 +1701,7 @@
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
     state=freshState(nagariCarryPower);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
+    presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
     els.roundNo.textContent=presentation.roundNo;render();
     setTimeout(processOpeningSpecials,420);
   }
@@ -1721,11 +1797,11 @@
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
-      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,
-      stableFloorTilt,stableStackAngle,
+      stableFloorTilt,stableStackAngle,shuffle,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
         return {

@@ -168,3 +168,9 @@ Player state now serializes `turnsTaken`, `firstPpeokPoints`, explicit `gukjinMo
 Declared Shake sets now persist their three public card IDs in `revealedShakeSets`, appear in the public `shakeDeclared` event, survive JSON round trips, and project to both viewers; KEEP SECRET adds no public set. The browser presents the declaration and provides a persistent `Shake ×N` review control. Gukjin uses a dedicated one-card Picture/Single choice instead of the captured gallery, while settlement presentation translates internal penalty names to English category terms.
 
 Presentation coverage also guards canonical full-size capture-flight clones and responsive CSS structure. The layout reflows status, hand, capture summaries, and felt at tablet, phone portrait (including 360–430px), and short phone landscape widths without making captured panels overlap the table. These source assertions complement, rather than replace, manual browser preview testing.
+
+## Third manual-preview regression pass
+
+Opening actions now use Shake, Keep for Bomb, and Bomb! wording. Only an accepted public `shakeDeclared` event reaches the three-bell presenter: Computer declarations pause in an acknowledgment dialog, human declarations use the existing short AI acknowledgment, and private Keep for Bomb remains silent. Player status keeps reviewable cumulative Shake and authoritative Go badges. User-visible stack terminology is Poop/Pooped, while stable internal engine identifiers remain unchanged.
+
+Temporary hand, deck-front, floor-hit, Pooped-pile, capture, and Bomb cards share the canonical face shell. The deck front no longer has a pale independent style, and its 3D front is separated with `translateZ` to avoid back/front raster seams. Stationary hand-card wrappers own hover hit testing. Presentation-only milestone history queues Godori, each valid three-Stripe set, and five-Bright celebrations once per player without modifying authority.

@@ -1839,9 +1839,9 @@ test('dedicated Gukjin choices map Picture and Single buttons to authoritative m
 });
 
 test('user-facing settlement formatting translates penalty terminology to English categories',()=>{
-  const formatted=api.formatScoreFormula({formulaSteps:['Base 7','Meong-bak ×2','Pi-bak ×2','Gwang-bak ×2','Go-bak ×2'],total:112});
-  assert.equal(formatted,'Base 7  →  Picture Penalty ×2  →  Single Penalty ×2  →  Bright Penalty ×2  →  Go Penalty ×2  →  Final 112');
-  assert.equal(/Meong|Pi-bak|Gwang|Go-bak/.test(formatted),false);
+  const formatted=api.formatScoreFormula({formulaSteps:['Base 7','First Ppeok +7','Meong-bak ×2','Pi-bak ×2','Gwang-bak ×2','Go-bak ×2'],total:224});
+  assert.equal(formatted,'Base 7  →  First Poop +7  →  Picture Penalty ×2  →  Single Penalty ×2  →  Bright Penalty ×2  →  Go Penalty ×2  →  Final 224');
+  assert.equal(/Ppeok|Meong|Pi-bak|Gwang|Go-bak/.test(formatted),false);
 });
 
 test('responsive CSS defines non-overlapping phone, landscape, tablet, and desktop strategies',()=>{
@@ -1853,4 +1853,77 @@ test('responsive CSS defines non-overlapping phone, landscape, tablet, and deskt
   assert.equal(css.includes('grid-template-columns:repeat(4,minmax(54px,1fr))'),true);
   assert.equal(css.includes('max-height:calc(100dvh - 20px)'),true);
   assert.equal(css.includes('.capture-flight-card'),true);
+});
+
+test('Keep for Bomb is silent while accepted Shake alone enters the acknowledgment presenter',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.equal(html.includes('id="shakeBtn" class="go-btn" type="button">Shake</button>'),true);
+  assert.equal(html.includes('id="keepSecretBtn" class="stop-btn" type="button">Keep for Bomb</button>'),true);
+  assert.equal(source.includes('Choose Shake or Keep for Bomb.'),true);
+  assert.equal((source.match(/playShakeSound\(/g)||[]).length,2,'only the semantic presenter and function declaration may reference Shake audio');
+  const presenter=source.slice(source.indexOf('async function presentShakeDeclaration'),source.indexOf('function openShakeReview'));
+  assert.equal(presenter.includes("events.find(item=>item.type==='shakeDeclared')"),true);
+  assert.equal(presenter.includes("event.actorId===PLAYER_B"),true);
+  assert.equal(presenter.includes('shakeRevealDialog.showModal()'),true);
+  assert.equal(presenter.includes("shakeRevealDialog.addEventListener('close'"),true);
+});
+
+test('First Poop notices cover both players while First and Triple Poop semantics stay distinct',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.equal(source.includes("if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side)"),true);
+  assert.equal(source.includes("'You pooped on your first turn and get +7 points.'"),true);
+  assert.equal(source.includes("'Computer pooped on its first turn and gets +7 points.'"),true);
+  assert.equal(source.includes("setGrandResult('TRIPLE POOP!'"),true);
+  const poopPath=source.slice(source.indexOf("if(classification.kind==='ppeokSsaDaCandidate')"),source.indexOf("}else{",source.indexOf("if(classification.kind==='ppeokSsaDaCandidate')")));
+  assert.equal(poopPath.includes('playPpeokSound()'),true);
+  assert.equal(poopPath.includes('playShakeSound()'),false);
+  assert.equal(html.includes('FIRST POOP!'),true);
+  const first=threePpeokFixture({existingPpeoks:0}).result;
+  assert.equal(first.state.winner,null);
+  assert.equal(threePpeokFixture({existingPpeoks:2}).result.state.terminalResult.type,'threePpeok');
+});
+
+test('normal visible English UI uses Poop terminology and not internal Korean-derived labels',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const visible=html.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ');
+  assert.match(visible,/Pooped pile/);
+  assert.match(visible,/FIRST POOP!/);
+  assert.doesNotMatch(visible,/Ppeok|PPEOK|Ssa-da|Meong-bak|Pi-bak|Gwang-bak|Go-bak/);
+});
+
+test('Go badges hide zero and label one or three while the decision copy is explicit',()=>{
+  assert.equal(api.goCountLabel(api.makePlayer({go:0})),'');
+  assert.equal(api.goCountLabel(api.makePlayer({go:1})),'1 Go');
+  assert.equal(api.goCountLabel(api.makePlayer({go:3})),'3 Go');
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.equal(source.includes('Current: ${state.human.go} Go.'),true);
+  assert.equal(source.includes("renderGoIndicator(document.querySelector('.cpu-chip'),topPlayer)"),true);
+});
+
+test('milestone detection queues Godori, valid Stripes, and five Brights once without changing authority',()=>{
+  const captured=cards('m2-1','m4-1','m8-2','m1-2','m2-2','m3-2','m1-1','m3-1','m8-1','m11-1','m12-1');
+  const state=stateWith({human:api.makePlayer({captured})});
+  api.setState(state); const before=JSON.stringify(api.getState());
+  const milestones=api.detectNewMilestones('playerA');
+  assert.deepEqual(Array.from(milestones,item=>item.title),['GODORI!','3-STRIPES!','5-BRIGHTS!']);
+  assert.deepEqual(Array.from(milestones[1].cardIds),['m1-2','m2-2','m3-2']);
+  assert.equal(milestones[0].birds,true);
+  assert.equal(api.detectNewMilestones('playerA').length,0);
+  assert.equal(JSON.stringify(api.getState()),before);
+});
+
+test('temporary deck and capture cards reuse the canonical card-face path and stable hover shell',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.equal(source.includes("front.className='deck-draw-face deck-draw-front canonical-card-face'"),true);
+  assert.equal(source.includes('front.appendChild(createCardFaceImage(card))'),true);
+  assert.equal(source.includes("el.className=`${className} canonical-card-face`"),true);
+  assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg) translateZ(1px);padding:0!important;background:#a92d21!important;border:1px solid #a92d21!important}'),true);
+  assert.equal(css.includes('.deck-draw-front{transform:rotateY(180deg);background:#f5efe3'),false);
+  assert.equal(source.includes("slot.className='hand-card-slot'"),true);
+  assert.equal(css.includes('.hand-card-slot:hover .hand-card'),true);
+  assert.equal(source.includes("new SpeechSynthesisUtterance('eh-heh-heh!')"),true);
+  assert.equal(source.includes("laugh:'https://"),false);
 });

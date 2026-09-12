@@ -36,8 +36,8 @@ node --test tests/current-behavior.test.js
 - Shake / keep secret
 - Bomb
 - Two visible blank/pass cards after Bomb
-- Ppeok / ssa-da
-- Self-Ppeok
+- Pooped piles (internal rule ID: Ppeok / ssa-da)
+- recapturing your own Pooped pile
 - Ttadak
 - Jjok
 - Sweep
