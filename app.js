@@ -63,7 +63,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,audioTrace:[],activeHoveredHandCardId:null
+    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -1071,6 +1071,7 @@
   }
 
   async function animatePiTransfer(card,fromSide,toSide){
+    presentation.piTransferAnimationCount++;
     if(TEST_MODE)return;
     const fromRect=captureTargetRect(fromSide,'pi');
     const toRect=captureTargetRect(toSide,'pi');
@@ -1554,12 +1555,27 @@
   function traceAudio(name){presentation.audioTrace.push(name);}
   function playProceduralNoise(kind){
     if(!presentation.soundEnabled)return;
-    try{const c=audioContext();if(!c)return;const duration=kind==='flush'?1.5:kind==='dice'?.9:.55,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const fade=kind==='dice'?.75+.25*Math.sin(i*.08):1-i/length;data[i]=(((seed>>>0)/0xffffffff)*2-1)*fade;}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'||kind==='dice'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:kind==='dice'?620:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:kind==='dice'?.3:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();}catch(_){ }
+    try{const c=audioContext();if(!c)return;const duration=kind==='flush'?1.5:.55,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;data[i]=(((seed>>>0)/0xffffffff)*2-1)*(1-i/length);}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();}catch(_){ }
+  }
+  let activeDiceSources=[];
+  function stopDiceSound(){activeDiceSources.forEach(source=>{try{source.stop();}catch(_){ }});activeDiceSources=[];}
+  function playDiceClatter(){
+    if(!presentation.soundEnabled)return;
+    try{
+      const c=audioContext();if(!c)return;stopDiceSound();const now=c.currentTime;
+      const impacts=[[0,.026,1850,.13],[.07,.021,2200,.1],[.14,.028,1550,.14],[.23,.02,2450,.09],[.32,.03,1750,.13],[.43,.024,2100,.1],[.55,.032,1450,.14],[.68,.026,1900,.12],[.77,.035,1250,.18],[.84,.055,980,.28]];
+      impacts.forEach(([delay,duration,frequency,volume],index)=>{
+        const length=Math.max(1,Math.floor(c.sampleRate*duration)),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0xd1ce0000+index;
+        for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const decay=(1-i/length)**3;data[i]=(((seed>>>0)/0xffffffff)*2-1)*decay;}
+        const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=1.4;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(volume,now+delay+.003);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start(now+delay);source.stop(now+delay+duration);activeDiceSources.push(source);
+      });
+      setTimeout(()=>{activeDiceSources=[];},920);
+    }catch(_){stopDiceSound();}
   }
   function playSweepSound(){
     if(!presentation.soundEnabled)return;
     traceAudio('sweep');if(TEST_MODE)return;
-    try{const c=audioContext();if(!c)return;const now=c.currentTime,duration=1.2,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x5eed1234;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const t=i/length,envelope=Math.sin(Math.PI*Math.min(1,t*1.15))*(1-t*.45),brush=.55+.45*Math.sin(i*.017);data[i]=(((seed>>>0)/0xffffffff)*2-1)*envelope*brush;}const source=c.createBufferSource(),high=c.createBiquadFilter(),band=c.createBiquadFilter(),gain=c.createGain(),pan=typeof c.createStereoPanner==='function'?c.createStereoPanner():null;high.type='highpass';high.frequency.value=850;band.type='bandpass';band.frequency.setValueAtTime(3800,now);band.frequency.exponentialRampToValueAtTime(1700,now+duration);band.Q.value=.45;gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.24,now+.055);gain.gain.setValueAtTime(.2,now+.72);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);source.buffer=buffer;source.connect(high).connect(band).connect(gain);if(pan){gain.connect(pan).connect(c.destination);pan.pan.setValueAtTime(-.8,now);pan.pan.linearRampToValueAtTime(.8,now+duration);}else gain.connect(c.destination);source.start(now);source.stop(now+duration);}catch(_){ }
+    try{const c=audioContext();if(!c)return;const now=c.currentTime;[[0,-.75,.55],[.48,.55,-.65]].forEach(([delay,panFrom,panTo],stroke)=>{const duration=.38,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x5eed1234+stroke;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const t=i/length,envelope=Math.sin(Math.PI*t)**.7,bristles=.45+.55*Math.abs(Math.sin(i*.043));data[i]=(((seed>>>0)/0xffffffff)*2-1)*envelope*bristles;}const source=c.createBufferSource(),high=c.createBiquadFilter(),band=c.createBiquadFilter(),gain=c.createGain(),pan=typeof c.createStereoPanner==='function'?c.createStereoPanner():null;high.type='highpass';high.frequency.value=1400;band.type='bandpass';band.frequency.setValueAtTime(5200,now+delay);band.frequency.exponentialRampToValueAtTime(2600,now+delay+duration);band.Q.value=.6;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(.2,now+delay+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(high).connect(band).connect(gain);if(pan){gain.connect(pan).connect(c.destination);pan.pan.setValueAtTime(panFrom,now+delay);pan.pan.linearRampToValueAtTime(panTo,now+delay+duration);}else gain.connect(c.destination);source.start(now+delay);source.stop(now+delay+duration);});}catch(_){ }
   }
   function playTapTapSound(){playProceduralNoise('flush');}
   function playKissSound(){
@@ -1857,7 +1873,7 @@
     for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();await sleep(72);}
     presentation.deckDisplayCount=null;render();
   }
-  function playDiceSound(){presentation.diceSoundCount++;traceAudio('dice');playProceduralNoise('dice');}
+  function playDiceSound(){if(!presentation.soundEnabled)return;presentation.diceSoundCount++;traceAudio('dice');if(!TEST_MODE)playDiceClatter();}
   async function startGame(){
     resetHandPresentationState();hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
@@ -1978,7 +1994,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,setActiveHoveredHandCard,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
@@ -1991,12 +2007,14 @@
           dicePresentationCount:presentation.dicePresentationCount,
           diceSoundCount:presentation.diceSoundCount,
           kissSoundCount:presentation.kissSoundCount,
+          piTransferAnimationCount:presentation.piTransferAnimationCount,
           audioTrace:[...presentation.audioTrace],
           activeHoveredHandCardId:presentation.activeHoveredHandCardId,
           sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
         };
       },
       resetAudioTrace(){presentation.audioTrace.length=0;},
+      resetPiTransferAnimationCount(){presentation.piTransferAnimationCount=0;},
       setSoundEnabled(value){presentation.soundEnabled=!!value;}
     });
   }else{

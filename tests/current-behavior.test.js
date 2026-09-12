@@ -2054,6 +2054,16 @@ test('opponent Pooped-pile capture transfers one available Single and zero when 
   for(const captured of [cards('m7-3','m8-3'),[]]){const stack=cards('m2-1','m2-2','m2-3');const result=specialFixture('playerA',{floor:stack,handCard:card('m2-4'),drawCard:card('m9-3'),captured,floorStacks:{2:{month:2,cardIds:stack.map(card=>card.id),source:'ppeok',owner:'playerB'}},targetId:'m2-3'});const transfers=result.events.filter(event=>event.type==='piTransferred'&&event.reason==='opponentPpeok');assert.equal(transfers.length,captured.length?1:0);}
 });
 
+test('ordinary opponent Pooped pickup emits and presents exactly one physical Single transfer',async()=>{
+  const stack=cards('m2-1','m2-2','m2-3');
+  const result=specialFixture('playerA',{floor:[...stack,card('m8-2')],handCard:card('m2-4'),drawCard:card('m9-3'),remainingHand:[card('m10-3')],captured:cards('m7-3','m8-3'),floorStacks:{2:{month:2,cardIds:stack.map(card=>card.id),source:'ppeok',owner:'playerB'}},targetId:'m2-3'});
+  const transfers=result.events.filter(event=>event.type==='piTransferred');
+  assert.deepEqual(transfers.map(event=>[event.reason,event.cardId]),[['opponentPpeok','m7-3']]);
+  assert.equal(result.state.human.captured.some(item=>item.id==='m7-3'),true);assert.equal(result.state.ai.captured.some(item=>item.id==='m7-3'),false);
+  api.resetPiTransferAnimationCount();await api.presentPiTransferEvents('human',result.events);
+  assert.equal(api.getPresentationSnapshot().piTransferAnimationCount,1);
+});
+
 test('non-Sweep special presentation is awaited before threshold evaluation and handoff',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const presenter=source.slice(source.indexOf('async function resolveExtractedSpecialTurn'),source.indexOf('async function playFullTurn'));assert.ok(presenter.includes("await showSpecialTransient('KISS!'"));assert.ok(presenter.includes("await showSpecialTransient('FLUSH!'"));
   const turn=source.slice(source.indexOf('async function playFullTurn'),source.indexOf('async function executeDeckOnlyTurn'));assert.ok(turn.indexOf('await resolveExtractedSpecialTurn')<turn.indexOf('await concludeTurn(side)'));
@@ -2343,7 +2353,18 @@ test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>
   api.setSoundEnabled(true);api.resetAudioTrace();api.playSweepSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['sweep']);
   api.resetAudioTrace();api.playBombSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['bomb']);
   api.setSoundEnabled(false);api.resetAudioTrace();api.playSweepSound();api.playBombSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sweep=source.slice(source.indexOf('function playSweepSound'),source.indexOf('function playTapTapSound'));assert.match(sweep,/duration=1\.2/);assert.match(sweep,/high\.type='highpass'/);assert.match(sweep,/pan\.pan\.linearRampToValueAtTime/);assert.doesNotMatch(sweep,/playBombSound|playSample\('bomb'/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sweep=source.slice(source.indexOf('function playSweepSound'),source.indexOf('function playTapTapSound'));assert.match(sweep,/\[\[0,-\.75,\.55\],\[\.48,\.55,-\.65\]\]/);assert.match(sweep,/const duration=\.38/);assert.match(sweep,/high\.type='highpass'/);assert.match(sweep,/pan\.pan\.linearRampToValueAtTime/);assert.doesNotMatch(sweep,/playBombSound|playSample\('bomb'/);
+});
+
+test('dice audio is a bounded sequence of discrete clacks rather than procedural white noise',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const clatter=source.slice(source.indexOf('function playDiceClatter'),source.indexOf('function playSweepSound'));
+  assert.match(clatter,/const impacts=\[\[0,\.026,1850,\.13\]/);assert.match(clatter,/\[\.84,\.055,980,\.28\]/);assert.match(clatter,/impacts\.forEach/);assert.equal((clatter.match(/createBufferSource\(\)/g)||[]).length,1);assert.match(clatter,/setTimeout\(\(\)=>\{activeDiceSources=\[\];\},920\)/);
+  const dice=source.slice(source.indexOf('function playDiceSound'),source.indexOf('async function startGame'));
+  assert.match(dice,/playDiceClatter\(\)/);assert.doesNotMatch(dice,/playProceduralNoise/);
+  const procedural=source.slice(source.indexOf('function playProceduralNoise'),source.indexOf('let activeDiceSources'));
+  assert.doesNotMatch(procedural,/kind==='dice'/);
+  api.setSoundEnabled(false);api.resetAudioTrace();api.playDiceSound?.();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
 });
 
 test('round boundary cleanup is idempotent and does not reset session authority',()=>{
