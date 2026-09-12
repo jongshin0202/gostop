@@ -99,4 +99,4 @@ Three-Ppeok is authority-owned as part of Ppeok/Ssa-da resolution. After stack c
 | Animations and audio | — | Browser |
 | Secure shuffle/deal/new-hand construction | Solo session/controller boundary | Browser deal presentation |
 
-Authoritative player records additionally carry `resolvedOpeningTripleMonths`, `turnsTaken`, `firstPpeokPoints`, and explicit `gukjinMode`. These fields make opening decisions, first-turn Ppeok rewards, and Gukjin scoring reproducible after serialization. Session wins and accrued awarded points remain neutral-ID-keyed browser-session metadata, not in-hand authority.
+Authoritative player records additionally carry `resolvedOpeningTripleMonths`, public `revealedShakeSets`, `turnsTaken`, `firstPpeokPoints`, and explicit `gukjinMode`. These fields make opening decisions, public Shake review, first-turn Ppeok rewards, and Gukjin scoring reproducible after serialization. KEEP SECRET never adds a revealed set. Session wins and accrued awarded points remain neutral-ID-keyed browser-session metadata, not in-hand authority.

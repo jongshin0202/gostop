@@ -178,6 +178,11 @@
       state[side].hiddenTripleMonths=normalizeMonthList(state[side].hiddenTripleMonths,`state.${side}.hiddenTripleMonths`);
       state[side].shakenMonths=normalizeMonthList(state[side].shakenMonths,`state.${side}.shakenMonths`);
       state[side].resolvedOpeningTripleMonths=normalizeMonthList(state[side].resolvedOpeningTripleMonths||[],`state.${side}.resolvedOpeningTripleMonths`);
+      state[side].revealedShakeSets=(state[side].revealedShakeSets||[]).map((set,index)=>{
+        const cardIds=Array.isArray(set?.cardIds)?[...new Set(set.cardIds)]:[];
+        if(!set||!Number.isInteger(set.month)||set.month<1||set.month>12||cardIds.length!==3||cardIds.some(id=>typeof id!=='string'))throw new Error(`state.${side}.revealedShakeSets[${index}] is invalid.`);
+        return {month:set.month,cardIds};
+      });
       state[side].turnsTaken=state[side].turnsTaken||0;
       state[side].firstPpeokPoints=state[side].firstPpeokPoints||0;
       state[side].gukjinMode=state[side].gukjinMode||'animal';
@@ -719,10 +724,13 @@
       if(action.type==='keepShakeSecret'&&decision.type==='openingTripleDecision'&&decision.floorCardId)throw new Error('KEEP SECRET is unavailable when Bomb is immediately available.');
       delete state.pendingDecision;
       if(action.type==='declareShake'){
+        const cardIds=decision.cardIds||player.hand.filter(card=>card.month===decision.month).map(card=>card.id);
+        if(cardIds.length!==3)throw new Error('Shake declaration requires exactly three revealed cards.');
         player.shakes++;
         if(!player.shakenMonths.includes(decision.month))player.shakenMonths.push(decision.month);
+        player.revealedShakeSets.push({month:decision.month,cardIds:[...cardIds]});
         player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
-        events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,shakeCount:player.shakes,multiplier:2**player.shakes});
+        events.push({type:'shakeDeclared',audience:'public',actorId,month:decision.month,cardIds:[...cardIds],shakeCount:player.shakes,multiplier:2**player.shakes});
       }
       if(decision.type==='openingTripleDecision'){
         if(!player.resolvedOpeningTripleMonths.includes(decision.month))player.resolvedOpeningTripleMonths.push(decision.month);

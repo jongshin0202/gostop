@@ -82,7 +82,7 @@
         <div><b>Singles</b><span>10 Singles value = 1 point, then +1 each.</span></div>
       </div>
       <p>When you reach the finish threshold, choose <b>STOP</b> to end the hand or <b>GO</b> to keep playing for a higher payout.</p>
-      <p class="muted">This build uses the Korean Matgo rule engine: Chongtong, Shake, Bomb, Ppeok/Jabbeok, Ttadak, Jjok, Sweep, Go multipliers, Pi-bak, Gwang-bak, Meong-bak, Go-bak, and Nagari carry.</p>
+      <p class="muted">This build includes Chongtong, Shake, Bomb, Ppeok/Jabbeok, Ttadak, Jjok, Sweep, Go multipliers, Single, Bright, Picture, and Go penalties, plus Nagari carry.</p>
     </form>
   </dialog>
 
@@ -119,7 +119,26 @@
       <h2 id="captureTitle">Gwang</h2>
       <div id="captureMagnified" class="capture-magnified" aria-label="Magnified captured cards"></div>
       <p id="captureSummary" class="muted"></p>
-      <button id="gukjinModeBtn" class="glass-btn gukjin-mode-btn" type="button" hidden></button>
+    </form>
+  </dialog>
+
+  <dialog id="gukjinDialog">
+    <div class="dialog-card compact-choice-card">
+      <h2>Choose how to use this card</h2>
+      <div id="gukjinChoiceCard" class="single-card-choice"></div>
+      <p class="muted">Single counts as 2 Singles.</p>
+      <div class="decision-actions">
+        <button id="gukjinPictureBtn" class="go-btn" type="button">Use as Picture</button>
+        <button id="gukjinSingleBtn" class="stop-btn" type="button">Use as Single</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="shakeReviewDialog">
+    <form method="dialog" class="dialog-card compact-choice-card">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <h2>Revealed Shake Cards</h2>
+      <div id="shakeReviewCards" class="shake-cards"></div>
     </form>
   </dialog>
 

@@ -1001,7 +1001,8 @@ test('declaring Shake mutates authority, emits public neutral event, and resumes
     assert.equal(declared.state[side].shakes,1);
     assert.deepEqual(declared.state[side].shakenMonths,[month]);
     assert.deepEqual(declared.state[side].hiddenTripleMonths,[]);
-    assert.deepEqual(declared.events,[{type:'shakeDeclared',audience:'public',actorId,month,shakeCount:1,multiplier:2}]);
+    assert.deepEqual(declared.events,[{type:'shakeDeclared',audience:'public',actorId,month,cardIds:triple.map(card=>card.id),shakeCount:1,multiplier:2}]);
+    assert.deepEqual(declared.state[side].revealedShakeSets,[{month,cardIds:triple.map(card=>card.id)}]);
     assert.equal(declared.resumePlay.cardId,triple[0].id);
     const played=extractedEngine.applyNormalTurnAction(declared.state,{type:'playCard',actorId,cardId:declared.resumePlay.cardId});
     assert.equal(played.events[0].type,'cardPlayed');
@@ -1050,7 +1051,7 @@ test('Shake sound presentation is driven only by public shakeDeclared events',()
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const humanFlow=source.slice(source.indexOf("const attempted=applyNormalAction(normalAction('human'"),source.indexOf('const matches=matchesFor(card)'));
   const shakeButton=source.slice(source.indexOf("if(els.shakeBtn)"),source.indexOf("if(els.keepSecretBtn)"));
-  assert.equal(humanFlow.includes("event.type==='shakeDeclared'))playShakeSound()"),true);
+  assert.equal(humanFlow.includes('presentShakeDeclaration(declared.events)'),true);
   assert.equal(shakeButton.includes('playShakeSound'),false);
 });
 
@@ -1804,6 +1805,52 @@ test('presentation regressions are wired without browser-side rule mutation',()=
   assert.equal(source.includes("utterance.lang='ko-KR'"),true);
   assert.equal(source.includes("classList.toggle('active-turn'"),true);
   assert.equal(source.includes('sessionStats:{playerA:'),true);
-  assert.equal(css.includes('object-fit:cover!important'),true);
+  assert.equal(css.includes('object-fit:contain!important'),true);
   assert.equal(css.includes('.player-chip.active-turn'),true);
+});
+
+test('declared Shake card identities are public, projected, and serializable while KEEP SECRET stays private',()=>{
+  const {state,triple}=shakeState('playerA');
+  state.ai.hand=[card('m10-1')];
+  const pending=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:triple[0].id}).state;
+  const declared=extractedEngine.applyNormalTurnAction(pending,{type:'declareShake',actorId:'playerA'});
+  const ids=triple.map(item=>item.id);
+  assert.deepEqual(declared.events[0].cardIds,ids);
+  assert.deepEqual(wireRoundTrip(declared.state).human.revealedShakeSets,[{month:6,cardIds:ids}]);
+  for(const viewerId of ['playerA','playerB']){
+    assert.deepEqual(extractedEngine.projectStateForViewer(declared.state,viewerId).human.revealedShakeSets,[{month:6,cardIds:ids}]);
+  }
+
+  const secret=extractedEngine.applyNormalTurnAction(pending,{type:'keepShakeSecret',actorId:'playerA'});
+  assert.deepEqual(secret.state.human.revealedShakeSets,[]);
+  assert.equal(secret.events.length,0);
+  assert.equal(JSON.stringify(extractedEngine.projectStateForViewer(secret.state,'playerB')).includes(ids[0]),false);
+});
+
+test('dedicated Gukjin choices map Picture and Single buttons to authoritative modes',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.equal(html.includes('<h2>Choose how to use this card</h2>'),true);
+  assert.equal(html.includes('>Use as Picture</button>'),true);
+  assert.equal(html.includes('>Use as Single</button>'),true);
+  assert.equal(source.includes("gukjinPictureBtn.addEventListener('click',()=>chooseGukjinMode('animal'))"),true);
+  assert.equal(source.includes("gukjinSingleBtn.addEventListener('click',()=>chooseGukjinMode('pi'))"),true);
+  assert.equal(source.includes('Gukjin: ${player.gukjinMode'),false);
+});
+
+test('user-facing settlement formatting translates penalty terminology to English categories',()=>{
+  const formatted=api.formatScoreFormula({formulaSteps:['Base 7','Meong-bak ×2','Pi-bak ×2','Gwang-bak ×2','Go-bak ×2'],total:112});
+  assert.equal(formatted,'Base 7  →  Picture Penalty ×2  →  Single Penalty ×2  →  Bright Penalty ×2  →  Go Penalty ×2  →  Final 112');
+  assert.equal(/Meong|Pi-bak|Gwang|Go-bak/.test(formatted),false);
+});
+
+test('responsive CSS defines non-overlapping phone, landscape, tablet, and desktop strategies',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.equal(css.includes('@media (max-width:700px)'),true);
+  assert.equal(css.includes('@media (max-width:380px)'),true);
+  assert.equal(css.includes('(orientation:landscape) and (max-height:500px)'),true);
+  assert.equal(css.includes('overflow-x:auto;overflow-y:visible'),true);
+  assert.equal(css.includes('grid-template-columns:repeat(4,minmax(54px,1fr))'),true);
+  assert.equal(css.includes('max-height:calc(100dvh - 20px)'),true);
+  assert.equal(css.includes('.capture-flight-card'),true);
 });

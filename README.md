@@ -63,7 +63,7 @@ node --test tests/current-behavior.test.js
 
 Decision and result screens show the actual settlement formula rather than only card-category counts, for example:
 
-`Base 7 → Shake ×2 → Pi-bak ×2 → Final 28`
+`Base 7 → Shake ×2 → Single Penalty ×2 → Final 28`
 
 ## Planned
 

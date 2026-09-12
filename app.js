@@ -38,7 +38,8 @@
     'howToDialog','decisionDialog','decisionText','goBtn','stopBtn','resultDialog','resultTitle','resultScore','resultBreakdown',
     'playAgainBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
     'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeCards','shakeBtn','keepSecretBtn',
-    'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','gukjinModeBtn','playerSessionStats','aiSessionStats'
+    'bombDialog','bombText','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
+    'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
@@ -138,7 +139,7 @@
     const makePlayer = hand => ({
       hand, captured:[], go:0, shakes:0, bombs:0, bombFreeTurns:0,
       ppeoks:0, hiddenTripleMonths:[], shakenMonths:[],
-      resolvedOpeningTripleMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0
+      resolvedOpeningTripleMonths:[],revealedShakeSets:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0
     });
     let next = {
       deck, floor,
@@ -397,8 +398,8 @@
 
     renderFloor();
 
-    if(els.playerMultiplier) els.playerMultiplier.textContent=playerDoubleLabel(bottomPlayer);
-    if(els.aiMultiplier) els.aiMultiplier.textContent=playerDoubleLabel(topPlayer);
+    renderShakeIndicator(els.playerMultiplier,bottomPlayer,view.bottom.id);
+    renderShakeIndicator(els.aiMultiplier,topPlayer,view.top.id);
 
     renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
     renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
@@ -407,7 +408,18 @@
 
   function playerDoubleLabel(player){
     const power=player.shakes;
-    return power ? `×${2**power}` : '';
+    return power ? `Shake ×${2**power}` : '';
+  }
+  function renderShakeIndicator(element,player,playerId){
+    if(!element)return;
+    element.textContent=playerDoubleLabel(player);
+    const reviewable=player.revealedShakeSets?.length>0;
+    element.classList.toggle('reviewable',reviewable);
+    element.tabIndex=reviewable?0:-1;
+    element.setAttribute('role',reviewable?'button':'status');
+    element.setAttribute('aria-label',reviewable?`${element.textContent}; review revealed cards`:'');
+    element.onclick=reviewable?()=>openShakeReview(playerId):null;
+    element.onkeydown=reviewable?event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openShakeReview(playerId);}}:null;
   }
 
   function renderFloor(){
@@ -476,6 +488,12 @@
       groupCards.forEach((c,i)=>{
         const img=document.createElement('img'); img.className='captured-mini'; img.src=artUrl(c.file); img.alt='';
         img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
+        if(isViewer&&c.id==='m9-1'){
+          img.classList.add('gukjin-review-card'); img.tabIndex=0; img.setAttribute('role','button');
+          img.setAttribute('aria-label','Change how to use Gukjin');
+          const review=event=>{event.stopPropagation();openGukjinChoice(false);};
+          img.addEventListener('click',review); img.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();review(event);}});
+        }
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
       btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(ownerId,group,groupCards)); root.appendChild(btn);
@@ -491,12 +509,6 @@
     const s=scorePlayer(playerStateById(state,ownerId));
     const detail=group.type==='bright'?`${cards.length} Bright${cards.length===1?'':'s'}`:group.type==='animal'?`${cards.length} picture / animal cards${s.godori?' · Godori complete':''}`:group.type==='ribbon'?`${cards.length} stripe cards`:`${s.piCount} Singles value${s.piCount===1?'':'s'} (${cards.length} cards)`;
     els.captureSummary.textContent=detail;
-    const player=playerStateById(state,ownerId),hasGukjin=player.captured.some(card=>card.month===9&&card.flags.includes('switchPi'));
-    els.gukjinModeBtn.hidden=!hasGukjin;
-    if(hasGukjin){
-      els.gukjinModeBtn.dataset.ownerId=ownerId;
-      els.gukjinModeBtn.textContent=`Gukjin: ${player.gukjinMode==='pi'?'Double Pi':'Picture / Yeol'} · Switch`;
-    }
     if(!els.captureDialog.open)els.captureDialog.showModal();
   }
   function effectiveCapturedGroup(player,group){
@@ -505,9 +517,14 @@
   async function promptGukjinChoice(side,events){
     const revealed=events.some(event=>(event.cards||event.cardIds||[]).some(card=>(typeof card==='string'?card:card.id)==='m9-1'));
     if(side!=='human'||!revealed||!state.human.captured.some(card=>card.id==='m9-1'))return;
-    const group=captureGroups.find(item=>item.type==='animal');
-    openCapturedGroup(PLAYER_A,group,effectiveCapturedGroup(state.human,group));
-    await new Promise(resolve=>els.captureDialog.addEventListener('close',resolve,{once:true}));
+    await openGukjinChoice(true);
+  }
+  function openGukjinChoice(waitForChoice=false){
+    const gukjin=state.human.captured.find(card=>card.id==='m9-1');
+    if(!gukjin)return Promise.resolve();
+    els.gukjinChoiceCard.innerHTML=''; els.gukjinChoiceCard.appendChild(createCardEl(gukjin,'card magnified-card'));
+    if(!els.gukjinDialog.open)els.gukjinDialog.showModal();
+    return waitForChoice?new Promise(resolve=>els.gukjinDialog.addEventListener('close',resolve,{once:true})):Promise.resolve();
   }
 
   function showActionCue(){ /* No turn/action text overlays; the animation is the cue. */ }
@@ -592,7 +609,7 @@
       const shake=await chooseShake(card.month);
       if(shake){
         const declared=applyNormalAction(normalAction('human',{type:'declareShake'}));
-        if(declared.events.some(event=>event.type==='shakeDeclared'))playShakeSound();
+        await presentShakeDeclaration(declared.events);
         render();
         await sleep(180);
       }else{
@@ -671,8 +688,7 @@
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
         if(!fourthOnFloor && Math.random()<.72){
           const declared=applyNormalAction(normalAction('ai',{type:'declareShake'}));
-          if(declared.events.some(event=>event.type==='shakeDeclared'))playShakeSound();
-          await revealAiShake(card.month);
+          await presentShakeDeclaration(declared.events);
           render();
           await sleep(220);
         }else applyNormalAction(normalAction('ai',{type:'keepShakeSecret'}));
@@ -1121,7 +1137,7 @@
         const shake=await chooseOpeningTriple(decision);
         if(shake){
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_A});
-          if(result.events.some(event=>event.type==='shakeDeclared'))playShakeSound();
+          await presentShakeDeclaration(result.events);
         }else if(decision.floorCardId){
           await executeBombTurn('human',decision.month); return;
         }else applyNormalAction({type:'keepShakeSecret',actorId:PLAYER_A});
@@ -1129,8 +1145,7 @@
         const shake=!decision.floorCardId&&Math.random()<.72;
         if(shake){
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_B});
-          if(result.events.some(event=>event.type==='shakeDeclared'))playShakeSound();
-          await revealAiShake(decision.month);
+          await presentShakeDeclaration(result.events);
         }else if(decision.floorCardId){await executeBombTurn('ai',decision.month);return;}
         else applyNormalAction({type:'keepShakeSecret',actorId:PLAYER_B});
       }
@@ -1152,14 +1167,26 @@
     els.resultDialog.showModal(); render();
   }
 
-  async function revealAiShake(month){
-    const cards=state.ai.hand.filter(c=>c.month===month);
-    if(!cards.length)return;
-    const rack=els.aiHand;
-    const overlay=document.createElement('div'); overlay.className='ai-shake-reveal';
+  async function presentShakeDeclaration(events){
+    const event=events.find(item=>item.type==='shakeDeclared');
+    if(!event)return;
+    playShakeSound(); render();
+    const cards=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean);
+    const rack=event.actorId===PLAYER_A?document.querySelector('.human-chip'):els.aiHand;
+    const overlay=document.createElement('div'); overlay.className='shake-public-reveal';
     cards.forEach(c=>overlay.appendChild(createCardEl(c,'card shake-mini-card')));
     rack.appendChild(overlay);
     await sleep(1050); overlay.remove();
+  }
+
+  function openShakeReview(playerId){
+    const player=playerStateById(state,playerId);
+    els.shakeReviewCards.innerHTML='';
+    player.revealedShakeSets.flatMap(set=>set.cardIds).forEach(id=>{
+      const card=MASTER_DECK.find(item=>item.id===id);
+      if(card)els.shakeReviewCards.appendChild(createCardEl(card,'card magnified-card'));
+    });
+    els.shakeReviewDialog.showModal();
   }
 
 
@@ -1191,10 +1218,9 @@
   function overlapLanding(targetCard){
     const targetEl=els.floor.querySelector(`[data-card-id="${targetCard.id}"]`) || presentation.stagedCards.get(targetCard.id);
     if(!targetEl)return null;
-    const r=targetEl.getBoundingClientRect(); const sign=Math.random()<.5?-1:1;
-    const x=r.width*(0.22+Math.random()*.24)*sign;
-    const y=r.height*(-.08+Math.random()*.18);
-    return {left:r.left+x,top:r.top+y,width:r.width,height:r.height,rotation:sign*(7+Math.random()*10)};
+    const r=targetEl.getBoundingClientRect(),size=cardSize(),sign=Math.random()<.5?-1:1;
+    const center=rectCenter(r),x=size.w*(0.22+Math.random()*.24)*sign,y=size.h*(-.08+Math.random()*.18);
+    return {left:center.x-size.w/2+x,top:center.y-size.h/2+y,width:size.w,height:size.h,rotation:sign*(7+Math.random()*10)};
   }
 
   function makePhysicalFace(card,rect,className='physical-card'){
@@ -1337,8 +1363,11 @@
 
   function detachFloorCard(card){
     const el=els.floor.querySelector(`[data-card-id="${card.id}"]`); if(!el)return null;
-    const r=el.getBoundingClientRect(); const ph=document.createElement('div'); ph.className='floor-slot-proxy'; ph.style.width=`${r.width}px`; ph.style.height=`${r.height}px`;
-    el.parentNode.insertBefore(ph,el); document.body.appendChild(el); el.classList.add('physical-card','sliding-capture'); normalizeFixed(el,r); return {el,card,placeholder:ph};
+    const r=el.getBoundingClientRect(),size=cardSize(),center=rectCenter(r);
+    const ph=document.createElement('div'); ph.className='floor-slot-proxy'; ph.style.width=`${r.width}px`; ph.style.height=`${r.height}px`;
+    el.parentNode.insertBefore(ph,el); el.style.visibility='hidden';
+    const flight=makePhysicalFace(card,{left:center.x-size.w/2,top:center.y-size.h/2,width:size.w,height:size.h},'physical-card capture-flight-card sliding-capture');
+    return {el:flight,card,placeholder:ph,sourceEl:el};
   }
 
 
@@ -1350,7 +1379,7 @@
     const entries=[];
     unique.forEach(card=>{
       const staged=presentation.stagedCards.get(card.id);
-      if(staged) entries.push({el:staged,card,placeholder:null,staged:true});
+      if(staged){staged.classList.add('capture-flight-card');entries.push({el:staged,card,placeholder:null,staged:true});}
       else {
         const e=detachFloorCard(card);
         if(e)entries.push({...e,staged:false});
@@ -1358,7 +1387,7 @@
     });
     if(!entries.length)return;
     if(prefersReducedMotion()){
-      entries.forEach(e=>{ presentation.stagedCards.delete(e.card.id); e.el.remove(); if(e.placeholder)e.placeholder.remove(); });
+      entries.forEach(e=>{ presentation.stagedCards.delete(e.card.id); e.el.remove(); if(e.sourceEl)e.sourceEl.remove(); if(e.placeholder)e.placeholder.remove(); });
       unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));
       return;
     }
@@ -1376,7 +1405,7 @@
         ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
         presentation.stagedCards.delete(entry.card.id);
-        entry.el.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
+        entry.el.remove(); if(entry.sourceEl)entry.sourceEl.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
       },i*70);
     }));
     await Promise.all(jobs);
@@ -1509,14 +1538,19 @@
   }
 
   function formatScoreFormula(settled,{includeFinal=true}={}){
-    const parts=[...(settled.formulaSteps||[`Base ${settled.base.total}`])];
+    const englishLabel=step=>step
+      .replace('Meong-bak','Picture Penalty')
+      .replace('Pi-bak','Single Penalty')
+      .replace('Gwang-bak','Bright Penalty')
+      .replace('Go-bak','Go Penalty');
+    const parts=(settled.formulaSteps||[`Base ${settled.base.total}`]).map(englishLabel);
     if(includeFinal)parts.push(`Final ${settled.total}`);
     return parts.join('  →  ');
   }
 
   async function humanGoStop(sc){
     const preview=calculateFinalScore('human');
-    els.decisionText.textContent=`${formatScoreFormula(preview)}. STOP takes ${preview.total} points now. GO continues the hand but risks Go-bak.`;
+    els.decisionText.textContent=`${formatScoreFormula(preview)}. STOP takes ${preview.total} points now. GO continues the hand but risks a Go Penalty.`;
     els.decisionDialog.show();
   }
 
@@ -1604,14 +1638,12 @@
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
   els.newGameBtn.addEventListener('click',()=>{resetSession();startGame();});
   els.playAgainBtn.addEventListener('click',()=>{presentation.roundNo++;startGame();});
-  if(els.gukjinModeBtn)els.gukjinModeBtn.addEventListener('click',()=>{
-    const actorId=els.gukjinModeBtn.dataset.ownerId;
-    if(actorId!==PLAYER_A)return;
-    const mode=state.human.gukjinMode==='animal'?'pi':'animal';
-    applyNormalAction({type:'setGukjinMode',actorId,mode}); render();
-    const group=captureGroups.find(item=>item.type===(mode==='pi'?'pi':'animal'));
-    openCapturedGroup(actorId,group,effectiveCapturedGroup(state.human,group));
-  });
+  const chooseGukjinMode=mode=>{
+    applyNormalAction({type:'setGukjinMode',actorId:PLAYER_A,mode});
+    els.gukjinDialog.close(); render();
+  };
+  els.gukjinPictureBtn.addEventListener('click',()=>chooseGukjinMode('animal'));
+  els.gukjinSingleBtn.addEventListener('click',()=>chooseGukjinMode('pi'));
   els.hintBtn.addEventListener('click',recommendHumanCard);
   els.goBtn.addEventListener('click',()=>{
     if(!state||state.turn!==PLAYER_A)return;
@@ -1658,7 +1690,7 @@
     const cloneCard=card=>({...card,flags:[...card.flags]});
     const makeTestPlayer=(overrides={})=>({
       hand:[],captured:[],go:0,shakes:0,bombs:0,bombFreeTurns:0,ppeoks:0,
-      hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0,
+      hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0,
       ...overrides
     });
     const makeTestState=(overrides={})=>{
@@ -1689,7 +1721,7 @@
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
-      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,
