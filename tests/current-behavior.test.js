@@ -2130,8 +2130,8 @@ test('Sweep broom is floor-relative, unique, and removed when its animation fini
 test('unchanged hand cards retain keyed node identity and explicit hover state across renders',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.match(source,/existing=new Map\(\[\.\.\.els\.playerHand\.querySelectorAll/);
-  assert.match(source,/pointerenter.*is-hovered/);
-  assert.match(source,/pointerleave.*is-hovered/);
+  assert.match(source,/pointerenter.*setActiveHoveredHandCard/);
+  assert.match(source,/playerHand\.addEventListener\('pointerleave'.*setActiveHoveredHandCard/);
   assert.match(css,/hand-card-slot\.is-hovered \.hand-card/);
 });
 
@@ -2183,4 +2183,62 @@ test('tutorial derives category examples from canonical metadata and explains ev
   assert.equal(extractedEngine.masterDeck.find(card=>card.flags.includes('switchPi')).id,'m9-1');
   assert.doesNotMatch(html,/m9-1,m11-2,m12-2/);
   for(const locale of Object.keys(i18n.dictionaries))for(const key of ['twoSingleCards','novemberDoubleHelp','decemberDoubleHelp','sakeCupHelp'])assert.ok(i18n.dictionaries[locale][key].trim());
+});
+
+test('normal gameplay semantic class leaves the approved card shell untouched',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.doesNotMatch(css,/\.normal-gameplay-card\s*\{/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.match(source,/const resting=document\.querySelector\('\.floor \.floor-card'\)/);
+  assert.match(source,/el\.style\.width=`\$\{rect\.width\}px`.*el\.style\.height=`\$\{rect\.height\}px`/s);
+});
+
+test('Player and Computer hands share the same responsive play-area grid column',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(css,/\.opponent-zone,\.player-zone\{grid-template-columns:max-content minmax\(260px,1fr\) minmax\(390px,620px\)/);
+  assert.match(css,/\.player-zone>\.hand\{grid-column:2/);
+  assert.match(css,/\.opponent-hand\{grid-column:2\}/);
+  assert.doesNotMatch(css,/\.player-zone>\.hand\{[^}]*left:/);
+});
+
+test('hand hover has one presentation-owned active card and clears on hand exit',()=>{
+  api.setActiveHoveredHandCard('m1-1');assert.equal(api.getPresentationSnapshot().activeHoveredHandCardId,'m1-1');
+  api.setActiveHoveredHandCard('m2-1');assert.equal(api.getPresentationSnapshot().activeHoveredHandCardId,'m2-1');
+  api.setActiveHoveredHandCard(null);assert.equal(api.getPresentationSnapshot().activeHoveredHandCardId,null);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.match(source,/pointerenter.*setActiveHoveredHandCard\(card\.id\)/);
+  assert.match(source,/playerHand\.addEventListener\('pointerleave',\(\)=>setActiveHoveredHandCard\(null\)\)/);
+});
+
+test('KISS presentation invokes one dedicated smooch path and respects Sound Off',()=>{
+  api.setSoundEnabled(true);const before=api.getPresentationSnapshot().kissSoundCount;api.playKissSound();assert.equal(api.getPresentationSnapshot().kissSoundCount,before+1);
+  api.setSoundEnabled(false);api.playKissSound();assert.equal(api.getPresentationSnapshot().kissSoundCount,before+1);api.setSoundEnabled(true);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.equal((source.match(/playKissSound\(\)/g)||[]).length,2);
+  assert.match(source,/frequency\.exponentialRampToValueAtTime\(720/);
+  assert.doesNotMatch(source,/SpeechSynthesisUtterance/);
+});
+
+test('round-start audio trace has only dice before first shuffle and none before later shuffles',async()=>{
+  api.resetSession();api.resetAudioTrace();
+  assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerA',true);
+  assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['shuffle']);
+  api.resetAudioTrace();assert.equal(api.consumeSessionStart(),false);await api.presentDealSequence();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['shuffle']);
+  api.resetSession();api.resetAudioTrace();assert.equal(api.consumeSessionStart(),true);await api.presentOpeningSequence('playerB',true);assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['dice']);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/function playShuffleSound\(\)\{traceAudio\('shuffle'\);playProceduralNoise\('shuffle'\);\}/);
+});
+
+test('authoritative unmatched deck landing keeps its reserved slot after earlier capture cleanup',()=>{
+  let state=stateWith({floor:cards('m1-1','m2-1','m3-1','m4-1'),deck:[card('m9-3')],human:api.makePlayer({hand:[card('m1-2')]})});api.initFloorSlots(state);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m1-2',targetId:'m1-1'}).state;
+  state=extractedEngine.applyNormalTurnAction(state,{type:'drawNextCard',actorId:'playerA'}).state;
+  const reserved=state.pendingTurn.drawn.landingSlot;assert.equal(reserved,4);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'played'}).state;
+  assert.equal(state.floorSlotByCard['m1-1'],undefined);assert.equal(state.floorSlotByCard['m2-1'],1);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'resolveNormalCard',actorId:'playerA',source:'drawn'}).state;
+  assert.equal(state.floorSlotByCard['m9-3'],reserved);assert.equal(state.floorSlotByCard['m2-1'],1);assert.equal(Object.values(state.floorSlotByCard).includes(0),false);
+  state=extractedEngine.applyNormalTurnAction(state,{type:'completeTurn',actorId:'playerA'}).state;
+  assert.equal(extractedEngine.deserializeGameState(extractedEngine.serializeGameState(state)).floorSlotByCard['m9-3'],reserved);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/reserveFloorSlot\(card,authoritativeSlot\)/);assert.match(source,/floor-slot-proxy canonical-card-face/);
 });

@@ -63,7 +63,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    dicePresentationCount:0,diceSoundCount:0
+    dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,audioTrace:[],activeHoveredHandCardId:null
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
@@ -402,7 +402,7 @@
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
-      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>slot.classList.add('is-hovered'));slot.addEventListener('pointerleave',()=>slot.classList.remove('is-hovered'));el=createCardEl(card,'card hand-card');el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
+      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
       el.disabled = presentation.locked || state.turn!==PLAYER_A;
       el.classList.toggle('matchable',card.id===presentation.hintCardId);
       el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
@@ -419,6 +419,7 @@
       const slot=document.createElement('div'); slot.className='hand-card-slot';slot.dataset.handKey=`blank-${i}`; slot.appendChild(blank); desired.push(slot);
     }
     existing.forEach(node=>node.remove());desired.forEach(node=>els.playerHand.appendChild(node));
+    setActiveHoveredHandCard(desired.some(node=>node.dataset.handKey===presentation.activeHoveredHandCardId)?presentation.activeHoveredHandCardId:null);
 
     els.aiHand.innerHTML='';
     topPlayer.hand.forEach(()=>{ const d=document.createElement('div'); d.className='mini-back'; els.aiHand.appendChild(d); });
@@ -432,6 +433,14 @@
 
     renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
     renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
+  }
+
+  function setActiveHoveredHandCard(cardId){
+    presentation.activeHoveredHandCardId=cardId;
+    els.playerHand.querySelectorAll('.hand-card-slot').forEach(slot=>{
+      const active=!!cardId&&slot.dataset.handKey===cardId;slot.classList.toggle('is-hovered',active);
+      const card=slot.querySelector('.hand-card');if(card)card.title=active?(card.dataset.hoverTitle||''):'';
+    });
   }
 
 
@@ -1259,21 +1268,19 @@
   function approximateAiSource(){ const r=els.aiHand.getBoundingClientRect(); return {left:r.left+r.width*.5-27,top:r.top+r.height*.42-44,width:54,height:88}; }
 
   async function freeFloorLanding(card){
-    const {w,h}=cardSize();
-    const slot=reserveFloorSlot(card);
+    const pendingEntries=[state.pendingTurn?.played,state.pendingTurn?.drawn].filter(Boolean);
+    const authoritativeSlot=pendingEntries.find(entry=>entry.card.id===card.id)?.landingSlot;
+    const slot=reserveFloorSlot(card,authoritativeSlot);
     let slotEl=els.floor.querySelector(`[data-floor-slot="${slot}"]`);
     if(!slotEl){
       renderFloor();
       await nextFrame();
       slotEl=els.floor.querySelector(`[data-floor-slot="${slot}"]`);
     }
-    const r=slotEl?.getBoundingClientRect();
-    if(!r)return {left:0,top:0,width:w,height:h,rotation:stableFloorTilt(card)};
-    return {
-      left:r.left+(r.width-w)/2,
-      top:r.top+(r.height-h)/2,
-      width:w,height:h,rotation:stableFloorTilt(card)
-    };
+    if(!slotEl){const {w,h}=cardSize();return {left:0,top:0,width:w,height:h,rotation:stableFloorTilt(card)};}
+    const proxy=document.createElement('div');proxy.className='card floor-card floor-slot-proxy canonical-card-face';slotEl.appendChild(proxy);await nextFrame();
+    const r=proxy.getBoundingClientRect();proxy.remove();
+    return {left:r.left,top:r.top,width:r.width,height:r.height,rotation:stableFloorTilt(card)};
   }
 
   function overlapLanding(targetCard){
@@ -1538,12 +1545,22 @@
     if(!presentation.soundEnabled)return;
     try{const c=audioContext();if(!c)return;const now=c.currentTime;notes.forEach(([delay,freq,duration])=>{const o=c.createOscillator(),g=c.createGain();o.frequency.value=freq;o.type='triangle';g.gain.setValueAtTime(.18,now+delay);g.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);o.connect(g).connect(c.destination);o.start(now+delay);o.stop(now+delay+duration);});}catch(_){ }
   }
+  function traceAudio(name){presentation.audioTrace.push(name);}
   function playProceduralNoise(kind){
     if(!presentation.soundEnabled)return;
     try{const c=audioContext();if(!c)return;const duration=kind==='flush'?1.5:kind==='dice'?.9:.55,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x51f15e;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const fade=kind==='dice'?.75+.25*Math.sin(i*.08):1-i/length;data[i]=(((seed>>>0)/0xffffffff)*2-1)*fade;}const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type=kind==='kiss'||kind==='dice'?'bandpass':'lowpass';filter.frequency.setValueAtTime(kind==='poop'?180:kind==='flush'?1400:kind==='dice'?620:900,c.currentTime);if(kind==='flush')filter.frequency.exponentialRampToValueAtTime(110,c.currentTime+1.45);gain.gain.value=kind==='poop'?.42:kind==='dice'?.3:.22;source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start();}catch(_){ }
   }
   function playTapTapSound(){playProceduralNoise('flush');}
-  function playKissSound(){playProceduralNoise('kiss');}
+  function playKissSound(){
+    if(!presentation.soundEnabled)return;
+    presentation.kissSoundCount++;traceAudio('kiss');
+    if(TEST_MODE)return;
+    try{
+      const c=audioContext();if(!c)return;const now=c.currentTime;
+      const tone=c.createOscillator(),gain=c.createGain();tone.type='sine';tone.frequency.setValueAtTime(260,now);tone.frequency.exponentialRampToValueAtTime(720,now+.18);tone.frequency.exponentialRampToValueAtTime(380,now+.34);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.3,now+.035);gain.gain.exponentialRampToValueAtTime(.0001,now+.38);tone.connect(gain).connect(c.destination);tone.start(now);tone.stop(now+.4);
+      playProceduralNoise('kiss');
+    }catch(_){ }
+  }
   function playSweepSound(){playProceduralNoise('sweep');}
   function playBirdSound(){synthNotes([[0,1600,.12],[.25,1900,.1],[.5,1450,.14],[.8,2100,.1],[1.15,1750,.14]]);}
   function playSadResultSound(){synthNotes([[0,330,.22],[.23,294,.22],[.46,262,.22],[.69,196,.5]]);}
@@ -1802,7 +1819,7 @@
   async function presentOpeningSequence(starter,roll){
     if(!roll)throw new Error('Dice presentation is restricted to the first hand of a session.');
     presentation.dicePresentationCount++;
-    if(TEST_MODE){presentation.diceSoundCount++;return;}
+    if(TEST_MODE){presentation.diceSoundCount++;traceAudio('dice');return;}
     els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
     if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=face++%2?'P':'C';},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?'P':'C';}
@@ -1810,14 +1827,14 @@
     await presentDealSequence();
   }
   async function presentDealSequence(){
-    if(TEST_MODE)return;
+    if(TEST_MODE){traceAudio('shuffle');return;}
     presentation.deckDisplayCount=48;render();playShuffleSound();await sleep(480);
     for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();playDealSound(count);await sleep(34);}
     presentation.deckDisplayCount=null;render();
   }
-  function playShuffleSound(){synthNotes(Array.from({length:12},(_,i)=>[i*.025,180+i*17,.045]));}
-  function playDiceSound(){presentation.diceSoundCount++;playProceduralNoise('dice');}
-  function playDealSound(index){if(index%2===0)synthNotes([[0,230+(index%5)*18,.035]]);}
+  function playShuffleSound(){traceAudio('shuffle');playProceduralNoise('shuffle');}
+  function playDiceSound(){presentation.diceSoundCount++;traceAudio('dice');playProceduralNoise('dice');}
+  function playDealSound(index){if(index%2===0){traceAudio('deal');synthNotes([[0,230+(index%5)*18,.035]]);}}
   async function startGame(){
     presentation.queuedHumanCardSwitch=null; presentation.pendingHumanCardId=null; cleanupTargetChoice(); presentation.stagedCards.forEach(el=>el.remove()); presentation.stagedCards.clear(); presentation.floorSlotReservations.clear(); hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
@@ -1846,6 +1863,7 @@
   if(els.shakeReviewDialog)els.shakeReviewDialog.addEventListener('click',()=>els.shakeReviewDialog.close());
   if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
   if(els.railNewGame)els.railNewGame.addEventListener('click',()=>els.newGameDialog.showModal());
+  els.playerHand.addEventListener('pointerleave',()=>setActiveHoveredHandCard(null));
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
   els.newGameBtn.addEventListener('click',()=>els.newGameDialog.showModal());
   els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
@@ -1937,7 +1955,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,setActiveHoveredHandCard,playKissSound,
       stableFloorTilt,stableStackAngle,shuffle,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
@@ -1949,9 +1967,14 @@
           sessionStarted:presentation.sessionStarted,
           dicePresentationCount:presentation.dicePresentationCount,
           diceSoundCount:presentation.diceSoundCount,
+          kissSoundCount:presentation.kissSoundCount,
+          audioTrace:[...presentation.audioTrace],
+          activeHoveredHandCardId:presentation.activeHoveredHandCardId,
           sessionStats:JSON.parse(JSON.stringify(presentation.sessionStats))
         };
-      }
+      },
+      resetAudioTrace(){presentation.audioTrace.length=0;},
+      setSoundEnabled(value){presentation.soundEnabled=!!value;}
     });
   }else{
     preloadCardFaces();
