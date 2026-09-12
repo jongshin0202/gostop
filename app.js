@@ -666,7 +666,7 @@
 
     const attempted=applyNormalAction(normalAction('human',{type:'attemptPlayCard',cardId:card.id}));
     if(attempted.pendingDecision?.type==='bombDecision'){
-      await executeBombTurn('human',card.month); return;
+      if(await executeBombTurn('human',card.month))return;
     }
     if(attempted.pendingDecision?.type==='shakeDecision'){
       const shake=await chooseShake(card.month);
@@ -682,10 +682,8 @@
           if(useBomb){
             presentation.pendingHumanCardId=null;
             presentation.queuedHumanCardSwitch=null;
-            await executeBombTurn('human',card.month);
-            return;
-          }
-          applyNormalAction(normalAction('human',{type:'declineBomb'}));
+            if(await executeBombTurn('human',card.month))return;
+          }else applyNormalAction(normalAction('human',{type:'declineBomb'}));
         }
       }
     }
@@ -943,7 +941,10 @@
     const decision=state.pendingDecision;
     const bombCards=decision?.cardIds.map(id=>state[side].hand.find(card=>card.id===id)).filter(Boolean)||[];
     const floorTarget=state.floor.find(c=>c.id===decision?.floorCardId);
-    if(bombCards.length!==3 || !floorTarget){ presentation.locked=false; render(); return; }
+    if(bombCards.length!==3 || !floorTarget){
+      if(decision?.type==='bombDecision')applyNormalAction(normalAction(side,{type:'declineBomb'}));
+      presentation.locked=false; render(); return false;
+    }
 
     const bombSourceRects=bombCards.map((c,i)=>{
       if(seatForLegacySide(side)==='bottom'){
@@ -966,6 +967,7 @@
     render();
     await sleep(260);
     await executePendingDrawTurn(side);
+    return true;
   }
 
   async function resolveCombinedTurn(side,play,draw){
@@ -1509,8 +1511,8 @@
     bomb:'https://raw.githubusercontent.com/gynura/to_you/main/assets/sound/fx/Explosion.wav'
   };
   const audioBases={};
-  function unlockAudio(){
-    if(presentation.soundEnabled)audioContext();
+  async function unlockAudio(){
+    const context=presentation.soundEnabled?audioContext():null;
     Object.entries(soundSources).forEach(([name,src])=>{
       if(audioBases[name])return;
       const a=new Audio(src);
@@ -1518,6 +1520,7 @@
       if(src.startsWith('http'))a.crossOrigin='anonymous';
       audioBases[name]=a;
     });
+    if(context?.state==='suspended')await context.resume().catch(()=>{});
   }
   function playSample(name,volume=1,playbackRate=1,maxMs=0){
     if(!presentation.soundEnabled)return;
@@ -1545,7 +1548,6 @@
   function audioContext(){
     const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
     if(!sharedAudioContext)sharedAudioContext=new C();
-    if(sharedAudioContext.state==='suspended')sharedAudioContext.resume().catch(()=>{});
     return sharedAudioContext;
   }
   function synthNotes(notes){
@@ -1562,12 +1564,12 @@
   function playDiceClatter(){
     if(!presentation.soundEnabled)return;
     try{
-      const c=audioContext();if(!c)return;stopDiceSound();const now=c.currentTime;
+      const c=audioContext();if(!c||c.state!=='running')return;stopDiceSound();const now=c.currentTime,master=c.createGain();master.gain.value=.9;master.connect(c.destination);
       const impacts=[[0,.026,1850,.13],[.07,.021,2200,.1],[.14,.028,1550,.14],[.23,.02,2450,.09],[.32,.03,1750,.13],[.43,.024,2100,.1],[.55,.032,1450,.14],[.68,.026,1900,.12],[.77,.035,1250,.18],[.84,.055,980,.28]];
       impacts.forEach(([delay,duration,frequency,volume],index)=>{
         const length=Math.max(1,Math.floor(c.sampleRate*duration)),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0xd1ce0000+index;
         for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const decay=(1-i/length)**3;data[i]=(((seed>>>0)/0xffffffff)*2-1)*decay;}
-        const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=1.4;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(volume,now+delay+.003);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(filter).connect(gain).connect(c.destination);source.start(now+delay);source.stop(now+delay+duration);activeDiceSources.push(source);
+        const source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=.7;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(Math.min(.72,volume*2.8),now+delay+.003);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(filter).connect(gain).connect(master);source.start(now+delay);source.stop(now+delay+duration);activeDiceSources.push(source);
       });
       setTimeout(()=>{activeDiceSources=[];},920);
     }catch(_){stopDiceSound();}
@@ -1881,6 +1883,7 @@
     [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
     const firstSessionHand=consumeSessionStart();
+    if(firstSessionHand&&!TEST_MODE)await unlockAudio();
     const starter=presentation.nextStarterId||(firstSessionHand?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
     state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
     presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
@@ -2019,6 +2022,6 @@
     });
   }else{
     preloadCardFaces();
-    els.playSoloBtn.addEventListener('click',()=>{unlockAudio();els.soloStartOverlay.hidden=true;startGame();},{once:true});
+    els.playSoloBtn.addEventListener('click',async()=>{await unlockAudio();els.soloStartOverlay.hidden=true;startGame();},{once:true});
   }
 })();

@@ -2157,7 +2157,7 @@ test('tutorial month rows contain four canonical labeled cards without overflow 
 test('intentional Play Solo start screen owns the first audio-unlocking gesture',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),i18n=require('../i18n.js');
   assert.match(html,/id="soloStartOverlay"/);assert.match(html,/id="playSoloBtn"/);assert.match(html,/data-i18n="playSolo"/);
-  assert.match(source,/playSoloBtn\.addEventListener\('click',\(\)=>\{unlockAudio\(\);els\.soloStartOverlay\.hidden=true;startGame\(\);\}/);
+  assert.match(source,/playSoloBtn\.addEventListener\('click',async\(\)=>\{await unlockAudio\(\);els\.soloStartOverlay\.hidden=true;startGame\(\);\}/);
   for(const locale of Object.keys(i18n.dictionaries))assert.ok(i18n.dictionaries[locale].playSolo.trim());
 });
 
@@ -2359,12 +2359,46 @@ test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>
 test('dice audio is a bounded sequence of discrete clacks rather than procedural white noise',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const clatter=source.slice(source.indexOf('function playDiceClatter'),source.indexOf('function playSweepSound'));
-  assert.match(clatter,/const impacts=\[\[0,\.026,1850,\.13\]/);assert.match(clatter,/\[\.84,\.055,980,\.28\]/);assert.match(clatter,/impacts\.forEach/);assert.equal((clatter.match(/createBufferSource\(\)/g)||[]).length,1);assert.match(clatter,/setTimeout\(\(\)=>\{activeDiceSources=\[\];\},920\)/);
+  assert.match(clatter,/c\.state!=='running'/);assert.match(clatter,/stopDiceSound\(\)/);assert.match(clatter,/const impacts=\[\[0,\.026,1850,\.13\]/);assert.match(clatter,/\[\.84,\.055,980,\.28\]/);assert.match(clatter,/impacts\.forEach/);assert.equal((clatter.match(/createBufferSource\(\)/g)||[]).length,1);assert.match(clatter,/data\[i\]=.*decay/);assert.match(clatter,/Math\.min\(\.72,volume\*2\.8\)/);assert.match(clatter,/source\.connect\(filter\)\.connect\(gain\)\.connect\(master\)/);assert.match(clatter,/master\.connect\(c\.destination\)/);assert.match(clatter,/source\.stop\(now\+delay\+duration\)/);assert.match(clatter,/setTimeout\(\(\)=>\{activeDiceSources=\[\];\},920\)/);
   const dice=source.slice(source.indexOf('function playDiceSound'),source.indexOf('async function startGame'));
   assert.match(dice,/playDiceClatter\(\)/);assert.doesNotMatch(dice,/playProceduralNoise/);
   const procedural=source.slice(source.indexOf('function playProceduralNoise'),source.indexOf('let activeDiceSources'));
   assert.doesNotMatch(procedural,/kind==='dice'/);
-  api.setSoundEnabled(false);api.resetAudioTrace();api.playDiceSound?.();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
+  assert.match(source,/async function unlockAudio\(\)/);assert.match(source,/if\(context\?\.state==='suspended'\)await context\.resume\(\)/);assert.match(source,/if\(firstSessionHand&&!TEST_MODE\)await unlockAudio\(\)/);assert.match(source,/addEventListener\('click',async\(\)=>\{await unlockAudio\(\)/);
+  api.setSoundEnabled(false);api.resetAudioTrace();api.playDiceSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
+});
+
+test('an armed triple without a current floor target falls back to ordinary play for every card and month',()=>{
+  for(const month of [4,7]){
+    const ids=[1,2,3].map(index=>`m${month}-${index}`);
+    for(const trigger of ids){
+      let state=stateWith({human:api.makePlayer({hand:cards(...ids),hiddenTripleMonths:[month],resolvedOpeningTripleMonths:[month],armedBombMonths:[month]})});
+      const attempted=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:trigger});
+      assert.equal(attempted.pendingDecision,null);assert.deepEqual(attempted.state.human.armedBombMonths,[]);
+      const played=extractedEngine.applyNormalTurnAction(attempted.state,{type:'playCard',actorId:'playerA',cardId:trigger});
+      assert.equal(played.events[0].type,'cardPlayed');assert.equal(played.events.some(event=>event.type==='bombDeclared'),false);assert.equal(played.state.human.bombs,0);assert.equal(played.state.human.bombFreeTurns,0);assert.equal(played.state.human.shakes,0);assert.equal(played.state.human.hand.length,2);
+    }
+  }
+});
+
+test('declining Shake keeps a targetless triple ordinary while valid Bomb legality remains board-dependent',()=>{
+  let state=stateWith({human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3'),hiddenTripleMonths:[6]})});
+  let attempted=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-2'});assert.equal(attempted.pendingDecision.type,'shakeDecision');
+  const kept=extractedEngine.applyNormalTurnAction(attempted.state,{type:'keepShakeSecret',actorId:'playerA'});assert.equal(kept.pendingDecision,null);assert.equal(kept.state.human.shakes,0);assert.equal(kept.state.human.bombs,0);
+  const played=extractedEngine.applyNormalTurnAction(kept.state,{type:'playCard',actorId:'playerA',cardId:'m6-2'});assert.equal(played.events[0].type,'cardPlayed');assert.equal(played.events.some(event=>event.type==='bombDeclared'),false);
+  state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3'),hiddenTripleMonths:[6],armedBombMonths:[6]})});api.initFloorSlots(state);
+  attempted=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-3'});assert.equal(attempted.pendingDecision.type,'bombDecision');
+  const bomb=extractedEngine.applyNormalTurnAction(attempted.state,{type:'declareBomb',actorId:'playerA'});assert.equal(bomb.events.filter(event=>event.type==='bombDeclared').length,1);assert.equal(bomb.state.human.bombs,1);assert.equal(bomb.state.human.bombFreeTurns,2);
+});
+
+test('AI Bomb selection requires a current floor target and stale UI Bomb intent clears before normal fallback',()=>{
+  const state=stateWith({turn:'playerB',startingPlayerId:'playerB',ai:api.makePlayer({hand:cards('m8-1','m8-2','m8-3'),hiddenTripleMonths:[8],resolvedOpeningTripleMonths:[8],armedBombMonths:[8]})});
+  assert.equal(extractedEngine.classifyTurnOutcome(state,{actorId:'playerB',cardId:'m8-1'}).kind,'playReady');
+  const attempted=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerB',cardId:'m8-1'});assert.equal(attempted.pendingDecision,null);
+  const played=extractedEngine.applyNormalTurnAction(attempted.state,{type:'playCard',actorId:'playerB',cardId:'m8-1'});assert.equal(played.events[0].type,'cardPlayed');assert.equal(played.state.ai.hand.length,2);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),bombWrapper=source.slice(source.indexOf('async function executeBombTurn'),source.indexOf('async function resolveCombinedTurn'));
+  assert.match(bombWrapper,/decision\?\.type==='bombDecision'.*type:'declineBomb'/s);assert.match(bombWrapper,/return false/);
+  assert.match(source,/if\(await executeBombTurn\('human',card\.month\)\)return/);
 });
 
 test('round boundary cleanup is idempotent and does not reset session authority',()=>{

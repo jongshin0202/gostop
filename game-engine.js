@@ -724,9 +724,11 @@
       if(!card)throw new Error('Attempted card is not owned by the actor.');
       if(player.armedBombMonths.includes(card.month)){
         const bombDecision=bombDecisionFor(state,side,actorId,card.id);
-        if(!bombDecision)throw new Error('Armed Bomb is stale.');
-        state.pendingDecision=bombDecision;
-        return {state,events,pendingDecision:serializeGameState(bombDecision)};
+        if(bombDecision){
+          state.pendingDecision=bombDecision;
+          return {state,events,pendingDecision:serializeGameState(bombDecision)};
+        }
+        player.armedBombMonths=player.armedBombMonths.filter(month=>month!==card.month);
       }
       const eligible=player.hand.filter(item=>item.month===card.month).length===3&&player.hiddenTripleMonths.includes(card.month)&&!player.shakenMonths.includes(card.month)&&!player.resolvedOpeningTripleMonths.includes(card.month);
       if(eligible)state.pendingDecision={type:'shakeDecision',audience:'player-private',playerId:actorId,month:card.month,cardId:card.id,choices:['shake','keepSecret']};
