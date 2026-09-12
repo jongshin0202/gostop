@@ -44,6 +44,8 @@ function loadCurrentGame(){
   vm.runInContext(i18nSource,context,{filename:'i18n.js'});
   const engineSource=fs.readFileSync(path.join(__dirname,'..','game-engine.js'),'utf8');
   vm.runInContext(engineSource,context,{filename:'game-engine.js'});
+  const authoritySource=fs.readFileSync(path.join(__dirname,'..','session-authority.js'),'utf8');
+  vm.runInContext(authoritySource,context,{filename:'session-authority.js'});
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   vm.runInContext(source,context,{filename:'app.js'});
   return {api:context.GOSTOP_TEST_API,elements};

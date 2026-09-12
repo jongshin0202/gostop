@@ -8,6 +8,8 @@
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
   const engine = globalThis.GoStopEngine;
   if(!engine)throw new Error('GoStopEngine must load before app.js.');
+  const authorityApi=globalThis.GoStopSessionAuthority;
+  if(!TEST_MODE&&!authorityApi)throw new Error('GoStopSessionAuthority must load before app.js.');
   const {
     monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
     hasFourOfMonth,matchingCards,score,scorePlayer,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
@@ -46,6 +48,8 @@
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
   let state = null;
+  const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
+  let soloMatchId=null,soloRevision=0,soloActionSequence=0;
   const presentation = {
     roundNo:1,
     locked:false,
@@ -118,18 +122,28 @@
   function monthListAdd(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');if(!monthListHas(player,field,month))player[field].push(month); }
   function monthListDelete(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');player[field]=player[field].filter(value=>value!==month); }
   function applyNormalAction(action){
+    if(!TEST_MODE)return submitSoloAction(action);
     const result=applyNormalTurnAction(state,action);
     state=result.state;
     return result;
   }
   function applySpecialAction(action){
+    if(!TEST_MODE)return submitSoloAction(action);
     const result=applySpecialTurnAction(state,action);
     state=result.state;
     return result;
   }
 
   function applyGoStopDecision(action){
+    if(!TEST_MODE)return submitSoloAction(action);
     const result=applyGoStopAction(state,action); state=result.state; return result;
+  }
+  function submitSoloAction(action){
+    const playerId=action.actorId;
+    const response=soloAuthority.submitAction({matchId:soloMatchId,playerId,actionId:`solo-${++soloActionSequence}`,expectedRevision:soloRevision,action:Object.fromEntries(Object.entries(action).filter(([key])=>key!=='actorId'))});
+    soloRevision=response.revision;
+    state=soloAuthority.readTrustedState(soloMatchId);
+    return {...response,events:response.events,pendingDecision:state.pendingDecision||null,state};
   }
   function normalAction(side,action){ return {...action,actorId:playerIdForLegacySide(side)}; }
   function classifyNormalTurn(side,details={}){
@@ -138,6 +152,19 @@
 
 
   function freshState(nagariCarryPower=0,startingPlayerId=PLAYER_A) {
+    if(!TEST_MODE){
+      if(soloMatchId&&state?.terminalResult){
+        const created=soloAuthority.createNewHand({matchId:soloMatchId,startingPlayerId});
+        soloRevision=created.revision;
+        return soloAuthority.readTrustedState(soloMatchId);
+      }
+      soloMatchId=`solo-${Date.now().toString(36)}-${(++soloActionSequence).toString(36)}`;
+      const created=soloAuthority.createMatch({matchId:soloMatchId,playerIds:[PLAYER_A,PLAYER_B],gameMode:'solo',startingPlayerId,nagariCarryPower});
+      soloRevision=created.revision;
+      const next=soloAuthority.readTrustedState(soloMatchId);
+      logShuffleAudit(soloMatchId,next);
+      return next;
+    }
     let deck, human, ai, floor, auditId='';
     for (let attempt=0; attempt<200; attempt++) {
       deck = shuffle(MASTER_DECK.map(c => ({...c})));
@@ -1101,7 +1128,7 @@
       const mode=score(actor.captured,'pi').total>score(actor.captured,'animal').total?'pi':'animal';
       if(actor.gukjinMode!==mode)applyNormalAction({type:'setGukjinMode',actorId,mode});
     }
-    let result=evaluateGoStop(state,{actorId}); state=result.state;
+    let result=TEST_MODE?evaluateGoStop(state,{actorId}):submitSoloAction({type:'evaluateGoStop',actorId}); state=result.state;
     if(result.autoStop){ presentStopResult(result); return; }
     if(result.pendingDecision){
       const sc=scorePlayer(state[side]);
@@ -1194,7 +1221,7 @@
   async function processOpeningSpecials(){
     if(state.winner)return;
     if(state.pendingDecision?.type!=='openingTripleDecision'){
-      const opening=resolveOpeningState(state); state=opening.state;
+      const opening=TEST_MODE?resolveOpeningState(state):submitSoloAction({type:'resolveOpening',actorId:state.turn}); state=opening.state;
       const chongtong=opening.events.find(event=>event.type==='chongtongDeclared');
       if(chongtong){ presentChongtong(chongtong); return; }
     }
@@ -1765,7 +1792,7 @@
 
   async function finishNagari(){
     if(state.winner)return;
-    const result=resolveNagari(state,{actorId:state.turn}); state=result.state;
+    const result=TEST_MODE?resolveNagari(state,{actorId:state.turn}):submitSoloAction({type:'resolveNagari',actorId:state.turn}); state=result.state;
     const event=result.events.find(item=>item.type==='nagariDeclared');
     recordTerminalResult(state.terminalResult);
     presentation.locked=true;
@@ -1800,6 +1827,7 @@
   function resetSession(){
     presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};
     presentation.roundNo=1; presentation.recordedTerminal=null;presentation.sessionStarted=false;presentation.nextStarterId=null;
+    if(!TEST_MODE){soloMatchId=null;soloRevision=0;soloActionSequence=0;}
   }
   function consumeSessionStart(){
     if(presentation.sessionStarted)return false;
