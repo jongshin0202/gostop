@@ -2328,6 +2328,17 @@ test('player-played and deck-drawn cards use untransformed canonical dimensions 
   assert.doesNotMatch(source,/concealImpactTarget/);
 });
 
+test('unmatched deck temporary landing uses the canonical size and only the floor proxy center',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const landing=source.slice(source.indexOf('async function freeFloorLanding'),source.indexOf('function overlapLanding'));
+  assert.match(landing,/const r=proxy\.getBoundingClientRect\(\),\{w,h\}=cardSize\(\),center=rectCenter\(r\)/);
+  assert.match(landing,/left:center\.x-w\/2,top:center\.y-h\/2,width:w,height:h/);
+  assert.doesNotMatch(landing,/width:r\.width|height:r\.height/);
+  const deck=source.slice(source.indexOf('async function animateStagedSlap'),source.indexOf('function captureTargetRect'));
+  assert.match(deck,/const landing=target \? overlapLanding\(target\) : await freeFloorLanding\(card\)/);
+  assert.match(deck,/normalizeFixed\(el,landing\)/);
+});
+
 test('Sweep and Bomb audio paths are distinct, single, and honor Sound Off',()=>{
   api.setSoundEnabled(true);api.resetAudioTrace();api.playSweepSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['sweep']);
   api.resetAudioTrace();api.playBombSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),['bomb']);

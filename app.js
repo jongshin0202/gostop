@@ -1277,8 +1277,8 @@
     }
     if(!slotEl){const {w,h}=cardSize();return {left:0,top:0,width:w,height:h,rotation:stableFloorTilt(card)};}
     const proxy=document.createElement('div');proxy.className='card floor-card floor-slot-proxy canonical-card-face';slotEl.appendChild(proxy);await nextFrame();
-    const r=proxy.getBoundingClientRect();proxy.remove();
-    return {left:r.left,top:r.top,width:r.width,height:r.height,rotation:stableFloorTilt(card)};
+    const r=proxy.getBoundingClientRect(),{w,h}=cardSize(),center=rectCenter(r);proxy.remove();
+    return {left:center.x-w/2,top:center.y-h/2,width:w,height:h,rotation:stableFloorTilt(card)};
   }
 
   function overlapLanding(targetCard){
