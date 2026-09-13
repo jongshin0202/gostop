@@ -5,6 +5,7 @@
     const state=snapshot?.state;
     return !!state&&state.turn===snapshot.seatId&&!state.pendingDecision&&Array.isArray(state.legalActions)&&state.legalActions.includes('attemptPlayCard');
   }
+  function viewerCanInteract(snapshot,{connected,pendingActionId=null,blocked=false}={}){return !!connected&&!pendingActionId&&!blocked&&viewerCanStartTurn(snapshot);}
   class OnlineSessionAdapter extends EventTarget{
     constructor({baseUrl=globalThis.GOSTOP_CONFIG?.serverUrl||'',WebSocketImpl=WebSocket}={}){super();this.baseUrl=baseUrl.replace(/\/$/,'');this.WebSocketImpl=WebSocketImpl;this.room=null;this.revision=0;this.pendingActionId=null;this.socket=null;}
     async request(path,body){const response=await fetch(`${this.baseUrl}${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})});const data=await response.json();if(!response.ok)throw Object.assign(new Error(data.error?.message||'Room request failed.'),data.error);return data.room;}
@@ -24,9 +25,10 @@
     }
     submit(action){if(this.pendingActionId)throw new Error('An action is already awaiting the server.');const actionId=crypto.randomUUID();this.pendingActionId=actionId;this.socket.send(JSON.stringify({type:'action',protocolVersion:PROTOCOL_VERSION,actionId,expectedRevision:this.revision,action}));return actionId;}
     sync(){this.socket.send(JSON.stringify({type:'syncRequest',protocolVersion:PROTOCOL_VERSION,sinceRevision:this.revision}));}
+    close(){if(this.socket){this.socket.close();this.socket=null;}this.pendingActionId=null;this.room=null;}
     emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail}));}
   }
-  const api=Object.freeze({OnlineSessionAdapter,PROTOCOL_VERSION,viewerCanStartTurn});
+  const api=Object.freeze({OnlineSessionAdapter,PROTOCOL_VERSION,viewerCanStartTurn,viewerCanInteract});
   globalThis.GoStopOnline=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })();

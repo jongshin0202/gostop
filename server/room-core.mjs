@@ -9,6 +9,7 @@ const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof v
 const fingerprint=value=>JSON.stringify(canonical(value));
 const randomId=(cryptoApi,prefix,bytes=18)=>{const data=new Uint8Array(bytes);cryptoApi.getRandomValues(data);return `${prefix}_${Array.from(data,b=>b.toString(16).padStart(2,'0')).join('')}`;};
 const token=cryptoApi=>randomId(cryptoApi,'room',32);
+const freshFlow=()=>({replayReady:{playerA:false,playerB:false},newGameRequest:null,requestGeneration:0,ended:false,endedBy:null});
 async function tokenHash(cryptoApi,value){const digest=await cryptoApi.subtle.digest('SHA-256',encoder.encode(value));return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');}
 function safeEqual(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let difference=0;for(let i=0;i<a.length;i++)difference|=a.charCodeAt(i)^b.charCodeAt(i);return difference===0;}
 export class RoomError extends Error{constructor(code,message,status=400){super(message);this.code=code;this.status=status;}}
@@ -20,7 +21,7 @@ export class RoomCore{
   async load(){
     if(this.room)return this.room;
     const stored=await this.storage.get('room');if(!stored)return null;
-    this.room=clone(stored);if(this.room.authority)this.authority.restoreMatch(this.room.authority);
+    this.room=clone(stored);this.room.sessionFlow={...freshFlow(),...(this.room.sessionFlow||{}),replayReady:{...freshFlow().replayReady,...(this.room.sessionFlow?.replayReady||{})}};if(this.room.authority)this.authority.restoreMatch(this.room.authority);
     return this.room;
   }
   async persist(){
@@ -29,10 +30,13 @@ export class RoomCore{
     await this.storage.put('room',record);
   }
   publicRoom(){return {roomCode:this.room.roomCode,matchId:this.room.matchId,status:this.room.status,maxPlayers:this.room.maxPlayers,createdAt:this.room.createdAt};}
+  flowFor(participant){const flow=this.room.sessionFlow;return {replayReady:{you:!!flow.replayReady[participant.seatId],opponent:!!flow.replayReady[participant.seatId==='playerA'?'playerB':'playerA']},newGameRequest:flow.newGameRequest?{requestId:flow.newGameRequest.requestId,requestedByYou:flow.newGameRequest.requesterPlayerId===participant.playerId}:null,ended:flow.ended,endedByYou:flow.endedBy===participant.playerId};}
+  snapshotFor(participant){return {...this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}),sessionFlow:this.flowFor(participant)};}
+  broadcastSnapshots(events=[]){for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.snapshotFor(viewer),events}));}
   async create(roomCode){
     if(await this.load())throw new RoomError('ROOM_EXISTS','Room already exists.',409);
     const credential=token(this.crypto),participant={playerId:randomId(this.crypto,'player'),seatId:'playerA',credentialHash:await tokenHash(this.crypto,credential),accountId:null,connected:false};
-    this.room={roomCode,matchId:null,status:'waiting',maxPlayers:MAX_PLAYERS,participants:[participant],eventHistory:[],terminalResult:null,createdAt:this.now(),updatedAt:this.now()};await this.persist();
+    this.room={roomCode,matchId:null,status:'waiting',maxPlayers:MAX_PLAYERS,participants:[participant],eventHistory:[],terminalResult:null,sessionFlow:freshFlow(),createdAt:this.now(),updatedAt:this.now()};await this.persist();
     return {...this.publicRoom(),playerId:participant.playerId,seatId:participant.seatId,credential};
   }
   async join(presentedCredential){
@@ -41,7 +45,7 @@ export class RoomCore{
     if(this.room.participants.length>=this.room.maxPlayers)throw new RoomError('ROOM_FULL','Room is full.',409);
     const credential=token(this.crypto),participant={playerId:randomId(this.crypto,'player'),seatId:'playerB',credentialHash:await tokenHash(this.crypto,credential),accountId:null,connected:false};this.room.participants.push(participant);
     this.room.matchId=randomId(this.crypto,'match');this.authority.createMatch({matchId:this.room.matchId,playerIds:this.room.participants.map(item=>item.playerId),gameMode:'online-2player'});this.room.status='ready';this.room.updatedAt=this.now();await this.persist();
-    for(const viewer of this.room.participants){this.sendTo(viewer.playerId,envelope('roomReady',{...this.publicRoom()}));this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events:[]}));}
+    for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('roomReady',{...this.publicRoom()}));this.broadcastSnapshots();
     return {...this.publicRoom(),playerId:participant.playerId,seatId:participant.seatId,credential};
   }
   async authenticate(credential){
@@ -53,7 +57,7 @@ export class RoomCore{
     const old=this.sockets.get(participant.playerId);if(old&&old!==socket){try{old.close(4001,'Reconnected elsewhere');}catch(_){}}
     this.sockets.set(participant.playerId,socket);participant.connected=true;socket.__playerId=participant.playerId;await this.persist();
     this.send(socket,envelope('connected',{...this.publicRoom(),playerId:participant.playerId,seatId:participant.seatId}));
-    if(this.room.matchId)this.send(socket,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId})}));
+    if(this.room.matchId)this.send(socket,envelope('snapshot',{snapshot:this.snapshotFor(participant),events:[]}));
     this.broadcastPresence(participant.playerId,true);return participant;
   }
   send(socket,message){socket.send(JSON.stringify(message));}
@@ -66,7 +70,7 @@ export class RoomCore{
     if(message.type==='ping'){const response=envelope('pong',{nonce:message.nonce});this.send(socket,response);return response;}
     if(!this.room.matchId){const response=protocolError('ROOM_NOT_READY','Waiting for a second player.');this.send(socket,response);return response;}
     if(message.type==='syncRequest'){
-      const snapshot=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
+      const snapshot=this.snapshotFor(participant);
       const events=this.authority.getEventsSince({matchId:this.room.matchId,viewerId:participant.playerId,revision:Math.min(message.sinceRevision,snapshot.revision)});
       const response=envelope('snapshot',{snapshot,events:events.events});this.send(socket,response);return response;
     }
@@ -74,30 +78,40 @@ export class RoomCore{
       const actionFingerprint=fingerprint(message.action),prior=this.room.eventHistory.find(entry=>entry.actionId===message.actionId&&entry.playerId===participant.playerId),wasSeen=!!prior;
       if(prior&&prior.fingerprint!==actionFingerprint)throw Object.assign(new Error('actionId was already used with different action data.'),{code:'ACTION_ID_CONFLICT'});
       if(message.action.type==='evaluateGoStop'||message.action.type==='resolveNagari')throw Object.assign(new Error('Turn evaluation is owned by the authoritative room.'),{code:'SERVER_OWNED_ACTION'});
-      if(message.action.type==='newGame'){
-        if(wasSeen){const response=envelope('actionAccepted',{actionId:message.actionId,matchId:prior.matchId,revision:prior.revision,duplicate:true});this.send(socket,response);return response;}
-        const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
-        if(message.expectedRevision!==current.revision)throw Object.assign(new Error(`Expected revision ${message.expectedRevision}, current revision is ${current.revision}.`),{code:'STALE_REVISION'});
-        const matchId=randomId(this.crypto,'match');
-        this.authority.createMatch({matchId,playerIds:this.room.participants.map(item=>item.playerId),gameMode:'online-2player'});
-        this.room.matchId=matchId;this.room.status='ready';this.room.terminalResult=null;this.room.updatedAt=this.now();
-        const entry={revision:0,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint,matchId};this.room.eventHistory.push(entry);this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);
-        for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId,viewerId:viewer.playerId}),events:[]}));
-        await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,matchId,revision:0,duplicate:false});this.send(socket,response);return response;
-      }
-      if(message.action.type==='newHand'){
+      const flow=this.room.sessionFlow,flowActions=new Set(['playAgainReady','requestNewGame','respondNewGame','cancelNewGame','quitGame']);
+      if(flowActions.has(message.action.type)){
         if(wasSeen){const response=envelope('actionAccepted',{actionId:message.actionId,revision:prior.revision,duplicate:true});this.send(socket,response);return response;}
-        const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
-        if(message.expectedRevision!==current.revision)throw Object.assign(new Error(`Expected revision ${message.expectedRevision}, current revision is ${current.revision}.`),{code:'STALE_REVISION'});
-        if(!current.terminalResult)throw Object.assign(new Error('The current hand is not complete.'),{code:'HAND_IN_PROGRESS'});
-        this.authority.createNewHand({matchId:this.room.matchId});this.room.eventHistory.push({revision:current.revision+1,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint});this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);
-        const revision=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision;this.room.status='ready';this.room.terminalResult=null;
-        for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events:wasSeen?[]:this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:current.revision}).events}));
-        await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,revision,duplicate:wasSeen});this.send(socket,response);return response;
+        if(flow.ended){if(message.action.type==='quitGame'){const response=envelope('actionAccepted',{actionId:message.actionId,revision:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision,duplicate:true});this.send(socket,response);return response;}throw Object.assign(new Error('This multiplayer session has ended.'),{code:'SESSION_ENDED'});}
+        if(flow.newGameRequest&&message.action.type==='playAgainReady')throw Object.assign(new Error('A New Game request is pending.'),{code:'SESSION_FLOW_PENDING'});
+        let flowEvents=[];
+        if(message.action.type==='playAgainReady'){
+          const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
+          if(!current.terminalResult)throw Object.assign(new Error('The current hand is not complete.'),{code:'HAND_IN_PROGRESS'});
+          flow.replayReady[participant.seatId]=true;
+          if(flow.replayReady.playerA&&flow.replayReady.playerB){this.authority.createNewHand({matchId:this.room.matchId});flowEvents=this.authority.getEventsSince({matchId:this.room.matchId,viewerId:participant.playerId,revision:current.revision}).events;flow.replayReady={playerA:false,playerB:false};this.room.status='ready';this.room.terminalResult=null;}
+        }else if(message.action.type==='requestNewGame'){
+          if(!flow.newGameRequest)flow.newGameRequest={requestId:`request-${++flow.requestGeneration}`,requesterPlayerId:participant.playerId,createdAt:this.now()};
+        }else if(message.action.type==='respondNewGame'){
+          const request=flow.newGameRequest;
+          if(request&&request.requestId===message.action.requestId&&request.requesterPlayerId!==participant.playerId){
+            flow.newGameRequest=null;
+            if(message.action.accept){const matchId=randomId(this.crypto,'match');this.authority.createMatch({matchId,playerIds:this.room.participants.map(item=>item.playerId),gameMode:'online-2player'});this.room.matchId=matchId;this.room.status='ready';this.room.terminalResult=null;flow.replayReady={playerA:false,playerB:false};}
+          }
+        }else if(message.action.type==='cancelNewGame'){
+          const request=flow.newGameRequest;if(request&&request.requestId===message.action.requestId&&request.requesterPlayerId===participant.playerId)flow.newGameRequest=null;
+        }else if(message.action.type==='quitGame'){
+          flow.ended=true;flow.endedBy=participant.playerId;flow.replayReady={playerA:false,playerB:false};flow.newGameRequest=null;this.room.status='ended';
+        }
+        const revision=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision;
+        this.room.eventHistory.push({revision,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint,matchId:this.room.matchId});this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);this.room.updatedAt=this.now();await this.persist();this.broadcastSnapshots(flowEvents);
+        const response=envelope('actionAccepted',{actionId:message.actionId,matchId:this.room.matchId,revision,duplicate:false});this.send(socket,response);return response;
       }
+      if(flow.ended)throw Object.assign(new Error('This multiplayer session has ended.'),{code:'SESSION_ENDED'});
+      if(flow.newGameRequest)throw Object.assign(new Error('A New Game request is pending.'),{code:'SESSION_FLOW_PENDING'});
+      if(message.action.type==='newGame'||message.action.type==='newHand')throw Object.assign(new Error('Direct match replacement is disabled; use multiplayer session flow.'),{code:'SESSION_FLOW_REQUIRED'});
       const result=this.authority.submitAction({matchId:this.room.matchId,playerId:participant.playerId,actionId:message.actionId,expectedRevision:message.expectedRevision,action:message.action});
       if(!wasSeen){this.room.eventHistory.push({revision:result.revision,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint});this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);}
-      for(const viewer of this.room.participants){const snapshot=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events=wasSeen?[]:this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:Math.max(0,result.revision-1)}).events;this.sendTo(viewer.playerId,envelope('snapshot',{snapshot,events}));}
+      for(const viewer of this.room.participants){const snapshot=this.snapshotFor(viewer),events=wasSeen?[]:this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:Math.max(0,result.revision-1)}).events;this.sendTo(viewer.playerId,envelope('snapshot',{snapshot,events}));}
       if(result.snapshot.terminalResult){this.room.status='completed';this.room.terminalResult=clone(result.snapshot.terminalResult);}
       this.room.updatedAt=this.now();await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,revision:result.revision,duplicate:wasSeen,requiresNagari:!!result.requiresNagari,autoStop:!!result.autoStop});this.send(socket,response);return response;
     }catch(error){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:error.code||'ILLEGAL_ACTION',message:error.message}});this.send(socket,response);return response;}

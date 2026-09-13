@@ -2,7 +2,7 @@
 
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {OnlineSessionAdapter,PROTOCOL_VERSION,viewerCanStartTurn}=require('../online-client.js');
+const {OnlineSessionAdapter,PROTOCOL_VERSION,viewerCanStartTurn,viewerCanInteract}=require('../online-client.js');
 
 function adapter(){return new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {}});}
 function message(type,extra={}){return {type,protocolVersion:PROTOCOL_VERSION,...extra};}
@@ -21,6 +21,25 @@ test('accepted, rejected, and ordinary transport messages each emit exactly once
   }
 });
 
+test('snapshot-before-ack keeps input locked until acknowledgement then unlocks only the authoritative viewer',()=>{
+  const client=adapter(),snapshot={seatId:'playerB',revision:8,state:{turn:'playerB',legalActions:['attemptPlayCard']}};client.pendingActionId='go-action';
+  client.receive(message('snapshot',{snapshot,events:[{type:'goDeclared',actorId:'playerA'}]}));
+  assert.equal(client.pendingActionId,'go-action');assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),false);
+  client.receive(message('actionAccepted',{actionId:'go-action'}));
+  assert.equal(client.pendingActionId,null);assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),true);
+  assert.equal(viewerCanInteract({...snapshot,seatId:'playerA'},{connected:true}),false);
+});
+
+test('rejected room-flow acknowledgement can resync and unlock only the fresh-hand starter',()=>{
+  const client=adapter(),snapshot={seatId:'playerB',revision:9,state:{turn:'playerB',legalActions:['attemptPlayCard']}};
+  client.pendingActionId='stale-ready';
+  assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),false);
+  client.receive(message('actionRejected',{actionId:'stale-ready',error:{code:'HAND_IN_PROGRESS'}}));
+  assert.equal(client.pendingActionId,null);
+  assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),true);
+  assert.equal(viewerCanInteract({...snapshot,seatId:'playerA'},{connected:true,pendingActionId:client.pendingActionId}),false);
+});
+
 test('one authoritative Jjok snapshot produces one presentation request per client',()=>{
   for(let viewer=0;viewer<2;viewer++){
     const client=adapter();let snapshots=0,kisses=0,sounds=0,overlays=0;
@@ -37,4 +56,8 @@ test('rejection unlock permission is derived solely from the latest authoritativ
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,legalActions:[]}}),false);
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,pendingDecision:{type:'goStopDecision'}}}),false);
   assert.equal(viewerCanStartTurn(null),false);
+  assert.equal(viewerCanInteract(base,{connected:true}),true);
+  assert.equal(viewerCanInteract(base,{connected:false}),false);
+  assert.equal(viewerCanInteract(base,{connected:true,pendingActionId:'pending'}),false);
+  assert.equal(viewerCanInteract(base,{connected:true,blocked:true}),false);
 });

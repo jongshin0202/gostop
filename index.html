@@ -18,7 +18,7 @@
         <button data-i18n="howTo" id="howToBtn" class="glass-btn" type="button">How to Play</button>
         <button id="languageBtn" class="glass-btn" type="button" aria-haspopup="true">English ▾</button>
         <div id="languageMenu" class="language-menu" hidden></div>
-        <button data-i18n="newGame" id="newGameBtn" class="glass-btn strong" type="button">New Game</button>
+        <div class="options-control"><button data-i18n="options" id="newGameBtn" class="glass-btn strong" type="button" aria-haspopup="menu" aria-expanded="false">Options ▾</button><div id="optionsMenu" class="options-menu" role="menu" hidden><button id="optionsNewGameBtn" type="button" role="menuitem" data-i18n="newGame">New Game</button><button id="optionsQuitBtn" type="button" role="menuitem" data-i18n="quit">Quit</button></div></div>
       </div>
     </header>
 
@@ -127,6 +127,11 @@
 
   <dialog id="scoreDialog"><form method="dialog" class="dialog-card score-breakdown-card"><button class="dialog-close" aria-label="Close">×</button><h2 data-i18n="scoreBreakdown">Score Breakdown</h2><div id="scoreBreakdownContent"></div></form></dialog>
   <dialog id="newGameDialog"><div class="dialog-card"><p data-i18n="restartWarning"></p><div class="decision-actions"><button id="newGameYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="newGameNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
+  <dialog id="replayWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2><button id="quitPlayingBtn" class="stop-btn" type="button" data-i18n="quitPlaying">Quit Playing</button></div></dialog>
+  <dialog id="newGameWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2><button id="cancelNewGameBtn" class="stop-btn" type="button" data-i18n="cancel">Cancel</button></div></dialog>
+  <dialog id="incomingNewGameDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="opponentNewGameRequest">Your opponent has requested to start a new game.</h2><div class="decision-actions"><button id="acceptNewGameBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="rejectNewGameBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
+  <dialog id="quitConfirmDialog"><div class="dialog-card flow-dialog-card"><h2 id="quitConfirmTitle" data-i18n="quitConfirmTitle">Quit. Are you sure?</h2><p id="quitConfirmMessage" data-i18n="quitConfirmMessage">Quitting will end the game for both players</p><div class="decision-actions"><button id="quitYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="quitNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
+  <dialog id="opponentEndedDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="opponentEnded">Your opponent has ended the game</h2><button id="opponentEndedOkBtn" class="go-btn" type="button" data-i18n="ok">OK</button></div></dialog>
 
   <dialog id="gukjinDialog">
     <div class="dialog-card compact-choice-card">
