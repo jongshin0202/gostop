@@ -1966,7 +1966,7 @@ test('milestone detection queues Godori, valid Stripes, and five Brights once wi
   const state=stateWith({human:api.makePlayer({captured})});
   api.setState(state); const before=JSON.stringify(api.getState());
   const milestones=api.detectNewMilestones('playerA');
-  assert.deepEqual(Array.from(milestones,item=>item.titleKey),['birdies','threeStripes','fiveBrights']);
+  assert.deepEqual(Array.from(milestones,item=>item.titleKey),['birdies','threeStripesRed','fiveBrights']);
   assert.deepEqual(Array.from(milestones[1].cardIds),['m1-2','m2-2','m3-2']);
   assert.equal(milestones[0].birds,true);
   assert.equal(api.detectNewMilestones('playerA').length,0);
@@ -1978,15 +1978,56 @@ test('valid Stripe sets are detected once for both authoritative players regardl
     const isolated=loadCurrentGame().api,side=playerId==='playerA'?'human':'ai',captured=ids.map(id=>isolated.card(id));
     if(set==='red')captured.push(isolated.card('m4-2'));
     isolated.setState(isolated.makeState({[side]:isolated.makePlayer({captured})}));
-    const found=isolated.detectNewMilestones(playerId).filter(item=>item.titleKey==='threeStripes');
+    const titleKey=`threeStripes${set[0].toUpperCase()}${set.slice(1)}`;
+    const found=isolated.detectNewMilestones(playerId).filter(item=>item.titleKey===titleKey);
     assert.equal(found.length,1);assert.equal(found[0].key,`stripes-${set}`);assert.equal(found[0].cardIds.length,3);
-    assert.equal(isolated.detectNewMilestones(playerId).some(item=>item.titleKey==='threeStripes'),false);
+    assert.equal(isolated.detectNewMilestones(playerId).some(item=>item.titleKey===titleKey),false);
   }
   const isolated=loadCurrentGame().api;
   isolated.setState(isolated.makeState({ai:isolated.makePlayer({captured:['m1-2','m4-2','m6-2'].map(id=>isolated.card(id))})}));
-  assert.equal(isolated.detectNewMilestones('playerB').some(item=>item.titleKey==='threeStripes'),false);
+  assert.equal(isolated.detectNewMilestones('playerB').some(item=>item.titleKey.startsWith('threeStripes')),false);
   assert.equal(isolated.onlineValueForViewer({actorId:'playerB'},'playerB').actorId,'playerA');
   assert.equal(isolated.onlineValueForViewer({actorId:'playerB'},'playerA').actorId,'playerB');
+});
+
+test('Online Go/Stop boundary awaits separated and multiple milestones without duplicates',async()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),drive=source.slice(source.indexOf('async function driveOnline'),source.indexOf('function onlineStateFromSnapshot'));
+  assert.match(drive,/decision\?\.type==='goStopDecision'\)\{await presentOnlineGoStopDecision\(decision\);return;/);
+  const makeRecorder=isolated=>{
+    const order=[],overlay=isolated.elements.get('milestoneOverlay'),title=isolated.elements.get('milestoneTitle'),dialog=isolated.elements.get('decisionDialog');
+    overlay.classList.add=()=>order.push(`start:${title.textContent}`);
+    overlay.classList.remove=()=>order.push(`finish:${title.textContent}`);
+    dialog.showModal=function(){order.push('go-stop');this.open=true;};
+    return order;
+  };
+  for(const [playerId,side] of [['playerA','human'],['playerB','ai']]){
+    const isolated=loadCurrentGame(),order=makeRecorder(isolated);
+    isolated.api.setState(isolated.api.makeState({[side]:isolated.api.makePlayer({captured:['m1-2','m2-2','m3-2'].map(id=>isolated.api.card(id))}),pendingDecision:{type:'goStopDecision',playerId,score:7}}));
+    await isolated.api.presentOnlineGoStopDecision(isolated.api.getState().pendingDecision);
+    assert.deepEqual(order,['start:3-STRIPES!','finish:3-STRIPES!','go-stop']);
+    assert.equal(isolated.api.getLocked(),true);
+  }
+
+  const multiple=loadCurrentGame(),multipleOrder=makeRecorder(multiple);
+  multiple.api.setState(multiple.api.makeState({human:multiple.api.makePlayer({captured:['m2-1','m4-1','m8-2','m1-2','m2-2','m3-2'].map(id=>multiple.api.card(id))}),pendingDecision:{type:'goStopDecision',playerId:'playerA',score:7}}));
+  await multiple.api.presentOnlineGoStopDecision(multiple.api.getState().pendingDecision);
+  assert.deepEqual(multipleOrder,['start:5-BIRDIES!','finish:5-BIRDIES!','start:3-STRIPES!','finish:3-STRIPES!','go-stop']);
+
+  const duplicate=loadCurrentGame(),duplicateOrder=makeRecorder(duplicate);
+  duplicate.api.setState(duplicate.api.makeState({human:duplicate.api.makePlayer({captured:['m1-2','m2-2','m3-2'].map(id=>duplicate.api.card(id))}),pendingDecision:{type:'goStopDecision',playerId:'playerA',score:7}}));
+  await duplicate.api.presentNewMilestones('playerA');
+  duplicateOrder.length=0;
+  await duplicate.api.presentOnlineGoStopDecision(duplicate.api.getState().pendingDecision);
+  assert.deepEqual(duplicateOrder,['go-stop']);
+});
+
+test('Stripe milestone titles are set-specific in Korean and remain generic elsewhere',()=>{
+  const i18n=require('../i18n.js'),keys=['threeStripesRed','threeStripesBlue','threeStripesGrass'];
+  assert.deepEqual(keys.map(key=>i18n.translate('ko',key)),['홍단!','청단!','초단!']);
+  assert.deepEqual(keys.map(key=>i18n.translate('en',key)),['3-STRIPES!','3-STRIPES!','3-STRIPES!']);
+  for(const dictionary of Object.values(i18n.dictionaries))for(const key of keys)assert.equal(Object.hasOwn(dictionary,key),true);
+  for(const locale of ['es','fr','de','ja','zh'])for(const key of keys)assert.equal(i18n.dictionaries[locale][key],i18n.dictionaries[locale].threeStripes);
+  for(const key of keys)assert.equal(i18n.REQUIRED_UI_KEYS.includes(key),true);
 });
 
 test('terminal Online presentation awaits semantics and milestones before opening any result',()=>{
