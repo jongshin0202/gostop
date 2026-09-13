@@ -17,7 +17,7 @@ function createReadyMatch(service,prefix){
     let match=service.createMatch({matchId:`${prefix}-${attempt}`,playerIds:['alice','bob'],startingPlayerId:'alice'});
     match=submit(service,match,'alice',`resolve-opening-${attempt}`,{type:'resolveOpening'}).snapshot;
     const other=service.getSnapshot({matchId:match.matchId,viewerId:'bob'});
-    if(!match.state.pendingDecision&&!other.state.pendingDecision)return match;
+    if(!match.terminalResult&&!match.state.pendingDecision&&!other.state.pendingDecision)return match;
   }
   throw new Error('Unable to create a hand without an opening decision.');
 }

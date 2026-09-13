@@ -1,0 +1,14 @@
+name = "gostop-authority"
+main = "server/worker.mjs"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "GAME_ROOMS"
+class_name = "GameRoom"
+
+[exports.GameRoom]
+type = "durable-object"
+storage = "sqlite"
+
+[dev]
+port = 8787
