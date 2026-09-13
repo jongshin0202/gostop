@@ -45,6 +45,8 @@ test('initial snapshots are viewer-safe and network action routing preserves aut
   const action={type:'resolveOpening'},message={type:'action',protocolVersion:1,actionId:'first',expectedRevision:snapshot.revision,action};
   const accepted=await core.handle(socket,JSON.stringify(message));assert.equal(accepted.type,'actionAccepted');assert.equal(accepted.revision,1);
   const duplicate=await core.handle(socket,JSON.stringify(message));assert.equal(duplicate.type,'actionAccepted');assert.equal(duplicate.duplicate,true);assert.equal(duplicate.revision,1);
+  assert.equal(typeof core.room.eventHistory.find(entry=>entry.actionId==='first').fingerprint,'string');
+  const crossType=await core.handle(socket,JSON.stringify({...message,expectedRevision:1,action:{type:'newGame'}}));assert.equal(crossType.type,'actionRejected');assert.equal(crossType.error.code,'ACTION_ID_CONFLICT');
   const stale=await core.handle(socket,JSON.stringify({...message,actionId:'stale'}));assert.equal(stale.type,'actionRejected');assert.equal(stale.error.code,'STALE_REVISION');
   const malformed=await core.handle(socket,'not json');assert.equal(malformed.error.code,'MALFORMED_MESSAGE');
   const illegal=await core.handle(socket,JSON.stringify({type:'action',protocolVersion:1,actionId:'illegal',expectedRevision:1,action:{type:'playCard',cardId:'missing'}}));assert.equal(illegal.error.code,'ILLEGAL_ACTION');
@@ -64,6 +66,10 @@ test('a completed authoritative terminal result survives room restoration',async
   stored.authority.state.terminalResult={winnerId:'playerA',reason:'stop',points:7};stored.authority.completedAt='2026-09-12T00:01:00.000Z';stored.terminalResult={winnerId:a.playerId,points:7};stored.status='completed';await core.storage.put('room',stored);
   const restored=new RoomCore({storage:core.storage,cryptoApi:webcrypto});await restored.load();const snapshot=restored.authority.getSnapshot({matchId:restored.room.matchId,viewerId:a.playerId});
   assert.equal(restored.room.status,'completed');assert.equal(restored.room.terminalResult.winnerId,a.playerId);assert.equal(snapshot.terminalResult.winnerId,a.playerId);assert.equal(snapshot.terminalResult.result.points,7);
+  const socket=new Socket();await restored.connect(a.credential,socket);const message={type:'action',protocolVersion:1,actionId:'new-hand-id',expectedRevision:snapshot.revision,action:{type:'newHand'}};
+  const accepted=await restored.handle(socket,JSON.stringify(message));assert.equal(accepted.type,'actionAccepted');assert.equal(accepted.duplicate,false);assert.equal(typeof restored.room.eventHistory.find(entry=>entry.actionId==='new-hand-id').fingerprint,'string');
+  const duplicate=await restored.handle(socket,JSON.stringify(message));assert.equal(duplicate.type,'actionAccepted');assert.equal(duplicate.duplicate,true);
+  const conflict=await restored.handle(socket,JSON.stringify({...message,expectedRevision:accepted.revision,action:{type:'newGame'}}));assert.equal(conflict.type,'actionRejected');assert.equal(conflict.error.code,'ACTION_ID_CONFLICT');
 });
 
 test('private pending decisions and events never cross the network boundary',async()=>{

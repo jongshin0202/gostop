@@ -71,8 +71,8 @@ export class RoomCore{
       const response=envelope('snapshot',{snapshot,events:events.events});this.send(socket,response);return response;
     }
     try{
-      const prior=this.room.eventHistory.find(entry=>entry.actionId===message.actionId&&entry.playerId===participant.playerId),wasSeen=!!prior;
-      if(prior?.fingerprint&&prior.fingerprint!==fingerprint(message.action))throw Object.assign(new Error('actionId was already used with different action data.'),{code:'ACTION_ID_CONFLICT'});
+      const actionFingerprint=fingerprint(message.action),prior=this.room.eventHistory.find(entry=>entry.actionId===message.actionId&&entry.playerId===participant.playerId),wasSeen=!!prior;
+      if(prior&&prior.fingerprint!==actionFingerprint)throw Object.assign(new Error('actionId was already used with different action data.'),{code:'ACTION_ID_CONFLICT'});
       if(message.action.type==='evaluateGoStop'||message.action.type==='resolveNagari')throw Object.assign(new Error('Turn evaluation is owned by the authoritative room.'),{code:'SERVER_OWNED_ACTION'});
       if(message.action.type==='newGame'){
         if(wasSeen){const response=envelope('actionAccepted',{actionId:message.actionId,matchId:prior.matchId,revision:prior.revision,duplicate:true});this.send(socket,response);return response;}
@@ -81,21 +81,22 @@ export class RoomCore{
         const matchId=randomId(this.crypto,'match');
         this.authority.createMatch({matchId,playerIds:this.room.participants.map(item=>item.playerId),gameMode:'online-2player'});
         this.room.matchId=matchId;this.room.status='ready';this.room.terminalResult=null;this.room.updatedAt=this.now();
-        const entry={revision:0,actionId:message.actionId,playerId:participant.playerId,fingerprint:fingerprint(message.action),matchId};this.room.eventHistory.push(entry);this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);
+        const entry={revision:0,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint,matchId};this.room.eventHistory.push(entry);this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);
         for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId,viewerId:viewer.playerId}),events:[]}));
         await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,matchId,revision:0,duplicate:false});this.send(socket,response);return response;
       }
       if(message.action.type==='newHand'){
+        if(wasSeen){const response=envelope('actionAccepted',{actionId:message.actionId,revision:prior.revision,duplicate:true});this.send(socket,response);return response;}
         const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
         if(message.expectedRevision!==current.revision)throw Object.assign(new Error(`Expected revision ${message.expectedRevision}, current revision is ${current.revision}.`),{code:'STALE_REVISION'});
         if(!current.terminalResult)throw Object.assign(new Error('The current hand is not complete.'),{code:'HAND_IN_PROGRESS'});
-        if(!wasSeen){this.authority.createNewHand({matchId:this.room.matchId});this.room.eventHistory.push({revision:current.revision+1,actionId:message.actionId,playerId:participant.playerId});}
+        this.authority.createNewHand({matchId:this.room.matchId});this.room.eventHistory.push({revision:current.revision+1,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint});this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);
         const revision=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision;this.room.status='ready';this.room.terminalResult=null;
         for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events:wasSeen?[]:this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:current.revision}).events}));
         await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,revision,duplicate:wasSeen});this.send(socket,response);return response;
       }
       const result=this.authority.submitAction({matchId:this.room.matchId,playerId:participant.playerId,actionId:message.actionId,expectedRevision:message.expectedRevision,action:message.action});
-      if(!wasSeen){this.room.eventHistory.push({revision:result.revision,actionId:message.actionId,playerId:participant.playerId});this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);}
+      if(!wasSeen){this.room.eventHistory.push({revision:result.revision,actionId:message.actionId,playerId:participant.playerId,fingerprint:actionFingerprint});this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);}
       for(const viewer of this.room.participants){const snapshot=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events=wasSeen?[]:this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:Math.max(0,result.revision-1)}).events;this.sendTo(viewer.playerId,envelope('snapshot',{snapshot,events}));}
       if(result.snapshot.terminalResult){this.room.status='completed';this.room.terminalResult=clone(result.snapshot.terminalResult);}
       this.room.updatedAt=this.now();await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,revision:result.revision,duplicate:wasSeen,requiresNagari:!!result.requiresNagari,autoStop:!!result.autoStop});this.send(socket,response);return response;
