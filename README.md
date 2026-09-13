@@ -8,6 +8,8 @@ Current baseline: **V1.10.2**
 
 Open `index.html` in a modern desktop browser.
 
+The optional authoritative two-player backend is a separate Cloudflare Worker/Durable Object project. See [`docs/cloudflare-server.md`](docs/cloudflare-server.md) for its room API, protocol, persistence model, local setup, and deployment steps.
+
 The GoStop Card artwork and several CC0 sound effects are loaded from public web sources, so an internet connection is recommended.
 
 ## Test
@@ -15,7 +17,7 @@ The GoStop Card artwork and several CC0 sound effects are loaded from public web
 Run the deterministic current-behavior characterization suite with Node.js:
 
 ```sh
-node --test tests/current-behavior.test.js
+npm test
 ```
 
 ## Current gameplay

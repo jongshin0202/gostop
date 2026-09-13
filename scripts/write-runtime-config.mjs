@@ -1,0 +1,4 @@
+import {writeFile} from 'node:fs/promises';
+const raw=(process.env.GOSTOP_SERVER_URL||'').trim().replace(/\/$/,'');
+if(raw){const url=new URL(raw);const local=['localhost','127.0.0.1','[::1]'].includes(url.hostname);if(url.protocol!=='https:'&&!(local&&url.protocol==='http:'))throw new Error('GOSTOP_SERVER_URL must use HTTPS, except for localhost development.');if(url.pathname!=='/'||url.search||url.hash)throw new Error('GOSTOP_SERVER_URL must be an origin without a path, query, or fragment.');}
+await writeFile(new URL('../runtime-config.js',import.meta.url),`// Generated public configuration; this URL is not a secret.\nglobalThis.GOSTOP_CONFIG=Object.freeze(${JSON.stringify({serverUrl:raw})});\n`);
