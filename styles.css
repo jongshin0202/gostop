@@ -390,6 +390,8 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 }
 .play-again-grand:hover{transform:translateY(-2px);filter:brightness(1.08)}
 .play-again-grand:active{transform:translateY(4px);box-shadow:0 3px 0 #42120e,0 7px 15px rgba(0,0,0,.4)}
+.result-quit-btn{position:absolute;right:18px;bottom:16px;z-index:3;padding:7px 11px;border:1px solid #ff766e;border-radius:8px;background:#8d211c;color:#fff;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.35)}
+.result-quit-btn:hover,.result-quit-btn:focus-visible{background:#ad2a23}.result-quit-btn[hidden]{display:none}
 
 @media(max-width:700px){
   #decisionDialog[open]{bottom:12px;width:calc(100vw - 18px)}

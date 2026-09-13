@@ -141,6 +141,21 @@ test('matching is by month and a three-card floor stack exposes only its top car
   assert.equal(state.floorStacks[1].source,'ppeok');
 });
 
+test('Online semantic floor candidates collapse every registered stack but retain ordinary match counts',()=>{
+  const stackCards=cards('m2-1','m2-2','m2-3'),played=card('m2-4');
+  for(const [source,owner] of [['ppeok','playerA'],['ppeok','playerB'],['initial',null]]){
+    useState(stateWith({floor:stackCards,floorStacks:{2:{month:2,cardIds:stackCards.map(item=>item.id),source,owner}}}));
+    assert.equal(api.effectiveFloorMatchCards(played).map(item=>item.id).join(','),'m2-3');
+  }
+  useState(stateWith({floor:cards('m2-1','m2-2')}));
+  assert.equal(api.effectiveFloorMatchCards(played).map(item=>item.id).join(','),'m2-1,m2-2');
+  useState(stateWith({floor:[card('m2-1')]}));assert.equal(api.effectiveFloorMatchCards(played).map(item=>item.id).join(','),'m2-1');
+  useState(stateWith({floor:[card('m3-1')]}));assert.equal(api.effectiveFloorMatchCards(played).length,0);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),submit=source.slice(source.indexOf('async function submitOnlineCardPlay'),source.indexOf('const beginOnline'));
+  assert.match(submit,/matches=card\?matchesFor\(card\):\[\]/);
+  assert.doesNotMatch(submit,/state\.floor\.filter\(item=>item\.month===card\.month\)/);
+});
+
 test('scoring covers Brights, Godori, ribbon sets, Singles, and Gukjin optimization',()=>{
   assert.equal(api.score(cards('m1-1','m3-1','m8-1')).brightPts,3);
   assert.equal(api.score(cards('m1-1','m3-1','m12-1')).brightPts,2);
@@ -257,7 +272,7 @@ test('Ppeok/Ssa-da forms a three-card stack and increments the actor count',asyn
   assert.equal(engineResult.events[0].type,'ppeokFormed');
 });
 
-test('Self-Ppeok capture takes the full stack and transfers two Pi',async()=>{
+test('Self-Ppeok capture takes the full stack and transfers one physical Pi',async()=>{
   const stack=cards('m2-1','m2-2','m2-3');
   const state=useState(stateWith({
     floor:[...stack],
@@ -268,8 +283,8 @@ test('Self-Ppeok capture takes the full stack and transfers two Pi',async()=>{
   await api.resolveSingleCard('human',{card:card('m2-4'),target:stack[2],matchCount:1},false);
   assert.equal(state.floor.length,0);
   assert.equal(state.human.captured.filter(c=>c.month===2).length,4);
-  assert.equal(state.human.captured.filter(c=>c.type==='pi').length,4);
-  assert.equal(state.ai.captured.length,0);
+  assert.equal(state.human.captured.filter(c=>c.type==='pi').length,3);
+  assert.equal(state.ai.captured.length,1);
 });
 
 test('Ttadak captures two floor cards plus the played and drawn cards and steals Pi',async()=>{
@@ -712,6 +727,34 @@ test('classifier distinguishes self-Ppeok and other floor-stack interactions',()
   }
 });
 
+test('registered floor stacks are one automatic semantic target for hand plays and deck draws',()=>{
+  for(const source of ['initial','ppeok'])for(const owner of source==='initial'?[null]:['playerA','playerB']){
+    const stack=cards('m2-1','m2-2','m2-3'),floorStacks={2:{month:2,cardIds:stack.map(item=>item.id),source,owner}};
+    let handState=stateWith({turn:'playerA',deck:[card('m8-1')],floor:stack,human:api.makePlayer({hand:[card('m2-4')]}),floorStacks});
+    api.initFloorSlots(handState);
+    const played=extractedEngine.applyNormalTurnAction(handState,{type:'playCard',actorId:'playerA',cardId:'m2-4'});
+    assert.equal(played.pendingDecision,null);assert.equal(played.state.pendingTurn.phase,'awaitingDraw');
+    assert.equal(played.events[0].targetId,'m2-3');
+
+    let drawState=stateWith({turn:'playerA',deck:[card('m2-4')],floor:stack,human:api.makePlayer({bombFreeTurns:1}),floorStacks});
+    api.initFloorSlots(drawState);
+    drawState=extractedEngine.applyNormalTurnAction(drawState,{type:'useBombBlank',actorId:'playerA'}).state;
+    const drawn=extractedEngine.applyNormalTurnAction(drawState,{type:'drawNextCard',actorId:'playerA'});
+    assert.equal(drawn.pendingDecision,null);assert.equal(drawn.state.pendingTurn.phase,'awaitingNormalResolution');
+    assert.equal(drawn.events[0].targetId,'m2-3');
+    assert.equal(extractedEngine.classifyTurnOutcome(drawn.state,{actorId:'playerA'}).kind,source==='ppeok'&&owner==='playerA'?'selfPpeokCandidate':'floorStackInteraction');
+  }
+});
+
+test('two ordinary same-month floor cards still require an authoritative target choice',()=>{
+  const state=stateWith({turn:'playerA',floor:cards('m2-2','m2-3'),human:api.makePlayer({hand:[card('m2-1')]})});
+  api.initFloorSlots(state);
+  const played=extractedEngine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m2-1'});
+  assert.equal(played.state.pendingTurn.phase,'awaitingFloorTarget');
+  assert.equal(played.pendingDecision.type,'chooseFloorTarget');
+  assert.deepEqual(played.pendingDecision.legalTargetIds,['m2-2','m2-3']);
+});
+
 test('classifier identifies Bomb eligibility without mutating the hand',()=>{
   const hand=cards('m6-1','m6-2','m6-3');
   const state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand,hiddenTripleMonths:[6]})});
@@ -852,7 +895,7 @@ test('engine forms Ppeok/Ssa-da stacks for both neutral players with legacy orde
   }
 });
 
-test('engine Self-Ppeok captures the full own stack and transfers ordinary Pi before fallback',()=>{
+test('engine Self-Ppeok captures the full own stack and transfers exactly one physical Pi',()=>{
   for(const actorId of ['playerA','playerB']){
     const stackCards=cards('m2-1','m2-2','m2-3');
     const result=specialFixture(actorId,{
@@ -864,9 +907,9 @@ test('engine Self-Ppeok captures the full own stack and transfers ordinary Pi be
     const other=side==='human'?'ai':'human';
     assert.equal(result.state.floorStacks[2],undefined);
     assert.equal(result.state[side].captured.filter(item=>item.month===2).length,4);
-    assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.cardId),['m7-3','m12-4']);
-    assert.equal(result.state[other].captured.length,0);
-    assert.deepEqual(result.events.map(event=>event.type),['floorStackRemoved','cardsCaptured','piTransferred','piTransferred','cardLanded','specialResolved']);
+    assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.cardId),['m7-3']);
+    assert.deepEqual(result.state[other].captured.map(item=>item.id),['m12-4']);
+    assert.deepEqual(result.events.map(event=>event.type),['floorStackRemoved','cardsCaptured','piTransferred','cardLanded','specialResolved']);
     assertSpecialWireSafe(result,actorId);
   }
 });
@@ -878,6 +921,13 @@ test('engine Self-Ppeok gracefully transfers only available Pi',()=>{
     floorStacks:{6:{month:6,cardIds:stackCards.map(item=>item.id),source:'ppeok',owner:'playerA'}},targetId:'m6-3'
   });
   assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.cardId),['m12-4']);
+});
+
+test('capturing a Ppeok stack emits no transfer when the opponent has no eligible Single',()=>{
+  const stack=cards('m6-1','m6-2','m6-3');
+  const result=specialFixture('playerA',{floor:stack,handCard:card('m6-4'),drawCard:card('m8-1'),captured:[],floorStacks:{6:{month:6,cardIds:stack.map(item=>item.id),source:'ppeok',owner:'playerA'}},targetId:'m6-3'});
+  assert.equal(result.events.filter(event=>event.type==='piTransferred').length,0);
+  assert.equal(result.state.human.captured.filter(item=>item.month===6).length,4);
 });
 
 test('engine Jjok captures its pair and transfers one Pi for both players',()=>{
@@ -941,9 +991,9 @@ test('Self-Ppeok resolves its remaining capture before Sweep',()=>{
     floorStacks:{2:{month:2,cardIds:stack.map(item=>item.id),source:'ppeok',owner:'playerA'}}
   });
   assert.deepEqual(result.events.map(event=>event.type),[
-    'floorStackRemoved','cardsCaptured','piTransferred','piTransferred','cardsCaptured','sweepTriggered','piTransferred','specialResolved'
+    'floorStackRemoved','cardsCaptured','piTransferred','cardsCaptured','sweepTriggered','piTransferred','specialResolved'
   ]);
-  assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.reason),['selfPpeok','selfPpeok','sweep']);
+  assert.deepEqual(result.events.filter(event=>event.type==='piTransferred').map(event=>event.reason),['selfPpeok','sweep']);
   assert.equal(result.state.floor.length,0);
 });
 
@@ -1644,6 +1694,7 @@ test('engine captures initial and opponent Ppeok floor stacks for both players',
       assert.equal(result.state.floorStacks[2],undefined);
       for(const card of stackCards)assert.equal(result.state.floorSlotByCard[card.id],undefined);
       assert.deepEqual(result.events.slice(0,3).map(event=>event.type),['floorStackRemoved','cardsCaptured','piTransferred']);
+      assert.equal(result.events.filter(event=>event.type==='piTransferred').length,1);
       assert.equal(result.events[2].reason,source==='initial'?'initialStack':'opponentPpeok');
       assert.deepEqual(wireRoundTrip(result.state),result.state);
     }
@@ -2041,15 +2092,27 @@ test('Online New Game submits to server authority without creating a local game'
 test('multiplayer flow UI and Go submission remain authoritative and fail closed',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   assert.match(html,/id="optionsMenu"[^]*id="optionsNewGameBtn"[^]*id="optionsQuitBtn"/);
-  for(const id of ['replayWaitingDialog','quitPlayingBtn','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','opponentEndedDialog'])assert.ok(html.includes(`id="${id}"`),id);
+  for(const id of ['replayWaitingDialog','resultQuitBtn','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','opponentEndedDialog'])assert.ok(html.includes(`id="${id}"`),id);
   assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareGo'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
   assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareStop'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
   assert.equal(api.canSubmitPlayAgain({terminalResult:{winnerId:'playerA'}}),true);
   assert.equal(api.canSubmitPlayAgain({terminalResult:null}),false);
   assert.equal(api.canSubmitPlayAgain(null),false);
-  assert.match(source,/if\(canSubmitPlayAgain\(latestOnlineSnapshot\)\)return !!onlineSubmit\(\{type:'playAgainReady'\}\)/);
+  assert.match(source,/if\(canSubmitPlayAgain\(latestOnlineSnapshot\)\)\{[^]*onlineSubmit\(\{type:'playAgainReady'\}\)/);
   assert.match(source,/if\(els\.resultDialog\?\.open\)els\.resultDialog\.close\(\)/);
   assert.doesNotMatch(source,/onlineSubmit\(\{type:'newHand'\}/);
+});
+
+test('Online result offers localized Quit Game while replay waiting has no quit control',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const result=html.slice(html.indexOf('id="resultDialog"'),html.indexOf('id="goCallout"'));
+  assert.match(result,/id="playAgainBtn"[^]*id="resultQuitBtn"[^]*data-i18n="resultQuit"/);
+  const waiting=html.slice(html.indexOf('id="replayWaitingDialog"'),html.indexOf('id="newGameWaitingDialog"'));
+  assert.match(waiting,/Waiting for Opponent/);assert.doesNotMatch(waiting,/button|Quit Playing/);
+  assert.match(source,/quitConfirmTitle\.textContent=t\('resultQuit'\);els\.quitConfirmMessage\.textContent=t\('resultQuitConfirm'\)/);
+  assert.match(source,/onlineQuitFromResult&&latestOnlineSnapshot\?\.terminalResult[^]*els\.resultDialog\.showModal\(\)/);
+  assert.match(source,/onlineSubmit\(\{type:'quitGame'\}\)/);
+  assert.match(source,/quitConfirmTitle\.textContent=t\('quitConfirmTitle'\);els\.quitConfirmMessage\.textContent=t\('quitConfirmMessage'\)/);
 });
 
 test('rejected room-flow actions resync authority while gameplay rejections remain fail closed',()=>{
@@ -2352,8 +2415,14 @@ test('canonical card shell is singular across gameplay and special-event context
 
 test('Online hand play captures the live source before animation and preserves exact destinations',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const exact={left:17,top:29,width:76,height:123};
+  assert.equal(JSON.stringify(api.rememberOnlineHandSource('m2-1',{getBoundingClientRect:()=>exact})),JSON.stringify(exact));
+  assert.equal(JSON.stringify(api.takeOnlineHandSource('m2-1')),JSON.stringify(exact));assert.equal(api.takeOnlineHandSource('m2-1'),null);
+  api.rememberOnlineHandSource('m2-1',exact);api.resetHandPresentationState();assert.equal(api.takeOnlineHandSource('m2-1'),null);
+  const onlineClick=source.slice(source.indexOf('async function humanPlay'),source.indexOf('// While choosing between two floor targets'));
+  assert.ok(onlineClick.indexOf('rememberOnlineHandSource(cardId,clickedEl)')<onlineClick.indexOf("onlineSubmit({type:'attemptPlayCard',cardId})"));
   const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
-  assert.match(transition,/side==='human'\?els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
+  assert.match(transition,/side==='human'\?takeOnlineHandSource\(event\.card\.id\)\|\|els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
   assert.match(transition,/target=state\.floor\.find\(card=>card\.id===step\.targetCardId\)/);
   assert.match(transition,/incoming\.pendingTurn\?\.played,incoming\.pendingTurn\?\.drawn/);
   assert.match(transition,/presentation\.floorSlotReservations\.set\(step\.cardId,landingSlot\)/);
