@@ -20,12 +20,13 @@ function fakeElement(){
 
 function loadCurrentGame(){
   const elements = new Map();
+  const selectors = new Map();
   const document = {
     getElementById(id){
       if(!elements.has(id))elements.set(id,fakeElement());
       return elements.get(id);
     },
-    addEventListener(){},querySelector(){return fakeElement();},querySelectorAll(){return [];},createElement(){return fakeElement();},
+    addEventListener(){},querySelector(selector){if(!selectors.has(selector))selectors.set(selector,fakeElement());return selectors.get(selector);},querySelectorAll(){return [];},createElement(){return fakeElement();},
     body:fakeElement(),documentElement:fakeElement()
   };
   const context = {
@@ -48,10 +49,10 @@ function loadCurrentGame(){
   vm.runInContext(authoritySource,context,{filename:'session-authority.js'});
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   vm.runInContext(source,context,{filename:'app.js'});
-  return {api:context.GOSTOP_TEST_API,elements};
+  return {api:context.GOSTOP_TEST_API,elements,selectors};
 }
 
-const {api,elements}=loadCurrentGame();
+const {api,elements,selectors}=loadCurrentGame();
 const card=id=>api.card(id);
 const cards=(...ids)=>ids.map(card);
 
@@ -2032,6 +2033,19 @@ test('New Game confirmation rejection preserves authority while acceptance reset
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("newGameBtn.addEventListener('click',()=>els.newGameDialog.showModal())"),true);assert.equal(source.includes('resetSession();startGame()'),true);
 });
 
+test('Online New Game submits to server authority without creating a local game',()=>{
+  const original=stateWith({human:api.makePlayer({hand:[card('m1-1')]})}),submitted=[];api.setState(original);api.setOnlineMode(true);api.setOnlineSubmit(action=>submitted.push(action));
+  assert.equal(api.confirmNewGame(true),true);assert.equal(JSON.stringify(submitted),JSON.stringify([{type:'newGame'}]));assert.equal(api.getState(),original);
+  api.setOnlineMode(false);
+});
+
+test('mode-aware localization refreshes Online opponent labels in both directions and preserves Solo Computer',()=>{
+  api.setOnlineMode(true);api.setLocale('ko');assert.equal(selectors.get('.cpu-chip .player-identity strong').textContent,'상대');
+  api.setLocale('en');assert.equal(selectors.get('.cpu-chip .player-identity strong').textContent,'Opponent');assert.equal(selectors.get('.cpu-capture-panel .capture-panel-title').textContent,'Opponent Captured Cards');assert.equal(JSON.stringify([...elements.values(),...selectors.values()].map(element=>element.textContent)).includes('상대'),false);
+  api.setLocale('ko');assert.equal(selectors.get('.cpu-chip .player-identity strong').textContent,'상대');
+  api.setOnlineMode(false);api.setLocale('en');assert.equal(selectors.get('.cpu-chip .player-identity strong').textContent,'Computer');
+});
+
 test('shuffle remains secure rejection-sampled Fisher-Yates with only floor-four retry',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes('cryptoApi.getRandomValues(buf)'),true);assert.equal(source.includes('while(value >= limit)'),true);assert.equal(source.includes('for(let i=a.length-1;i>0;i--)' ),true);assert.equal(source.includes('if (!hasFourOfMonth(floor)) break'),true);assert.equal(extractedEngine.masterDeck.length,48);assert.equal(new Set(extractedEngine.masterDeck.map(card=>card.id)).size,48);
 });
@@ -2056,7 +2070,7 @@ test('starter dice remains presentation-only, rolls only for a new session, and 
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const sequence=source.slice(source.indexOf('async function presentOpeningSequence'),source.indexOf('function playDiceSound'));
   assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
   assert.ok(sequence.indexOf('await sleep(900)')<sequence.indexOf("classList.remove('rolling')"));
-  assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf("els.openingDie.textContent=starter===PLAYER_A?'P':'C'"));
+  assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf('els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1]'));
   assert.equal(source.includes('const firstSessionHand=consumeSessionStart()'),true);assert.equal(source.includes('if(firstSessionHand)await presentOpeningSequence(starter,true)'),true);assert.equal(source.includes('else await presentDealSequence()'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
 });
 

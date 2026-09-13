@@ -562,7 +562,7 @@
       const owner=playerStateById(state,ownerId);
       const groupCards=cards.filter(c=>(c.month===9&&c.flags.includes('switchPi'))?(owner.gukjinMode==='pi'?'pi':'animal')===group.type:c.type===group.type).sort((a,b)=>a.month-b.month);
       const btn=document.createElement('button'); btn.type='button'; btn.className='capture-group'; btn.dataset.captureType=group.type;
-      btn.setAttribute('aria-label',`${isViewer?t('yourCaptured'):t('computerCaptured')}: ${t(group.key)} ${groupCards.length}`);
+      btn.setAttribute('aria-label',`${isViewer?t('yourCaptured'):t(onlineMode?'opponentCaptured':'computerCaptured')}: ${t(group.key)} ${groupCards.length}`);
       const head=document.createElement('span'); head.className='capture-group-head';
       const displayedCount=group.type==='pi'?scorePlayer(owner).piCount:groupCards.length;
       head.innerHTML=`<b>${t(group.key)}</b><em>${displayedCount}</em>`;
@@ -585,7 +585,7 @@
 
   function openCapturedGroup(ownerId,group,cards){
     const isViewer=ownerId===SOLO_VIEWER_ID;
-    els.captureOwner.textContent=isViewer?t('yourCaptured'):t('computerCaptured');
+    els.captureOwner.textContent=isViewer?t('yourCaptured'):t(onlineMode?'opponentCaptured':'computerCaptured');
     els.captureTitle.textContent=t(group.key); els.captureMagnified.innerHTML='';
     cards.forEach(c=>els.captureMagnified.appendChild(createCardEl(c,'card magnified-card')));
     if(!cards.length){ const empty=document.createElement('div'); empty.className='magnified-empty'; empty.textContent=t('noCards'); els.captureMagnified.appendChild(empty); }
@@ -1291,7 +1291,7 @@
     const player=playerStateById(state,playerId);
     els.shakeReviewCards.innerHTML='';
     player.revealedShakeSets.forEach((set,index)=>{
-      const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t('computer')} — ${t('shake')} #${index+1} · ×${set.declarationMultiplier||(set.month>=11?4:2)}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
+      const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t(onlineMode?'opponent':'computer')} — ${t('shake')} #${index+1} · ×${set.declarationMultiplier||(set.month>=11?4:2)}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
     });
     els.shakeReviewDialog.showModal();
   }
@@ -1856,12 +1856,14 @@
   }
   function confirmNewGame(accepted){
     if(!accepted){if(els.newGameDialog?.open)els.newGameDialog.close();return false;}
-    if(els.newGameDialog?.open)els.newGameDialog.close();if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
+    if(els.newGameDialog?.open)els.newGameDialog.close();
+    if(onlineMode){onlineSubmit({type:'newGame'});return true;}
+    if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
   }
   function showFirstPoopNotice(side){
     if(!els.firstPpeokDialog)return Promise.resolve();
     els.firstPoopTitle.textContent=t('firstPoop');
-    els.firstPoopText.textContent=`${side==='human'?t('you'):t('computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
+    els.firstPoopText.textContent=`${side==='human'?t('you'):t(onlineMode?'opponent':'computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
     els.firstPpeokDialog.showModal();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
   }
@@ -1872,10 +1874,21 @@
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
     document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
     document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
+    refreshModeLocalizedLabels();
     renderTutorialCards();
     if(els.scoreDialog?.open&&presentation.scoreBreakdownPlayerId)openScoreBreakdown(presentation.scoreBreakdownPlayerId);
     if(els.decisionDialog?.open&&state)humanGoStop(scorePlayer(state.human));
     if(state)render();
+  }
+  function refreshModeLocalizedLabels(){
+    const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');
+    const opponentKey=onlineMode?'opponent':'computer',capturedKey=onlineMode?'opponentCaptured':'computerCaptured',cardsKey=onlineMode?'opponentCards':'computerCards';
+    if(opponentName)opponentName.textContent=t(opponentKey);
+    if(opponentAvatar)opponentAvatar.textContent=t(opponentKey).slice(0,3).toUpperCase();
+    if(opponentZone)opponentZone.setAttribute('aria-label',t(opponentKey));
+    if(opponentCaptureTitle)opponentCaptureTitle.textContent=t(capturedKey);
+    if(els.aiHand)els.aiHand.setAttribute('aria-label',t(cardsKey));
+    if(els.aiCaptured)els.aiCaptured.setAttribute('aria-label',t(capturedKey));
   }
   function setupLanguageMenu(){
     if(!els.languageBtn||!els.languageMenu||!i18n)return;
@@ -1913,8 +1926,9 @@
     if(TEST_MODE){presentation.diceSoundCount++;traceAudio('dice');return;}
     els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
-    if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=face++%2?'P':'C';},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?'P':'C';}
-    els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    const dieFaces=onlineMode?['Y','O']:['P','C'];
+    if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];}
+    els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t(onlineMode?'you':'player'):t(onlineMode?'opponent':'computer')});await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
     await presentDealSequence();
   }
   async function presentDealSequence(){
@@ -2042,6 +2056,9 @@
       makePlayer:makeTestPlayer,
       makeState:makeTestState,
       setState(next){state=next;},
+      setOnlineMode(value){onlineMode=!!value;},
+      setOnlineSubmit(fn){onlineSubmit=fn;},
+      setLocale,refreshModeLocalizedLabels,
       getState(){return state;},
       setNagariCarryPower(value){state.matchContext.nagariCarryPower=value;},
       getNagariCarryPower(){return state.matchContext.nagariCarryPower;},
@@ -2085,7 +2102,7 @@
     preloadCardFaces();
     els.playSoloBtn.addEventListener('click',async()=>{await unlockAudio();els.soloStartOverlay.hidden=true;startGame();},{once:true});
     const onlineStatus=document.getElementById('onlineStatus'),createOnlineBtn=document.getElementById('createOnlineBtn'),joinOnlineForm=document.getElementById('joinOnlineForm');
-    const onlineActions=new Map();let latestOnlineSnapshot=null,onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlineStageState={};
+    const onlineActions=new Map();let latestOnlineSnapshot=null,onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlinePresentedMatchId=null,onlineStageState={};
     onlineSubmit=function(action){
       if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){onlineStatus.textContent='Online authority is disconnected. Reconnect before acting.';presentation.locked=true;render();return null;}
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);presentation.locked=true;return id;}catch(error){onlineStatus.textContent=error.message;return null;}
@@ -2102,7 +2119,8 @@
       }
       if(snapshot.nextAction?.type==='chooseFloorTarget'){const targets=snapshot.nextAction.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');if(target)onlineSubmit({type:'chooseFloorTarget',source:snapshot.nextAction.source,targetId:target.id});return;}
       if(snapshot.nextAction){onlineSubmit(snapshot.nextAction);return;}
-      presentation.locked=state.turn!==PLAYER_A||!state.legalActions?.includes('attemptPlayCard');render();
+      const connected=globalThis.goStopOnlineSession?.socket?.readyState===WebSocket.OPEN;
+      presentation.locked=!connected||!globalThis.GoStopOnline.viewerCanStartTurn(snapshot);render();
     }
     function onlineStateFromSnapshot(snapshot,rawEvents=[]){
       const viewerIsB=snapshot.seatId===PLAYER_B,swapId=value=>value===PLAYER_A?PLAYER_B:value===PLAYER_B?PLAYER_A:value;
@@ -2110,9 +2128,17 @@
       const projected=remap(snapshot.state),bottom=viewerIsB?projected.ai:projected.human,top=viewerIsB?projected.human:projected.ai;
       return {state:{...projected,human:bottom,ai:{...top,hand:Array.from({length:top.handCount||0},()=>({}))},deck:Array.from({length:projected.deckCount||0},()=>null)},events:rawEvents.map(remap)};
     }
+    function resetOnlinePresentationForMatch(matchId){
+      resetHandPresentationState();presentation.hintCardId=null;
+      presentation.roundNo=1;presentation.sessionStats={playerA:{wins:0,points:0},playerB:{wins:0,points:0}};presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};presentation.recordedTerminal=null;presentation.nextStarterId=null;presentation.sessionStarted=false;presentation.deckDisplayCount=null;
+      onlinePendingCardId=null;onlineStageState={};onlineDealPresented=false;state=null;
+      [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog].filter(Boolean).forEach(dialog=>{if(dialog.open)dialog.close();});
+      onlinePresentedMatchId=matchId;
+    }
     async function presentOnlineTransition(snapshot,events){
       presentation.locked=true;
-      if(!state){const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,false);await presentDealSequence();}await driveOnline(snapshot,onlineLastEvents);return;}
+      if(snapshot.matchId!==onlinePresentedMatchId)resetOnlinePresentationForMatch(snapshot.matchId);
+      if(!state){const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!events.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
       let bombEvent=null;
       const onlinePlayed=state.pendingTurn?.played?.card,onlineDrawn=state.pendingTurn?.drawn?.card;
@@ -2162,7 +2188,7 @@
     const beginOnline=async room=>{
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
       onlineMode=true;
-      const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');if(opponentName){opponentName.textContent=t('opponent');opponentName.removeAttribute('data-i18n');}if(opponentAvatar)opponentAvatar.textContent=t('opponent').slice(0,3).toUpperCase();if(opponentZone){opponentZone.removeAttribute('data-i18n-aria');opponentZone.setAttribute('aria-label',t('opponent'));}if(opponentCaptureTitle){opponentCaptureTitle.removeAttribute('data-i18n');opponentCaptureTitle.textContent=t('opponentCaptured');}els.aiHand.removeAttribute('data-i18n-aria');els.aiHand.setAttribute('aria-label',t('opponentCards'));els.aiCaptured.removeAttribute('data-i18n-aria');els.aiCaptured.setAttribute('aria-label',t('opponentCaptured'));
+      refreshModeLocalizedLabels();
       sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));onlineStatus.textContent=`Room ${room.roomCode} — waiting for connection…`;
       adapter.addEventListener('connected',()=>{onlineStatus.textContent=`Room ${room.roomCode} — waiting for opponent`;});
       adapter.addEventListener('roomReady',()=>{onlineStatus.textContent='Match ready.';els.soloStartOverlay.hidden=true;});
@@ -2178,7 +2204,7 @@
         if(['declareShake','keepShakeSecret','declineBomb'].includes(action?.type)&&!state.pendingDecision&&onlinePendingCardId){await submitOnlineCardPlay();return;}
         await driveOnline(latestOnlineSnapshot,onlineLastEvents);
       });
-      adapter.addEventListener('actionRejected',event=>{onlineActions.delete(event.detail.actionId);onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=!globalThis.GoStopOnline.viewerCanStartTurn(latestOnlineSnapshot);render();});
+      adapter.addEventListener('actionRejected',event=>{onlineActions.delete(event.detail.actionId);onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=true;render();});
       adapter.addEventListener('error',event=>{onlineStatus.textContent=event.detail.message||event.detail.code||'Online connection error.';});adapter.connect();
     };
     addEventListener('gostop-online-snapshot',event=>{const {snapshot,events}=event.detail;onlinePresentationQueue=onlinePresentationQueue.then(()=>presentOnlineTransition(snapshot,onlineStateFromSnapshot(snapshot,events).events)).catch(error=>{onlineStatus.textContent=error.message;presentation.locked=true;});});

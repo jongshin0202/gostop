@@ -5,6 +5,8 @@ import {PROTOCOL_VERSION,envelope,parseClientMessage,protocolError} from './prot
 const MAX_PLAYERS=2,EVENT_WINDOW=256;
 const encoder=new TextEncoder();
 const clone=value=>JSON.parse(JSON.stringify(value));
+const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+const fingerprint=value=>JSON.stringify(canonical(value));
 const randomId=(cryptoApi,prefix,bytes=18)=>{const data=new Uint8Array(bytes);cryptoApi.getRandomValues(data);return `${prefix}_${Array.from(data,b=>b.toString(16).padStart(2,'0')).join('')}`;};
 const token=cryptoApi=>randomId(cryptoApi,'room',32);
 async function tokenHash(cryptoApi,value){const digest=await cryptoApi.subtle.digest('SHA-256',encoder.encode(value));return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');}
@@ -69,8 +71,20 @@ export class RoomCore{
       const response=envelope('snapshot',{snapshot,events:events.events});this.send(socket,response);return response;
     }
     try{
-      const wasSeen=this.room.eventHistory.some(entry=>entry.actionId===message.actionId&&entry.playerId===participant.playerId);
+      const prior=this.room.eventHistory.find(entry=>entry.actionId===message.actionId&&entry.playerId===participant.playerId),wasSeen=!!prior;
+      if(prior?.fingerprint&&prior.fingerprint!==fingerprint(message.action))throw Object.assign(new Error('actionId was already used with different action data.'),{code:'ACTION_ID_CONFLICT'});
       if(message.action.type==='evaluateGoStop'||message.action.type==='resolveNagari')throw Object.assign(new Error('Turn evaluation is owned by the authoritative room.'),{code:'SERVER_OWNED_ACTION'});
+      if(message.action.type==='newGame'){
+        if(wasSeen){const response=envelope('actionAccepted',{actionId:message.actionId,matchId:prior.matchId,revision:prior.revision,duplicate:true});this.send(socket,response);return response;}
+        const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
+        if(message.expectedRevision!==current.revision)throw Object.assign(new Error(`Expected revision ${message.expectedRevision}, current revision is ${current.revision}.`),{code:'STALE_REVISION'});
+        const matchId=randomId(this.crypto,'match');
+        this.authority.createMatch({matchId,playerIds:this.room.participants.map(item=>item.playerId),gameMode:'online-2player'});
+        this.room.matchId=matchId;this.room.status='ready';this.room.terminalResult=null;this.room.updatedAt=this.now();
+        const entry={revision:0,actionId:message.actionId,playerId:participant.playerId,fingerprint:fingerprint(message.action),matchId};this.room.eventHistory.push(entry);this.room.eventHistory=this.room.eventHistory.slice(-EVENT_WINDOW);
+        for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId,viewerId:viewer.playerId}),events:[]}));
+        await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,matchId,revision:0,duplicate:false});this.send(socket,response);return response;
+      }
       if(message.action.type==='newHand'){
         const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
         if(message.expectedRevision!==current.revision)throw Object.assign(new Error(`Expected revision ${message.expectedRevision}, current revision is ${current.revision}.`),{code:'STALE_REVISION'});
