@@ -186,7 +186,9 @@
   </div>
   <div id="soloStartOverlay" class="solo-start-overlay">
     <strong>GoStop Online</strong>
-    <button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button>
+    <div class="start-actions"><button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button><button id="createOnlineBtn" class="play-solo-btn" type="button">Create Online Game</button></div>
+    <form id="joinOnlineForm" class="online-join-form"><label for="onlineRoomCode">Room code</label><input id="onlineRoomCode" autocomplete="off" maxlength="14" pattern="[A-Za-z2-9]{14}" required><button type="submit" class="glass-btn strong">Join Game</button></form>
+    <p id="onlineStatus" class="online-status" role="status" aria-live="polite"></p>
   </div>
   <div id="openingOverlay" class="opening-overlay" aria-live="polite" aria-hidden="true">
     <div id="openingDie" class="opening-die">●</div>
@@ -198,6 +200,7 @@
       <div class="eyebrow" data-i18n="bomb">Bomb!</div>
       <h2>Play all three?</h2>
       <p id="bombText"></p>
+      <div id="bombCards" class="shake-cards" aria-label="Three matching-month cards"></div>
       <div class="decision-actions">
         <button id="bombBtn" class="go-btn" type="button" data-i18n="bomb">Bomb!</button>
         <button id="playOneBtn" class="stop-btn" type="button">PLAY ONE</button>
@@ -217,6 +220,8 @@
   <script src="i18n.js"></script>
   <script src="game-engine.js"></script>
   <script src="session-authority.js"></script>
+  <script src="runtime-config.js"></script>
+  <script src="online-client.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

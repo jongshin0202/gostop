@@ -75,6 +75,10 @@
   }
   function fingerprint(action){return JSON.stringify(canonical(action));}
 
+  function serializeMatch(match){
+    return clone({id:match.id,gameMode:match.gameMode,playerIds:match.playerIds,seatByPlayer:Object.fromEntries(match.seatByPlayer),state:match.state,revision:match.revision,events:match.events,actions:Object.fromEntries(match.actions),createdAt:match.createdAt,completedAt:match.completedAt});
+  }
+
   function createSessionAuthority(options={}){
     const cryptoApi=requireCrypto(options.crypto||globalThis.crypto);
     const now=typeof options.now==='function'?options.now:()=>new Date().toISOString();
@@ -97,7 +101,20 @@
     }
     function snapshot(match,viewerId){
       if(!match.playerIds.includes(viewerId))throw new AuthorityError('WRONG_PLAYER','Viewer is not a participant in this match.');
-      return {matchId:match.id,gameMode:match.gameMode,playerIds:[...match.playerIds],viewerId,seatId:match.seatByPlayer.get(viewerId),revision:match.revision,state:engine.projectStateForViewer(match.state,match.seatByPlayer.get(viewerId)),terminalResult:publicTerminal(match,match.state.terminalResult)};
+      const seatId=match.seatByPlayer.get(viewerId),projected=engine.projectStateForViewer(match.state,seatId);let nextAction=null;if(!match.state.openingSpecialsComplete)projected.legalActions=[];
+      if(!match.state.terminalResult&&match.state.pendingTurn?.actorId===seatId){
+        const pending=match.state.pendingTurn;
+        if(pending.phase==='awaitingDraw')nextAction={type:'drawNextCard'};
+        else if(pending.phase==='awaitingFloorTarget'){
+          const source=pending.played?.targetId?'drawn':'played',entry=source==='played'?pending.played:pending.drawn;
+          nextAction={type:'chooseFloorTarget',source,legalTargetIds:[...entry.matchIds]};
+        }
+        else if(pending.phase==='awaitingNormalResolution'){
+          const classification=engine.classifyTurnOutcome(match.state,{actorId:seatId});
+          nextAction=classification.kind==='normal'?{type:'resolveNormalCard',source:pending.nextResolution}:{type:'resolveSpecialTurn'};
+        }else if(pending.phase==='awaitingTurnCompletion')nextAction={type:'completeTurn'};
+      }else if(!match.state.terminalResult&&!match.state.openingSpecialsComplete&&!match.state.pendingDecision&&match.state.turn===seatId)nextAction={type:'resolveOpening'};
+      return {matchId:match.id,gameMode:match.gameMode,playerIds:[...match.playerIds],viewerId,seatId,revision:match.revision,state:projected,nextAction,terminalResult:publicTerminal(match,match.state.terminalResult)};
     }
 
     return Object.freeze({
@@ -158,6 +175,23 @@
       readTrustedState(matchId){
         if(options.trustedRuntime!==true)throw new AuthorityError('FORBIDDEN','Trusted state access is disabled.');
         return clone(requireMatch(matchId).state);
+      },
+      // Persistence capabilities are restricted to explicitly trusted hosts. They
+      // are intentionally absent from every browser/network protocol adapter.
+      exportMatch(matchId){
+        if(options.trustedRuntime!==true)throw new AuthorityError('FORBIDDEN','Trusted persistence access is disabled.');
+        return serializeMatch(requireMatch(matchId));
+      },
+      restoreMatch(record){
+        if(options.trustedRuntime!==true)throw new AuthorityError('FORBIDDEN','Trusted persistence access is disabled.');
+        const data=clone(record);
+        if(!plainObject(data)||typeof data.id!=='string'||!Array.isArray(data.playerIds)||data.playerIds.length!==2||!Number.isInteger(data.revision)||data.revision<0)throw new AuthorityError('INVALID_PERSISTED_MATCH','Persisted match is malformed.');
+        if(matches.has(data.id))throw new AuthorityError('MATCH_EXISTS','A match with this ID already exists.');
+        const seatByPlayer=new Map(Object.entries(data.seatByPlayer||{}));
+        if(data.playerIds.some(id=>!PLAYER_IDS.includes(seatByPlayer.get(id)))||new Set(seatByPlayer.values()).size!==2)throw new AuthorityError('INVALID_PERSISTED_MATCH','Persisted seat assignments are invalid.');
+        const match={id:data.id,gameMode:data.gameMode||'online-2player',playerIds:[...data.playerIds],seatByPlayer,playerBySeat:new Map([...seatByPlayer].map(([player,seat])=>[seat,player])),state:engine.deserializeGameState(data.state),revision:data.revision,events:Array.isArray(data.events)?data.events.map(clone):[],actions:new Map(Object.entries(data.actions||{})),createdAt:data.createdAt||now(),completedAt:data.completedAt||null};
+        matches.set(match.id,match);
+        return snapshot(match,match.playerIds[0]);
       },
       get matchCount(){return matches.size;}
     });
