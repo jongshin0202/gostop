@@ -40,6 +40,13 @@
     }
   }
 
+  function assertCardConservation(state){
+    const locations=new Map(),add=(card,location)=>{if(!card||typeof card.id!=='string')throw new Error(`Card conservation failure: invalid card in ${location}.`);if(locations.has(card.id))throw new Error(`Card conservation failure: ${card.id} appears in both ${locations.get(card.id)} and ${location}.`);locations.set(card.id,location);};
+    [['deck',state.deck],['floor',state.floor],['playerA hand',state.human?.hand],['playerB hand',state.ai?.hand],['playerA captured',state.human?.captured],['playerB captured',state.ai?.captured]].forEach(([location,cards])=>(cards||[]).forEach(card=>add(card,location)));
+    [['pending played',state.pendingTurn?.played?.card],['pending drawn',state.pendingTurn?.drawn?.card]].forEach(([location,card])=>{if(card&&!locations.has(card.id))add(card,location);});
+    const expected=new Set(masterDeck.map(card=>card.id));if(locations.size!==expected.size)throw new Error(`Card conservation failure: expected ${expected.size} cards, found ${locations.size}.`);for(const id of locations.keys())if(!expected.has(id))throw new Error(`Card conservation failure: unknown card ${id}.`);return true;
+  }
+
   function countsByMonth(cards){
     const counts={};
     cards.forEach(card=>counts[card.month]=(counts[card.month]||0)+1);
@@ -925,7 +932,7 @@
 
   const api=Object.freeze({
     monthNames,monthShort,masterDeck,
-    assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
+    assertDeckIntegrity,assertCardConservation,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
     matchingCards,score,scorePlayer,scoreWithGukjinMode,calculateSettlement,
     serializeGameState,deserializeGameState,projectStateForViewer,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome,isHandExhausted,conquerMinimumPoints
   });

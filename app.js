@@ -1258,11 +1258,11 @@
     // played the Chongtong fanfare before authority extraction.
     if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
     const playerWon=event.actorId===PLAYER_A;
-    const reason=`${playerWon?t('player'):(onlineMode?'Opponent':t('computer'))}: ${t('conquer')} — ${localizedMonth(event.month)}`;
+    const reason=`${playerWon?t('player'):(onlineMode?t('opponent'):t('computer'))}: ${t('conquer')} — ${localizedMonth(event.month)}`;
     const terminal=state.terminalResult;
     recordTerminalResult(terminal);
     if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
-    setGrandResult(t('conquer'),playerWon?t('playerWins'):(onlineMode?'Opponent Wins!':t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
+    setGrandResult(t('conquer'),playerWon?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -1272,8 +1272,8 @@
     playShakeSound(); render();
     const cards=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean);
     if(event.actorId===PLAYER_B){
-      els.shakeRevealTitle.textContent=onlineMode?`Opponent ${t('shake')}`:t('computerShakes');
-      els.shakeRevealText.textContent=t('shakeAck');
+      els.shakeRevealTitle.textContent=onlineMode?t('opponentShakes'):t('computerShakes');
+      els.shakeRevealText.textContent=t(onlineMode?'opponentShakeAck':'shakeAck');
       els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
       els.shakeRevealDialog.showModal();
       await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
@@ -1464,6 +1464,14 @@
     ],{duration,easing:'cubic-bezier(.2,.7,.14,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; impactAt(landing);
   }
+
+  async function stageHandCardForChoice(side,card,sourceRect){
+    await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');presentation.stagedCards.set(card.id,el);
+    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:240,easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
+    return el;
+  }
+
+  function cleanupStagedCard(cardId){const staged=presentation.stagedCards.get(cardId);if(staged){presentation.stagedCards.delete(cardId);staged.remove();}presentation.floorSlotReservations.delete(cardId);}
 
   function captureTargetRect(side,type){
     const root=seatForLegacySide(side)==='bottom'?els.playerCaptured:els.aiCaptured;
@@ -1792,7 +1800,7 @@
     const side=legacySideForPlayerId(ended.winnerId);
     recordTerminalResult(state.terminalResult);
     presentation.locked=true; hideActionCue();
-    setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):(onlineMode?'Opponent Wins!':t('computerWins')),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
+    setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
     if(side==='human')playChongtongFanfare();else playSadResultSound();
     els.resultDialog.showModal(); render();
   }
@@ -1814,7 +1822,7 @@
     const side=legacySideForPlayerId(event.actorId);
     recordTerminalResult(terminal);
     presentation.locked=true;
-    setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):(onlineMode?'Opponent Wins!':t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
+    setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
     els.resultDialog.showModal(); render();
   }
 
@@ -2066,7 +2074,7 @@
     preloadCardFaces();
     els.playSoloBtn.addEventListener('click',async()=>{await unlockAudio();els.soloStartOverlay.hidden=true;startGame();},{once:true});
     const onlineStatus=document.getElementById('onlineStatus'),createOnlineBtn=document.getElementById('createOnlineBtn'),joinOnlineForm=document.getElementById('joinOnlineForm');
-    const onlineActions=new Map();let latestOnlineSnapshot=null,onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false;
+    const onlineActions=new Map();let latestOnlineSnapshot=null,onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlineStageState={};
     onlineSubmit=function(action){
       if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){onlineStatus.textContent='Online authority is disconnected. Reconnect before acting.';presentation.locked=true;render();return null;}
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);presentation.locked=true;render();return id;}catch(error){onlineStatus.textContent=error.message;return null;}
@@ -2095,23 +2103,25 @@
     async function presentOnlineTransition(snapshot,events){
       presentation.locked=true;
       if(!state){const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,false);await presentDealSequence();}await driveOnline(snapshot,onlineLastEvents);return;}
-      let bombEvent=null;
-      for(const event of events){
-        const side=legacySideForPlayerId(event.actorId||PLAYER_A),cardIds=event.cardIds||event.cards?.map(card=>card.id)||[];
-        if(event.type==='cardPlayed'){
+      if(!events.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
+      let bombEvent=null;const plan=globalThis.GoStopPresentationPlan.planOnlinePresentation(events,onlineStageState);onlineStageState=plan.stages;
+      for(const step of plan.steps){
+        const event=step.event,side=legacySideForPlayerId(event.actorId||PLAYER_A);
+        if(step.kind==='handSlap'||step.kind==='handStage'){
           const source=side==='human'?els.playerHand.querySelector(`[data-card-id="${event.card.id}"]`)?.getBoundingClientRect()||approximateHumanSource():approximateAiSource(),target=state.floor.find(card=>card.id===event.targetId);
-          await animateHandCardSlap(side,event.card,source,target);
-        }else if(event.type==='deckCardRevealed'){
-          const stage=await animateDeckLiftFlip(side,event.card),target=state.floor.find(card=>card.id===event.targetId);if(event.targetId||event.matchCount===0)await animateStagedSlap(stage,event.card,target,'flip');
-        }else if(event.type==='floorTargetChosen'){
-          const entry=event.source==='played'?state.pendingTurn?.played:state.pendingTurn?.drawn,card=entry?.card,stage=card&&presentation.stagedCards.get(card.id),target=state.floor.find(item=>item.id===event.targetId);if(stage&&card)await animateStagedSlap(stage,card,target,event.source==='drawn'?'flip':'play');
-        }else if(event.type==='bombDeclared')bombEvent=event;
-        else if(event.type==='bombCardsPlayed'){
-          const cards=cardIds.map(id=>state[side].hand.find(card=>card.id===id)||MASTER_DECK.find(card=>card.id===id)).filter(Boolean),target=state.floor.find(card=>card.month===bombEvent?.month),sources=cards.map((card,index)=>side==='human'?els.playerHand.querySelector(`[data-card-id="${card.id}"]`)?.getBoundingClientRect()||approximateHumanSource(index,cards.length):approximateAiSource());if(target)await animateBombSlap(side,cards,target,sources);
-        }else if(event.type==='cardsCaptured')await animateCaptureBatch(cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean),side);
+          if(step.kind==='handSlap')await animateHandCardSlap(side,event.card,source,target);else await stageHandCardForChoice(side,event.card,source);
+        }else if(step.kind==='deckFlip')await animateDeckLiftFlip(side,event.card);
+        else if(step.kind==='stageSlap'){
+          const entry=event.card||state.pendingTurn?.drawn?.card||state.pendingTurn?.played?.card,card=entry?.id===step.cardId?entry:MASTER_DECK.find(item=>item.id===step.cardId),stage=presentation.stagedCards.get(step.cardId),target=state.floor.find(item=>item.id===(event.targetId||event.event?.targetId));if(stage&&card)await animateStagedSlap(stage,card,target,event.source==='drawn'||event.type==='deckCardRevealed'?'flip':'play');
+        }else if(step.kind==='rememberBomb')bombEvent=event;
+        else if(step.kind==='bombSlap'){
+          const cards=step.cardIds.map(id=>state[side].hand.find(card=>card.id===id)||MASTER_DECK.find(card=>card.id===id)).filter(Boolean),target=state.floor.find(card=>card.month===bombEvent?.month),sources=cards.map((card,index)=>side==='human'?els.playerHand.querySelector(`[data-card-id="${card.id}"]`)?.getBoundingClientRect()||approximateHumanSource(index,cards.length):approximateAiSource());if(target)await animateBombSlap(side,cards,target,sources);
+        }else if(step.kind==='capture'){await animateCaptureBatch(step.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean),side);step.cardIds.forEach(cleanupStagedCard);}
+        else if(step.kind==='landedCleanup')cleanupStagedCard(step.cardId);
         else if(event.type==='piTransferred')await presentPiTransferEvents(side,[event]);
       }
       const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();
+      for(const cardId of [...presentation.stagedCards.keys()])if(!Object.hasOwn(onlineStageState,cardId))cleanupStagedCard(cardId);
       if(events.some(event=>event.type==='newHandCreated')){resetHandPresentationState();await presentDealSequence();}
       for(const event of events){
         const side=legacySideForPlayerId(event.actorId||PLAYER_A),cardIds=event.cardIds||[];
@@ -2136,7 +2146,7 @@
     const beginOnline=async room=>{
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
       onlineMode=true;
-      const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');if(opponentName){opponentName.textContent='Opponent';opponentName.removeAttribute('data-i18n');}if(opponentAvatar)opponentAvatar.textContent='OPP';if(opponentZone){opponentZone.removeAttribute('data-i18n-aria');opponentZone.setAttribute('aria-label','Opponent player');}if(opponentCaptureTitle){opponentCaptureTitle.removeAttribute('data-i18n');opponentCaptureTitle.textContent='Opponent Captured Cards';}els.aiHand.removeAttribute('data-i18n-aria');els.aiHand.setAttribute('aria-label','Opponent cards');els.aiCaptured.removeAttribute('data-i18n-aria');els.aiCaptured.setAttribute('aria-label','Opponent captured cards');
+      const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');if(opponentName){opponentName.textContent=t('opponent');opponentName.removeAttribute('data-i18n');}if(opponentAvatar)opponentAvatar.textContent=t('opponent').slice(0,3).toUpperCase();if(opponentZone){opponentZone.removeAttribute('data-i18n-aria');opponentZone.setAttribute('aria-label',t('opponent'));}if(opponentCaptureTitle){opponentCaptureTitle.removeAttribute('data-i18n');opponentCaptureTitle.textContent=t('opponentCaptured');}els.aiHand.removeAttribute('data-i18n-aria');els.aiHand.setAttribute('aria-label',t('opponentCards'));els.aiCaptured.removeAttribute('data-i18n-aria');els.aiCaptured.setAttribute('aria-label',t('opponentCaptured'));
       sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));onlineStatus.textContent=`Room ${room.roomCode} — waiting for connection…`;
       adapter.addEventListener('connected',()=>{onlineStatus.textContent=`Room ${room.roomCode} — waiting for opponent`;});
       adapter.addEventListener('roomReady',()=>{onlineStatus.textContent='Match ready.';els.soloStartOverlay.hidden=true;});

@@ -128,7 +128,7 @@
         if(!playerIds.includes(starter))throw new AuthorityError('WRONG_PLAYER','Starting player is not a participant.');
         const seatStarter=seatIds[playerIds.indexOf(starter)];
         const state=makeHand(cryptoApi,seatStarter,nagariCarryPower);
-        const match={id,gameMode,playerIds:[...playerIds],seatByPlayer:new Map(playerIds.map((id,index)=>[id,seatIds[index]])),playerBySeat:new Map(seatIds.map((seat,index)=>[seat,playerIds[index]])),state,revision:0,events:[],actions:new Map(),createdAt:now(),completedAt:state.terminalResult?now():null};
+        engine.assertCardConservation(state);const match={id,gameMode,playerIds:[...playerIds],seatByPlayer:new Map(playerIds.map((id,index)=>[id,seatIds[index]])),playerBySeat:new Map(seatIds.map((seat,index)=>[seat,playerIds[index]])),state,revision:0,events:[],actions:new Map(),createdAt:now(),completedAt:state.terminalResult?now():null};
         matches.set(id,match);
         return snapshot(match,playerIds[0]);
       },
@@ -146,7 +146,7 @@
         let result;
         try{result=dispatch(match.state,{...clone(request.action),actorId:seat});}
         catch(error){if(error instanceof AuthorityError)throw error;throw new AuthorityError('ILLEGAL_ACTION',error.message);}
-        match.state=result.state;match.revision++;
+        engine.assertCardConservation(result.state);match.state=result.state;match.revision++;
         if(match.state.terminalResult&&!match.completedAt)match.completedAt=now();
         appendEvents(match,result.events||[],match.revision);
         const response={accepted:true,duplicate:false,matchId:match.id,actionId:request.actionId,revision:match.revision,events:(result.events||[]).map((event,eventIndex)=>projectEvent({...event,revision:match.revision,eventIndex},seat)).filter(Boolean),snapshot:snapshot(match,request.playerId)};
@@ -165,7 +165,7 @@
         const match=requireMatch(matchId);if(!match.state.terminalResult)throw new AuthorityError('HAND_IN_PROGRESS','The current hand is not complete.');
         const starter=startingPlayerId||match.state.terminalResult.winnerId&&match.playerBySeat.get(match.state.terminalResult.winnerId)||match.playerIds[0];
         if(!match.playerIds.includes(starter))throw new AuthorityError('WRONG_PLAYER','Starting player is not a participant.');
-        const carry=match.state.matchContext.nagariCarryPower||0;match.state=makeHand(cryptoApi,match.seatByPlayer.get(starter),carry);match.revision++;
+        const carry=match.state.matchContext.nagariCarryPower||0;match.state=makeHand(cryptoApi,match.seatByPlayer.get(starter),carry);engine.assertCardConservation(match.state);match.revision++;
         appendEvents(match,[{type:'newHandCreated',audience:'public',startingPlayerId:match.seatByPlayer.get(starter)}],match.revision);match.completedAt=null;match.actions.clear();
         return snapshot(match,starter);
       },
@@ -189,7 +189,7 @@
         if(matches.has(data.id))throw new AuthorityError('MATCH_EXISTS','A match with this ID already exists.');
         const seatByPlayer=new Map(Object.entries(data.seatByPlayer||{}));
         if(data.playerIds.some(id=>!PLAYER_IDS.includes(seatByPlayer.get(id)))||new Set(seatByPlayer.values()).size!==2)throw new AuthorityError('INVALID_PERSISTED_MATCH','Persisted seat assignments are invalid.');
-        const match={id:data.id,gameMode:data.gameMode||'online-2player',playerIds:[...data.playerIds],seatByPlayer,playerBySeat:new Map([...seatByPlayer].map(([player,seat])=>[seat,player])),state:engine.deserializeGameState(data.state),revision:data.revision,events:Array.isArray(data.events)?data.events.map(clone):[],actions:new Map(Object.entries(data.actions||{})),createdAt:data.createdAt||now(),completedAt:data.completedAt||null};
+        const restoredState=engine.deserializeGameState(data.state);engine.assertCardConservation(restoredState);const match={id:data.id,gameMode:data.gameMode||'online-2player',playerIds:[...data.playerIds],seatByPlayer,playerBySeat:new Map([...seatByPlayer].map(([player,seat])=>[seat,player])),state:restoredState,revision:data.revision,events:Array.isArray(data.events)?data.events.map(clone):[],actions:new Map(Object.entries(data.actions||{})),createdAt:data.createdAt||now(),completedAt:data.completedAt||null};
         matches.set(match.id,match);
         return snapshot(match,match.playerIds[0]);
       },
