@@ -2159,7 +2159,7 @@
       if(latestOnlineSnapshot)await driveOnline(latestOnlineSnapshot,onlineLastEvents);
       return false;
     };
-    const setDialog=(dialog,open)=>{if(!dialog)return;if(open&&!dialog.open){if(dialog===els.replayWaitingDialog)dialog.show();else dialog.showModal();}else if(!open&&dialog.open)dialog.close();};
+    const setDialog=(dialog,open)=>{if(!dialog)return;if(open&&!dialog.open)dialog.showModal();else if(!open&&dialog.open)dialog.close();};
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
@@ -2253,13 +2253,15 @@
         }
         else if(event.type==='sweepTriggered')await presentSemanticEvents([event]);
         else if(event.type==='goDeclared')showGoCallout(side);
-        else if(event.type==='chongtongDeclared')presentChongtong(event);
-        else if(event.type==='threePpeokDeclared')presentThreePpeok({events:[event]});
-        else if(event.type==='nagariDeclared'){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');els.resultDialog.showModal();}
+        else if(['chongtongDeclared','threePpeokDeclared','nagariDeclared'].includes(event.type)){ /* Terminal UI is presented after every turn animation. */ }
       }
-      if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       const actor=presentationEvents.find(event=>event.actorId)?.actorId;if(actor)await promptGukjinChoice(legacySideForPlayerId(actor),presentationEvents);
-      if(presentationEvents.some(event=>event.type==='turnCompleted')&&actor)await presentNewMilestones(actor);
+      const completedTurn=presentationEvents.find(event=>event.type==='turnCompleted');if(completedTurn)await presentNewMilestones(completedTurn.actorId);
+      const chongtong=presentationEvents.find(event=>event.type==='chongtongDeclared'),threePpeok=presentationEvents.find(event=>event.type==='threePpeokDeclared'),nagari=presentationEvents.find(event=>event.type==='nagariDeclared');
+      if(chongtong)presentChongtong(chongtong);
+      else if(threePpeok)presentThreePpeok({events:[threePpeok]});
+      else if(nagari){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${nagari.nextHandMultiplier}`,t('noWinnerHelp'),'special');els.resultDialog.showModal();}
+      else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       await driveOnline(snapshot,presentationEvents);
     }
     async function submitOnlineCardPlay(){const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?matchesFor(card):[];let target=null;if(matches.length===1)target=matches[0];else if(matches.length>1)target=await chooseFloorTarget(matches,'Choose which floor card to hit');if(target||matches.length<2)onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});}

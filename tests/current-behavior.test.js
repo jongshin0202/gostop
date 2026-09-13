@@ -1973,6 +1973,34 @@ test('milestone detection queues Godori, valid Stripes, and five Brights once wi
   assert.equal(JSON.stringify(api.getState()),before);
 });
 
+test('valid Stripe sets are detected once for both authoritative players regardless of total ribbon count',()=>{
+  for(const playerId of ['playerA','playerB'])for(const [set,ids] of Object.entries({red:['m1-2','m2-2','m3-2'],grass:['m4-2','m5-2','m7-2'],blue:['m6-2','m9-2','m10-2']})){
+    const isolated=loadCurrentGame().api,side=playerId==='playerA'?'human':'ai',captured=ids.map(id=>isolated.card(id));
+    if(set==='red')captured.push(isolated.card('m4-2'));
+    isolated.setState(isolated.makeState({[side]:isolated.makePlayer({captured})}));
+    const found=isolated.detectNewMilestones(playerId).filter(item=>item.titleKey==='threeStripes');
+    assert.equal(found.length,1);assert.equal(found[0].key,`stripes-${set}`);assert.equal(found[0].cardIds.length,3);
+    assert.equal(isolated.detectNewMilestones(playerId).some(item=>item.titleKey==='threeStripes'),false);
+  }
+  const isolated=loadCurrentGame().api;
+  isolated.setState(isolated.makeState({ai:isolated.makePlayer({captured:['m1-2','m4-2','m6-2'].map(id=>isolated.card(id))})}));
+  assert.equal(isolated.detectNewMilestones('playerB').some(item=>item.titleKey==='threeStripes'),false);
+  assert.equal(isolated.onlineValueForViewer({actorId:'playerB'},'playerB').actorId,'playerA');
+  assert.equal(isolated.onlineValueForViewer({actorId:'playerB'},'playerA').actorId,'playerB');
+});
+
+test('terminal Online presentation awaits semantics and milestones before opening any result',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  const semantic=transition.indexOf("event.type==='sweepTriggered'"),milestone=transition.indexOf('await presentNewMilestones(completedTurn.actorId)'),terminal=transition.indexOf('if(chongtong)presentChongtong(chongtong)');
+  assert.ok(semantic>=0&&semantic<milestone&&milestone<terminal);
+  for(const token of ['presentChongtong(chongtong)','presentThreePpeok({events:[threePpeok]})','setGrandResult(t(\'noWinner\')','presentStopResult({events:presentationEvents})'])assert.ok(transition.indexOf(token)>milestone,token);
+  assert.match(transition,/completedTurn=presentationEvents\.find\(event=>event\.type==='turnCompleted'\)/);
+  const solo=source.slice(source.indexOf('async function concludeTurn'),source.indexOf('function scheduleTurnStart'));
+  assert.ok(solo.indexOf('await presentNewMilestones')<solo.indexOf('evaluateGoStop'));assert.ok(solo.indexOf('await presentNewMilestones')<solo.indexOf('presentStopResult'));
+  const milestones=source.slice(source.indexOf('async function presentNewMilestones'),source.indexOf('function bestAiCard'));
+  assert.match(milestones,/for\(const milestone[^]*await sleep\(2000\)[^]*await sleep\(120\)/);
+});
+
 test('temporary deck and capture cards reuse the canonical card-face path and stable hover shell',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
@@ -2113,6 +2141,10 @@ test('Online result offers localized Quit Game while replay waiting has no quit 
   assert.match(source,/onlineQuitFromResult&&latestOnlineSnapshot\?\.terminalResult[^]*els\.resultDialog\.showModal\(\)/);
   assert.match(source,/onlineSubmit\(\{type:'quitGame'\}\)/);
   assert.match(source,/quitConfirmTitle\.textContent=t\('quitConfirmTitle'\);els\.quitConfirmMessage\.textContent=t\('quitConfirmMessage'\)/);
+  const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),waitingRule=css.match(/#replayWaitingDialog\[open\]\{([^}]+)\}/)?.[1]||'',cardRule=css.match(/#replayWaitingDialog \.flow-dialog-card\{([^}]+)\}/)?.[1]||'';
+  for(const declaration of ['position:fixed','inset:0','margin:auto'])assert.ok(waitingRule.includes(declaration),declaration);
+  assert.match(cardRule,/min-width:min\(560px,88vw\)/);assert.match(cardRule,/min-height:min\(240px,42vh\)/);
+  assert.match(source,/if\(open&&!dialog\.open\)dialog\.showModal\(\)/);
 });
 
 test('rejected room-flow actions resync authority while gameplay rejections remain fail closed',()=>{
