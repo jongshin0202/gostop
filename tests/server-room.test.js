@@ -45,6 +45,8 @@ test('initial snapshots are viewer-safe and network action routing preserves aut
   const action={type:'resolveOpening'},message={type:'action',protocolVersion:1,actionId:'first',expectedRevision:snapshot.revision,action};
   const accepted=await core.handle(socket,JSON.stringify(message));assert.equal(accepted.type,'actionAccepted');assert.equal(accepted.revision,1);
   const duplicate=await core.handle(socket,JSON.stringify(message));assert.equal(duplicate.type,'actionAccepted');assert.equal(duplicate.duplicate,true);assert.equal(duplicate.revision,1);
+  assert.equal(typeof core.room.eventHistory.find(entry=>entry.actionId==='first').fingerprint,'string');
+  const crossType=await core.handle(socket,JSON.stringify({...message,expectedRevision:1,action:{type:'newGame'}}));assert.equal(crossType.type,'actionRejected');assert.equal(crossType.error.code,'ACTION_ID_CONFLICT');
   const stale=await core.handle(socket,JSON.stringify({...message,actionId:'stale'}));assert.equal(stale.type,'actionRejected');assert.equal(stale.error.code,'STALE_REVISION');
   const malformed=await core.handle(socket,'not json');assert.equal(malformed.error.code,'MALFORMED_MESSAGE');
   const illegal=await core.handle(socket,JSON.stringify({type:'action',protocolVersion:1,actionId:'illegal',expectedRevision:1,action:{type:'playCard',cardId:'missing'}}));assert.equal(illegal.error.code,'ILLEGAL_ACTION');
@@ -64,6 +66,10 @@ test('a completed authoritative terminal result survives room restoration',async
   stored.authority.state.terminalResult={winnerId:'playerA',reason:'stop',points:7};stored.authority.completedAt='2026-09-12T00:01:00.000Z';stored.terminalResult={winnerId:a.playerId,points:7};stored.status='completed';await core.storage.put('room',stored);
   const restored=new RoomCore({storage:core.storage,cryptoApi:webcrypto});await restored.load();const snapshot=restored.authority.getSnapshot({matchId:restored.room.matchId,viewerId:a.playerId});
   assert.equal(restored.room.status,'completed');assert.equal(restored.room.terminalResult.winnerId,a.playerId);assert.equal(snapshot.terminalResult.winnerId,a.playerId);assert.equal(snapshot.terminalResult.result.points,7);
+  const socket=new Socket();await restored.connect(a.credential,socket);const message={type:'action',protocolVersion:1,actionId:'new-hand-id',expectedRevision:snapshot.revision,action:{type:'newHand'}};
+  const accepted=await restored.handle(socket,JSON.stringify(message));assert.equal(accepted.type,'actionAccepted');assert.equal(accepted.duplicate,false);assert.equal(typeof restored.room.eventHistory.find(entry=>entry.actionId==='new-hand-id').fingerprint,'string');
+  const duplicate=await restored.handle(socket,JSON.stringify(message));assert.equal(duplicate.type,'actionAccepted');assert.equal(duplicate.duplicate,true);
+  const conflict=await restored.handle(socket,JSON.stringify({...message,expectedRevision:accepted.revision,action:{type:'newGame'}}));assert.equal(conflict.type,'actionRejected');assert.equal(conflict.error.code,'ACTION_ID_CONFLICT');
 });
 
 test('private pending decisions and events never cross the network boundary',async()=>{
@@ -74,6 +80,28 @@ test('private pending decisions and events never cross the network boundary',asy
   const isolated=new RoomCore({storage:new MemoryStorage(),cryptoApi:webcrypto});isolated.room=structuredClone(core.room);isolated.room.authority=exported;await isolated.storage.put('room',isolated.room);isolated.room=null;await isolated.load();
   const eventsA=isolated.authority.getEventsSince({matchId:core.room.matchId,viewerId:a.playerId,revision:0}).events,eventsB=isolated.authority.getEventsSince({matchId:core.room.matchId,viewerId:b.playerId,revision:0}).events;
   assert.equal(eventsA.some(event=>event.type==='secret'),true);assert.equal(eventsB.some(event=>event.type==='secret'),false);
+});
+
+test('either authenticated player can replace an in-progress match once with a private, playable authoritative deal',async()=>{
+  for(const requesterSeat of ['playerA','playerB']){
+    const {core,a,b}=await readyRoom(),sa=new Socket(),sb=new Socket();await core.connect(a.credential,sa);await core.connect(b.credential,sb);
+    const requester=requesterSeat==='playerA'?a:b,socket=requesterSeat==='playerA'?sa:sb,oldMatchId=core.room.matchId,oldView=socket.last('snapshot').snapshot;
+    const message={type:'action',protocolVersion:1,actionId:`reset-${requesterSeat}`,expectedRevision:oldView.revision,action:{type:'newGame'}};
+    const accepted=await core.handle(socket,JSON.stringify(message));assert.equal(accepted.type,'actionAccepted');assert.equal(accepted.duplicate,false);assert.notEqual(accepted.matchId,oldMatchId);
+    const viewA=sa.last('snapshot').snapshot,viewB=sb.last('snapshot').snapshot;assert.equal(viewA.matchId,accepted.matchId);assert.equal(viewB.matchId,accepted.matchId);assert.equal(core.room.status,'ready');assert.equal(core.room.terminalResult,null);
+    assert.equal(viewA.viewerId,a.playerId);assert.equal(viewB.viewerId,b.playerId);assert.equal(viewA.seatId,'playerA');assert.equal(viewB.seatId,'playerB');assert.deepEqual(viewA.playerIds,[a.playerId,b.playerId]);assert.deepEqual(viewB.playerIds,[a.playerId,b.playerId]);
+    assert.equal(viewA.state.ai.hand,undefined);assert.equal(viewB.state.human.hand,undefined);assert.equal(JSON.stringify(viewA).includes(viewB.state.ai.hand?.[0]?.id||'never-visible'),false);
+    const trusted=core.authority.exportMatch(accepted.matchId).state,all=[...trusted.human.hand,...trusted.ai.hand,...trusted.floor,...trusted.deck,...trusted.human.captured,...trusted.ai.captured];assert.deepEqual([trusted.human.hand.length,trusted.ai.hand.length,trusted.floor.length,trusted.deck.length],[10,10,8,20]);assert.equal(new Set(all.map(card=>card.id)).size,48);
+    const duplicate=await core.handle(socket,JSON.stringify(message));assert.equal(duplicate.duplicate,true);assert.equal(duplicate.matchId,accepted.matchId);assert.equal(core.room.matchId,accepted.matchId);
+    const conflict=await core.handle(socket,JSON.stringify({...message,action:{type:'newGame',conflict:true}}));assert.equal(conflict.type,'actionRejected');assert.equal(conflict.error.code,'ACTION_ID_CONFLICT');assert.equal(core.room.matchId,accepted.matchId);
+    assert.equal((await core.authenticate(a.credential)).seatId,'playerA');assert.equal((await core.authenticate(b.credential)).seatId,'playerB');await assert.rejects(core.join(),error=>error.code==='ROOM_FULL');
+    const starterView=trusted.turn==='playerA'?viewA:viewB,starterSocket=trusted.turn==='playerA'?sa:sb;const continued=await core.handle(starterSocket,JSON.stringify({type:'action',protocolVersion:1,actionId:`continue-${requesterSeat}`,expectedRevision:starterView.revision,action:{type:'resolveOpening'}}));assert.equal(continued.type,'actionAccepted');
+  }
+});
+
+test('newGame rejects a stale revision without replacing the authoritative match',async()=>{
+  const {core,a}=await readyRoom(),socket=new Socket();await core.connect(a.credential,socket);const matchId=core.room.matchId;
+  const rejected=await core.handle(socket,JSON.stringify({type:'action',protocolVersion:1,actionId:'stale-reset',expectedRevision:99,action:{type:'newGame'}}));assert.equal(rejected.type,'actionRejected');assert.equal(rejected.error.code,'STALE_REVISION');assert.equal(core.room.matchId,matchId);
 });
 
 test('online browser mode has a fail-closed authority boundary and no AI turn path',()=>{
@@ -105,8 +133,16 @@ test('online opening and private Shake evidence remain gated and viewer-safe',as
   assert.equal(aView.state.openingSpecialsComplete?true:aView.state.legalActions.includes('attemptPlayCard'),false);
 });
 
+test('Online match boundaries own one authoritative viewer-relative dice/deal presentation and canonical unlocking',()=>{
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay')),drive=source.slice(source.indexOf('async function driveOnline'),source.indexOf('function onlineStateFromSnapshot'));
+  assert.match(transition,/snapshot\.matchId!==onlinePresentedMatchId/);assert.match(transition,/presentOpeningSequence\(state\.startingPlayerId,true\)/);assert.equal((transition.match(/presentOpeningSequence\(/g)||[]).length,1);assert.doesNotMatch(transition,/presentOpeningSequence\([^)]*false|presentOpeningSequence\(state\.startingPlayerId,true\);await presentDealSequence/);
+  assert.match(source,/starter===PLAYER_A\?t\(onlineMode\?'you':'player'\):t\(onlineMode\?'opponent':'computer'\)/);assert.match(source,/viewerIsB\?swapId\(value\):value/);
+  assert.match(drive,/viewerCanStartTurn\(snapshot\)/);assert.match(drive,/readyState===WebSocket\.OPEN/);assert.ok(drive.indexOf("decision?.type==='shakeDecision'")<drive.indexOf('viewerCanStartTurn(snapshot)'));assert.ok(drive.indexOf('snapshot.nextAction')<drive.indexOf('viewerCanStartTurn(snapshot)'));
+  assert.match(source,/function resetOnlinePresentationForMatch[\s\S]*?sessionStats=\{playerA:\{wins:0,points:0\},playerB:\{wins:0,points:0\}\}[\s\S]*?onlineDealPresented=false[\s\S]*?onlinePresentedMatchId=matchId/);
+});
+
 test('online identity labels are human-relative while Solo markup remains unchanged',()=>{
-  const app=readFileSync(join(__dirname,'..','app.js'),'utf8'),html=readFileSync(join(__dirname,'..','index.html'),'utf8');assert.match(app,/opponentName\.textContent=t\('opponent'\)/);assert.match(app,/opponentAvatar\.textContent=t\('opponent'\)\.slice/);assert.match(app,/t\(onlineMode\?'opponentShakeAck':'shakeAck'\)/);assert.match(html,/>AI<\/div>.*data-i18n="computer">Computer</s);
+  const app=readFileSync(join(__dirname,'..','app.js'),'utf8'),html=readFileSync(join(__dirname,'..','index.html'),'utf8');assert.match(app,/opponentKey=onlineMode\?'opponent':'computer'/);assert.match(app,/refreshModeLocalizedLabels\(\)/);assert.match(app,/t\(onlineMode\?'opponentShakeAck':'shakeAck'\)/);assert.match(html,/>AI<\/div>.*data-i18n="computer">Computer</s);
 });
 
 test('online deterministic authority continuations are buffered before presentation waits',()=>{
@@ -120,5 +156,5 @@ test('turn evaluation is server-owned and browsers do not submit handoff actions
   const response=await core.handle(socket,JSON.stringify({type:'action',protocolVersion:1,actionId:'forbidden-evaluation',expectedRevision:snapshot.revision,action:{type:'evaluateGoStop'}}));
   assert.equal(response.type,'actionRejected');assert.equal(response.error.code,'SERVER_OWNED_ACTION');
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/onlineSubmit\(\{type:'evaluateGoStop'/);assert.doesNotMatch(source,/onlineSubmit\(\{type:'resolveNagari'/);
-  const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));assert.match(rejected,/viewerCanStartTurn\(latestOnlineSnapshot\)/);assert.doesNotMatch(rejected,/presentation\.locked=false/);
+  const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));assert.match(rejected,/presentation\.locked=true/);assert.doesNotMatch(rejected,/viewerCanStartTurn|presentation\.locked=false/);
 });
