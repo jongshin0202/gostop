@@ -1359,9 +1359,9 @@
   async function animateHandCardSlap(side,card,sourceRect,target){
     // CPU backs are intentionally smaller in the rack, but the card entering play is always full GoStop Card size.
     sourceRect=fullSizeSourceRect(sourceRect);
-    document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{node.style.visibility='hidden';});
     await preloadCardFace(card);
     const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); presentation.stagedCards.set(card.id,el);
+    document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     if(!landing)return el;
     if(prefersReducedMotion()){ normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; return el; }
@@ -1472,6 +1472,7 @@
 
   async function stageHandCardForChoice(side,card,sourceRect){
     await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');presentation.stagedCards.set(card.id,el);
+    document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
     if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:240,easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
     return el;
   }
@@ -2141,14 +2142,15 @@
       if(!state){const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!events.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
       let bombEvent=null;
+      const incoming=onlineStateFromSnapshot(snapshot,events).state;
       const onlinePlayed=state.pendingTurn?.played?.card,onlineDrawn=state.pendingTurn?.drawn?.card;
       const sameMonthSpecial=snapshot.nextAction?.type==='resolveSpecialTurn'&&onlinePlayed&&onlineDrawn&&onlinePlayed.month===onlineDrawn.month;
       const plan=globalThis.GoStopPresentationPlan.planOnlinePresentation(events,onlineStageState,{pendingPlayedCard:onlinePlayed,sameMonthSpecial});onlineStageState=plan.stages;
       for(const step of plan.steps){
         const event=step.event,side=legacySideForPlayerId(event.actorId||PLAYER_A);
         if(step.kind==='handSlap'||step.kind==='handStage'){
-          const source=side==='human'?els.playerHand.querySelector(`[data-card-id="${event.card.id}"]`)?.getBoundingClientRect()||approximateHumanSource():approximateAiSource(),target=state.floor.find(card=>card.id===event.targetId);
-          if(step.kind==='handSlap'){await runPhysicalMotion(()=>animateHandCardSlap(side,event.card,source,target));await presentationPause('handToDeck');}else await runPhysicalMotion(()=>stageHandCardForChoice(side,event.card,source));
+          const source=side==='human'?els.playerHand.querySelector(`[data-card-id="${event.card.id}"]`)?.getBoundingClientRect()||approximateHumanSource():approximateAiSource(),target=state.floor.find(card=>card.id===step.targetCardId),landingSlot=[incoming.pendingTurn?.played,incoming.pendingTurn?.drawn].find(entry=>entry?.card.id===step.cardId)?.landingSlot;
+          if(step.kind==='handSlap'){if(!target&&Number.isFinite(landingSlot))presentation.floorSlotReservations.set(step.cardId,landingSlot);await runPhysicalMotion(()=>animateHandCardSlap(side,event.card,source,target));await presentationPause('handToDeck');}else await runPhysicalMotion(()=>stageHandCardForChoice(side,event.card,source));
         }else if(step.kind==='deckFlip')await runPhysicalMotion(()=>animateDeckLiftFlip(side,event.card));
         else if(step.kind==='stageSlap'){
           const entry=event.card||state.pendingTurn?.drawn?.card||state.pendingTurn?.played?.card,card=entry?.id===step.cardId?entry:MASTER_DECK.find(item=>item.id===step.cardId),stage=presentation.stagedCards.get(step.cardId),target=state.floor.find(item=>item.id===step.targetCardId)||state.pendingTurn?.played?.card.id===step.targetCardId&&state.pendingTurn.played.card;if(stage&&card)await runPhysicalMotion(()=>animateStagedSlap(stage,card,target,event.source==='drawn'||event.type==='deckCardRevealed'?'flip':'play'));
