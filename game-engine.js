@@ -66,6 +66,13 @@
     return cards.filter(card=>card.month===month);
   }
 
+  function floorStackTargetId(state,month){
+    const stack=state.floorStacks?.[month];
+    if(!stack)return null;
+    for(let index=stack.cardIds.length-1;index>=0;index--)if(state.floor.some(card=>card.id===stack.cardIds[index]))return stack.cardIds[index];
+    return null;
+  }
+
   function score(cards,mode=null){
     if(mode==='animal')return scoreWithGukjinMode(cards,false);
     if(mode==='pi')return scoreWithGukjinMode(cards,true);
@@ -505,7 +512,10 @@
       if(pending.phase==='awaitingFloorTarget')return classification('floorTargetDecision',actorId,{...base,source:'drawn',targetIds:[...pending.drawn.matchIds],requiresDecision:true});
       if(pending.phase==='awaitingTurnCompletion')return classification('awaitingTurnCompletion',actorId,base);
       if(pending.phase!=='awaitingNormalResolution')return classification('legacySpecial',actorId,base);
-      if(state.floorStacks[pending.drawn.card.month])return classification('floorStackInteraction',actorId,{...base,source:'drawn',targetIds:[...pending.drawn.matchIds],stackMonth:pending.drawn.card.month});
+      if(state.floorStacks[pending.drawn.card.month]){
+        const stack=state.floorStacks[pending.drawn.card.month],selfPpeok=stack.source==='ppeok'&&stack.owner===actorId;
+        return classification(selfPpeok?'selfPpeokCandidate':'floorStackInteraction',actorId,{...base,source:'drawn',targetIds:[...pending.drawn.matchIds],stackMonth:pending.drawn.card.month});
+      }
       if(pending.drawn.matchIds.length>2)return classification('legacySpecial',actorId,{...base,targetIds:[...pending.drawn.matchIds]});
       return classification('normal',actorId,{...base,targetIds:[...pending.drawn.matchIds],cardOutcomes:[{source:'drawn',cardId:pending.drawn.card.id,kind:pending.drawn.matchIds.length===0?'unmatchedLanding':pending.drawn.matchIds.length===1?'singleMatchCapture':'chosenMatchCapture',targetId:pending.drawn.targetId}],sweep:'postResolution'});
     }
@@ -662,7 +672,7 @@
       actor.captured.push(entry.card,...stackCards);
       events.push({type:'floorStackRemoved',audience:'public',actorId,rule:'selfPpeok',month:stack.month,cardIds:[...stack.cardIds]});
       events.push({type:'cardsCaptured',audience:'public',actorId,rule:'selfPpeok',cardIds:[entry.card.id,...stack.cardIds]});
-      emitTransfers(2,'selfPpeok');
+      emitTransfers(1,'selfPpeok');
       entry.resolved=true;
       const other=entry===pending.played?pending.drawn:pending.played;
       if(other&&!other.resolved){
@@ -834,10 +844,11 @@
       const card=player.hand[index];
       player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==card.month);
       const matchIds=matchingCards(state.floor,card).map(match=>match.id);
-      const targetId=selectTarget(matchIds,action.targetId);
+      const stackTargetId=floorStackTargetId(state,card.month);
+      const targetId=stackTargetId||selectTarget(matchIds,action.targetId);
       player.hand.splice(index,1);
       const landingSlot=matchIds.length===0?firstOpenFloorSlot(state):null;
-      const needsTarget=matchIds.length>1&&!targetId;
+      const needsTarget=!stackTargetId&&matchIds.length>1&&!targetId;
       state.pendingTurn={phase:needsTarget?'awaitingFloorTarget':'awaitingDraw',actorId,nextResolution:null,played:{card,matchIds,targetId,landingSlot,resolved:false},drawn:null};
       events.push({type:'cardPlayed',audience:'public',actorId,card,targetId,matchCount:matchIds.length});
       return {state,events,pendingDecision:needsTarget?targetDecision(state.pendingTurn,'played'):null};
@@ -868,10 +879,11 @@
       }
       const card=state.deck.shift();
       const matchIds=matchingCards(state.floor,card).map(match=>match.id);
+      const stackTargetId=floorStackTargetId(state,card.month);
       const reserved=pending.played?.landingSlot==null?[]:[pending.played.landingSlot];
       const landingSlot=matchIds.length===0?firstOpenFloorSlot(state,reserved):null;
-      pending.drawn={card,matchIds,targetId:selectTarget(matchIds,action.targetId),landingSlot,resolved:false};
-      const needsTarget=matchIds.length>1&&!pending.drawn.targetId;
+      pending.drawn={card,matchIds,targetId:stackTargetId||selectTarget(matchIds,action.targetId),landingSlot,resolved:false};
+      const needsTarget=!stackTargetId&&matchIds.length>1&&!pending.drawn.targetId;
       pending.phase=needsTarget?'awaitingFloorTarget':'awaitingNormalResolution';
       if(!needsTarget)pending.nextResolution=pending.played?'played':'drawn';
       events.push({type:'deckCardRevealed',audience:'public',actorId,card,targetId:pending.drawn.targetId,matchCount:matchIds.length});

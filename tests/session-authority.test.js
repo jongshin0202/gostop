@@ -60,6 +60,21 @@ test('online Go is public to both viewers and hands the turn to the opposite par
   }
 });
 
+test('deck draw onto a registered stack advances directly to authoritative special resolution',()=>{
+  const seed=authority({trustedRuntime:true}),created=seed.createMatch({matchId:'stack-auto',playerIds:['alice','bob'],startingPlayerId:'alice'}),record=seed.exportMatch(created.matchId),state=record.state;
+  const month=3,monthCards=engine.masterDeck.filter(card=>card.month===month).map(card=>engine.serializeGameState(card)),stack=monthCards.slice(0,3),drawn=monthCards[3],remaining=engine.masterDeck.filter(card=>card.month!==month).map(card=>engine.serializeGameState(card));
+  state.floor=stack;state.deck=[drawn];state.human.hand=[remaining.shift()];state.ai.hand=[remaining.shift()];state.human.captured=[];state.ai.captured=remaining;
+  state.floorSlotByCard=Object.fromEntries(stack.map(card=>[card.id,0]));state.floorSlotCount=12;state.floorStacks={[month]:{month,cardIds:stack.map(card=>card.id),source:'ppeok',owner:'playerA'}};
+  state.turn='playerA';state.startingPlayerId='playerA';state.openingSpecialsComplete=true;state.human.bombFreeTurns=1;state.winner=null;state.terminalResult=null;delete state.pendingDecision;delete state.pendingTurn;
+  engine.assertCardConservation(state);record.state=state;record.events=[];record.actions={};record.revision=0;
+  const service=authority({trustedRuntime:true});service.restoreMatch(record);
+  const blank=submit(service,service.getSnapshot({matchId:record.id,viewerId:'alice'}),'alice','blank',{type:'useBombBlank'});
+  assert.equal(blank.snapshot.nextAction.type,'drawNextCard');
+  const result=submit(service,blank.snapshot,'alice','draw',{type:'drawNextCard'});
+  assert.equal(result.snapshot.state.pendingDecision,undefined);assert.equal(result.snapshot.nextAction.type,'resolveSpecialTurn');
+  assert.equal(result.events[0].type,'deckCardRevealed');assert.equal(result.events[0].targetId,stack[2].id);
+});
+
 test('accepted action advances once; exact duplicate is idempotent and conflicting reuse fails',()=>{
   const service=authority();const current=createReadyMatch(service,'idem');
   const cardId=current.state.human.hand[0].id;

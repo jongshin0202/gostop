@@ -23,6 +23,13 @@ test('unmatched hand play keeps one hand movement owner and no inferred target',
   assert.equal(plan.steps[0].targetCardId,null);
 });
 
+test('registered stack representative targets drive direct hand and deck slaps',()=>{
+  const hand=planOnlinePresentation([{type:'cardPlayed',actorId:'playerA',card:card('m2-4'),targetId:'m2-3',matchCount:3}]);
+  assert.deepEqual(hand.steps.map(step=>[step.kind,step.cardId,step.targetCardId]),[['handSlap','m2-4','m2-3']]);
+  const deck=planOnlinePresentation([{type:'deckCardRevealed',actorId:'playerA',card:card('m3-4'),targetId:'m3-3',matchCount:3}]);
+  assert.deepEqual(deck.steps.map(step=>[step.kind,step.cardId,step.targetCardId]),[['deckFlip','m3-4',undefined],['stageSlap','m3-4','m3-3']]);
+});
+
 test('target selection continues an existing stage without replaying departure or flip',()=>{
   const first=planOnlinePresentation([{type:'cardPlayed',actorId:'playerA',card:card('m2-1'),targetId:null,matchCount:2}]);
   assert.deepEqual(first.steps.map(step=>step.kind),['handStage']);

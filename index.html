@@ -110,6 +110,7 @@
       <p id="resultBreakdown" class="result-breakdown"></p>
       <div id="resultCards" class="result-cards"></div>
       <button id="playAgainBtn" class="play-again-grand" type="button" data-i18n="playAgain">Play Again?</button>
+      <button id="resultQuitBtn" class="result-quit-btn" type="button" data-i18n="resultQuit" hidden>Quit Game</button>
     </div>
   </dialog>
 
@@ -127,7 +128,7 @@
 
   <dialog id="scoreDialog"><form method="dialog" class="dialog-card score-breakdown-card"><button class="dialog-close" aria-label="Close">×</button><h2 data-i18n="scoreBreakdown">Score Breakdown</h2><div id="scoreBreakdownContent"></div></form></dialog>
   <dialog id="newGameDialog"><div class="dialog-card"><p data-i18n="restartWarning"></p><div class="decision-actions"><button id="newGameYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="newGameNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
-  <dialog id="replayWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2><button id="quitPlayingBtn" class="stop-btn" type="button" data-i18n="quitPlaying">Quit Playing</button></div></dialog>
+  <dialog id="replayWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2></div></dialog>
   <dialog id="newGameWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2><button id="cancelNewGameBtn" class="stop-btn" type="button" data-i18n="cancel">Cancel</button></div></dialog>
   <dialog id="incomingNewGameDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="opponentNewGameRequest">Your opponent has requested to start a new game.</h2><div class="decision-actions"><button id="acceptNewGameBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="rejectNewGameBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
   <dialog id="quitConfirmDialog"><div class="dialog-card flow-dialog-card"><h2 id="quitConfirmTitle" data-i18n="quitConfirmTitle">Quit. Are you sure?</h2><p id="quitConfirmMessage" data-i18n="quitConfirmMessage">Quitting will end the game for both players</p><div class="decision-actions"><button id="quitYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="quitNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>

@@ -44,20 +44,28 @@
     'playerHand','aiHand','floor','playerCaptured','aiCaptured','deckCount','deckCountTop','deckCorner','roundCorner',
     'playerScore','aiScore','goCount','turnLabel','aiThinking','eventBanner','coachText','promptText','howToBtn','newGameBtn',
     'howToDialog','decisionDialog','decisionText','goBtn','stopBtn','resultDialog','resultTitle','resultScore','resultBreakdown',
-    'playAgainBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
+    'playAgainBtn','resultQuitBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
     'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeCards','shakeBtn','keepSecretBtn',
     'bombDialog','bombText','bombCards','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
-    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','quitPlayingBtn','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedOkBtn'
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedOkBtn'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
   let state = null;
   const ONLINE_SESSION_FLOW_ACTIONS=new Set(['playAgainReady','requestNewGame','respondNewGame','cancelNewGame','quitGame']);
+  const onlineHandSourceRects=new Map();
   function canSubmitPlayAgain(snapshot){return !!snapshot?.terminalResult;}
   function isOnlineSessionFlowAction(action){return ONLINE_SESSION_FLOW_ACTIONS.has(action?.type);}
-  let onlineMode=false,onlinePendingCardId=null,onlineLastEvents=[],onlineSubmit=()=>null,onlinePlayAgain=()=>false,onlineQuitFromWaiting=false,latestOnlineSnapshot=null;
+  function rememberOnlineHandSource(cardId,source){
+    const rect=source?.getBoundingClientRect?.()||source;
+    if(!rect||![rect.left,rect.top,rect.width,rect.height].every(Number.isFinite))return null;
+    const saved={left:rect.left,top:rect.top,width:rect.width,height:rect.height};
+    onlineHandSourceRects.clear();onlineHandSourceRects.set(cardId,saved);return {...saved};
+  }
+  function takeOnlineHandSource(cardId){const rect=onlineHandSourceRects.get(cardId)||null;onlineHandSourceRects.delete(cardId);return rect&&{...rect};}
+  let onlineMode=false,onlinePendingCardId=null,onlineLastEvents=[],onlineSubmit=()=>null,onlinePlayAgain=()=>false,onlineQuitFromResult=false,latestOnlineSnapshot=null;
   const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
   let soloMatchId=null,soloRevision=0,soloActionSequence=0;
   const presentation = {
@@ -397,7 +405,7 @@
     const st=floorStackForMonth(targetCard.month);
     if(!st || !st.cardIds.includes(targetCard.id)) return 0;
     if(st.source==='initial') return 1;
-    if(st.source==='ppeok') return st.owner===playerIdForLegacySide(side) ? 2 : 1;
+    if(st.source==='ppeok') return 1;
     return 0;
   }
 
@@ -695,7 +703,7 @@
   }
 
   async function humanPlay(cardId, clickedEl){
-    if(onlineMode){onlinePendingCardId=cardId;onlineSubmit({type:'attemptPlayCard',cardId});return;}
+    if(onlineMode){onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);if(!onlineSubmit({type:'attemptPlayCard',cardId}))onlineHandSourceRects.delete(cardId);return;}
     if(state.turn!==PLAYER_A || state.winner)return;
 
     // While choosing between two floor targets, clicking a different hand card
@@ -1363,7 +1371,7 @@
     cleanupTargetChoice();
     if(presentation.goCalloutTimer){clearTimeout(presentation.goCalloutTimer);presentation.goCalloutTimer=null;}
     presentation.stagedCards.forEach(el=>{el?.getAnimations?.().forEach(animation=>animation.cancel());el?.remove?.();});
-    presentation.stagedCards.clear();presentation.floorSlotReservations.clear();presentation.activeHoveredHandCardId=null;
+    presentation.stagedCards.clear();presentation.floorSlotReservations.clear();onlineHandSourceRects.clear();presentation.activeHoveredHandCardId=null;
     presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;
     if(!TEST_MODE){document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
   }
@@ -1789,6 +1797,7 @@
     els.resultTitle.textContent=winnerLabel;
     els.resultScore.textContent=scoreText;
     els.resultBreakdown.textContent=breakdown||'';
+    if(els.resultQuitBtn)els.resultQuitBtn.hidden=!onlineMode;
     if(call!==t('conquer')&&els.resultCards&&typeof els.resultCards.replaceChildren==='function')els.resultCards.replaceChildren();
   }
 
@@ -1991,14 +2000,14 @@
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
   els.newGameBtn.addEventListener('click',()=>{els.optionsMenu.hidden=!els.optionsMenu.hidden;els.newGameBtn.setAttribute('aria-expanded',String(!els.optionsMenu.hidden));});
   els.optionsNewGameBtn.addEventListener('click',()=>{els.optionsMenu.hidden=true;els.newGameDialog.showModal();});
-  els.optionsQuitBtn.addEventListener('click',()=>{els.optionsMenu.hidden=true;onlineQuitFromWaiting=false;els.quitConfirmTitle.textContent=t('quitConfirmTitle');els.quitConfirmMessage.textContent=t('quitConfirmMessage');els.quitConfirmDialog.showModal();});
+  els.optionsQuitBtn.addEventListener('click',()=>{els.optionsMenu.hidden=true;onlineQuitFromResult=false;els.quitConfirmTitle.textContent=t('quitConfirmTitle');els.quitConfirmMessage.textContent=t('quitConfirmMessage');els.quitConfirmDialog.showModal();});
   document.addEventListener('pointerdown',event=>{if(!els.optionsMenu.hidden&&!els.optionsMenu.contains(event.target)&&event.target!==els.newGameBtn){els.optionsMenu.hidden=true;els.newGameBtn.setAttribute('aria-expanded','false');}});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'){els.optionsMenu.hidden=true;els.newGameBtn.setAttribute('aria-expanded','false');}});
   els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
   els.newGameNoBtn.addEventListener('click',()=>confirmNewGame(false));
   els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;startGame();}});
-  els.quitPlayingBtn.addEventListener('click',()=>{onlineQuitFromWaiting=true;els.replayWaitingDialog.close();els.quitConfirmTitle.textContent=t('quitReadyTitle');els.quitConfirmMessage.textContent=t('quitReadyMessage');els.quitConfirmDialog.showModal();});
-  els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromWaiting&&latestOnlineSnapshot?.sessionFlow?.replayReady.you)els.replayWaitingDialog.showModal();});
+  els.resultQuitBtn.addEventListener('click',()=>{if(!onlineMode)return;onlineQuitFromResult=true;if(els.resultDialog.open)els.resultDialog.close();els.quitConfirmTitle.textContent=t('resultQuit');els.quitConfirmMessage.textContent=t('resultQuitConfirm');els.quitConfirmDialog.showModal();});
+  els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromResult&&latestOnlineSnapshot?.terminalResult&&!els.resultDialog.open)els.resultDialog.showModal();onlineQuitFromResult=false;});
   els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();els.soloStartOverlay.hidden=false;}});
   els.cancelNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'cancelNewGame',requestId});});
   els.acceptNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'respondNewGame',requestId,accept:true});});
@@ -2080,7 +2089,7 @@
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
       onlineValueForViewer,
-      canSubmitPlayAgain,isOnlineSessionFlowAction,
+      canSubmitPlayAgain,isOnlineSessionFlowAction,rememberOnlineHandSource,takeOnlineHandSource,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
       monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
@@ -2140,7 +2149,11 @@
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);presentation.locked=true;return id;}catch(error){onlineStatus.textContent=error.message;return null;}
     };
     onlinePlayAgain=async function(){
-      if(canSubmitPlayAgain(latestOnlineSnapshot))return !!onlineSubmit({type:'playAgainReady'});
+      if(canSubmitPlayAgain(latestOnlineSnapshot)){
+        const submitted=!!onlineSubmit({type:'playAgainReady'});
+        if(submitted&&els.resultDialog?.open)els.resultDialog.close();
+        return submitted;
+      }
       if(els.resultDialog?.open)els.resultDialog.close();
       await onlinePresentationQueue;
       if(latestOnlineSnapshot)await driveOnline(latestOnlineSnapshot,onlineLastEvents);
@@ -2158,7 +2171,7 @@
       setDialog(els.replayWaitingDialog,replayWaiting);
       if(replayWaiting)setDialog(els.resultDialog,false);
       if(!flow.replayReady.you&&!snapshot.terminalResult)setDialog(els.resultDialog,false);
-      if(!flow.replayReady.you&&els.quitConfirmDialog.open&&onlineQuitFromWaiting)setDialog(els.quitConfirmDialog,false);
+      if(!snapshot.terminalResult&&els.quitConfirmDialog.open&&onlineQuitFromResult)setDialog(els.quitConfirmDialog,false);
     }
     function returnOnlineToMenu(){
       onlineMode=false;presentation.locked=true;resetHandPresentationState();
@@ -2211,13 +2224,14 @@
       for(const step of plan.steps){
         const event=step.event,side=legacySideForPlayerId(event.actorId||PLAYER_A);
         if(step.kind==='handSlap'||step.kind==='handStage'){
-          const source=side==='human'?els.playerHand.querySelector(`[data-card-id="${event.card.id}"]`)?.getBoundingClientRect()||approximateHumanSource():approximateAiSource(),target=state.floor.find(card=>card.id===step.targetCardId),landingSlot=[incoming.pendingTurn?.played,incoming.pendingTurn?.drawn].find(entry=>entry?.card.id===step.cardId)?.landingSlot;
+          const source=side==='human'?takeOnlineHandSource(event.card.id)||els.playerHand.querySelector(`[data-card-id="${event.card.id}"]`)?.getBoundingClientRect()||approximateHumanSource():approximateAiSource(),target=state.floor.find(card=>card.id===step.targetCardId),landingSlot=[incoming.pendingTurn?.played,incoming.pendingTurn?.drawn].find(entry=>entry?.card.id===step.cardId)?.landingSlot;
           if(step.kind==='handSlap'){if(!target&&Number.isFinite(landingSlot))presentation.floorSlotReservations.set(step.cardId,landingSlot);await runPhysicalMotion(()=>animateHandCardSlap(side,event.card,source,target));await presentationPause('handToDeck');}else await runPhysicalMotion(()=>stageHandCardForChoice(side,event.card,source));
         }else if(step.kind==='deckFlip')await runPhysicalMotion(()=>animateDeckLiftFlip(side,event.card));
         else if(step.kind==='stageSlap'){
           const entry=event.card||state.pendingTurn?.drawn?.card||state.pendingTurn?.played?.card,card=entry?.id===step.cardId?entry:MASTER_DECK.find(item=>item.id===step.cardId),stage=presentation.stagedCards.get(step.cardId),target=state.floor.find(item=>item.id===step.targetCardId)||state.pendingTurn?.played?.card.id===step.targetCardId&&state.pendingTurn.played.card;if(stage&&card)await runPhysicalMotion(()=>animateStagedSlap(stage,card,target,event.source==='drawn'||event.type==='deckCardRevealed'?'flip':'play'));
         }else if(step.kind==='rememberBomb')bombEvent=event;
         else if(step.kind==='bombSlap'){
+          onlineHandSourceRects.clear();
           const cards=step.cardIds.map(id=>state[side].hand.find(card=>card.id===id)||MASTER_DECK.find(card=>card.id===id)).filter(Boolean),target=state.floor.find(card=>card.month===bombEvent?.month),sources=cards.map((card,index)=>side==='human'?els.playerHand.querySelector(`[data-card-id="${card.id}"]`)?.getBoundingClientRect()||approximateHumanSource(index,cards.length):approximateAiSource());if(target)await runPhysicalMotion(()=>animateBombSlap(side,cards,target,sources));
         }else if(step.kind==='capture'){await runPhysicalMotion(()=>animateCaptureBatch(step.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean),side));step.cardIds.forEach(cleanupStagedCard);}
         else if(step.kind==='landedCleanup')cleanupStagedCard(step.cardId);
@@ -2248,7 +2262,7 @@
       if(presentationEvents.some(event=>event.type==='turnCompleted')&&actor)await presentNewMilestones(actor);
       await driveOnline(snapshot,presentationEvents);
     }
-    async function submitOnlineCardPlay(){const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?state.floor.filter(item=>item.month===card.month):[];let target=null;if(matches.length===1)target=matches[0];else if(matches.length>1)target=await chooseFloorTarget(matches,'Choose which floor card to hit');if(target||matches.length<2)onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});}
+    async function submitOnlineCardPlay(){const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?matchesFor(card):[];let target=null;if(matches.length===1)target=matches[0];else if(matches.length>1)target=await chooseFloorTarget(matches,'Choose which floor card to hit');if(target||matches.length<2)onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});}
     const beginOnline=async room=>{
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
       onlineMode=true;
@@ -2257,7 +2271,7 @@
       adapter.addEventListener('connected',()=>{onlineStatus.textContent=`Room ${room.roomCode} — waiting for opponent`;});
       adapter.addEventListener('roomReady',()=>{onlineStatus.textContent='Match ready.';els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('opponentConnected',()=>{onlineStatus.textContent='Opponent connected. Match ready.';els.soloStartOverlay.hidden=true;});
-      adapter.addEventListener('disconnected',()=>{onlineStatus.textContent='Disconnected from the authoritative server. Reconnect before playing.';presentation.locked=true;render();});
+      adapter.addEventListener('disconnected',()=>{onlineHandSourceRects.clear();onlineStatus.textContent='Disconnected from the authoritative server. Reconnect before playing.';presentation.locked=true;render();});
       adapter.addEventListener('snapshot',event=>{latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:event.detail}));});
       adapter.addEventListener('actionAccepted',async event=>{
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
@@ -2270,6 +2284,7 @@
       });
       adapter.addEventListener('actionRejected',event=>{
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
+        if(action?.cardId)onlineHandSourceRects.delete(action.cardId);
         onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=true;render();
         if(isOnlineSessionFlowAction(action))adapter.sync();
       });
