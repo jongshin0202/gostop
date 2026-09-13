@@ -2049,7 +2049,39 @@ test('all seven locales explicitly populate every canonical required UI key',()=
   }
   for(const locale of ['es','fr','de','ko','ja','zh'])for(const key of ['language','howTo','newGame','wins','captured','brights','pictures','stripes','singles','pooped','kiss','cleanSweep','birdies','conquer','noWinner','tutorialOverview'])assert.notEqual(i18n.dictionaries[locale][key],i18n.dictionaries.en[key],`${locale}.${key} must not rely on English`);
   assert.equal(i18n.translate('xx','newGame'),i18n.dictionaries.en.newGame);
-  assert.equal(i18n.brand,'GoStop Online');
+  assert.equal(i18n.brand,'GoStop Live!');
+});
+
+test('New Game reset warning is localized and limited to all three New Game request states',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
+  for(const dictionary of Object.values(i18n.dictionaries))assert.equal(typeof dictionary.newGameResetWarning==='string'&&dictionary.newGameResetWarning.length>0,true);
+  assert.equal(i18n.dictionaries.en.newGameResetWarning,'Starting a New Game will reset all wins, points, and achievements from this session and start fresh.');
+  for(const id of ['newGameDialog','newGameWaitingDialog','incomingNewGameDialog']){
+    const dialog=html.slice(html.indexOf(`<dialog id="${id}"`),html.indexOf('</dialog>',html.indexOf(`<dialog id="${id}"`)));
+    assert.match(dialog,/data-i18n="newGameResetWarning"/);
+  }
+  const replay=html.slice(html.indexOf('<dialog id="replayWaitingDialog"'),html.indexOf('</dialog>',html.indexOf('<dialog id="replayWaitingDialog"')));
+  assert.doesNotMatch(replay,/newGameResetWarning/);
+});
+
+test('shared milestone overlay clears KISS effects before every scoring milestone',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const transient=source.slice(source.indexOf('async function showSpecialTransient'),source.indexOf('async function presentSemanticEvents'));
+  const milestones=source.slice(source.indexOf('async function presentNewMilestones'),source.indexOf('function bestAiCard'));
+  assert.match(transient,/dataset\.effect=effect/);assert.match(source,/presentKiss\(cardIds\).*'kiss'/);
+  assert.match(milestones,/milestoneOverlay\.dataset\.effect=''/);
+  assert.match(milestones,/if\(milestone\.birds\)for\(let index=0;index<5;index\+\+\)/);
+  assert.match(milestones,/if\(milestone\.birds\)playBirdSound\(\)/);
+  for(const key of ['birdies','threeStripes','fiveBrights'])assert.doesNotMatch(milestones,new RegExp(`${key}[^\\n]*kiss`));
+});
+
+test('GoStop Live branding uses semantic partial italics without renaming Online mode controls',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(html,/<title>GoStop Live!<\/title>/);
+  assert.match(html,/<span class="brand-mark">GoStop <em>Live!<\/em><\/span>/);
+  assert.match(css,/\.brand-mark\{[^}]*font-style:normal/);assert.match(css,/\.brand-mark em\{font-style:italic\}/);
+  assert.doesNotMatch(html,/GoStop Online/);
+  assert.match(html,/>Create Online Game<\/button>/);assert.match(html,/id="joinOnlineForm"/);
 });
 
 test('visual beginner guide covers every section with canonical GoStop Card evidence',()=>{

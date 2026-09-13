@@ -41,6 +41,7 @@ export class RoomCore{
   }
   async join(presentedCredential){
     if(!await this.load())throw new RoomError('ROOM_NOT_FOUND','Room does not exist or has expired.',404);
+    if(this.room.sessionFlow?.ended||this.room.status==='ended')throw new RoomError('ROOM_NOT_FOUND','Room does not exist or has expired.',404);
     if(presentedCredential&&await this.authenticate(presentedCredential))throw new RoomError('ALREADY_JOINED','This participant already owns a seat.',409);
     if(this.room.participants.length>=this.room.maxPlayers)throw new RoomError('ROOM_FULL','Room is full.',409);
     const credential=token(this.crypto),participant={playerId:randomId(this.crypto,'player'),seatId:'playerB',credentialHash:await tokenHash(this.crypto,credential),accountId:null,connected:false};this.room.participants.push(participant);
