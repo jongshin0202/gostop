@@ -117,15 +117,20 @@
       if(!match.state.terminalResult&&match.state.pendingTurn?.actorId===seatId){
         const pending=match.state.pendingTurn;
         if(pending.phase==='awaitingDraw')nextAction={type:'drawNextCard'};
-        else if(pending.phase==='awaitingFloorTarget'){
-          const drawnNeedsTarget=pending.drawn&&!pending.drawn.resolved&&pending.drawn.matchIds.length>1&&!pending.drawn.targetId;
-          const source=drawnNeedsTarget?'drawn':'played',entry=source==='played'?pending.played:pending.drawn;
-          nextAction={type:'chooseFloorTarget',source,legalTargetIds:[...entry.matchIds]};
+        else {
+          const classification=pending.played&&pending.drawn?engine.classifyTurnOutcome(match.state,{actorId:seatId}):null;
+          const sameMonthSpecialPhase=pending.phase==='awaitingFloorTarget'||pending.phase==='awaitingNormalResolution';
+          const sameMonthSpecial=sameMonthSpecialPhase&&classification&&['jjokCandidate','ppeokSsaDaCandidate','ttadakCandidate'].includes(classification.kind);
+          if(sameMonthSpecial)nextAction={type:'resolveSpecialTurn'};
+          else if(pending.phase==='awaitingFloorTarget'){
+            const drawnNeedsTarget=pending.drawn&&!pending.drawn.resolved&&pending.drawn.matchIds.length>1&&!pending.drawn.targetId;
+            const source=drawnNeedsTarget?'drawn':'played',entry=source==='played'?pending.played:pending.drawn;
+            nextAction={type:'chooseFloorTarget',source,legalTargetIds:[...entry.matchIds]};
+          }else if(pending.phase==='awaitingNormalResolution'){
+            const normalClassification=classification||engine.classifyTurnOutcome(match.state,{actorId:seatId});
+            nextAction=normalClassification.kind==='normal'?{type:'resolveNormalCard',source:pending.nextResolution}:{type:'resolveSpecialTurn'};
+          }else if(pending.phase==='awaitingTurnCompletion')nextAction={type:'completeTurn'};
         }
-        else if(pending.phase==='awaitingNormalResolution'){
-          const classification=engine.classifyTurnOutcome(match.state,{actorId:seatId});
-          nextAction=classification.kind==='normal'?{type:'resolveNormalCard',source:pending.nextResolution}:{type:'resolveSpecialTurn'};
-        }else if(pending.phase==='awaitingTurnCompletion')nextAction={type:'completeTurn'};
       }else if(!match.state.terminalResult&&!match.state.openingSpecialsComplete&&!match.state.pendingDecision&&match.state.turn===seatId)nextAction={type:'resolveOpening'};
       return {matchId:match.id,gameMode:match.gameMode,playerIds:[...match.playerIds],viewerId,seatId,revision:match.revision,state:projected,nextAction,terminalResult:publicTerminal(match,match.state.terminalResult)};
     }

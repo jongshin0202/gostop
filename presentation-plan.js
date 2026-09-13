@@ -8,7 +8,9 @@
         if(!stages.has(event.card.id)){steps.push({kind:event.targetId||event.matchCount===0?'handSlap':'handStage',cardId:event.card.id,event});stages.set(event.card.id,event.targetId||event.matchCount===0?'landed':'waitingTarget');}
       }else if(event.type==='deckCardRevealed'){
         if(!stages.has(event.card.id)){steps.push({kind:'deckFlip',cardId:event.card.id,event});stages.set(event.card.id,'waitingTarget');}
-        if((event.targetId||event.matchCount===0)&&stages.get(event.card.id)==='waitingTarget'){const sameMonth=context.pendingPlayedCard?.month===event.card.month?context.pendingPlayedCard.id:null;steps.push({kind:'stageSlap',cardId:event.card.id,targetCardId:event.targetId||sameMonth,event});stages.set(event.card.id,'landed');}
+        const sameMonth=context.pendingPlayedCard?.month===event.card.month?context.pendingPlayedCard.id:null;
+        const targetCardId=context.sameMonthSpecial&&sameMonth?sameMonth:(event.targetId||sameMonth);
+        if((targetCardId||event.matchCount===0)&&stages.get(event.card.id)==='waitingTarget'){steps.push({kind:'stageSlap',cardId:event.card.id,targetCardId,event});stages.set(event.card.id,'landed');}
       }else if(event.type==='floorTargetChosen'){
         const entry=[...stages].find(([,status])=>status==='waitingTarget');if(entry){steps.push({kind:'stageSlap',cardId:entry[0],event});stages.set(entry[0],'landed');}
       }else if(event.type==='bombDeclared')steps.push({kind:'rememberBomb',event});

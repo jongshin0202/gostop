@@ -34,9 +34,29 @@ test('capture and landing events clean staged ownership for both viewers',()=>{
   }
 });
 
-test('Jjok keeps one deck element from flip through impact with the staged played card',()=>{
-  const played=card('m10-3'),drawn=card('m10-4'),plan=planOnlinePresentation([{type:'deckCardRevealed',actorId:'playerA',card:drawn,targetId:null,matchCount:0}],{[played.id]:'landed'},{pendingPlayedCard:played});
-  assert.deepEqual(plan.steps.map(step=>step.kind),['deckFlip','stageSlap']);assert.equal(plan.steps[1].cardId,drawn.id);assert.equal(plan.steps[1].targetCardId,played.id);
+test('same-month Jjok, Ppeok, and Ttadak keep the drawn card aimed at the staged played card',()=>{
+  const played=card('m10-3'),drawn=card('m10-4'),ordinaryFloorTarget=card('m10-1');
+  for(const scenario of [
+    {name:'Jjok',targetId:null,matchCount:0},
+    {name:'Ppeok',targetId:ordinaryFloorTarget.id,matchCount:1},
+    {name:'Ttadak',targetId:ordinaryFloorTarget.id,matchCount:2}
+  ]){
+    const plan=planOnlinePresentation(
+      [{type:'deckCardRevealed',actorId:'playerA',card:drawn,targetId:scenario.targetId,matchCount:scenario.matchCount}],
+      {[played.id]:'landed'},
+      {pendingPlayedCard:played,sameMonthSpecial:true}
+    );
+    assert.deepEqual(plan.steps.map(step=>step.kind),['deckFlip','stageSlap'],scenario.name);
+    assert.equal(plan.steps[1].cardId,drawn.id,scenario.name);
+    assert.equal(plan.steps[1].targetCardId,played.id,scenario.name);
+  }
+
+  const ordinary=planOnlinePresentation(
+    [{type:'deckCardRevealed',actorId:'playerA',card:drawn,targetId:ordinaryFloorTarget.id,matchCount:1}],
+    {},
+    {pendingPlayedCard:played,sameMonthSpecial:false}
+  );
+  assert.equal(ordinary.steps[1].targetCardId,ordinaryFloorTarget.id);
 });
 
 test('matching deck capture conserves all 48 authoritative cards with no floor duplicate',()=>{

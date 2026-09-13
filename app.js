@@ -72,6 +72,8 @@
   };
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
+  const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
+  const presentationPause=key=>sleep(PRESENTATION_PACING[key]);
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
@@ -815,13 +817,13 @@
       presentation.floorSlotReservations.delete(event.card.id);
       removeStage(event.card.id);
       render();
-      await sleep(180);
+      await presentationPause('cardLandCleanup');
       return;
     }
     if(event.type==='cardsCaptured'){
       await animateCaptureBatch(event.cards,side);
       render();
-      await sleep(190);
+      await presentationPause('postCapture');
     }
     await promptGukjinChoice(side,result.events);
   }
@@ -864,13 +866,13 @@
           if(classification.kind==='jjokCandidate')await presentKiss(event.cardIds);
           if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('FLUSH!',event.cardIds,'flush');}
         }else if(event.type==='cardLanded'){
-          presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await sleep(180);
+          presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await presentationPause('cardLandCleanup');
         }else if(event.type==='piTransferred'){
           const card=MASTER_DECK.find(item=>item.id===event.cardId);
           await animatePiTransfer(card,legacySideForPlayerId(event.fromPlayerId),side);
         }
       }
-      render(); await sleep(190);
+      render(); await presentationPause('postCapture');
       await promptGukjinChoice(side,result.events);
       await presentSemanticEvents(result.events);
     }
@@ -879,7 +881,7 @@
 
   async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
-    await sleep(330);
+    await presentationPause('handToDeck');
 
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
@@ -1061,7 +1063,7 @@
       addFloorCard(card);
       removeStage(card.id);
       render();
-      await sleep(180);
+      await presentationPause('cardLandCleanup');
       return;
     }
 
@@ -1086,7 +1088,7 @@
     if(capturedPpeok) playLaughSound();
     if(steal) await stealPiAnimated(side,steal);
     render();
-    await sleep(190);
+    await presentationPause('postCapture');
   }
 
   async function applySweepIfNeeded(side){
@@ -1448,7 +1450,7 @@
     const now=el.getBoundingClientRect(); el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,now);
     const flip=inner.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],{duration:380,easing:'cubic-bezier(.35,.05,.2,1)',fill:'forwards'});
     await flip.finished.catch(()=>{}); inner.style.transform='rotateY(180deg)'; inner.getAnimations().forEach(a=>a.cancel());
-    await sleep(180); return el;
+    await presentationPause('deckReveal'); return el;
   }
 
   async function animateStagedSlap(el,card,target,kind='flip'){
@@ -2051,7 +2053,7 @@
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
-      stableFloorTilt,stableStackAngle,shuffle,
+      stableFloorTilt,stableStackAngle,shuffle,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
         return {
@@ -2112,12 +2114,15 @@
       presentation.locked=true;
       if(!state){const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,false);await presentDealSequence();}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!events.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
-      let bombEvent=null;const plan=globalThis.GoStopPresentationPlan.planOnlinePresentation(events,onlineStageState,{pendingPlayedCard:state.pendingTurn?.played?.card});onlineStageState=plan.stages;
+      let bombEvent=null;
+      const onlinePlayed=state.pendingTurn?.played?.card,onlineDrawn=state.pendingTurn?.drawn?.card;
+      const sameMonthSpecial=snapshot.nextAction?.type==='resolveSpecialTurn'&&onlinePlayed&&onlineDrawn&&onlinePlayed.month===onlineDrawn.month;
+      const plan=globalThis.GoStopPresentationPlan.planOnlinePresentation(events,onlineStageState,{pendingPlayedCard:onlinePlayed,sameMonthSpecial});onlineStageState=plan.stages;
       for(const step of plan.steps){
         const event=step.event,side=legacySideForPlayerId(event.actorId||PLAYER_A);
         if(step.kind==='handSlap'||step.kind==='handStage'){
           const source=side==='human'?els.playerHand.querySelector(`[data-card-id="${event.card.id}"]`)?.getBoundingClientRect()||approximateHumanSource():approximateAiSource(),target=state.floor.find(card=>card.id===event.targetId);
-          if(step.kind==='handSlap')await runPhysicalMotion(()=>animateHandCardSlap(side,event.card,source,target));else await runPhysicalMotion(()=>stageHandCardForChoice(side,event.card,source));
+          if(step.kind==='handSlap'){await runPhysicalMotion(()=>animateHandCardSlap(side,event.card,source,target));await presentationPause('handToDeck');}else await runPhysicalMotion(()=>stageHandCardForChoice(side,event.card,source));
         }else if(step.kind==='deckFlip')await runPhysicalMotion(()=>animateDeckLiftFlip(side,event.card));
         else if(step.kind==='stageSlap'){
           const entry=event.card||state.pendingTurn?.drawn?.card||state.pendingTurn?.played?.card,card=entry?.id===step.cardId?entry:MASTER_DECK.find(item=>item.id===step.cardId),stage=presentation.stagedCards.get(step.cardId),target=state.floor.find(item=>item.id===step.targetCardId)||state.pendingTurn?.played?.card.id===step.targetCardId&&state.pendingTurn.played.card;if(stage&&card)await runPhysicalMotion(()=>animateStagedSlap(stage,card,target,event.source==='drawn'||event.type==='deckCardRevealed'?'flip':'play'));
@@ -2133,12 +2138,15 @@
       if(events.some(event=>event.type==='newHandCreated')){resetHandPresentationState();await presentDealSequence();}
       for(const event of events){
         const side=legacySideForPlayerId(event.actorId||PLAYER_A),cardIds=event.cardIds||[];
-        if(event.type==='cardLanded'){removeStage(event.card?.id||event.cardId);await sleep(180);}
+        if(event.type==='cardLanded'){removeStage(event.card?.id||event.cardId);await presentationPause('cardLandCleanup');}
         else if(event.type==='shakeDeclared')await presentShakeDeclaration([event]);
         else if(event.type==='ppeokFormed'){cardIds.forEach(removeStage);playPpeokSound();await showSpecialTransient('POOPED!',cardIds);}
         else if(event.type==='firstPpeokAwarded')await showFirstPoopNotice(side);
-        else if(event.type==='cardsCaptured'&&event.rule==='jjok')await presentKiss(cardIds);
-        else if(event.type==='cardsCaptured'&&event.rule==='ttadak'){playTapTapSound();await showSpecialTransient('FLUSH!',cardIds,'flush');}
+        else if(event.type==='cardsCaptured'){
+          await presentationPause('postCapture');
+          if(event.rule==='jjok')await presentKiss(cardIds);
+          else if(event.rule==='ttadak'){playTapTapSound();await showSpecialTransient('FLUSH!',cardIds,'flush');}
+        }
         else if(event.type==='sweepTriggered')await presentSemanticEvents([event]);
         else if(event.type==='goDeclared')showGoCallout(side);
         else if(event.type==='chongtongDeclared')presentChongtong(event);

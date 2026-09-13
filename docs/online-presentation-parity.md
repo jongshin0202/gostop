@@ -61,3 +61,18 @@ Physical presenter calls are wrapped by `runPhysicalMotion`. `render()` records 
 `OnlineSessionAdapter.receive` treats `snapshot` as a terminal dispatch branch: it updates the revision, emits one normalized snapshot event, and returns rather than falling through to the generic type dispatch. Accepted and rejected action envelopes clear the one pending action and are each dispatched once. Consequently, one public Jjok capture reaches the presentation queue once and produces one Kiss presenter invocation per browser.
 
 Online `completeTurn` is composite at the session authority boundary. In the same accepted revision, the authority appends `turnCompleted`, evaluates the actor's score, and either creates the private Go/Stop decision, appends `turnHandedOff`, performs automatic terminal Stop, or resolves exhausted-hand Nagari. The Worker rejects client attempts to submit `evaluateGoStop` or `resolveNagari`; the browser only presents this result. A rejected browser action recomputes its lock from the latest viewer snapshot rather than assuming rejection grants permission to play.
+
+## Same-month special targeting and shared pacing
+
+Jjok, Ppeok/Ssa-da, and Ttadak now share the same same-month visual rule in Online presentation: when the authority identifies the pending played/drawn pair as a same-month special, the revealed deck card impacts the already-staged played card rather than an ordinary floor target. This preserves the Solo choreography and prevents Ttadak or Ppeok from exposing an irrelevant drawn-card target choice.
+
+The authoritative snapshot chooses `resolveSpecialTurn` before `chooseFloorTarget` for these unresolved same-month special states. Once the special has resolved and the pending turn advances to turn completion, the authority no longer advertises `resolveSpecialTurn`, preventing the same Jjok, Ppeok, or Ttadak capture from being applied twice.
+
+Solo and Online also share one presentation pacing contract for the physical turn sequence:
+
+- hand play to deck action: 330 ms
+- deck reveal pause: 180 ms
+- landed-card cleanup: 180 ms
+- post-capture pause: 190 ms
+
+These values are centralized in `PRESENTATION_PACING` and used by both presentation paths so Online does not compress or accelerate the established Solo rhythm.

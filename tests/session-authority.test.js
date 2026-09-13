@@ -127,3 +127,117 @@ test('authoritative completion atomically evaluates and strictly alternates ordi
   }
   assert.ok(completed>0);assert.ok(completed===20||service.getSnapshot({matchId,viewerId:'alice'}).terminalResult);
 });
+
+
+test('Ttadak skips irrelevant drawn target selection while ordinary two-target draws still choose',()=>{
+  const findScenario=(wanted,prefix)=>{
+    const service=authority({crypto:deterministicCrypto(0x31f2a9c7),trustedRuntime:true});
+
+    for(let attempt=0;attempt<120;attempt++){
+      const match=createReadyMatch(service,`${prefix}-${attempt}`);
+      const trusted=service.readTrustedState(match.matchId);
+
+      if(trusted.turn!=='playerA')continue;
+
+      for(const played of trusted.human.hand){
+        // Avoid Shake/Bomb decision branches; this test is specifically about
+        // post-play draw continuation.
+        if(trusted.human.hand.filter(card=>card.month===played.month).length>=3)continue;
+
+        const matches=engine.matchingCards(trusted.floor,played);
+        const target=matches.length?matches[0]:null;
+
+        let afterPlay,afterDraw;
+        try{
+          afterPlay=engine.applyNormalTurnAction(trusted,{
+            type:'playCard',
+            actorId:'playerA',
+            cardId:played.id,
+            targetId:target?.id||null
+          }).state;
+
+          afterDraw=engine.applyNormalTurnAction(afterPlay,{
+            type:'drawNextCard',
+            actorId:'playerA'
+          }).state;
+        }catch(_){
+          continue;
+        }
+
+        const classification=engine.classifyTurnOutcome(afterDraw,{actorId:'playerA'});
+
+        if(wanted==='ttadak'&&classification.kind==='ttadakCandidate')
+          return {service,match,played,target};
+
+        if(
+          wanted==='ordinary-two-target'&&
+          afterDraw.pendingTurn?.phase==='awaitingFloorTarget'&&
+          afterDraw.pendingTurn?.drawn?.matchIds?.length===2&&
+          afterDraw.pendingTurn.drawn.card.month!==afterDraw.pendingTurn.played.card.month
+        )
+          return {service,match,played,target};
+      }
+    }
+
+    throw new Error(`Unable to find deterministic ${wanted} scenario.`);
+  };
+
+  const runThroughDraw=(scenario,label)=>{
+    const {service,played,target}=scenario;
+    let snapshot=scenario.match;
+
+    let result=submit(
+      service,snapshot,'alice',`${label}-attempt`,
+      {type:'attemptPlayCard',cardId:played.id}
+    );
+    snapshot=result.snapshot;
+    assert.equal(snapshot.state.pendingDecision,undefined);
+
+    result=submit(
+      service,snapshot,'alice',`${label}-play`,
+      {type:'playCard',cardId:played.id,targetId:target?.id||null}
+    );
+    snapshot=result.snapshot;
+    assert.equal(snapshot.nextAction?.type,'drawNextCard');
+
+    result=submit(
+      service,snapshot,'alice',`${label}-draw`,
+      {type:'drawNextCard'}
+    );
+
+    return {service,actor:result.snapshot};
+  };
+
+  const ttadak=runThroughDraw(findScenario('ttadak','ttadak-scenario'),'ttadak');
+  const ttadakOpponent=ttadak.service.getSnapshot({
+    matchId:ttadak.actor.matchId,
+    viewerId:'bob'
+  });
+
+  assert.equal(ttadak.actor.nextAction?.type,'resolveSpecialTurn');
+  assert.equal(ttadak.actor.nextAction?.source,undefined);
+  assert.equal(ttadakOpponent.nextAction,null);
+  assert.equal(ttadak.actor.state.pendingDecision,undefined);
+  assert.equal(ttadakOpponent.state.pendingDecision,undefined);
+  assert.deepEqual(ttadak.actor.state.floor,ttadakOpponent.state.floor);
+
+  const resolvedSpecial=submit(
+    ttadak.service,
+    ttadak.actor,
+    'alice',
+    'ttadak-resolve-once',
+    {type:'resolveSpecialTurn'}
+  );
+
+  assert.equal(resolvedSpecial.snapshot.nextAction?.type,'completeTurn');
+  assert.notEqual(resolvedSpecial.snapshot.nextAction?.type,'resolveSpecialTurn');
+
+  const ordinary=runThroughDraw(
+    findScenario('ordinary-two-target','ordinary-target-scenario'),
+    'ordinary'
+  );
+
+  assert.equal(ordinary.actor.nextAction?.type,'chooseFloorTarget');
+  assert.equal(ordinary.actor.nextAction?.source,'drawn');
+  assert.equal(ordinary.actor.nextAction?.legalTargetIds.length,2);
+});
