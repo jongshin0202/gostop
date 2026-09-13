@@ -2310,13 +2310,49 @@ test('deterministic Go Stop risk model goes early with a lead, can stop late, an
 
 test('canonical card shell is singular across gameplay and special-event contexts',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
-  const contract=css.match(/\/\* One canonical face[^]*?\.canonical-card-face\{([^}]+)\}/)?.[1]||'';
-  assert.match(contract,/aspect-ratio:var\(--card-aspect\)/);assert.match(contract,/background:#f5efe3/);assert.match(contract,/border:1px solid #b33226/);assert.doesNotMatch(contract,/!important/);
+  const contract=css.match(/\/\* Keep the artwork[^]*?\.canonical-card-face\{([^}]+)\}/)?.[1]||'';
+  assert.match(contract,/aspect-ratio:var\(--card-aspect\)/);assert.match(contract,/background:transparent/);assert.match(contract,/border:0/);assert.doesNotMatch(contract,/!important/);
+  const art=css.match(/\.canonical-card-face>img\{([^}]+)\}/)?.[1]||'',frame=css.match(/\.canonical-card-face::after\{([^}]+)\}/)?.[1]||'';
+  assert.match(art,/width:100%/);assert.match(art,/height:100%/);assert.match(art,/object-fit:contain/);assert.match(art,/background:transparent/);
+  assert.match(frame,/position:absolute/);assert.match(frame,/inset:0/);assert.match(frame,/border:1px solid #b33226/);
   assert.doesNotMatch(css,/\.card,\.physical-card,\.flying-card,\.capture-ghost\{/);
   assert.doesNotMatch(css,/\.deck-draw-front\{[^}]*(?:background|border):/);
   assert.match(source,/createCardEl\(card,'card'\)/);assert.match(source,/card canonical-card-face normal-gameplay-card/);
   const reset=source.slice(source.indexOf('function resetHandPresentationState'),source.indexOf('function fullSizeSourceRect'));
   for(const token of ['stagedCards.clear()','floorSlotReservations.clear()','activeHoveredHandCardId=null','physical-card','floor-slot-proxy'])assert.ok(reset.includes(token),token);
+});
+
+test('Online hand play captures the live source before animation and preserves exact destinations',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  assert.match(transition,/side==='human'\?els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
+  assert.match(transition,/target=state\.floor\.find\(card=>card\.id===step\.targetCardId\)/);
+  assert.match(transition,/incoming\.pendingTurn\?\.played,incoming\.pendingTurn\?\.drawn/);
+  assert.match(transition,/presentation\.floorSlotReservations\.set\(step\.cardId,landingSlot\)/);
+  assert.match(transition,/animateHandCardSlap\(side,event\.card,source,target\)/);
+  const motionTransition=transition.slice(transition.indexOf('let bombEvent=null'));
+  assert.ok(motionTransition.indexOf('getBoundingClientRect()')<motionTransition.indexOf('animateHandCardSlap(side,event.card,source,target)'));
+  assert.ok(motionTransition.indexOf('animateHandCardSlap(side,event.card,source,target)')<motionTransition.indexOf('state=incomingMapped.state'));
+
+  const movement=source.slice(source.indexOf('async function animateHandCardSlap'),source.indexOf('async function animateBombSlap'));
+  assert.ok(movement.indexOf("makePhysicalFace(card,sourceRect,'physical-card moving-card')")<movement.indexOf("node.style.visibility='hidden'"));
+  assert.match(movement,/target \? overlapLanding\(target\) : await freeFloorLanding\(card\)/);
+  const staged=source.slice(source.indexOf('async function stageHandCardForChoice'),source.indexOf('function cleanupStagedCard'));
+  assert.ok(staged.indexOf("makePhysicalFace(card,full,'physical-card moving-card')")<staged.indexOf("node.style.visibility='hidden'"));
+});
+
+test('Online authoritative actors remap viewer-relatively without changing card targeting data',()=>{
+  const event={type:'cardsCaptured',actorId:'playerA',fromPlayerId:'playerB',source:'drawn',targetId:'m3-2',cardIds:['m3-1','m3-2']};
+  assert.deepEqual(JSON.parse(JSON.stringify(api.onlineValueForViewer(event,'playerA'))),event);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.onlineValueForViewer(event,'playerB'))),{...event,actorId:'playerB',fromPlayerId:'playerA'});
+  for(const [viewerId,actorId,expectedSide] of [
+    ['playerA','playerA','human'],['playerA','playerB','ai'],
+    ['playerB','playerB','human'],['playerB','playerA','ai']
+  ]){
+    const mapped=api.onlineValueForViewer({type:'cardPlayed',actorId,card:{id:'m2-1'},targetId:'m2-2'},viewerId);
+    assert.equal(api.legacySideForPlayerId(mapped.actorId),expectedSide);
+    assert.equal(mapped.card.id,'m2-1');assert.equal(mapped.targetId,'m2-2');
+  }
 });
 
 test('every face-up dialog and event card preserves the canonical 76 by 123 ratio',()=>{

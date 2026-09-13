@@ -11,8 +11,16 @@ test('presentation planner assigns one movement owner to normal played and drawn
   const draw={type:'deckCardRevealed',actorId:'playerA',card:card('m3-1'),targetId:'m3-2',matchCount:1};
   const plan=planOnlinePresentation([played,draw]);
   assert.equal(plan.steps.filter(step=>step.kind==='handSlap').length,1);
+  assert.equal(plan.steps.find(step=>step.kind==='handSlap').targetCardId,'m2-2');
   assert.equal(plan.steps.filter(step=>step.kind==='deckFlip').length,1);
   assert.equal(plan.steps.filter(step=>step.kind==='stageSlap'&&step.cardId==='m3-1').length,1);
+});
+
+test('unmatched hand play keeps one hand movement owner and no inferred target',()=>{
+  const plan=planOnlinePresentation([{type:'cardPlayed',actorId:'playerA',card:card('m2-1'),targetId:null,matchCount:0}]);
+  assert.deepEqual(plan.steps.map(step=>step.kind),['handSlap']);
+  assert.equal(plan.steps[0].cardId,'m2-1');
+  assert.equal(plan.steps[0].targetCardId,null);
 });
 
 test('target selection continues an existing stage without replaying departure or flip',()=>{
@@ -20,10 +28,17 @@ test('target selection continues an existing stage without replaying departure o
   assert.deepEqual(first.steps.map(step=>step.kind),['handStage']);
   const chosen=planOnlinePresentation([{type:'floorTargetChosen',actorId:'playerA',source:'played',targetId:'m2-2'}],first.stages);
   assert.deepEqual(chosen.steps.map(step=>step.kind),['stageSlap']);
+  assert.equal(chosen.steps[0].cardId,'m2-1');
+  assert.equal(chosen.steps[0].targetCardId,'m2-2');
+  assert.equal(chosen.steps.filter(step=>step.kind==='handSlap'||step.kind==='handStage').length,0);
+
   const revealed=planOnlinePresentation([{type:'deckCardRevealed',actorId:'playerA',card:card('m3-1'),targetId:null,matchCount:2}]);
   assert.deepEqual(revealed.steps.map(step=>step.kind),['deckFlip']);
   const drawChosen=planOnlinePresentation([{type:'floorTargetChosen',actorId:'playerA',source:'drawn',targetId:'m3-2'}],revealed.stages);
   assert.deepEqual(drawChosen.steps.map(step=>step.kind),['stageSlap']);
+  assert.equal(drawChosen.steps[0].cardId,'m3-1');
+  assert.equal(drawChosen.steps[0].targetCardId,'m3-2');
+  assert.equal(drawChosen.steps.filter(step=>step.kind==='deckFlip').length,0);
 });
 
 test('capture and landing events clean staged ownership for both viewers',()=>{

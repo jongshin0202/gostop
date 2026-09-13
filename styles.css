@@ -418,9 +418,10 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
   .opponent-zone{grid-template-columns:115px 1fr!important;padding:0 4px!important;}
   .cpu-capture-panel{grid-column:1/3!important;justify-self:stretch!important;}
 }
-/* One canonical face owns artwork clipping and the thin frame; wrappers only move it. */
-.canonical-card-face{aspect-ratio:var(--card-aspect);padding:0;background:#f5efe3;border:1px solid #b33226;border-radius:7px;overflow:hidden}
-.canonical-card-face>img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;background:#f5efe3;border-radius:6px}
+/* Keep the artwork at the full canonical geometry; overlay the frame without consuming its box. */
+.canonical-card-face{aspect-ratio:var(--card-aspect);padding:0;background:transparent;border:0;border-radius:7px;overflow:hidden}
+.canonical-card-face>img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;background:transparent;border-radius:7px}
+.canonical-card-face::after{content:"";position:absolute;inset:0;border:1px solid #b33226;border-radius:7px;pointer-events:none}
 .capture-stack{height:72px;overflow:visible!important;padding-block:2px}
 .captured-mini{width:41px!important;height:auto!important;aspect-ratio:var(--card-aspect);overflow:visible!important}
 .capture-flight-card{width:var(--card-w)!important;height:var(--card-h)!important}
