@@ -110,6 +110,17 @@ test('quit ends both views, persists across reconnect, and rejects gameplay',asy
   const reconnectCore=new RoomCore({storage:core.storage,cryptoApi:webcrypto});await reconnectCore.load();const reconnect=new Socket();await reconnectCore.connect(b.credential,reconnect);assert.equal(reconnect.last('snapshot').snapshot.sessionFlow.ended,true);const rejected=await reconnectCore.handle(reconnect,flowAction('play-after-end',{type:'attemptPlayCard',cardId:'m1-1'}));assert.equal(rejected.error.code,'SESSION_ENDED');
 });
 
+test('ended rooms reject new joins as missing while active room join contracts remain unchanged',async()=>{
+  const waiting=makeRoom(),host=await waiting.create('ABCDEFGHJK2345'),guest=await waiting.join();assert.equal(guest.seatId,'playerB');
+  await assert.rejects(waiting.join(),error=>error.code==='ROOM_FULL'&&error.message==='Room is full.'&&error.status===409);
+  const hostSocket=new Socket();await waiting.connect(host.credential,hostSocket);await waiting.handle(hostSocket,flowAction('quit-before-rejoin',{type:'quitGame'}));
+  await assert.rejects(waiting.join(),error=>error.code==='ROOM_NOT_FOUND'&&error.message==='Room does not exist or has expired.'&&error.status===404);
+  const reconnect=new Socket();await waiting.connect(guest.credential,reconnect);assert.equal(reconnect.last('snapshot').snapshot.sessionFlow.ended,true);
+
+  const legacyStatus=makeRoom();await legacyStatus.create('ABCDEFGHJK2346');legacyStatus.room.status='ended';
+  await assert.rejects(legacyStatus.join(),error=>error.code==='ROOM_NOT_FOUND'&&error.status===404);
+});
+
 test('online browser mode has a fail-closed authority boundary and no AI turn path',()=>{
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8');
   assert.match(source,/if\(onlineMode\)throw new Error\('Online authoritative actions must use the WebSocket authority\.'\);/);
