@@ -95,7 +95,7 @@ test('online transitions reuse the canonical Solo animation and event presenters
   assert.match(online,/presentKiss\(cardIds\)/);assert.match(online,/playTapTapSound\(\).*showSpecialTransient\('FLUSH!'/s);
   assert.match(online,/showGoCallout\(/);assert.match(online,/presentStopResult\(/);assert.match(online,/presentChongtong\(/);assert.match(online,/presentThreePpeok\(/);
   assert.match(online,/promptGukjinChoice\(/);assert.match(online,/presentNewMilestones\(/);
-  assert.match(online,/planOnlinePresentation\(events,onlineStageState\)[\s\S]*animateHandCardSlap[\s\S]*const mapped=onlineStateFromSnapshot\(snapshot,events\)/);
+  assert.match(online,/planOnlinePresentation\(events,onlineStageState,\{pendingPlayedCard:[\s\S]*animateHandCardSlap[\s\S]*const mapped=onlineStateFromSnapshot\(snapshot,events\)/);
 });
 
 test('online opening and private Shake evidence remain gated and viewer-safe',async()=>{
@@ -107,4 +107,18 @@ test('online opening and private Shake evidence remain gated and viewer-safe',as
 
 test('online identity labels are human-relative while Solo markup remains unchanged',()=>{
   const app=readFileSync(join(__dirname,'..','app.js'),'utf8'),html=readFileSync(join(__dirname,'..','index.html'),'utf8');assert.match(app,/opponentName\.textContent=t\('opponent'\)/);assert.match(app,/opponentAvatar\.textContent=t\('opponent'\)\.slice/);assert.match(app,/t\(onlineMode\?'opponentShakeAck':'shakeAck'\)/);assert.match(html,/>AI<\/div>.*data-i18n="computer">Computer</s);
+});
+
+test('online deterministic authority continuations are buffered before presentation waits',()=>{
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),accepted=source.slice(source.indexOf("adapter.addEventListener('actionAccepted'"),source.indexOf("adapter.addEventListener('actionRejected'"));
+  assert.ok(accepted.indexOf('onlineSubmit(automatic)')<accepted.indexOf('await onlinePresentationQueue'));
+  assert.doesNotMatch(source,/onlineActions\.set\(id,action\);presentation\.locked=true;render\(\)/);
+});
+
+test('turn evaluation is server-owned and browsers do not submit handoff actions',async()=>{
+  const {core,a}=await readyRoom(),socket=new Socket();await core.connect(a.credential,socket);const snapshot=socket.last('snapshot').snapshot;
+  const response=await core.handle(socket,JSON.stringify({type:'action',protocolVersion:1,actionId:'forbidden-evaluation',expectedRevision:snapshot.revision,action:{type:'evaluateGoStop'}}));
+  assert.equal(response.type,'actionRejected');assert.equal(response.error.code,'SERVER_OWNED_ACTION');
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/onlineSubmit\(\{type:'evaluateGoStop'/);assert.doesNotMatch(source,/onlineSubmit\(\{type:'resolveNagari'/);
+  const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));assert.match(rejected,/viewerCanStartTurn\(latestOnlineSnapshot\)/);assert.doesNotMatch(rejected,/presentation\.locked=false/);
 });

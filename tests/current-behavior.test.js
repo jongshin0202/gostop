@@ -2438,3 +2438,8 @@ test('authoritative unmatched deck landing keeps its reserved slot after earlier
   assert.equal(extractedEngine.deserializeGameState(extractedEngine.serializeGameState(state)).floorSlotByCard['m9-3'],reserved);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/reserveFloorSlot\(card,authoritativeSlot\)/);assert.match(source,/floor-slot-proxy canonical-card-face/);
 });
+
+test('physical-motion instrumentation detects render interruption without changing Solo timing',()=>{
+  api.resetPhysicalMotionTrace();api.beginPhysicalMotion();api.notePresentationRender();let trace=api.getPresentationSnapshot();assert.equal(trace.activePhysicalMotions,1);assert.equal(trace.rendersDuringPhysicalMotion,1);api.endPhysicalMotion();api.notePresentationRender();trace=api.getPresentationSnapshot();assert.equal(trace.activePhysicalMotions,0);assert.equal(trace.rendersDuringPhysicalMotion,1);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/runPhysicalMotion\(\(\)=>animateHandCardSlap/);assert.match(source,/runPhysicalMotion\(\(\)=>animateDeckLiftFlip/);assert.match(source,/runPhysicalMotion\(\(\)=>animateStagedSlap/);assert.match(source,/duration=650/);assert.match(source,/duration=500/);assert.match(source,/cubic-bezier\(\.22,\.72,\.17,1\)/);assert.match(source,/cubic-bezier\(\.2,\.7,\.14,1\)/);
+});

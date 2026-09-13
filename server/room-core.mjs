@@ -70,6 +70,7 @@ export class RoomCore{
     }
     try{
       const wasSeen=this.room.eventHistory.some(entry=>entry.actionId===message.actionId&&entry.playerId===participant.playerId);
+      if(message.action.type==='evaluateGoStop'||message.action.type==='resolveNagari')throw Object.assign(new Error('Turn evaluation is owned by the authoritative room.'),{code:'SERVER_OWNED_ACTION'});
       if(message.action.type==='newHand'){
         const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
         if(message.expectedRevision!==current.revision)throw Object.assign(new Error(`Expected revision ${message.expectedRevision}, current revision is ${current.revision}.`),{code:'STALE_REVISION'});

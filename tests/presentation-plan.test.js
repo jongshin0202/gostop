@@ -34,6 +34,11 @@ test('capture and landing events clean staged ownership for both viewers',()=>{
   }
 });
 
+test('Jjok keeps one deck element from flip through impact with the staged played card',()=>{
+  const played=card('m10-3'),drawn=card('m10-4'),plan=planOnlinePresentation([{type:'deckCardRevealed',actorId:'playerA',card:drawn,targetId:null,matchCount:0}],{[played.id]:'landed'},{pendingPlayedCard:played});
+  assert.deepEqual(plan.steps.map(step=>step.kind),['deckFlip','stageSlap']);assert.equal(plan.steps[1].cardId,drawn.id);assert.equal(plan.steps[1].targetCardId,played.id);
+});
+
 test('matching deck capture conserves all 48 authoritative cards with no floor duplicate',()=>{
   const used=new Set(['m1-1','m1-2','m2-1']),remaining=engine.masterDeck.filter(item=>!used.has(item.id)).map(item=>structuredClone(item));
   let state={deck:[card('m1-2'),...remaining],floor:[card('m1-1')],human:player([card('m2-1')]),ai:player([]),floorStacks:{},floorSlotByCard:{'m1-1':0},floorSlotCount:12,startingPlayerId:'playerA',turn:'playerA',winner:null,specialWinner:null,openingSpecialsComplete:true,matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0}};

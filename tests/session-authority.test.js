@@ -7,6 +7,7 @@ const engine=require('../game-engine.js');
 const {createSessionAuthority,AuthorityError}=require('../session-authority.js');
 
 function authority(options={}){return createSessionAuthority({crypto:webcrypto,now:()=> '2026-09-12T00:00:00.000Z',...options});}
+function deterministicCrypto(seed=0x6d2b79f5){let value=seed>>>0;return {getRandomValues(array){for(let index=0;index<array.length;index++){value^=value<<13;value^=value>>>17;value^=value<<5;array[index]=value>>>0;}return array;}};}
 function allVisibleCards(snapshot){
   const state=snapshot.state;
   return [...state.human.hand,...state.human.captured,...(state.ai.hand||[]),...state.ai.captured,...state.floor];
@@ -86,4 +87,43 @@ test('engine remains DOM-free and authority delegates every gameplay action to i
   assert.equal(typeof engine.applyNormalTurnAction,'function');
   const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','session-authority.js'),'utf8');
   assert.match(source,/engine\.applyNormalTurnAction/);assert.match(source,/engine\.applySpecialTurnAction/);assert.match(source,/engine\.applyGoStopAction/);
+});
+
+test('authoritative completion atomically evaluates and strictly alternates ordinary turns',()=>{
+  const service=authority({crypto:deterministicCrypto()}),initial=createReadyMatch(service,'alternation'),matchId=initial.matchId;
+  let revision=initial.revision,actionSequence=0,completed=0,expectedSeat=initial.state.turn;
+  const external=seat=>seat==='playerA'?'alice':'bob';
+  const ownHand=(snapshot,seat)=>seat==='playerA'?snapshot.state.human.hand:snapshot.state.ai.hand;
+  const send=(playerId,action)=>service.submitAction({matchId,playerId,actionId:`alternation-${++actionSequence}`,expectedRevision:revision,action:JSON.parse(JSON.stringify(action))});
+  while(completed<20){
+    const actor=external(expectedSeat),opponent=external(expectedSeat==='playerA'?'playerB':'playerA');
+    const actorView=service.getSnapshot({matchId,viewerId:actor}),opponentView=service.getSnapshot({matchId,viewerId:opponent});revision=actorView.revision;
+    assert.equal(actorView.state.turn,expectedSeat);assert.equal(opponentView.state.turn,expectedSeat);
+    assert.ok(actorView.state.legalActions.includes('attemptPlayCard'));assert.equal(opponentView.state.legalActions.includes('attemptPlayCard'),false);
+    assert.throws(()=>send(opponent,{type:'attemptPlayCard',cardId:'not-the-opponents-turn'}),error=>error.code==='OUT_OF_TURN');
+    const cardId=ownHand(actorView,expectedSeat)[0]?.id;if(!cardId)break;
+    let result=send(actor,{type:'attemptPlayCard',cardId});revision=result.revision;
+    let view=service.getSnapshot({matchId,viewerId:actor});
+    if(view.state.pendingDecision?.type==='shakeDecision'){result=send(actor,{type:'keepShakeSecret'});revision=result.revision;view=result.snapshot;}
+    else if(view.state.pendingDecision?.type==='bombDecision'){result=send(actor,{type:'declineBomb'});revision=result.revision;view=result.snapshot;}
+    result=send(actor,{type:'playCard',cardId});revision=result.revision;
+    for(let guard=0;guard<12&&!result.events.some(event=>event.type==='turnCompleted');guard++){
+      view=service.getSnapshot({matchId,viewerId:actor});const next=view.nextAction;assert.ok(next,`authority stalled after ${completed} completed turns`);
+      const action=next.type==='chooseFloorTarget'?{type:'chooseFloorTarget',source:next.source,targetId:next.legalTargetIds[0]}:next;
+      result=send(actor,action);revision=result.revision;
+    }
+    assert.equal(result.events.filter(event=>event.type==='turnCompleted').length,1);completed++;
+    view=service.getSnapshot({matchId,viewerId:actor});
+    if(view.terminalResult)break;
+    if(view.state.pendingDecision?.type==='goStopDecision'){
+      result=send(actor,{type:'declareGo'});revision=result.revision;view=result.snapshot;
+      if(view.terminalResult)break;
+    }
+    const nextSeat=expectedSeat==='playerA'?'playerB':'playerA';
+    const a=service.getSnapshot({matchId,viewerId:'alice'}),b=service.getSnapshot({matchId,viewerId:'bob'});
+    assert.equal(a.state.turn,nextSeat);assert.equal(b.state.turn,nextSeat);
+    assert.equal(a.state.legalActions.includes('attemptPlayCard'),nextSeat==='playerA');assert.equal(b.state.legalActions.includes('attemptPlayCard'),nextSeat==='playerB');
+    expectedSeat=nextSeat;
+  }
+  assert.ok(completed>0);assert.ok(completed===20||service.getSnapshot({matchId,viewerId:'alice'}).terminalResult);
 });
