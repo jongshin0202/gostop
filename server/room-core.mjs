@@ -76,7 +76,7 @@ export class RoomCore{
         if(!current.terminalResult)throw Object.assign(new Error('The current hand is not complete.'),{code:'HAND_IN_PROGRESS'});
         if(!wasSeen){this.authority.createNewHand({matchId:this.room.matchId});this.room.eventHistory.push({revision:current.revision+1,actionId:message.actionId,playerId:participant.playerId});}
         const revision=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision;this.room.status='ready';this.room.terminalResult=null;
-        for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events:[]}));
+        for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.authority.getSnapshot({matchId:this.room.matchId,viewerId:viewer.playerId}),events:wasSeen?[]:this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:current.revision}).events}));
         await this.persist();const response=envelope('actionAccepted',{actionId:message.actionId,revision,duplicate:wasSeen});this.send(socket,response);return response;
       }
       const result=this.authority.submitAction({matchId:this.room.matchId,playerId:participant.playerId,actionId:message.actionId,expectedRevision:message.expectedRevision,action:message.action});

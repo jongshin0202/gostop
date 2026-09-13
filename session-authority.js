@@ -101,7 +101,7 @@
     }
     function snapshot(match,viewerId){
       if(!match.playerIds.includes(viewerId))throw new AuthorityError('WRONG_PLAYER','Viewer is not a participant in this match.');
-      const seatId=match.seatByPlayer.get(viewerId),projected=engine.projectStateForViewer(match.state,seatId);let nextAction=null;
+      const seatId=match.seatByPlayer.get(viewerId),projected=engine.projectStateForViewer(match.state,seatId);let nextAction=null;if(!match.state.openingSpecialsComplete)projected.legalActions=[];
       if(!match.state.terminalResult&&match.state.pendingTurn?.actorId===seatId){
         const pending=match.state.pendingTurn;
         if(pending.phase==='awaitingDraw')nextAction={type:'drawNextCard'};
