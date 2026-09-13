@@ -38,4 +38,12 @@ Connected play now serializes transitions through `onlinePresentationQueue`. Eac
 
 `showShakeChoice` always derives evidence from the acting viewer's projected hand and the private decision's card IDs. The opponent projection contains neither the decision nor those hidden hand identities. A public `shakeDeclared` event then carries the revealed IDs to both viewers and invokes `presentShakeDeclaration`.
 
-Online labels replace the top `Computer`/`AI` identity with `Opponent`/`OPP` when a network room starts. The checked-in Solo markup and localization attributes remain unchanged until that point.
+Online labels replace the top `Computer`/`AI` identity with the localized `opponent` label and its localized abbreviation when a network room starts. The checked-in Solo markup and localization attributes remain unchanged until that point.
+
+## Normal-turn event ownership
+
+The authority emits each event once; the observed duplication was overlapping browser responsibility, not a repeated server revision. A normal connected turn is: `attemptPlayCard` (no physical event), `cardPlayed`, optional `floorTargetChosen`, `deckCardRevealed`, optional drawn `floorTargetChosen`, one or two `cardLanded`/`cardsCaptured` resolution events, then `turnCompleted`. Each accepted action advances exactly one revision.
+
+`planOnlinePresentation` makes physical ownership explicit: `cardPlayed` owns hand departure (or a single held stage when a target is pending); `deckCardRevealed` owns the one deck lift/flip; `floorTargetChosen` continues the already-existing stage and never repeats departure; `cardsCaptured` owns the capture slide and deletes staging ownership; and `cardLanded` deletes staging ownership as the canonical floor node takes over. Semantic overlays never create another physical card flight.
+
+The phantom matching draw was a stale fixed-position staged DOM clone: the authoritative drawn card existed only in captured cards and never remained on the floor. Explicit capture/landing cleanup now removes both the `presentation.stagedCards` entry and its detached DOM element before the reconciled floor/capture view settles. Authority-level conservation validation independently proves all 48 IDs exist exactly once after every accepted mutation, treating an unresolved pending played/drawn card as an owning location only while it is absent from the canonical zones.

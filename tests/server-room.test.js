@@ -95,7 +95,7 @@ test('online transitions reuse the canonical Solo animation and event presenters
   assert.match(online,/presentKiss\(cardIds\)/);assert.match(online,/playTapTapSound\(\).*showSpecialTransient\('FLUSH!'/s);
   assert.match(online,/showGoCallout\(/);assert.match(online,/presentStopResult\(/);assert.match(online,/presentChongtong\(/);assert.match(online,/presentThreePpeok\(/);
   assert.match(online,/promptGukjinChoice\(/);assert.match(online,/presentNewMilestones\(/);
-  assert.match(online,/for\(const event of events\)[\s\S]*animateHandCardSlap[\s\S]*const mapped=onlineStateFromSnapshot\(snapshot,events\)/);
+  assert.match(online,/planOnlinePresentation\(events,onlineStageState\)[\s\S]*animateHandCardSlap[\s\S]*const mapped=onlineStateFromSnapshot\(snapshot,events\)/);
 });
 
 test('online opening and private Shake evidence remain gated and viewer-safe',async()=>{
@@ -106,5 +106,5 @@ test('online opening and private Shake evidence remain gated and viewer-safe',as
 });
 
 test('online identity labels are human-relative while Solo markup remains unchanged',()=>{
-  const app=readFileSync(join(__dirname,'..','app.js'),'utf8'),html=readFileSync(join(__dirname,'..','index.html'),'utf8');assert.match(app,/opponentName\.textContent='Opponent'/);assert.match(app,/opponentAvatar\.textContent='OPP'/);assert.match(html,/>AI<\/div>.*data-i18n="computer">Computer</s);
+  const app=readFileSync(join(__dirname,'..','app.js'),'utf8'),html=readFileSync(join(__dirname,'..','index.html'),'utf8');assert.match(app,/opponentName\.textContent=t\('opponent'\)/);assert.match(app,/opponentAvatar\.textContent=t\('opponent'\)\.slice/);assert.match(app,/t\(onlineMode\?'opponentShakeAck':'shakeAck'\)/);assert.match(html,/>AI<\/div>.*data-i18n="computer">Computer</s);
 });
