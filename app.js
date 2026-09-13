@@ -1702,9 +1702,10 @@
     const add=(key,titleKey,cards,birds=false)=>{if(cards.length&&!history.has(key)){history.add(key);found.push({key,titleKey,cardIds:cards.map(card=>card.id),birds});}};
     const godori=[2,4,8].map(month=>player.captured.find(card=>card.month===month&&card.flags.includes('godori'))).filter(Boolean);
     if(godori.length===3)add('godori','birdies',godori,true);
+    const stripeTitleKeys={red:'threeStripesRed',blue:'threeStripesBlue',grass:'threeStripesGrass'};
     for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]})){
       const cards=months.map(month=>player.captured.find(card=>card.month===month&&card.ribbonSet===set)).filter(Boolean);
-      if(cards.length===3)add(`stripes-${set}`,'threeStripes',cards);
+      if(cards.length===3)add(`stripes-${set}`,stripeTitleKeys[set],cards);
     }
     const brights=player.captured.filter(card=>card.type==='bright');
     if(brights.length>=5)add('five-brights','fiveBrights',brights.slice(0,5));
@@ -1721,6 +1722,13 @@
       els.milestoneOverlay.classList.remove('show'); els.milestoneOverlay.setAttribute('aria-hidden','true');
       await sleep(120);
     }
+  }
+
+  async function presentOnlineGoStopDecision(decision){
+    presentation.locked=true;render();
+    await presentNewMilestones(decision.playerId);
+    els.decisionText.textContent=`You have ${decision.score} points.`;
+    if(!els.decisionDialog.open)els.decisionDialog.showModal();
   }
 
 
@@ -2110,7 +2118,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
+      executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
@@ -2187,7 +2195,7 @@
       const decision=state.pendingDecision;
       if(decision?.type==='shakeDecision'||decision?.type==='openingTripleDecision'){showShakeChoice(decision);if(!els.shakeDialog.open)els.shakeDialog.showModal();return;}
       if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));if(!els.bombDialog.open)els.bombDialog.showModal();return;}
-      if(decision?.type==='goStopDecision'){els.decisionText.textContent=`You have ${decision.score} points.`;if(!els.decisionDialog.open)els.decisionDialog.showModal();return;}
+      if(decision?.type==='goStopDecision'){await presentOnlineGoStopDecision(decision);return;}
       if(decision?.type==='chooseFloorTarget'){
         const targets=decision.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');
         if(target)onlineSubmit({type:'chooseFloorTarget',source:decision.source,targetId:target.id});return;
