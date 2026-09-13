@@ -49,6 +49,17 @@ test('snapshots protect opponent hands, deck order, and private decisions',()=>{
   else if(b.state.pendingDecision){assert.equal(b.state.pendingDecision.playerId,'playerB');assert.equal(a.state.pendingDecision,undefined);}
 });
 
+test('online Go is public to both viewers and hands the turn to the opposite participant',()=>{
+  for(const actor of ['alice','bob']){
+    const seed=authority({trustedRuntime:true}),created=seed.createMatch({matchId:`go-${actor}`,playerIds:['alice','bob'],startingPlayerId:actor}),record=seed.exportMatch(created.matchId),state=record.state,actorSeat=actor==='alice'?'playerA':'playerB',side=actorSeat==='playerA'?'human':'ai',otherSide=side==='human'?'ai':'human';
+    const all=[...state.human.hand,...state.ai.hand,...state.floor,...state.deck],captured=[];for(const card of all)if(card.type==='pi'&&engine.scorePlayer({...state[side],captured:[...captured,card]}).total<=7)captured.push(card);
+    while(engine.scorePlayer({...state[side],captured}).total<7){const next=all.find(card=>!captured.some(item=>item.id===card.id));captured.push(next);}
+    const remaining=all.filter(card=>!captured.some(item=>item.id===card.id));state[side].captured=captured;state[side].hand=[remaining.shift()];state[otherSide].captured=[];state[otherSide].hand=[remaining.shift()];state.floor=[];state.deck=remaining;state.floorSlotByCard={};state.floorStacks={};state.turn=actorSeat;state.winner=null;state.terminalResult=null;state.openingSpecialsComplete=true;delete state.pendingTurn;const score=engine.scorePlayer(state[side]).total;state.pendingDecision={type:'goStopDecision',audience:'player-private',playerId:actorSeat,score,previousGoScore:0,choices:['go','stop']};state.matchContext.lastScoreBySide[actorSeat]=0;record.state=state;record.events=[];record.actions={};record.revision=0;
+    const service=authority({trustedRuntime:true});service.restoreMatch(record);const result=service.submitAction({matchId:record.id,playerId:actor,actionId:'go',expectedRevision:0,action:{type:'declareGo'}}),other=actor==='alice'?'bob':'alice',otherView=service.getSnapshot({matchId:record.id,viewerId:other});
+    assert.equal(result.events.filter(event=>event.type==='goDeclared').length,1);assert.equal(result.events.find(event=>event.type==='turnHandedOff').toPlayerId,actorSeat==='playerA'?'playerB':'playerA');assert.equal(otherView.state.turn,actorSeat==='playerA'?'playerB':'playerA');assert.equal(otherView.state.legalActions.includes('attemptPlayCard'),true);assert.equal(service.getEventsSince({matchId:record.id,viewerId:other,revision:0}).events.filter(event=>event.type==='goDeclared').length,1);
+  }
+});
+
 test('accepted action advances once; exact duplicate is idempotent and conflicting reuse fails',()=>{
   const service=authority();const current=createReadyMatch(service,'idem');
   const cardId=current.state.human.hand[0].id;

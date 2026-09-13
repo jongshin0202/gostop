@@ -9,6 +9,8 @@ export function parseClientMessage(input){
   if(message.protocolVersion!==PROTOCOL_VERSION)throw Object.assign(new Error(`Protocol version ${PROTOCOL_VERSION} is required.`),{code:'UNSUPPORTED_PROTOCOL'});
   if(!['action','syncRequest','ping'].includes(message.type))throw Object.assign(new Error('Unknown message type.'),{code:'MALFORMED_MESSAGE'});
   if(message.type==='action'&&(typeof message.actionId!=='string'||!message.actionId||!Number.isInteger(message.expectedRevision)||!message.action||typeof message.action!=='object'||Array.isArray(message.action)||typeof message.action.type!=='string'))throw Object.assign(new Error('Action message is malformed.'),{code:'MALFORMED_ACTION'});
+  if(message.type==='action'&&['respondNewGame','cancelNewGame'].includes(message.action.type)&&(typeof message.action.requestId!=='string'||!message.action.requestId))throw Object.assign(new Error('Session-flow requestId is required.'),{code:'MALFORMED_ACTION'});
+  if(message.type==='action'&&message.action.type==='respondNewGame'&&typeof message.action.accept!=='boolean')throw Object.assign(new Error('New Game response must be boolean.'),{code:'MALFORMED_ACTION'});
   if(message.type==='syncRequest'&&(!Number.isInteger(message.sinceRevision)||message.sinceRevision<0))throw Object.assign(new Error('sinceRevision must be a non-negative integer.'),{code:'INVALID_REVISION'});
   return message;
 }

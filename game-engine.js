@@ -297,6 +297,26 @@
     return {type:'bombDecision',audience:'player-private',playerId:actorId,month:card.month,cardIds:cards.map(item=>item.id),floorCardId:floorCard.id,choices:['bomb','playNormally']};
   }
 
+  function executeBombDecision(state,side,actorId,decision){
+    const player=state[side],events=[];
+    const bombCards=decision.cardIds.map(id=>player.hand.find(card=>card.id===id));
+    const floorCard=state.floor.find(card=>card.id===decision.floorCardId);
+    if(bombCards.some(card=>!card)||!floorCard)throw new Error('Bomb decision is stale.');
+    player.hand=player.hand.filter(card=>!decision.cardIds.includes(card.id));
+    player.armedBombMonths=player.armedBombMonths.filter(month=>month!==decision.month);
+    player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
+    removeFloorCardIds(state,[floorCard.id]);player.captured.push(...bombCards,floorCard);
+    player.bombs++;player.bombFreeTurns+=2;
+    events.push({type:'bombDeclared',audience:'public',actorId,month:decision.month,bombCount:player.bombs});
+    events.push({type:'bombCardsPlayed',audience:'public',actorId,cardIds:[...decision.cardIds]});
+    events.push({type:'cardsCaptured',audience:'public',actorId,rule:'bomb',cardIds:[...decision.cardIds,floorCard.id]});
+    transferSingleCards(state,otherPlayerId(actorId),actorId,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'bomb',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
+    events.push({type:'bombBlankTurnsGranted',audience:'public',actorId,count:2,remaining:player.bombFreeTurns});
+    events.push({type:'specialResolved',audience:'public',actorId,rule:'bomb'});
+    state.pendingTurn={phase:'awaitingDraw',mode:'bomb',actorId,nextResolution:null,played:null,drawn:null,sweepResolved:false};
+    return {state,events,pendingDecision:null};
+  }
+
   function firstOpenFloorSlot(state,reserved=[]){
     const used=new Set([...Object.values(state.floorSlotByCard||{}),...reserved]);
     const count=Number.isFinite(state.floorSlotCount)?state.floorSlotCount:12;
@@ -731,10 +751,7 @@
       if(!card)throw new Error('Attempted card is not owned by the actor.');
       if(player.armedBombMonths.includes(card.month)){
         const bombDecision=bombDecisionFor(state,side,actorId,card.id);
-        if(bombDecision){
-          state.pendingDecision=bombDecision;
-          return {state,events,pendingDecision:serializeGameState(bombDecision)};
-        }
+        if(bombDecision)return executeBombDecision(state,side,actorId,bombDecision);
         player.armedBombMonths=player.armedBombMonths.filter(month=>month!==card.month);
       }
       const eligible=player.hand.filter(item=>item.month===card.month).length===3&&player.hiddenTripleMonths.includes(card.month)&&!player.shakenMonths.includes(card.month)&&!player.resolvedOpeningTripleMonths.includes(card.month);
@@ -798,23 +815,7 @@
       if(decision.playerId!==actorId)throw new Error('The Bomb decision belongs to another player.');
       delete state.pendingDecision;
       if(action.type==='declineBomb')return {state,events,pendingDecision:null,resumePlay:{actorId,cardId:decision.cardIds[0]}};
-      const bombCards=decision.cardIds.map(id=>player.hand.find(card=>card.id===id));
-      const floorCard=state.floor.find(card=>card.id===decision.floorCardId);
-      if(bombCards.some(card=>!card)||!floorCard)throw new Error('Bomb decision is stale.');
-      player.hand=player.hand.filter(card=>!decision.cardIds.includes(card.id));
-      player.armedBombMonths=player.armedBombMonths.filter(month=>month!==decision.month);
-      player.hiddenTripleMonths=player.hiddenTripleMonths.filter(month=>month!==decision.month);
-      removeFloorCardIds(state,[floorCard.id]);
-      player.captured.push(...bombCards,floorCard);
-      player.bombs++; player.bombFreeTurns+=2;
-      events.push({type:'bombDeclared',audience:'public',actorId,month:decision.month,bombCount:player.bombs});
-      events.push({type:'bombCardsPlayed',audience:'public',actorId,cardIds:[...decision.cardIds]});
-      events.push({type:'cardsCaptured',audience:'public',actorId,rule:'bomb',cardIds:[...decision.cardIds,floorCard.id]});
-      transferSingleCards(state,otherPlayerId(actorId),actorId,1).forEach(cardId=>events.push({type:'piTransferred',audience:'public',actorId,reason:'bomb',cardId,fromPlayerId:otherPlayerId(actorId),toPlayerId:actorId}));
-      events.push({type:'bombBlankTurnsGranted',audience:'public',actorId,count:2,remaining:player.bombFreeTurns});
-      events.push({type:'specialResolved',audience:'public',actorId,rule:'bomb'});
-      state.pendingTurn={phase:'awaitingDraw',mode:'bomb',actorId,nextResolution:null,played:null,drawn:null,sweepResolved:false};
-      return {state,events,pendingDecision:null};
+      return executeBombDecision(state,side,actorId,decision);
     }
 
     if(action.type==='useBombBlank'){

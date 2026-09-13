@@ -2008,9 +2008,8 @@ test('November and December Shakes multiply by four and compound with normal Sha
 test('an armed opening Bomb intercepts any armed card before normal play and executes all three',()=>{
   let state=stateWith({turn:'playerA',startingPlayerId:'playerA',floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3')}),ai:api.makePlayer({captured:[card('m7-3')]})});api.initFloorSlots(state);
   state=extractedEngine.resolveOpeningState(state).state;state=extractedEngine.applyNormalTurnAction(state,{type:'declareBomb',actorId:'playerA'}).state;
-  const attempt=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-2'});
-  assert.equal(attempt.pendingDecision.type,'bombDecision');assert.equal(attempt.state.pendingTurn,undefined);
-  const bomb=extractedEngine.applyNormalTurnAction(attempt.state,{type:'declareBomb',actorId:'playerA'});
+  const bomb=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-2'});
+  assert.equal(bomb.pendingDecision,null);assert.equal(bomb.state.pendingTurn.mode,'bomb');
   assert.equal(bomb.state.human.hand.length,0);assert.deepEqual(bomb.state.human.captured.slice(0,4).map(card=>card.id),['m6-1','m6-2','m6-3','m6-4']);assert.equal(bomb.state.human.bombFreeTurns,2);assert.equal(bomb.events.filter(event=>event.type==='piTransferred').length,1);
 });
 
@@ -2030,13 +2029,43 @@ test('tutorial Overview renders every four-card month family through canonical c
 
 test('New Game confirmation rejection preserves authority while acceptance resets the session seam',()=>{
   const original=stateWith({human:api.makePlayer({hand:[card('m1-1')]})});api.setState(original);const before=JSON.stringify(api.getState());assert.equal(api.confirmNewGame(false),false);assert.equal(JSON.stringify(api.getState()),before);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("newGameBtn.addEventListener('click',()=>els.newGameDialog.showModal())"),true);assert.equal(source.includes('resetSession();startGame()'),true);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("optionsNewGameBtn.addEventListener('click'"),true);assert.equal(source.includes('resetSession();startGame()'),true);
 });
 
 test('Online New Game submits to server authority without creating a local game',()=>{
   const original=stateWith({human:api.makePlayer({hand:[card('m1-1')]})}),submitted=[];api.setState(original);api.setOnlineMode(true);api.setOnlineSubmit(action=>submitted.push(action));
-  assert.equal(api.confirmNewGame(true),true);assert.equal(JSON.stringify(submitted),JSON.stringify([{type:'newGame'}]));assert.equal(api.getState(),original);
+  assert.equal(api.confirmNewGame(true),true);assert.equal(JSON.stringify(submitted),JSON.stringify([{type:'requestNewGame'}]));assert.equal(api.getState(),original);
   api.setOnlineMode(false);
+});
+
+test('multiplayer flow UI and Go submission remain authoritative and fail closed',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.match(html,/id="optionsMenu"[^]*id="optionsNewGameBtn"[^]*id="optionsQuitBtn"/);
+  for(const id of ['replayWaitingDialog','quitPlayingBtn','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','opponentEndedDialog'])assert.ok(html.includes(`id="${id}"`),id);
+  assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareGo'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
+  assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareStop'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
+  assert.equal(api.canSubmitPlayAgain({terminalResult:{winnerId:'playerA'}}),true);
+  assert.equal(api.canSubmitPlayAgain({terminalResult:null}),false);
+  assert.equal(api.canSubmitPlayAgain(null),false);
+  assert.match(source,/if\(canSubmitPlayAgain\(latestOnlineSnapshot\)\)return !!onlineSubmit\(\{type:'playAgainReady'\}\)/);
+  assert.match(source,/if\(els\.resultDialog\?\.open\)els\.resultDialog\.close\(\)/);
+  assert.doesNotMatch(source,/onlineSubmit\(\{type:'newHand'\}/);
+});
+
+test('rejected room-flow actions resync authority while gameplay rejections remain fail closed',()=>{
+  for(const type of ['playAgainReady','requestNewGame','respondNewGame','cancelNewGame','quitGame'])assert.equal(api.isOnlineSessionFlowAction({type}),true);
+  assert.equal(api.isOnlineSessionFlowAction({type:'attemptPlayCard'}),false);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));
+  assert.ok(rejected.indexOf('presentation.locked=true;render()')<rejected.indexOf('if(isOnlineSessionFlowAction(action))adapter.sync()'));
+  assert.doesNotMatch(rejected,/presentation\.locked=false/);
+});
+
+test('Online presentation bookkeeping is bounded and automatic actions wait for presentation',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.match(source,/onlinePresentedEvents\.size>256/);assert.match(source,/onlinePresentedEvents\.delete/);assert.match(source,/onlinePresentedEvents\.clear\(\)/);
+  assert.match(source,/if\(presentation\.goCalloutTimer\)clearTimeout/);
+  const accepted=source.slice(source.indexOf("adapter.addEventListener('actionAccepted'"),source.indexOf("adapter.addEventListener('actionRejected'"));assert.ok(accepted.indexOf('await onlinePresentationQueue')<accepted.indexOf('onlineSubmit(automatic)'));
 });
 
 test('mode-aware localization refreshes Online opponent labels in both directions and preserves Solo Computer',()=>{
@@ -2291,9 +2320,8 @@ test('opening Keep for Bomb arms authority and any of the three cards triggers t
     const armed=extractedEngine.applyNormalTurnAction(state,{type:'armOpeningBomb',actorId:'playerA'}).state;
     assert.deepEqual(armed.human.armedBombMonths,[5]);assert.equal(armed.human.hand.length,3);assert.equal(armed.turn,'playerB');assert.equal(armed.startingPlayerId,'playerB');
     const restored=extractedEngine.deserializeGameState(extractedEngine.serializeGameState(armed));restored.floor=[card('m5-4')];restored.floorSlotByCard={'m5-4':0};restored.floorSlotCount=1;restored.turn='playerA';
-    const pending=extractedEngine.applyNormalTurnAction(restored,{type:'attemptPlayCard',actorId:'playerA',cardId:trigger});
-    assert.deepEqual(new Set(pending.pendingDecision.cardIds),new Set(['m5-1','m5-2','m5-3']));
-    const bomb=extractedEngine.applyNormalTurnAction(pending.state,{type:'declareBomb',actorId:'playerA'}).state;
+    const result=extractedEngine.applyNormalTurnAction(restored,{type:'attemptPlayCard',actorId:'playerA',cardId:trigger});assert.equal(result.pendingDecision,null);assert.equal(result.events.filter(event=>event.type==='bombDeclared').length,1);
+    const bomb=result.state;
     assert.equal(bomb.human.hand.length,0);assert.deepEqual(new Set(bomb.human.captured.map(c=>c.id)),new Set(['m5-1','m5-2','m5-3','m5-4','m1-3']));assert.equal(bomb.human.bombs,1);assert.equal(bomb.human.bombFreeTurns,2);assert.deepEqual(bomb.human.armedBombMonths,[]);assert.deepEqual(bomb.ai.captured.map(c=>c.id),['m2-3']);
   }
 });
@@ -2455,8 +2483,7 @@ test('declining Shake keeps a targetless triple ordinary while valid Bomb legali
   const kept=extractedEngine.applyNormalTurnAction(attempted.state,{type:'keepShakeSecret',actorId:'playerA'});assert.equal(kept.pendingDecision,null);assert.equal(kept.state.human.shakes,0);assert.equal(kept.state.human.bombs,0);
   const played=extractedEngine.applyNormalTurnAction(kept.state,{type:'playCard',actorId:'playerA',cardId:'m6-2'});assert.equal(played.events[0].type,'cardPlayed');assert.equal(played.events.some(event=>event.type==='bombDeclared'),false);
   state=stateWith({floor:[card('m6-4')],human:api.makePlayer({hand:cards('m6-1','m6-2','m6-3'),hiddenTripleMonths:[6],armedBombMonths:[6]})});api.initFloorSlots(state);
-  attempted=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-3'});assert.equal(attempted.pendingDecision.type,'bombDecision');
-  const bomb=extractedEngine.applyNormalTurnAction(attempted.state,{type:'declareBomb',actorId:'playerA'});assert.equal(bomb.events.filter(event=>event.type==='bombDeclared').length,1);assert.equal(bomb.state.human.bombs,1);assert.equal(bomb.state.human.bombFreeTurns,2);
+  const bomb=extractedEngine.applyNormalTurnAction(state,{type:'attemptPlayCard',actorId:'playerA',cardId:'m6-3'});assert.equal(bomb.pendingDecision,null);assert.equal(bomb.events.filter(event=>event.type==='bombDeclared').length,1);assert.equal(bomb.state.human.bombs,1);assert.equal(bomb.state.human.bombFreeTurns,2);
 });
 
 test('AI Bomb selection requires a current floor target and stale UI Bomb intent clears before normal fallback',()=>{
