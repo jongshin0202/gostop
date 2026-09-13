@@ -34,6 +34,31 @@ test('capture and landing events clean staged ownership for both viewers',()=>{
   }
 });
 
+test('same-month Jjok, Ppeok, and Ttadak keep the drawn card aimed at the staged played card',()=>{
+  const played=card('m10-3'),drawn=card('m10-4'),ordinaryFloorTarget=card('m10-1');
+  for(const scenario of [
+    {name:'Jjok',targetId:null,matchCount:0},
+    {name:'Ppeok',targetId:ordinaryFloorTarget.id,matchCount:1},
+    {name:'Ttadak',targetId:ordinaryFloorTarget.id,matchCount:2}
+  ]){
+    const plan=planOnlinePresentation(
+      [{type:'deckCardRevealed',actorId:'playerA',card:drawn,targetId:scenario.targetId,matchCount:scenario.matchCount}],
+      {[played.id]:'landed'},
+      {pendingPlayedCard:played,sameMonthSpecial:true}
+    );
+    assert.deepEqual(plan.steps.map(step=>step.kind),['deckFlip','stageSlap'],scenario.name);
+    assert.equal(plan.steps[1].cardId,drawn.id,scenario.name);
+    assert.equal(plan.steps[1].targetCardId,played.id,scenario.name);
+  }
+
+  const ordinary=planOnlinePresentation(
+    [{type:'deckCardRevealed',actorId:'playerA',card:drawn,targetId:ordinaryFloorTarget.id,matchCount:1}],
+    {},
+    {pendingPlayedCard:played,sameMonthSpecial:false}
+  );
+  assert.equal(ordinary.steps[1].targetCardId,ordinaryFloorTarget.id);
+});
+
 test('matching deck capture conserves all 48 authoritative cards with no floor duplicate',()=>{
   const used=new Set(['m1-1','m1-2','m2-1']),remaining=engine.masterDeck.filter(item=>!used.has(item.id)).map(item=>structuredClone(item));
   let state={deck:[card('m1-2'),...remaining],floor:[card('m1-1')],human:player([card('m2-1')]),ai:player([]),floorStacks:{},floorSlotByCard:{'m1-1':0},floorSlotCount:12,startingPlayerId:'playerA',turn:'playerA',winner:null,specialWinner:null,openingSpecialsComplete:true,matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0}};

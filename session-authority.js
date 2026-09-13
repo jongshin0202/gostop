@@ -99,20 +99,38 @@
       if(action.type==='resolveThreePpeok')return engine.resolveThreePpeok(state,action);
       throw new AuthorityError('MALFORMED_ACTION',`Unknown action type: ${action.type}`);
     }
+    function dispatchAuthoritative(match,action){
+      const state=match.state;
+      const initial=dispatch(state,action);
+      if(match.gameMode!=='online-2player'||action.type!=='completeTurn')return initial;
+      const evaluated=engine.evaluateGoStop(initial.state,{actorId:action.actorId});
+      let result={...evaluated,events:[...(initial.events||[]),...(evaluated.events||[])]};
+      if(evaluated.requiresNagari){
+        const nagari=engine.resolveNagari(evaluated.state,{actorId:action.actorId});
+        result={...nagari,requiresNagari:false,events:[...result.events,...(nagari.events||[])]};
+      }
+      return result;
+    }
     function snapshot(match,viewerId){
       if(!match.playerIds.includes(viewerId))throw new AuthorityError('WRONG_PLAYER','Viewer is not a participant in this match.');
       const seatId=match.seatByPlayer.get(viewerId),projected=engine.projectStateForViewer(match.state,seatId);let nextAction=null;if(!match.state.openingSpecialsComplete)projected.legalActions=[];
       if(!match.state.terminalResult&&match.state.pendingTurn?.actorId===seatId){
         const pending=match.state.pendingTurn;
         if(pending.phase==='awaitingDraw')nextAction={type:'drawNextCard'};
-        else if(pending.phase==='awaitingFloorTarget'){
-          const source=pending.played?.targetId?'drawn':'played',entry=source==='played'?pending.played:pending.drawn;
-          nextAction={type:'chooseFloorTarget',source,legalTargetIds:[...entry.matchIds]};
+        else {
+          const classification=pending.played&&pending.drawn?engine.classifyTurnOutcome(match.state,{actorId:seatId}):null;
+          const sameMonthSpecialPhase=pending.phase==='awaitingFloorTarget'||pending.phase==='awaitingNormalResolution';
+          const sameMonthSpecial=sameMonthSpecialPhase&&classification&&['jjokCandidate','ppeokSsaDaCandidate','ttadakCandidate'].includes(classification.kind);
+          if(sameMonthSpecial)nextAction={type:'resolveSpecialTurn'};
+          else if(pending.phase==='awaitingFloorTarget'){
+            const drawnNeedsTarget=pending.drawn&&!pending.drawn.resolved&&pending.drawn.matchIds.length>1&&!pending.drawn.targetId;
+            const source=drawnNeedsTarget?'drawn':'played',entry=source==='played'?pending.played:pending.drawn;
+            nextAction={type:'chooseFloorTarget',source,legalTargetIds:[...entry.matchIds]};
+          }else if(pending.phase==='awaitingNormalResolution'){
+            const normalClassification=classification||engine.classifyTurnOutcome(match.state,{actorId:seatId});
+            nextAction=normalClassification.kind==='normal'?{type:'resolveNormalCard',source:pending.nextResolution}:{type:'resolveSpecialTurn'};
+          }else if(pending.phase==='awaitingTurnCompletion')nextAction={type:'completeTurn'};
         }
-        else if(pending.phase==='awaitingNormalResolution'){
-          const classification=engine.classifyTurnOutcome(match.state,{actorId:seatId});
-          nextAction=classification.kind==='normal'?{type:'resolveNormalCard',source:pending.nextResolution}:{type:'resolveSpecialTurn'};
-        }else if(pending.phase==='awaitingTurnCompletion')nextAction={type:'completeTurn'};
       }else if(!match.state.terminalResult&&!match.state.openingSpecialsComplete&&!match.state.pendingDecision&&match.state.turn===seatId)nextAction={type:'resolveOpening'};
       return {matchId:match.id,gameMode:match.gameMode,playerIds:[...match.playerIds],viewerId,seatId,revision:match.revision,state:projected,nextAction,terminalResult:publicTerminal(match,match.state.terminalResult)};
     }
@@ -144,7 +162,7 @@
         const mayActOutOfTurn=match.state.pendingDecision?.type==='openingTripleDecision'&&pendingOwner===seat||request.action.type==='setGukjinMode';
         if(match.state.turn!==seat&&!mayActOutOfTurn)throw new AuthorityError('OUT_OF_TURN','Player cannot act out of turn.');
         let result;
-        try{result=dispatch(match.state,{...clone(request.action),actorId:seat});}
+        try{result=dispatchAuthoritative(match,{...clone(request.action),actorId:seat});}
         catch(error){if(error instanceof AuthorityError)throw error;throw new AuthorityError('ILLEGAL_ACTION',error.message);}
         engine.assertCardConservation(result.state);match.state=result.state;match.revision++;
         if(match.state.terminalResult&&!match.completedAt)match.completedAt=now();
