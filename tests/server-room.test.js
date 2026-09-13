@@ -81,6 +81,30 @@ test('online browser mode has a fail-closed authority boundary and no AI turn pa
   assert.match(source,/if\(onlineMode\)throw new Error\('Online authoritative actions must use the WebSocket authority\.'\);/);
   assert.match(source,/async function aiTurn\(\)\{\s*if\(onlineMode\)return;/);
   assert.match(source,/function scheduleTurnStart\(\)\{[\s\S]*?if\(onlineMode\)return;/);
-  for(const type of ['attemptPlayCard','useBombBlank','declareShake','keepShakeSecret','declareBomb','declineBomb','declareGo','declareStop','setGukjinMode','newHand'])assert.match(source,new RegExp(`onlineSubmit\\(\\{type:'${type}'`));
-  assert.match(source,/presentSemanticEvents\(events\)/);assert.match(source,/state=\{\.\.\.projected/);assert.match(source,/authoritative server\. Reconnect before playing/);
+  for(const type of ['attemptPlayCard','useBombBlank','declareShake','declareBomb','declineBomb','declareGo','declareStop','setGukjinMode','newHand'])assert.match(source,new RegExp(`onlineSubmit\\(\\{type:'${type}'`));
+  assert.match(source,/'keepShakeSecret'/);assert.match(source,/presentSemanticEvents\(\[event\]\)/);assert.match(source,/state:\{\.\.\.projected/);assert.match(source,/authoritative server\. Reconnect before playing/);
+});
+
+test('online transitions reuse the canonical Solo animation and event presenters',()=>{
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),online=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  assert.match(online,/animateHandCardSlap\(side,event\.card,source,target\)/);
+  assert.match(online,/side==='human'.*approximateAiSource\(\)/s);
+  assert.match(online,/animateDeckLiftFlip\(side,event\.card\)/);assert.match(online,/animateStagedSlap\(/);
+  assert.match(online,/animateCaptureBatch\(/);assert.match(online,/presentPiTransferEvents\(/);
+  assert.match(online,/presentShakeDeclaration\(/);assert.match(online,/animateBombSlap\(/);assert.match(online,/presentSemanticEvents\(\[event\]\)/);
+  assert.match(online,/presentKiss\(cardIds\)/);assert.match(online,/playTapTapSound\(\).*showSpecialTransient\('FLUSH!'/s);
+  assert.match(online,/showGoCallout\(/);assert.match(online,/presentStopResult\(/);assert.match(online,/presentChongtong\(/);assert.match(online,/presentThreePpeok\(/);
+  assert.match(online,/promptGukjinChoice\(/);assert.match(online,/presentNewMilestones\(/);
+  assert.match(online,/for\(const event of events\)[\s\S]*animateHandCardSlap[\s\S]*const mapped=onlineStateFromSnapshot\(snapshot,events\)/);
+});
+
+test('online opening and private Shake evidence remain gated and viewer-safe',async()=>{
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8');assert.match(source,/showShakeChoice\(decision\)/);assert.match(source,/decision\.cardIds\|\|state\.human\.hand\.filter/);assert.match(source,/presentation\.locked=true/);
+  const {core,a,b}=await readyRoom(),sa=new Socket(),sb=new Socket();await core.connect(a.credential,sa);await core.connect(b.credential,sb);const aView=sa.last('snapshot').snapshot,bView=sb.last('snapshot').snapshot;
+  const privateView=aView.state.pendingDecision?aView:bView.state.pendingDecision?bView:null;if(privateView){const other=privateView===aView?bView:aView;assert.equal(privateView.state.pendingDecision.cardIds.length,3);assert.equal(other.state.pendingDecision,undefined);}
+  assert.equal(aView.state.openingSpecialsComplete?true:aView.state.legalActions.includes('attemptPlayCard'),false);
+});
+
+test('online identity labels are human-relative while Solo markup remains unchanged',()=>{
+  const app=readFileSync(join(__dirname,'..','app.js'),'utf8'),html=readFileSync(join(__dirname,'..','index.html'),'utf8');assert.match(app,/opponentName\.textContent='Opponent'/);assert.match(app,/opponentAvatar\.textContent='OPP'/);assert.match(html,/>AI<\/div>.*data-i18n="computer">Computer</s);
 });
