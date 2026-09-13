@@ -2332,13 +2332,27 @@ test('Online hand play captures the live source before animation and preserves e
   assert.match(transition,/animateHandCardSlap\(side,event\.card,source,target\)/);
   const motionTransition=transition.slice(transition.indexOf('let bombEvent=null'));
   assert.ok(motionTransition.indexOf('getBoundingClientRect()')<motionTransition.indexOf('animateHandCardSlap(side,event.card,source,target)'));
-  assert.ok(motionTransition.indexOf('animateHandCardSlap(side,event.card,source,target)')<motionTransition.indexOf('state=mapped.state'));
+  assert.ok(motionTransition.indexOf('animateHandCardSlap(side,event.card,source,target)')<motionTransition.indexOf('state=incomingMapped.state'));
 
   const movement=source.slice(source.indexOf('async function animateHandCardSlap'),source.indexOf('async function animateBombSlap'));
   assert.ok(movement.indexOf("makePhysicalFace(card,sourceRect,'physical-card moving-card')")<movement.indexOf("node.style.visibility='hidden'"));
   assert.match(movement,/target \? overlapLanding\(target\) : await freeFloorLanding\(card\)/);
   const staged=source.slice(source.indexOf('async function stageHandCardForChoice'),source.indexOf('function cleanupStagedCard'));
   assert.ok(staged.indexOf("makePhysicalFace(card,full,'physical-card moving-card')")<staged.indexOf("node.style.visibility='hidden'"));
+});
+
+test('Online authoritative actors remap viewer-relatively without changing card targeting data',()=>{
+  const event={type:'cardsCaptured',actorId:'playerA',fromPlayerId:'playerB',source:'drawn',targetId:'m3-2',cardIds:['m3-1','m3-2']};
+  assert.deepEqual(JSON.parse(JSON.stringify(api.onlineValueForViewer(event,'playerA'))),event);
+  assert.deepEqual(JSON.parse(JSON.stringify(api.onlineValueForViewer(event,'playerB'))),{...event,actorId:'playerB',fromPlayerId:'playerA'});
+  for(const [viewerId,actorId,expectedSide] of [
+    ['playerA','playerA','human'],['playerA','playerB','ai'],
+    ['playerB','playerB','human'],['playerB','playerA','ai']
+  ]){
+    const mapped=api.onlineValueForViewer({type:'cardPlayed',actorId,card:{id:'m2-1'},targetId:'m2-2'},viewerId);
+    assert.equal(api.legacySideForPlayerId(mapped.actorId),expectedSide);
+    assert.equal(mapped.card.id,'m2-1');assert.equal(mapped.targetId,'m2-2');
+  }
 });
 
 test('every face-up dialog and event card preserves the canonical 76 by 123 ratio',()=>{

@@ -123,7 +123,9 @@ test('online transitions reuse the canonical Solo animation and event presenters
   assert.match(online,/presentKiss\(cardIds\)/);assert.match(online,/playTapTapSound\(\).*showSpecialTransient\('FLUSH!'/s);
   assert.match(online,/showGoCallout\(/);assert.match(online,/presentStopResult\(/);assert.match(online,/presentChongtong\(/);assert.match(online,/presentThreePpeok\(/);
   assert.match(online,/promptGukjinChoice\(/);assert.match(online,/presentNewMilestones\(/);
-  assert.match(online,/planOnlinePresentation\(events,onlineStageState,\{pendingPlayedCard:[\s\S]*animateHandCardSlap[\s\S]*const mapped=onlineStateFromSnapshot\(snapshot,events\)/);
+  assert.match(online,/incomingMapped=onlineStateFromSnapshot\(snapshot,events\),presentationEvents=incomingMapped\.events[\s\S]*planOnlinePresentation\(presentationEvents,onlineStageState,\{pendingPlayedCard:[\s\S]*animateHandCardSlap[\s\S]*state=incomingMapped\.state/);
+  assert.match(online,/for\(const event of presentationEvents\)/);
+  assert.match(online,/const actor=presentationEvents\.find/);
 });
 
 test('online opening and private Shake evidence remain gated and viewer-safe',async()=>{
@@ -136,7 +138,7 @@ test('online opening and private Shake evidence remain gated and viewer-safe',as
 test('Online match boundaries own one authoritative viewer-relative dice/deal presentation and canonical unlocking',()=>{
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay')),drive=source.slice(source.indexOf('async function driveOnline'),source.indexOf('function onlineStateFromSnapshot'));
   assert.match(transition,/snapshot\.matchId!==onlinePresentedMatchId/);assert.match(transition,/presentOpeningSequence\(state\.startingPlayerId,true\)/);assert.equal((transition.match(/presentOpeningSequence\(/g)||[]).length,1);assert.doesNotMatch(transition,/presentOpeningSequence\([^)]*false|presentOpeningSequence\(state\.startingPlayerId,true\);await presentDealSequence/);
-  assert.match(source,/starter===PLAYER_A\?t\(onlineMode\?'you':'player'\):t\(onlineMode\?'opponent':'computer'\)/);assert.match(source,/viewerIsB\?swapId\(value\):value/);
+  assert.match(source,/starter===PLAYER_A\?t\(onlineMode\?'you':'player'\):t\(onlineMode\?'opponent':'computer'\)/);assert.match(source,/viewerId===PLAYER_B\?swapId\(item\):item/);
   assert.match(drive,/viewerCanStartTurn\(snapshot\)/);assert.match(drive,/readyState===WebSocket\.OPEN/);assert.ok(drive.indexOf("decision?.type==='shakeDecision'")<drive.indexOf('viewerCanStartTurn(snapshot)'));assert.ok(drive.indexOf('snapshot.nextAction')<drive.indexOf('viewerCanStartTurn(snapshot)'));
   assert.match(source,/function resetOnlinePresentationForMatch[\s\S]*?sessionStats=\{playerA:\{wins:0,points:0\},playerB:\{wins:0,points:0\}\}[\s\S]*?onlineDealPresented=false[\s\S]*?onlinePresentedMatchId=matchId/);
 });

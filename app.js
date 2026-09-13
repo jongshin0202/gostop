@@ -22,6 +22,12 @@
   const PLAYER_B = 'playerB';
   const SOLO_VIEWER_ID = PLAYER_A;
 
+  function onlineValueForViewer(value,viewerId){
+    const swapId=item=>item===PLAYER_A?PLAYER_B:item===PLAYER_B?PLAYER_A:item;
+    const remap=item=>Array.isArray(item)?item.map(remap):item&&typeof item==='object'?Object.fromEntries(Object.entries(item).map(([key,entry])=>[key,remap(entry)])):viewerId===PLAYER_B?swapId(item):item;
+    return remap(value);
+  }
+
   function artUrl(filename) { return COMMONS + encodeURIComponent(filename).replace(/%2F/g,'/'); }
   function preloadCardFace(card){
     if(TEST_MODE)return Promise.resolve();
@@ -2050,6 +2056,7 @@
       playerIds:Object.freeze({playerA:PLAYER_A,playerB:PLAYER_B}),
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
+      onlineValueForViewer,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
       monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
@@ -2124,10 +2131,8 @@
       presentation.locked=!connected||!globalThis.GoStopOnline.viewerCanStartTurn(snapshot);render();
     }
     function onlineStateFromSnapshot(snapshot,rawEvents=[]){
-      const viewerIsB=snapshot.seatId===PLAYER_B,swapId=value=>value===PLAYER_A?PLAYER_B:value===PLAYER_B?PLAYER_A:value;
-      const remap=value=>Array.isArray(value)?value.map(remap):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,remap(item)])):viewerIsB?swapId(value):value;
-      const projected=remap(snapshot.state),bottom=viewerIsB?projected.ai:projected.human,top=viewerIsB?projected.human:projected.ai;
-      return {state:{...projected,human:bottom,ai:{...top,hand:Array.from({length:top.handCount||0},()=>({}))},deck:Array.from({length:projected.deckCount||0},()=>null)},events:rawEvents.map(remap)};
+      const viewerIsB=snapshot.seatId===PLAYER_B,projected=onlineValueForViewer(snapshot.state,snapshot.seatId),bottom=viewerIsB?projected.ai:projected.human,top=viewerIsB?projected.human:projected.ai;
+      return {state:{...projected,human:bottom,ai:{...top,hand:Array.from({length:top.handCount||0},()=>({}))},deck:Array.from({length:projected.deckCount||0},()=>null)},events:onlineValueForViewer(rawEvents,snapshot.seatId)};
     }
     function resetOnlinePresentationForMatch(matchId){
       resetHandPresentationState();presentation.hintCardId=null;
@@ -2139,13 +2144,14 @@
     async function presentOnlineTransition(snapshot,events){
       presentation.locked=true;
       if(snapshot.matchId!==onlinePresentedMatchId)resetOnlinePresentationForMatch(snapshot.matchId);
-      if(!state){const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
-      if(!events.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
+      const incomingMapped=onlineStateFromSnapshot(snapshot,events),presentationEvents=incomingMapped.events;
+      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
+      if(!presentationEvents.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};state=incomingMapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
       let bombEvent=null;
-      const incoming=onlineStateFromSnapshot(snapshot,events).state;
+      const incoming=incomingMapped.state;
       const onlinePlayed=state.pendingTurn?.played?.card,onlineDrawn=state.pendingTurn?.drawn?.card;
       const sameMonthSpecial=snapshot.nextAction?.type==='resolveSpecialTurn'&&onlinePlayed&&onlineDrawn&&onlinePlayed.month===onlineDrawn.month;
-      const plan=globalThis.GoStopPresentationPlan.planOnlinePresentation(events,onlineStageState,{pendingPlayedCard:onlinePlayed,sameMonthSpecial});onlineStageState=plan.stages;
+      const plan=globalThis.GoStopPresentationPlan.planOnlinePresentation(presentationEvents,onlineStageState,{pendingPlayedCard:onlinePlayed,sameMonthSpecial});onlineStageState=plan.stages;
       for(const step of plan.steps){
         const event=step.event,side=legacySideForPlayerId(event.actorId||PLAYER_A);
         if(step.kind==='handSlap'||step.kind==='handStage'){
@@ -2161,10 +2167,10 @@
         else if(step.kind==='landedCleanup')cleanupStagedCard(step.cardId);
         else if(event.type==='piTransferred')await presentPiTransferEvents(side,[event]);
       }
-      const mapped=onlineStateFromSnapshot(snapshot,events);state=mapped.state;onlineLastEvents=mapped.events;render();
+      state=incomingMapped.state;onlineLastEvents=presentationEvents;render();
       for(const cardId of [...presentation.stagedCards.keys()])if(!Object.hasOwn(onlineStageState,cardId))cleanupStagedCard(cardId);
-      if(events.some(event=>event.type==='newHandCreated')){resetHandPresentationState();await presentDealSequence();}
-      for(const event of events){
+      if(presentationEvents.some(event=>event.type==='newHandCreated')){resetHandPresentationState();await presentDealSequence();}
+      for(const event of presentationEvents){
         const side=legacySideForPlayerId(event.actorId||PLAYER_A),cardIds=event.cardIds||[];
         if(event.type==='cardLanded'){removeStage(event.card?.id||event.cardId);await presentationPause('cardLandCleanup');}
         else if(event.type==='shakeDeclared')await presentShakeDeclaration([event]);
@@ -2181,10 +2187,10 @@
         else if(event.type==='threePpeokDeclared')presentThreePpeok({events:[event]});
         else if(event.type==='nagariDeclared'){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');els.resultDialog.showModal();}
       }
-      if(events.some(event=>event.type==='handEnded'))presentStopResult({events});
-      const actor=events.find(event=>event.actorId)?.actorId;if(actor)await promptGukjinChoice(legacySideForPlayerId(actor),events);
-      if(events.some(event=>event.type==='turnCompleted')&&actor)await presentNewMilestones(actor);
-      await driveOnline(snapshot,events);
+      if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
+      const actor=presentationEvents.find(event=>event.actorId)?.actorId;if(actor)await promptGukjinChoice(legacySideForPlayerId(actor),presentationEvents);
+      if(presentationEvents.some(event=>event.type==='turnCompleted')&&actor)await presentNewMilestones(actor);
+      await driveOnline(snapshot,presentationEvents);
     }
     async function submitOnlineCardPlay(){const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?state.floor.filter(item=>item.month===card.month):[];let target=null;if(matches.length===1)target=matches[0];else if(matches.length>1)target=await chooseFloorTarget(matches,'Choose which floor card to hit');if(target||matches.length<2)onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});}
     const beginOnline=async room=>{
@@ -2209,7 +2215,7 @@
       adapter.addEventListener('actionRejected',event=>{onlineActions.delete(event.detail.actionId);onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=true;render();});
       adapter.addEventListener('error',event=>{onlineStatus.textContent=event.detail.message||event.detail.code||'Online connection error.';});adapter.connect();
     };
-    addEventListener('gostop-online-snapshot',event=>{const {snapshot,events}=event.detail;onlinePresentationQueue=onlinePresentationQueue.then(()=>presentOnlineTransition(snapshot,onlineStateFromSnapshot(snapshot,events).events)).catch(error=>{onlineStatus.textContent=error.message;presentation.locked=true;});});
+    addEventListener('gostop-online-snapshot',event=>{const {snapshot,events}=event.detail;onlinePresentationQueue=onlinePresentationQueue.then(()=>presentOnlineTransition(snapshot,events)).catch(error=>{onlineStatus.textContent=error.message;presentation.locked=true;});});
     createOnlineBtn?.addEventListener('click',async()=>{try{onlineStatus.textContent='Creating room…';const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();onlineStatus.textContent=`Share room code: ${room.roomCode}`;await beginOnline(room);}catch(error){onlineStatus.textContent=error.message;}});
     joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();try{onlineStatus.textContent='Joining room…';const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase(),existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null'),room=await adapter.join(code,existing?.credential);await beginOnline(room);els.soloStartOverlay.hidden=true;}catch(error){onlineStatus.textContent=error.message;}});
   }
