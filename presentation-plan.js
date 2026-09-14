@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const FLICK_DEFAULTS=Object.freeze({minDistance:38,maxDuration:420,minSpeed:.16,maxHorizontalRatio:1.2});
+  const FLICK_DEFAULTS=Object.freeze({minDistance:36,maxDuration:500,minSpeed:.14,maxHorizontalRatio:1.35});
 
   function isUpwardFlick(sample,options={}){
     if(!sample)return false;
@@ -25,124 +25,233 @@
       .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
       .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2147482000!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
       .physical-card.moving-card,.capture-flight-card,.sliding-capture{contain:paint}
-      @media (hover:none),(pointer:coarse){#playerHand .hand-card:hover{transform:none!important}}
+      @media (hover:none),(pointer:coarse){
+        #playerHand .hand-card:hover{transform:none!important}
+        #playerHand .hand-card-slot.is-hovered{z-index:40!important}
+        #playerHand .hand-card-slot.is-hovered .hand-card{transform:translate3d(0,-18px,0) rotate(-1deg)!important;box-shadow:0 12px 18px rgba(0,0,0,.38)!important}
+      }
     `;
     (doc.head||doc.documentElement).appendChild(style);
 
-    let gesture=null;
-    let suppressCard=null;
-    let suppressUntil=0;
+    let touchState=null;
+    let bypassClickCard=null;
+    let suppressTouchClicksUntil=0;
 
+    const now=()=>globalThis.performance?.now?.()??Date.now();
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
-    const canStart=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
-    const begin=(card,x,y,time,source,id)=>{
-      if(!canStart(card))return false;
-      restore();
-      const rect=card.getBoundingClientRect();
-      gesture={source,id,card,startX:x,startY:y,lastX:x,lastY:y,startTime:time||performance.now(),startRect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height},ghost:null,previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,moved:false};
+    const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
+    const allHandCards=()=>[...doc.querySelectorAll('#playerHand .hand-card')].filter(canUseCard);
+    const handRect=()=>doc.getElementById('playerHand')?.getBoundingClientRect?.()||null;
+
+    const selectCard=card=>{
+      if(!canUseCard(card))return false;
+      const slot=card.closest('.hand-card-slot');
+      if(!slot)return false;
+      try{slot.dispatchEvent(new Event('pointerenter'));}catch(_){ }
+      doc.querySelectorAll('#playerHand .hand-card-slot').forEach(node=>node.classList.toggle('is-hovered',node===slot));
       return true;
     };
-    const restore=()=>{
-      if(!gesture)return;
-      gesture.ghost?.remove();
-      if(gesture.card){
-        gesture.card.style.visibility=gesture.previousVisibility;
-        gesture.card.style.transform=gesture.previousTransform;
-        gesture.card.style.zIndex=gesture.previousZIndex;
+
+    const nearestHandCard=(x,y)=>{
+      const hand=handRect();
+      if(!hand||y<hand.top-28||y>hand.bottom+24)return null;
+      const cards=allHandCards();
+      let best=null,bestDistance=Infinity;
+      for(const card of cards){
+        const rect=card.getBoundingClientRect();
+        const centerX=rect.left+rect.width/2;
+        const distance=Math.abs(x-centerX);
+        if(distance<bestDistance){best=card;bestDistance=distance;}
       }
-      gesture=null;
+      return best;
     };
-    const ensureGhost=()=>{
-      if(!gesture||gesture.ghost)return gesture?.ghost||null;
-      const {card,startRect}=gesture;
-      const ghost=card.cloneNode(true);
-      ghost.removeAttribute('id');ghost.removeAttribute('disabled');ghost.setAttribute('aria-hidden','true');ghost.tabIndex=-1;
+
+    const removeGhost=state=>{
+      state?.ghost?.remove?.();
+      if(state)state.ghost=null;
+    };
+
+    const restoreDraggedCard=state=>{
+      if(!state)return;
+      removeGhost(state);
+      if(state.card){
+        state.card.style.visibility=state.previousVisibility;
+        state.card.style.transform=state.previousTransform;
+        state.card.style.zIndex=state.previousZIndex;
+      }
+    };
+
+    const setActiveCard=(state,card,x,y)=>{
+      if(!state||!canUseCard(card)||card===state.card)return;
+      restoreDraggedCard(state);
+      selectCard(card);
+      const rect=card.getBoundingClientRect();
+      state.card=card;
+      state.anchorX=x;
+      state.anchorY=y;
+      state.anchorTime=now();
+      state.startRect={left:rect.left,top:rect.top,width:rect.width,height:rect.height};
+      state.previousVisibility=card.style.visibility;
+      state.previousTransform=card.style.transform;
+      state.previousZIndex=card.style.zIndex;
+      state.dragging=false;
+      state.switched=true;
+    };
+
+    const ensureGhost=state=>{
+      if(!state||state.ghost)return state?.ghost||null;
+      const ghost=state.card.cloneNode(true);
+      ghost.removeAttribute('id');
+      ghost.removeAttribute('disabled');
+      ghost.setAttribute('aria-hidden','true');
+      ghost.tabIndex=-1;
       ghost.classList.add('gostop-flick-ghost');
-      ghost.style.left=`${startRect.left}px`;ghost.style.top=`${startRect.top}px`;ghost.style.width=`${startRect.width}px`;ghost.style.height=`${startRect.height}px`;
+      ghost.style.left=`${state.startRect.left}px`;
+      ghost.style.top=`${state.startRect.top}px`;
+      ghost.style.width=`${state.startRect.width}px`;
+      ghost.style.height=`${state.startRect.height}px`;
       ghost.style.transform='translate3d(0,0,0)';
       doc.body.appendChild(ghost);
-      gesture.ghost=ghost;
-      card.style.visibility='hidden';
+      state.ghost=ghost;
+      state.card.style.visibility='hidden';
       return ghost;
     };
-    const move=(x,y,event)=>{
-      if(!gesture)return;
-      gesture.lastX=x;gesture.lastY=y;
-      const up=gesture.startY-y,side=Math.abs(x-gesture.startX);
-      if(up>3&&up>=side*.35){
-        gesture.moved=true;
-        const ghost=ensureGhost();
-        if(ghost){const dx=x-gesture.startX,dy=Math.min(12,y-gesture.startY);ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;}
-        event?.preventDefault?.();
-      }
-    };
-    const finish=(x,y,time,event)=>{
-      if(!gesture)return false;
-      const current=gesture;
-      current.lastX=x;current.lastY=y;
-      const duration=Math.max(1,(time||performance.now())-current.startTime);
-      const flick=isUpwardFlick({startX:current.startX,startY:current.startY,endX:x,endY:y,duration});
-      if(!flick){
-        if(current.moved){event?.preventDefault?.();suppressCard=current.card;suppressUntil=Date.now()+700;}
-        restore();return false;
-      }
-      event?.preventDefault?.();event?.stopImmediatePropagation?.();
-      suppressCard=current.card;suppressUntil=Date.now()+700;
-      const dx=x-current.startX,dy=y-current.startY;
-      current.card.style.visibility='hidden';current.card.style.transform=`translate3d(${dx}px,${dy}px,0)`;current.card.style.zIndex='2147482000';
-      if(current.ghost)current.ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
-      const card=current.card,ghost=current.ghost,previousVisibility=current.previousVisibility,previousTransform=current.previousTransform,previousZIndex=current.previousZIndex;
-      gesture=null;
-      card.click();
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        ghost?.remove();
-        card.style.transform=previousTransform;
-        card.style.zIndex=previousZIndex;
-        if(card.isConnected&&card.style.visibility==='hidden')card.style.visibility=previousVisibility;
-      }));
+
+    const beginTouch=(event,touch,card)=>{
+      if(!canUseCard(card))return false;
+      const slot=card.closest('.hand-card-slot');
+      const wasSelected=!!slot?.classList.contains('is-hovered');
+      selectCard(card);
+      const rect=card.getBoundingClientRect();
+      touchState={
+        id:touch.identifier,
+        card,
+        wasSelected,
+        switched:false,
+        dragging:false,
+        anchorX:touch.clientX,
+        anchorY:touch.clientY,
+        anchorTime:now(),
+        lastX:touch.clientX,
+        lastY:touch.clientY,
+        startRect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height},
+        previousVisibility:card.style.visibility,
+        previousTransform:card.style.transform,
+        previousZIndex:card.style.zIndex,
+        ghost:null
+      };
+      suppressTouchClicksUntil=Date.now()+900;
+      event.preventDefault();
       return true;
     };
+
+    const moveTouch=(event,touch)=>{
+      const state=touchState;
+      if(!state)return;
+      state.lastX=touch.clientX;
+      state.lastY=touch.clientY;
+
+      const up=state.anchorY-touch.clientY;
+      const sideways=Math.abs(touch.clientX-state.anchorX);
+      const verticalIntent=up>=8&&up>=sideways*.65;
+
+      if(!state.dragging&&!verticalIntent){
+        const hovered=nearestHandCard(touch.clientX,touch.clientY);
+        if(hovered&&hovered!==state.card){
+          setActiveCard(state,hovered,touch.clientX,touch.clientY);
+          event.preventDefault();
+          return;
+        }
+      }
+
+      if(!state.dragging&&verticalIntent){
+        state.dragging=true;
+        state.wasSelected=false;
+      }
+
+      if(state.dragging){
+        const ghost=ensureGhost(state);
+        if(ghost){
+          const dx=touch.clientX-state.anchorX;
+          const dy=touch.clientY-state.anchorY;
+          ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
+        }
+      }
+      event.preventDefault();
+    };
+
+    const triggerPlay=card=>{
+      if(!canUseCard(card))return false;
+      bypassClickCard=card;
+      try{card.click();}finally{bypassClickCard=null;}
+      return true;
+    };
+
+    const finishTouch=(event,touch)=>{
+      const state=touchState;
+      if(!state)return;
+      const endX=touch?.clientX??state.lastX;
+      const endY=touch?.clientY??state.lastY;
+      const duration=Math.max(1,now()-state.anchorTime);
+      const flick=state.dragging&&isUpwardFlick({startX:state.anchorX,startY:state.anchorY,endX,endY,duration});
+      const card=state.card;
+      const secondTap=!state.dragging&&!state.switched&&state.wasSelected&&Math.abs(endX-state.anchorX)<8&&Math.abs(endY-state.anchorY)<8;
+
+      restoreDraggedCard(state);
+      touchState=null;
+      event.preventDefault();
+      event.stopPropagation();
+
+      if(flick||secondTap){
+        triggerPlay(card);
+      }else{
+        selectCard(card);
+      }
+    };
+
+    const cancelTouch=event=>{
+      if(!touchState)return;
+      const card=touchState.card;
+      restoreDraggedCard(touchState);
+      touchState=null;
+      event?.preventDefault?.();
+      selectCard(card);
+    };
+
     const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
 
     doc.addEventListener('touchstart',event=>{
       if(event.touches.length!==1)return;
-      const touch=event.touches[0],card=cardFromTarget(event.target);
-      begin(card,touch.clientX,touch.clientY,event.timeStamp,'touch',touch.identifier);
-    },{capture:true,passive:true});
-    doc.addEventListener('touchmove',event=>{
-      if(!gesture||gesture.source!=='touch')return;
-      const touch=touchById(event.touches,gesture.id);if(!touch)return;
-      move(touch.clientX,touch.clientY,event);
-    },{capture:true,passive:false});
-    doc.addEventListener('touchend',event=>{
-      if(!gesture||gesture.source!=='touch')return;
-      const touch=touchById(event.changedTouches,gesture.id);if(!touch){restore();return;}
-      finish(touch.clientX,touch.clientY,event.timeStamp,event);
-    },{capture:true,passive:false});
-    doc.addEventListener('touchcancel',()=>{if(gesture?.source==='touch')restore();},{capture:true,passive:true});
-
-    doc.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='touch')return;
-      if(event.button!=null&&event.button!==0)return;
+      const touch=event.touches[0];
       const card=cardFromTarget(event.target);
-      if(!begin(card,event.clientX,event.clientY,event.timeStamp,'pointer',event.pointerId))return;
-      try{card.setPointerCapture?.(event.pointerId);}catch(_){ }
-    },true);
-    doc.addEventListener('pointermove',event=>{
-      if(!gesture||gesture.source!=='pointer'||event.pointerId!==gesture.id)return;
-      move(event.clientX,event.clientY,event);
+      beginTouch(event,touch,card);
     },{capture:true,passive:false});
-    doc.addEventListener('pointerup',event=>{
-      if(!gesture||gesture.source!=='pointer'||event.pointerId!==gesture.id)return;
-      finish(event.clientX,event.clientY,event.timeStamp,event);
+
+    doc.addEventListener('touchmove',event=>{
+      if(!touchState)return;
+      const touch=touchById(event.touches,touchState.id);
+      if(!touch){cancelTouch(event);return;}
+      moveTouch(event,touch);
     },{capture:true,passive:false});
-    doc.addEventListener('pointercancel',event=>{if(gesture?.source==='pointer'&&event.pointerId===gesture.id)restore();},true);
+
+    doc.addEventListener('touchend',event=>{
+      if(!touchState)return;
+      const touch=touchById(event.changedTouches,touchState.id);
+      finishTouch(event,touch);
+    },{capture:true,passive:false});
+
+    doc.addEventListener('touchcancel',event=>cancelTouch(event),{capture:true,passive:false});
 
     doc.addEventListener('click',event=>{
-      if(!event.isTrusted)return;
       const card=cardFromTarget(event.target);
-      if(card&&card===suppressCard&&Date.now()<suppressUntil){event.preventDefault();event.stopImmediatePropagation();suppressCard=null;suppressUntil=0;}
+      if(!card)return;
+      if(card===bypassClickCard)return;
+      if(Date.now()<suppressTouchClicksUntil){
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     },true);
+
     return true;
   }
 
