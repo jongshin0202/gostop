@@ -6,16 +6,17 @@ const engine=require('../game-engine.js');
 const card=id=>structuredClone(engine.masterDeck.find(item=>item.id===id));
 const player=hand=>({hand,captured:[],go:0,shakes:0,shakeMultiplier:1,bombs:0,bombFreeTurns:0,ppeoks:0,hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0});
 
-test('quick deliberate upward motion is a flick throw',()=>{
+test('quick upward and radial top-right motions are flick throws',()=>{
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:112,endY:420,duration:170}),true);
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:70,endY:440,duration:190}),true);
+  assert.equal(isUpwardFlick({startX:100,startY:500,endX:195,endY:455,duration:150}),true);
 });
 
-test('tap, slow drag, short lift, and sideways swipe are not flick throws',()=>{
+test('tap, slow drag, short lift, and nearly horizontal swipe are not flick throws',()=>{
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:101,endY:497,duration:90}),false);
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:100,endY:425,duration:520}),false);
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:100,endY:466,duration:120}),false);
-  assert.equal(isUpwardFlick({startX:100,startY:500,endX:190,endY:445,duration:150}),false);
+  assert.equal(isUpwardFlick({startX:100,startY:500,endX:190,endY:490,duration:150}),false);
 });
 
 test('presentation planner assigns one movement owner to normal played and drawn cards',()=>{
