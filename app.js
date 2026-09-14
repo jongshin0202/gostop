@@ -1962,6 +1962,10 @@
   }
 
 
+  function openingStarterMessage(starter,isOnline=onlineMode){
+    return isOnline?t(starter===PLAYER_A?'youGoFirst':'opponentGoesFirst'):t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});
+  }
+
   async function presentOpeningSequence(starter,roll){
     if(!roll)throw new Error('Dice presentation is restricted to the first hand of a session.');
     presentation.dicePresentationCount++;
@@ -1970,7 +1974,7 @@
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
     const dieFaces=onlineMode?['Y','O']:['P','C'];
     if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];}
-    els.openingMessage.textContent=t('goesFirst',{player:starter===PLAYER_A?t(onlineMode?'you':'player'):t(onlineMode?'opponent':'computer')});await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    els.openingMessage.textContent=openingStarterMessage(starter);await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
     await presentDealSequence();
   }
   async function presentDealSequence(){
@@ -2101,7 +2105,7 @@
       playerIds:Object.freeze({playerA:PLAYER_A,playerB:PLAYER_B}),
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
-      onlineValueForViewer,
+      onlineValueForViewer,openingStarterMessage,
       canSubmitPlayAgain,isOnlineSessionFlowAction,rememberOnlineHandSource,takeOnlineHandSource,hasUnpresentedLocalHandMovement,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
       monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
@@ -2189,7 +2193,9 @@
     function returnOnlineToMenu(){
       onlineMode=false;presentation.locked=true;resetHandPresentationState();
       [els.resultDialog,els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.quitConfirmDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.gukjinDialog,els.opponentEndedDialog].forEach(dialog=>setDialog(dialog,false));
-      const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
+      const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);
+      document.getElementById('onlineRoomCode').value='';onlineStatus.textContent='';
+      globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
     }
     els.opponentEndedOkBtn.addEventListener('click',returnOnlineToMenu);
     [els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.opponentEndedDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
@@ -2291,7 +2297,7 @@
       adapter.addEventListener('connected',()=>{onlineStatus.textContent=t('roomWaitingOpponent',{roomCode:room.roomCode});});
       adapter.addEventListener('roomReady',()=>{onlineStatus.textContent=t('matchReady');els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('opponentConnected',()=>{onlineStatus.textContent=t('opponentConnectedMatchReady');els.soloStartOverlay.hidden=true;});
-      adapter.addEventListener('disconnected',()=>{onlineHandSourceRects.clear();onlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
+      adapter.addEventListener('disconnected',()=>{onlineHandSourceRects.clear();if(!onlineMode)return;onlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
       adapter.addEventListener('snapshot',event=>{latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:event.detail}));});
       adapter.addEventListener('actionAccepted',async event=>{
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
