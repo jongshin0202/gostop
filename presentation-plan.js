@@ -84,7 +84,10 @@
       current.lastX=event.clientX;current.lastY=event.clientY;
       const duration=Math.max(1,(event.timeStamp||performance.now())-current.startTime);
       const flick=isUpwardFlick({startX:current.startX,startY:current.startY,endX:event.clientX,endY:event.clientY,duration});
-      if(!flick){restore();return;}
+      if(!flick){
+        if(current.moved){event.preventDefault();suppressCard=current.card;suppressUntil=Date.now()+450;}
+        restore();return;
+      }
 
       event.preventDefault();event.stopImmediatePropagation();
       suppressCard=current.card;suppressUntil=Date.now()+450;
