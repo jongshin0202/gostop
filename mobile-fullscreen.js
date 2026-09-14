@@ -1,0 +1,100 @@
+(() => {
+  'use strict';
+
+  const START_OVERLAY_ID='soloStartOverlay';
+  const ORIENTATION_RECOVERY_WINDOW_MS=1800;
+  let orientationChangeAt=0;
+  let fullscreenExitAt=0;
+  let orientationRecoveryArmed=false;
+
+  function isMobileFullscreenEligible(env=globalThis){
+    const touchPoints=Number(env.navigator?.maxTouchPoints||0);
+    const coarsePointer=!!env.matchMedia?.('(pointer: coarse)')?.matches;
+    const touchLike=touchPoints>0||coarsePointer;
+    const width=Number(env.innerWidth||0),height=Number(env.innerHeight||0);
+    const phoneViewport=(width<=700&&height<=1000)||(width<=1000&&height<=600);
+    return touchLike&&phoneViewport;
+  }
+
+  function requestGameFullscreen(doc=document){
+    const root=doc?.documentElement;
+    if(!root||doc.fullscreenElement||typeof root.requestFullscreen!=='function')return false;
+    try{
+      const request=root.requestFullscreen();
+      if(request&&typeof request.catch==='function')request.catch(()=>{});
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  function isStartScreenButton(target,doc=document){
+    const overlay=doc?.getElementById?.(START_OVERLAY_ID);
+    if(!overlay||overlay.hidden)return false;
+    const button=target?.closest?.('button');
+    if(!button)return false;
+    return !!button.closest?.(`#${START_OVERLAY_ID}, .topbar`);
+  }
+
+  function isGameplayInteraction(target){
+    return !!target?.closest?.('.app-shell');
+  }
+
+  function handleFullscreenClick(event){
+    if(!isMobileFullscreenEligible(globalThis))return;
+    if(isStartScreenButton(event.target,document)){
+      requestGameFullscreen(document);
+      return;
+    }
+    if(orientationRecoveryArmed&&isGameplayInteraction(event.target)){
+      orientationRecoveryArmed=false;
+      requestGameFullscreen(document);
+    }
+  }
+
+  function refreshLayout(){
+    const refresh=()=>globalThis.dispatchEvent?.(new Event('resize'));
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(refresh);else refresh();
+  }
+
+  function handleFullscreenChange(){
+    const now=Date.now();
+    if(document.fullscreenElement){
+      orientationRecoveryArmed=false;
+      fullscreenExitAt=0;
+    }else{
+      fullscreenExitAt=now;
+      if(now-orientationChangeAt<=ORIENTATION_RECOVERY_WINDOW_MS)orientationRecoveryArmed=true;
+    }
+    refreshLayout();
+  }
+
+  function handleOrientationChange(){
+    const now=Date.now();
+    orientationChangeAt=now;
+    if(!document.fullscreenElement&&fullscreenExitAt&&now-fullscreenExitAt<=ORIENTATION_RECOVERY_WINDOW_MS){
+      orientationRecoveryArmed=true;
+    }
+    refreshLayout();
+  }
+
+  if(!document.querySelector('link[data-gostop-fullscreen-style]')){
+    const style=document.createElement('link');
+    style.rel='stylesheet';
+    style.href='mobile-fullscreen.css';
+    style.dataset.gostopFullscreenStyle='true';
+    document.head.appendChild(style);
+  }
+
+  document.addEventListener('click',handleFullscreenClick,{capture:true});
+  document.addEventListener('fullscreenchange',handleFullscreenChange);
+  globalThis.addEventListener?.('orientationchange',handleOrientationChange);
+
+  if(globalThis.GOSTOP_TEST_MODE===true){
+    globalThis.GOSTOP_FULLSCREEN_TEST_API=Object.freeze({
+      isMobileFullscreenEligible,requestGameFullscreen,isStartScreenButton,isGameplayInteraction,
+      handleFullscreenClick,handleFullscreenChange,handleOrientationChange,
+      isOrientationRecoveryArmed:()=>orientationRecoveryArmed
+    });
+  }
+})();
