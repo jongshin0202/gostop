@@ -1,0 +1,48 @@
+/* Fullscreen only: reclaim browser-chrome space without changing normal mobile geometry. */
+@media (max-width:700px) and (orientation:portrait){
+  :fullscreen .app-shell{height:100vh;height:100dvh}
+  :fullscreen .topbar{
+    height:40px;
+    min-height:40px;
+    padding:0 max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
+  }
+  :fullscreen .brand-mark{font-size:26px;line-height:1}
+  :fullscreen .glass-btn{min-height:36px;padding:4px 7px}
+  :fullscreen .game-stage{
+    height:calc(100vh - 44px);
+    height:calc(100dvh - 44px);
+    grid-template-rows:100px minmax(0,1fr) 224px;
+    gap:1px;
+  }
+  :fullscreen .table{border-width:16px}
+  :fullscreen .table-center{inset:18px 4px 12px}
+  :fullscreen .floor{padding:0 1px;gap:0}
+  :fullscreen .player-zone{
+    grid-template-rows:100px 54px 36px!important;
+    gap:1px!important;
+    align-content:start;
+  }
+  :fullscreen .hand{grid-row:1!important;align-items:flex-start;padding-top:0}
+  :fullscreen .player-capture-panel{grid-row:2!important}
+  :fullscreen .player-row{grid-row:3!important;align-self:start}
+  :fullscreen .player-row{margin-top:8px}
+  :fullscreen .table:after{bottom:-16px;height:24px}
+  :fullscreen .capture-stack{height:28px}
+  :fullscreen .captured-mini{width:17px!important;height:auto!important;aspect-ratio:var(--card-aspect)}
+  :fullscreen .capture-empty{height:26px}
+}
+
+@media (orientation:landscape) and (max-height:600px) and (max-width:1000px){
+  :fullscreen .app-shell{height:100vh;height:100dvh}
+  :fullscreen .game-stage{
+    height:calc(100vh - 40px);
+    height:calc(100dvh - 40px);
+    grid-template-rows:44px minmax(0,1fr) 68px;
+    gap:1px;
+  }
+  :fullscreen .table{border-width:5px}
+  :fullscreen .table-center{inset:2px 6px 2px}
+  :fullscreen .floor{padding:0 3px;gap:0 2px}
+  :fullscreen .player-zone{align-content:start}
+  :fullscreen .captured-mini{width:15px!important;height:auto!important;aspect-ratio:var(--card-aspect)}
+}
