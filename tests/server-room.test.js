@@ -127,7 +127,7 @@ test('online browser mode has a fail-closed authority boundary and no AI turn pa
   assert.match(source,/async function aiTurn\(\)\{\s*if\(onlineMode\)return;/);
   assert.match(source,/function scheduleTurnStart\(\)\{[\s\S]*?if\(onlineMode\)return;/);
   for(const type of ['attemptPlayCard','useBombBlank','declareShake','declareBomb','declineBomb','declareGo','declareStop','setGukjinMode','playAgainReady','requestNewGame','quitGame'])assert.match(source,new RegExp(`onlineSubmit\\(\\{type:'${type}'`));
-  assert.match(source,/'keepShakeSecret'/);assert.match(source,/presentSemanticEvents\(\[event\]\)/);assert.match(source,/state:\{\.\.\.projected/);assert.match(source,/authoritative server\. Reconnect before playing/);
+  assert.match(source,/'keepShakeSecret'/);assert.match(source,/presentSemanticEvents\(\[event\]\)/);assert.match(source,/state:\{\.\.\.projected/);assert.match(source,/t\('authorityDisconnected'\)/);
 });
 
 test('online transitions reuse the canonical Solo animation and event presenters',()=>{
@@ -166,7 +166,7 @@ test('online identity labels are human-relative while Solo markup remains unchan
 
 test('online deterministic authority continuations are buffered before presentation waits',()=>{
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),accepted=source.slice(source.indexOf("adapter.addEventListener('actionAccepted'"),source.indexOf("adapter.addEventListener('actionRejected'"));
-  assert.ok(accepted.indexOf('await onlinePresentationQueue')<accepted.indexOf('onlineSubmit(automatic)'));
+  assert.ok(accepted.indexOf('await onlinePresentationQueue')<accepted.indexOf('const automatic=')&&accepted.indexOf('const automatic=')<accepted.indexOf('onlineSubmit(automatic)'));
   assert.doesNotMatch(source,/onlineActions\.set\(id,action\);presentation\.locked=true;render\(\)/);
 });
 
@@ -175,5 +175,5 @@ test('turn evaluation is server-owned and browsers do not submit handoff actions
   const response=await core.handle(socket,JSON.stringify({type:'action',protocolVersion:1,actionId:'forbidden-evaluation',expectedRevision:snapshot.revision,action:{type:'evaluateGoStop'}}));
   assert.equal(response.type,'actionRejected');assert.equal(response.error.code,'SERVER_OWNED_ACTION');
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/onlineSubmit\(\{type:'evaluateGoStop'/);assert.doesNotMatch(source,/onlineSubmit\(\{type:'resolveNagari'/);
-  const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));assert.match(rejected,/presentation\.locked=true/);assert.doesNotMatch(rejected,/viewerCanStartTurn|presentation\.locked=false/);
+  const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));assert.match(rejected,/presentation\.locked=true/);assert.match(rejected,/adapter\.sync\(\)/);assert.doesNotMatch(rejected,/viewerCanStartTurn|presentation\.locked=false/);
 });

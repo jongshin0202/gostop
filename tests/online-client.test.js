@@ -61,3 +61,15 @@ test('rejection unlock permission is derived solely from the latest authoritativ
   assert.equal(viewerCanInteract(base,{connected:true,pendingActionId:'pending'}),false);
   assert.equal(viewerCanInteract(base,{connected:true,blocked:true}),false);
 });
+
+test('post-opening permission unlocks either New Game starter only after both Shake decisions resolve',()=>{
+  for(const seatId of ['playerA','playerB']){
+    const waiting={seatId,state:{turn:seatId,pendingDecision:{type:'openingTripleDecision'},legalActions:['declareShake','keepShakeSecret']}};
+    assert.equal(viewerCanInteract(waiting,{connected:true}),false);
+    const resolved={seatId,state:{turn:seatId,pendingDecision:null,legalActions:['attemptPlayCard']}};
+    assert.equal(viewerCanInteract(resolved,{connected:true,pendingActionId:null,blocked:false}),true);
+    assert.equal(viewerCanInteract(resolved,{connected:true,pendingActionId:'stale-opening-action',blocked:false}),false);
+    assert.equal(viewerCanInteract(resolved,{connected:false,pendingActionId:null,blocked:false}),false);
+    assert.equal(viewerCanInteract(resolved,{connected:true,pendingActionId:null,blocked:true}),false);
+  }
+});

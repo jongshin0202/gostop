@@ -2093,8 +2093,25 @@ test('all seven locales explicitly populate every canonical required UI key',()=
   assert.equal(i18n.brand,'GoStop Live!');
 });
 
+test('Online start controls and client-owned connection statuses are fully localized',()=>{
+  const i18n=require('../i18n.js'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const controls={createOnlineGame:'Create Online Game',roomCode:'Room code',joinGame:'Join Game'};
+  for(const [key,english] of Object.entries(controls)){
+    assert.equal(i18n.dictionaries.en[key],english);
+    assert.match(html,new RegExp(`data-i18n="${key}"[^>]*>${english.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}<`));
+  }
+  assert.deepEqual(Object.keys(controls).map(key=>i18n.translate('ko',key)),['온라인 게임 만들기','방 코드','게임 참가']);
+  const statusKeys=['creatingRoom','joiningRoom','shareRoomCode','roomWaitingConnection','roomWaitingOpponent','matchReady','opponentConnectedMatchReady','authorityDisconnected','onlineAuthorityDisconnected'];
+  for(const dictionary of Object.values(i18n.dictionaries))for(const key of [...Object.keys(controls),...statusKeys])assert.equal(Object.hasOwn(dictionary,key),true,key);
+  for(const key of statusKeys)assert.match(source,new RegExp(`t\\('${key}'`));
+  for(const english of ['Creating room…','Share room code:','waiting for connection…','waiting for opponent','Match ready.','Opponent connected. Match ready.','Disconnected from the authoritative server. Reconnect before playing.','Online authority is disconnected. Reconnect before acting.'])assert.equal(source.includes(`textContent='${english}'`)||source.includes(`textContent=\`${english}`),false,english);
+  api.setLocale('ko');
+  assert.deepEqual(Object.keys(controls).map(key=>i18n.translate('ko',key)),['온라인 게임 만들기','방 코드','게임 참가']);
+  api.setLocale('en');
+});
+
 test('New Game reset warning is localized and limited to all three New Game request states',()=>{
-  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),i18n=require('../i18n.js');
   for(const dictionary of Object.values(i18n.dictionaries))assert.equal(typeof dictionary.newGameResetWarning==='string'&&dictionary.newGameResetWarning.length>0,true);
   assert.equal(i18n.dictionaries.en.newGameResetWarning,'Starting a New Game will reset all wins, points, and achievements from this session and start fresh.');
   for(const id of ['newGameDialog','newGameWaitingDialog','incomingNewGameDialog']){
@@ -2102,7 +2119,19 @@ test('New Game reset warning is localized and limited to all three New Game requ
     assert.match(dialog,/data-i18n="newGameResetWarning"/);
   }
   const replay=html.slice(html.indexOf('<dialog id="replayWaitingDialog"'),html.indexOf('</dialog>',html.indexOf('<dialog id="replayWaitingDialog"')));
-  assert.doesNotMatch(replay,/newGameResetWarning/);
+  const requester=html.slice(html.indexOf('<dialog id="newGameWaitingDialog"'),html.indexOf('</dialog>',html.indexOf('<dialog id="newGameWaitingDialog"')));
+  const receiver=html.slice(html.indexOf('<dialog id="incomingNewGameDialog"'),html.indexOf('</dialog>',html.indexOf('<dialog id="incomingNewGameDialog"')));
+  assert.equal(i18n.dictionaries.en.waitingForOpponentToAcceptNewGame,'Waiting for Opponent to Accept New Game');
+  assert.match(requester,/data-i18n="waitingForOpponentToAcceptNewGame">Waiting for Opponent to Accept New Game</);
+  assert.match(requester,/data-i18n="newGameResetWarning"/);assert.match(requester,/data-i18n="cancel">Cancel</);
+  assert.equal(i18n.dictionaries.en.opponentNewGameRequest,'Opponent Has Requested to Start a New Game');
+  assert.match(receiver,/data-i18n="opponentNewGameRequest">Opponent Has Requested to Start a New Game</);
+  assert.match(receiver,/data-i18n="newGameResetWarning"/);assert.match(receiver,/data-i18n="accept">Accept</);assert.match(receiver,/data-i18n="decline">Decline</);assert.doesNotMatch(receiver,/data-i18n="(?:yes|no)"/);
+  assert.match(replay,/data-i18n="waitingForOpponent">Waiting for Opponent</);assert.doesNotMatch(replay,/waitingForOpponentToAcceptNewGame|newGameResetWarning/);
+  for(const dictionary of Object.values(i18n.dictionaries))for(const key of ['waitingForOpponentToAcceptNewGame','accept','decline'])assert.equal(typeof dictionary[key], 'string');
+  const reconcile=source.slice(source.indexOf('function reconcileOnlineFlow'),source.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/setDialog\(els\.newGameWaitingDialog,!!request\?\.requestedByYou\)/);
+  assert.match(reconcile,/setDialog\(els\.incomingNewGameDialog,!!request&&!request\.requestedByYou\)/);
 });
 
 test('shared milestone overlay clears KISS effects before every scoring milestone',()=>{
@@ -2220,12 +2249,12 @@ test('Online result offers localized Quit Game while replay waiting has no quit 
   assert.match(source,/if\(open&&!dialog\.open\)dialog\.showModal\(\)/);
 });
 
-test('rejected room-flow actions resync authority while gameplay rejections remain fail closed',()=>{
+test('rejected Online actions resync authority while remaining fail closed',()=>{
   for(const type of ['playAgainReady','requestNewGame','respondNewGame','cancelNewGame','quitGame'])assert.equal(api.isOnlineSessionFlowAction({type}),true);
   assert.equal(api.isOnlineSessionFlowAction({type:'attemptPlayCard'}),false);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));
-  assert.ok(rejected.indexOf('presentation.locked=true;render()')<rejected.indexOf('if(isOnlineSessionFlowAction(action))adapter.sync()'));
+  assert.ok(rejected.indexOf('presentation.locked=true;render()')<rejected.indexOf('adapter.sync()'));
   assert.doesNotMatch(rejected,/presentation\.locked=false/);
 });
 
@@ -2233,7 +2262,7 @@ test('Online presentation bookkeeping is bounded and automatic actions wait for 
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   assert.match(source,/onlinePresentedEvents\.size>256/);assert.match(source,/onlinePresentedEvents\.delete/);assert.match(source,/onlinePresentedEvents\.clear\(\)/);
   assert.match(source,/if\(presentation\.goCalloutTimer\)clearTimeout/);
-  const accepted=source.slice(source.indexOf("adapter.addEventListener('actionAccepted'"),source.indexOf("adapter.addEventListener('actionRejected'"));assert.ok(accepted.indexOf('await onlinePresentationQueue')<accepted.indexOf('onlineSubmit(automatic)'));
+  const accepted=source.slice(source.indexOf("adapter.addEventListener('actionAccepted'"),source.indexOf("adapter.addEventListener('actionRejected'"));assert.ok(accepted.indexOf('await onlinePresentationQueue')<accepted.indexOf('const automatic=')&&accepted.indexOf('const automatic=')<accepted.indexOf('onlineSubmit(automatic)'));
 });
 
 test('mode-aware localization refreshes Online opponent labels in both directions and preserves Solo Computer',()=>{
@@ -2541,6 +2570,24 @@ test('Online hand play captures the live source before animation and preserves e
   assert.match(movement,/target \? overlapLanding\(target\) : await freeFloorLanding\(card\)/);
   const staged=source.slice(source.indexOf('async function stageHandCardForChoice'),source.indexOf('function cleanupStagedCard'));
   assert.ok(staged.indexOf("makePhysicalFace(card,full,'physical-card moving-card')")<staged.indexOf("node.style.visibility='hidden'"));
+});
+
+test('eventless authority snapshots preserve a clicked local card until physical movement claims it',()=>{
+  const exactA={left:17,top:29,width:76,height:123},exactB={left:317,top:429,width:76,height:123};
+  for(const [seat,exact] of [['playerA',exactA],['playerB',exactB]]){
+    const selected=api.card('m2-1'),other=api.card('m3-1');
+    api.rememberOnlineHandSource(selected.id,exact);
+    const projected=api.onlineValueForViewer({human:api.makePlayer({hand:seat==='playerA'?[other]:[]}),ai:api.makePlayer({hand:seat==='playerB'?[other]:[]})},seat);
+    const bottom=seat==='playerB'?projected.ai:projected.human;
+    assert.equal(api.hasUnpresentedLocalHandMovement({human:bottom},[]),true,`${seat} local/bottom card must not teleport`);
+    assert.equal(api.hasUnpresentedLocalHandMovement({human:bottom},[{type:'cardPlayed'}]),false);
+    assert.equal(JSON.stringify(api.takeOnlineHandSource(selected.id)),JSON.stringify(exact));
+    assert.equal(api.takeOnlineHandSource(selected.id),null);
+  }
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  const eventless=transition.slice(transition.indexOf('if(!presentationEvents.length)'));assert.ok(eventless.indexOf('hasUnpresentedLocalHandMovement')<eventless.indexOf('state=incomingMapped.state'));
+  assert.match(transition,/side==='human'\?takeOnlineHandSource/);
+  assert.match(transition,/:approximateAiSource\(\)/);
 });
 
 test('Online authoritative actors remap viewer-relatively without changing card targeting data',()=>{
