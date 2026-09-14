@@ -1901,15 +1901,19 @@ test('user-facing settlement formatting translates penalty terminology to Englis
   assert.equal(/Ppeok|Meong|Pi-bak|Gwang|Go-bak/.test(formatted),false);
 });
 
-test('responsive CSS defines non-overlapping phone, landscape, tablet, and desktop strategies',()=>{
+test('responsive CSS defines compact portrait and short-height landscape strategies without destabilizing cards',()=>{
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
-  assert.equal(css.includes('@media (max-width:700px)'),true);
-  assert.equal(css.includes('@media (max-width:380px)'),true);
-  assert.equal(css.includes('(orientation:landscape) and (max-height:500px)'),true);
-  assert.equal(css.includes('overflow-x:auto;overflow-y:visible'),true);
-  assert.equal(css.includes('grid-template-columns:repeat(4,minmax(54px,1fr))'),true);
-  assert.equal(css.includes('max-height:calc(100dvh - 20px)'),true);
-  assert.equal(css.includes('.capture-flight-card'),true);
+  assert.match(css,/@media \(max-width:700px\) and \(orientation:portrait\)/);
+  assert.match(css,/@media \(orientation:landscape\) and \(max-height:600px\) and \(max-width:1000px\)/);
+  assert.match(css,/--card-aspect:76 \/ 123/);
+  assert.match(css,/html,body\{width:100%;max-width:100%;overflow-x:hidden\}/);
+  assert.match(css,/\.avatar\{[^}]*white-space:nowrap/);
+  assert.match(css,/\.tutorial-nav\{[^}]*overflow-x:auto;overflow-y:hidden/);
+  assert.match(css,/@media \(orientation:landscape\) and \(max-height:600px\) and \(max-width:1000px\)[\s\S]*?\.captured-mini\{[^}]*width:22px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)/,'landscape captured cards override the fixed desktop height');
+  assert.match(css,/\.table\{position:relative;z-index:10;min-height:565px/,'desktop table geometry remains the base');
+  assert.match(css,/--card-w:76px;--card-h:123px/,'desktop card geometry remains the base');
+  assert.doesNotMatch(css,/\.hand(?:-card-slot)?\{[^}]*(?:position:fixed|position:sticky)/);
+  assert.match(css,/\.hand\{[^}]*justify-content:center;overflow:visible/,'the full mobile hand fits without its own horizontal scroller');
 });
 
 test('Keep for Bomb is silent while accepted Shake alone enters the acknowledgment presenter',()=>{
