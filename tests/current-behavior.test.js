@@ -1922,15 +1922,34 @@ test('responsive CSS defines compact portrait and one-viewport short landscape s
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   const landscape=css.slice(css.indexOf('@media (orientation:landscape) and (max-height:600px) and (max-width:1000px)'));
   const portrait=css.slice(css.indexOf('@media (max-width:700px) and (orientation:portrait)'),css.indexOf('/* Phones wider than the portrait breakpoint'));
+  const narrow=css.slice(css.indexOf('@media (max-width:380px)'),css.indexOf('@media (max-width:932px)'));
   assert.match(css,/@media \(max-width:700px\) and \(orientation:portrait\)/);
   assert.match(css,/@media \(orientation:landscape\) and \(max-height:600px\) and \(max-width:1000px\)/);
   assert.match(css,/--card-aspect:76 \/ 123/);
-  assert.match(landscape,/\.app-shell\{height:100svh;height:100dvh;min-height:0;[^}]*overflow:hidden/);
-  assert.match(landscape,/\.game-stage\{[^}]*height:calc\(100dvh - 34px\);min-height:0;[^}]*grid-template-rows:48px minmax\(0,1fr\) 70px;[^}]*overflow:hidden/);
-  assert.match(landscape,/\.table\{[^}]*height:100%;min-height:0/);
+  assert.doesNotMatch(narrow,/(?:height|min-height):376px|grid-template-rows:auto 376px auto/);
+  assert.match(portrait,/html,body\{[^}]*height:100%;[^}]*overflow:hidden/);
+  assert.match(portrait,/\.app-shell\{height:100vh;height:100svh;min-height:0;[^}]*overflow:hidden/);
+  assert.match(portrait,/\.topbar\{height:44px;min-height:44px/);
+  assert.match(portrait,/\.game-stage\{height:calc\(100vh - 44px\);height:calc\(100svh - 44px\);min-height:0;[^}]*grid-template-rows:100px minmax\(0,1fr\) 194px;[^}]*overflow:hidden/);
+  assert.match(portrait,/\.table\{height:100%;min-width:0;min-height:0/);
+  assert.match(portrait,/\.floor-slot\{height:100%;min-height:0;min-width:0/);
+  assert.match(landscape,/--card-w:clamp\(36px,10svh,40px\)/);
+  assert.match(landscape,/\.app-shell\{height:100vh;height:100svh;min-height:0;[^}]*overflow:hidden/);
+  assert.doesNotMatch(landscape,/\.app-shell\{[^}]*100svh[^}]*100dvh/);
+  assert.match(landscape,/\.topbar\{height:32px;min-height:32px/);
+  assert.match(landscape,/\.game-stage\{[^}]*height:calc\(100vh - 32px\);height:calc\(100svh - 32px\);[^}]*grid-template-rows:44px minmax\(0,1fr\) 62px;[^}]*overflow:hidden/);
+  assert.doesNotMatch(landscape,/\.game-stage\{[^}]*100svh[^}]*100dvh/);
+  assert.match(landscape,/\.opponent-zone\{[^}]*min-width:0;min-height:0;[^}]*grid-template-rows:44px/);
+  assert.match(landscape,/\.table\{[^}]*height:100%;min-width:0;min-height:0/);
   assert.doesNotMatch(landscape,/222px/);
   assert.match(landscape,/\.floor\{[^}]*grid-template-columns:repeat\(6,[^}]*grid-template-rows:repeat\(2,/);
   assert.match(portrait,/\.floor\{[^}]*grid-template-columns:repeat\(4,[^}]*grid-template-rows:repeat\(3,/);
+  assert.match(landscape,/\.floor-slot\{height:100%;min-height:0;min-width:0/);
+  assert.match(landscape,/\.player-zone\{[^}]*min-width:0;min-height:0;[^}]*grid-template-rows:62px/);
+  for(const selector of ['opponent-zone','opponent-hand','cpu-capture-panel','table','floor','player-zone','hand','player-capture-panel']){
+    assert.doesNotMatch(portrait,new RegExp(`\\.${selector}\\{[^}]*(?:display:none|visibility:hidden)`));
+    assert.doesNotMatch(landscape,new RegExp(`\\.${selector}\\{[^}]*(?:display:none|visibility:hidden)`));
+  }
   assert.match(css,/\.avatar\{[^}]*white-space:nowrap/);
   assert.match(css,/\.tutorial-nav\{[^}]*overflow-x:auto;overflow-y:hidden/);
   assert.match(landscape,/\.captured-mini\{[^}]*height:auto!important;aspect-ratio:var\(--card-aspect\)/,'landscape captured cards override the fixed desktop height');
@@ -1938,7 +1957,7 @@ test('responsive CSS defines compact portrait and one-viewport short landscape s
   assert.match(css,/\.table\{position:relative;z-index:10;min-height:565px/,'desktop table geometry remains the base');
   assert.match(css,/--card-w:76px;--card-h:123px/,'desktop card geometry remains the base');
   assert.doesNotMatch(css,/\.hand(?:-card-slot)?\{[^}]*(?:position:fixed|position:sticky)/);
-  assert.match(landscape,/\.hand\{position:static;[^}]*justify-content:center;overflow:visible/,'the full landscape hand fits without scrolling or fixed positioning');
+  assert.match(landscape,/\.hand\{position:static;[^}]*height:62px;justify-content:center;overflow:visible/,'the full landscape hand fits without scrolling or fixed positioning');
   assert.match(landscape,/dialog\{[^}]*max-height:calc\(100dvh - 8px\)[^}]*overflow:hidden\}\.dialog-card\{[^}]*overflow:auto/);
 });
 
