@@ -153,8 +153,9 @@
 
       const up=state.anchorY-touch.clientY;
       const sideways=Math.abs(touch.clientX-state.anchorX);
+      const verticalIntent=up>=8&&up>=sideways*.65;
 
-      if(!state.dragging&&up<10){
+      if(!state.dragging&&!verticalIntent){
         const hovered=nearestHandCard(touch.clientX,touch.clientY);
         if(hovered&&hovered!==state.card){
           setActiveCard(state,hovered,touch.clientX,touch.clientY);
@@ -163,7 +164,7 @@
         }
       }
 
-      if(!state.dragging&&up>=8&&up>=sideways*.65){
+      if(!state.dragging&&verticalIntent){
         state.dragging=true;
         state.wasSelected=false;
       }
