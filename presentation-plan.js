@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const FLICK_DEFAULTS=Object.freeze({minDistance:46,maxDuration:320,minSpeed:.24,maxHorizontalRatio:1.1});
+  const FLICK_DEFAULTS=Object.freeze({minDistance:38,maxDuration:420,minSpeed:.16,maxHorizontalRatio:1.2});
 
   function isUpwardFlick(sample,options={}){
     if(!sample)return false;
@@ -21,10 +21,11 @@
     const style=doc.createElement('style');
     style.dataset.gostopMotionLayer='true';
     style.textContent=`
-      #playerHand .hand-card{touch-action:none}
+      #playerHand .hand-card{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
       .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
       .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2147482000!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
       .physical-card.moving-card,.capture-flight-card,.sliding-capture{contain:paint}
+      @media (hover:none),(pointer:coarse){#playerHand .hand-card:hover{transform:none!important}}
     `;
     (doc.head||doc.documentElement).appendChild(style);
 
@@ -32,10 +33,18 @@
     let suppressCard=null;
     let suppressUntil=0;
 
-    const cardFromEvent=event=>event.target?.closest?.('#playerHand .hand-card');
+    const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
+    const canStart=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
+    const begin=(card,x,y,time,source,id)=>{
+      if(!canStart(card))return false;
+      restore();
+      const rect=card.getBoundingClientRect();
+      gesture={source,id,card,startX:x,startY:y,lastX:x,lastY:y,startTime:time||performance.now(),startRect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height},ghost:null,previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,moved:false};
+      return true;
+    };
     const restore=()=>{
       if(!gesture)return;
-      if(gesture.ghost)gesture.ghost.remove();
+      gesture.ghost?.remove();
       if(gesture.card){
         gesture.card.style.visibility=gesture.previousVisibility;
         gesture.card.style.transform=gesture.previousTransform;
@@ -56,43 +65,30 @@
       card.style.visibility='hidden';
       return ghost;
     };
-    const placeGhost=(x,y)=>{
-      const ghost=ensureGhost();if(!ghost||!gesture)return;
-      const dx=x-gesture.startX,dy=Math.min(10,y-gesture.startY);
-      ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
-    };
-
-    doc.addEventListener('pointerdown',event=>{
-      if(event.button!=null&&event.button!==0)return;
-      const card=cardFromEvent(event);
-      if(!card||card.disabled||card.getAttribute('aria-disabled')==='true')return;
-      restore();
-      const rect=card.getBoundingClientRect();
-      gesture={pointerId:event.pointerId,card,startX:event.clientX,startY:event.clientY,lastX:event.clientX,lastY:event.clientY,startTime:event.timeStamp||performance.now(),startRect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height},ghost:null,previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,moved:false};
-      try{card.setPointerCapture?.(event.pointerId);}catch(_){ }
-    },true);
-
-    doc.addEventListener('pointermove',event=>{
-      if(!gesture||event.pointerId!==gesture.pointerId)return;
-      gesture.lastX=event.clientX;gesture.lastY=event.clientY;
-      const up=gesture.startY-event.clientY,side=Math.abs(event.clientX-gesture.startX);
-      if(up>7&&up>=side*.45){gesture.moved=true;placeGhost(event.clientX,event.clientY);event.preventDefault();}
-    },{capture:true,passive:false});
-
-    doc.addEventListener('pointerup',event=>{
-      if(!gesture||event.pointerId!==gesture.pointerId)return;
-      const current=gesture;
-      current.lastX=event.clientX;current.lastY=event.clientY;
-      const duration=Math.max(1,(event.timeStamp||performance.now())-current.startTime);
-      const flick=isUpwardFlick({startX:current.startX,startY:current.startY,endX:event.clientX,endY:event.clientY,duration});
-      if(!flick){
-        if(current.moved){event.preventDefault();suppressCard=current.card;suppressUntil=Date.now()+450;}
-        restore();return;
+    const move=(x,y,event)=>{
+      if(!gesture)return;
+      gesture.lastX=x;gesture.lastY=y;
+      const up=gesture.startY-y,side=Math.abs(x-gesture.startX);
+      if(up>3&&up>=side*.35){
+        gesture.moved=true;
+        const ghost=ensureGhost();
+        if(ghost){const dx=x-gesture.startX,dy=Math.min(12,y-gesture.startY);ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;}
+        event?.preventDefault?.();
       }
-
-      event.preventDefault();event.stopImmediatePropagation();
-      suppressCard=current.card;suppressUntil=Date.now()+450;
-      const dx=event.clientX-current.startX,dy=event.clientY-current.startY;
+    };
+    const finish=(x,y,time,event)=>{
+      if(!gesture)return false;
+      const current=gesture;
+      current.lastX=x;current.lastY=y;
+      const duration=Math.max(1,(time||performance.now())-current.startTime);
+      const flick=isUpwardFlick({startX:current.startX,startY:current.startY,endX:x,endY:y,duration});
+      if(!flick){
+        if(current.moved){event?.preventDefault?.();suppressCard=current.card;suppressUntil=Date.now()+700;}
+        restore();return false;
+      }
+      event?.preventDefault?.();event?.stopImmediatePropagation?.();
+      suppressCard=current.card;suppressUntil=Date.now()+700;
+      const dx=x-current.startX,dy=y-current.startY;
       current.card.style.visibility='hidden';current.card.style.transform=`translate3d(${dx}px,${dy}px,0)`;current.card.style.zIndex='2147482000';
       if(current.ghost)current.ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
       const card=current.card,ghost=current.ghost,previousVisibility=current.previousVisibility,previousTransform=current.previousTransform,previousZIndex=current.previousZIndex;
@@ -104,12 +100,47 @@
         card.style.zIndex=previousZIndex;
         if(card.isConnected&&card.style.visibility==='hidden')card.style.visibility=previousVisibility;
       }));
-    },{capture:true,passive:false});
+      return true;
+    };
+    const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
 
-    doc.addEventListener('pointercancel',event=>{if(gesture&&event.pointerId===gesture.pointerId)restore();},true);
+    doc.addEventListener('touchstart',event=>{
+      if(event.touches.length!==1)return;
+      const touch=event.touches[0],card=cardFromTarget(event.target);
+      begin(card,touch.clientX,touch.clientY,event.timeStamp,'touch',touch.identifier);
+    },{capture:true,passive:true});
+    doc.addEventListener('touchmove',event=>{
+      if(!gesture||gesture.source!=='touch')return;
+      const touch=touchById(event.touches,gesture.id);if(!touch)return;
+      move(touch.clientX,touch.clientY,event);
+    },{capture:true,passive:false});
+    doc.addEventListener('touchend',event=>{
+      if(!gesture||gesture.source!=='touch')return;
+      const touch=touchById(event.changedTouches,gesture.id);if(!touch){restore();return;}
+      finish(touch.clientX,touch.clientY,event.timeStamp,event);
+    },{capture:true,passive:false});
+    doc.addEventListener('touchcancel',()=>{if(gesture?.source==='touch')restore();},{capture:true,passive:true});
+
+    doc.addEventListener('pointerdown',event=>{
+      if(event.pointerType==='touch')return;
+      if(event.button!=null&&event.button!==0)return;
+      const card=cardFromTarget(event.target);
+      if(!begin(card,event.clientX,event.clientY,event.timeStamp,'pointer',event.pointerId))return;
+      try{card.setPointerCapture?.(event.pointerId);}catch(_){ }
+    },true);
+    doc.addEventListener('pointermove',event=>{
+      if(!gesture||gesture.source!=='pointer'||event.pointerId!==gesture.id)return;
+      move(event.clientX,event.clientY,event);
+    },{capture:true,passive:false});
+    doc.addEventListener('pointerup',event=>{
+      if(!gesture||gesture.source!=='pointer'||event.pointerId!==gesture.id)return;
+      finish(event.clientX,event.clientY,event.timeStamp,event);
+    },{capture:true,passive:false});
+    doc.addEventListener('pointercancel',event=>{if(gesture?.source==='pointer'&&event.pointerId===gesture.id)restore();},true);
+
     doc.addEventListener('click',event=>{
       if(!event.isTrusted)return;
-      const card=cardFromEvent(event);
+      const card=cardFromTarget(event.target);
       if(card&&card===suppressCard&&Date.now()<suppressUntil){event.preventDefault();event.stopImmediatePropagation();suppressCard=null;suppressUntil=0;}
     },true);
     return true;
