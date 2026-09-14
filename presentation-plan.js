@@ -42,6 +42,7 @@
     (doc.head||doc.documentElement).appendChild(style);
 
     let touchState=null;
+    let touchSelectedCard=null;
     let bypassClickCard=null;
     let suppressTouchClicksUntil=0;
 
@@ -53,6 +54,7 @@
     const handRect=()=>playerHand()?.getBoundingClientRect?.()||null;
 
     const clearSelection=()=>{
+      touchSelectedCard=null;
       playerHand()?.classList.add('gostop-touch-selection-cleared');
       doc.querySelectorAll('#playerHand .hand-card-slot').forEach(slot=>{
         slot.classList.remove('is-hovered');
@@ -65,6 +67,7 @@
       if(!canUseCard(card))return false;
       const slot=card.closest('.hand-card-slot');
       if(!slot)return false;
+      touchSelectedCard=card;
       playerHand()?.classList.remove('gostop-touch-selection-cleared');
       try{slot.dispatchEvent(new Event('pointerenter'));}catch(_){ }
       doc.querySelectorAll('#playerHand .hand-card-slot').forEach(node=>node.classList.toggle('is-hovered',node===slot));
@@ -159,8 +162,7 @@
 
     const beginTouch=(event,touch,card)=>{
       if(!canUseCard(card))return false;
-      const slot=card.closest('.hand-card-slot');
-      const wasSelected=!!slot?.classList.contains('is-hovered')&&!playerHand()?.classList.contains('gostop-touch-selection-cleared');
+      const wasSelected=touchSelectedCard===card;
       selectCard(card);
       const rect=card.getBoundingClientRect();
       const startTime=now();
@@ -229,6 +231,7 @@
 
     const triggerPlay=card=>{
       if(!canUseCard(card))return false;
+      touchSelectedCard=null;
       bypassClickCard=card;
       try{card.click();}finally{bypassClickCard=null;}
       return true;
