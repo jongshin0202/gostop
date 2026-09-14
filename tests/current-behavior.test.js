@@ -2779,3 +2779,41 @@ test('Solo and Online share one physical turn pacing contract',()=>{
     /event\.type==='cardsCaptured'[\s\S]*?presentationPause\('postCapture'\)/
   );
 });
+
+test('intentional Online exits clean room UI and ignore only their resulting disconnect',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const reconcile=source.slice(source.indexOf('function reconcileOnlineFlow'),source.indexOf('function returnOnlineToMenu'));
+  const cleanup=source.slice(source.indexOf('function returnOnlineToMenu'),source.indexOf("els.opponentEndedOkBtn.addEventListener"));
+  const disconnect=source.slice(source.indexOf("adapter.addEventListener('disconnected'"),source.indexOf("adapter.addEventListener('snapshot'"));
+  assert.match(reconcile,/if\(flow\.endedByYou\)returnOnlineToMenu\(\);else setDialog\(els\.opponentEndedDialog,true\)/,'the local quitter returns automatically while the opponent sees the ended dialog');
+  assert.match(source,/opponentEndedOkBtn\.addEventListener\('click',returnOnlineToMenu\)/,'the opponent OK path uses the same cleanup');
+  assert.match(cleanup,/onlineMode=false/);
+  assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);
+  assert.match(cleanup,/getElementById\('onlineRoomCode'\)\.value=''/);
+  assert.match(cleanup,/onlineStatus\.textContent=''/);
+  assert.match(cleanup,/goStopOnlineSession\?\.close\(\);globalThis\.goStopOnlineSession=null/);
+  assert.match(cleanup,/soloStartOverlay\.hidden=false/);
+  assert.match(disconnect,/if\(!onlineMode\)return;onlineStatus\.textContent=t\('authorityDisconnected'\)/,'intentional close is ignored after cleanup sets onlineMode false');
+  assert.doesNotMatch(disconnect,/if\(onlineMode\).*return/,'active Online disconnects must not be suppressed');
+});
+
+test('Online starter messages are localized and viewer-relative for both seats',()=>{
+  const i18n=require('../i18n.js');
+  assert.equal(i18n.dictionaries.ko.youGoFirst,'님께서 먼저 하시겠습니다.');
+  assert.equal(i18n.dictionaries.ko.opponentGoesFirst,'상대방이 먼저 하겠습니다.');
+  for(const dictionary of Object.values(i18n.dictionaries)){
+    assert.equal(typeof dictionary.youGoFirst,'string');
+    assert.equal(typeof dictionary.opponentGoesFirst,'string');
+  }
+  api.setLocale('ko');api.setOnlineMode(true);
+  for(const [viewer,starter,expected] of [
+    [api.playerIds.playerA,api.playerIds.playerA,'님께서 먼저 하시겠습니다.'],
+    [api.playerIds.playerA,api.playerIds.playerB,'상대방이 먼저 하겠습니다.'],
+    [api.playerIds.playerB,api.playerIds.playerB,'님께서 먼저 하시겠습니다.'],
+    [api.playerIds.playerB,api.playerIds.playerA,'상대방이 먼저 하겠습니다.']
+  ])assert.equal(api.openingStarterMessage(api.onlineValueForViewer(starter,viewer)),expected);
+  api.setOnlineMode(false);
+  assert.equal(api.openingStarterMessage(api.playerIds.playerA),i18n.translate('ko','goesFirst',{player:i18n.translate('ko','player')}));
+  assert.equal(api.openingStarterMessage(api.playerIds.playerB),i18n.translate('ko','goesFirst',{player:i18n.translate('ko','computer')}));
+  api.setLocale('en');
+});
