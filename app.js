@@ -1329,10 +1329,21 @@
 
   function rectCenter(r){ return {x:r.left+(r.width||0)/2,y:r.top+(r.height||0)/2}; }
   function cardSize(){
-    const cs=getComputedStyle(document.documentElement);
     const stage=document.querySelector('.game-stage');
-    const scale=stage&&typeof innerWidth!=='undefined'&&innerWidth>700?stage.getBoundingClientRect().width/stage.offsetWidth:1;
-    return {w:(parseFloat(cs.getPropertyValue('--card-w'))||78)*scale,h:(parseFloat(cs.getPropertyValue('--card-h'))||127)*scale};
+    // Resolve clamp()/calc() through layout rather than parsing the raw custom
+    // property. Keeping the probe inside the stage also includes its desktop
+    // transform without inheriting a hand lift or floor-card rotation.
+    if(stage){
+      const probe=document.createElement('div');
+      probe.className='card normal-gameplay-card card-size-probe';
+      stage.appendChild(probe);
+      const probeRect=probe.getBoundingClientRect();
+      probe.remove();
+      if(probeRect.width>0&&probeRect.height>0)return {w:probeRect.width,h:probeRect.height};
+    }
+
+    // The base stylesheet dimensions are the last-resort non-layout fallback.
+    return {w:76,h:123};
   }
   function approximateAiSource(){ const r=els.aiHand.getBoundingClientRect(); return {left:r.left+r.width*.5-27,top:r.top+r.height*.42-44,width:54,height:88}; }
 
@@ -2128,7 +2139,7 @@
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
-      stableFloorTilt,stableStackAngle,shuffle,presentationPacing:PRESENTATION_PACING,
+      stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
       getPresentationSnapshot(){
         return {

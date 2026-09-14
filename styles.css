@@ -45,6 +45,7 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 .action-cue.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .action-cue.human:before{content:'YOU · ';color:#ffd790}.action-cue.ai:before{content:'CPU · ';color:#a9c7ff}
 .physical-card{position:fixed;z-index:1160;border-radius:7px;overflow:hidden;box-shadow:0 10px 13px rgba(0,0,0,.38);will-change:transform,left,top,opacity}
+.card-size-probe{position:absolute!important;left:0!important;top:0!important;visibility:hidden!important;pointer-events:none!important;margin:0!important}
 .floor-placeholder{width:var(--card-w);height:var(--card-h);visibility:hidden;pointer-events:none}
 .impact-ring:after{font-family:system-ui,sans-serif;font-weight:900;letter-spacing:-2px}
 @media(max-width:700px){.hand-actor{width:250px;height:118px;transform-origin:82% 50%}.hand-sleeve{left:0;top:38px;width:112px;height:56px}.hand-forearm{left:88px;top:39px;width:86px;height:51px}.hand-palm{left:150px;top:27px;width:83px;height:65px}.finger-index{left:198px;top:21px;width:57px;height:18px}.finger-middle{left:194px;top:42px;width:61px;height:18px}.finger-thumb{left:178px;top:71px;width:52px;height:20px}.action-cue{top:76px;font-size:11px}}
@@ -565,25 +566,25 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 
 /* Phones wider than the portrait breakpoint still need a height-led landscape layout. */
 @media (orientation:landscape) and (max-height:600px) and (max-width:1000px){
-  :root{--card-w:clamp(44px,5vw,48px);--card-h:calc(var(--card-w) * 123 / 76)}
-  html,body{width:100%;max-width:100%;overflow-x:hidden}
-  .app-shell{min-height:100svh;min-height:100dvh;padding-bottom:max(4px,env(safe-area-inset-bottom));overflow-x:hidden;overflow-y:visible}
-  .topbar{min-height:38px;padding:2px max(8px,env(safe-area-inset-right)) 2px max(8px,env(safe-area-inset-left));gap:6px}
-  .brand-mark{font-size:22px;line-height:1}.brand-sub{display:none}.round-status{gap:5px}.glass-btn{min-height:34px;padding:4px 8px;font-size:11px;white-space:nowrap}
-  .game-stage{width:100%;padding:3px max(5px,env(safe-area-inset-right)) 6px max(5px,env(safe-area-inset-left));display:grid;grid-template-rows:54px clamp(222px,61svh,262px) calc(var(--card-h) + 12px);gap:3px}
-  .opponent-zone{grid-row:1!important;display:grid!important;grid-template-columns:minmax(145px,190px) minmax(150px,1fr) minmax(190px,240px)!important;grid-template-rows:54px!important;margin:0!important;padding:0!important;gap:5px!important}
-  .cpu-status-component,.opponent-hand,.opponent-zone .cpu-capture-panel{grid-row:1!important}.cpu-status-component{grid-column:1!important}.opponent-hand{grid-column:2!important;height:54px;min-width:0;padding:1px;overflow:hidden;justify-content:center}.opponent-zone .cpu-capture-panel{grid-column:3!important}
-  .opponent-hand .mini-back{width:32px;height:52px;margin-left:-12px;border-width:2px}
-  .table{grid-row:2;height:clamp(222px,61svh,262px);min-height:clamp(222px,61svh,262px);margin:0!important;border-width:7px;border-radius:20px;transform:none;overflow:visible}
-  .table-center{inset:8px 9px 7px;grid-template-columns:54px minmax(0,1fr);gap:3px}.deck-stack{width:43px;height:70px}.deck-label{padding:2px 4px;font-size:8px}
-  .floor{height:100%;min-height:0;padding:1px 5px;grid-template-columns:repeat(4,minmax(var(--card-w),1fr));grid-template-rows:repeat(3,minmax(var(--card-h),1fr));grid-auto-rows:minmax(var(--card-h),1fr);gap:1px 5px;align-content:center}
+  :root{--card-w:clamp(38px,11dvh,42px);--card-h:calc(var(--card-w) * 123 / 76)}
+  html,body{width:100%;height:100%;max-width:100%;overflow:hidden}
+  .app-shell{height:100svh;height:100dvh;min-height:0;padding:0;overflow:hidden}
+  .topbar{height:34px;min-height:34px;padding:1px max(8px,env(safe-area-inset-right)) 1px max(8px,env(safe-area-inset-left));gap:5px}
+  .brand-mark{font-size:19px;line-height:1}.brand-sub{display:none}.round-status{gap:4px}.glass-btn{min-height:30px;padding:3px 7px;font-size:10px;white-space:nowrap}
+  .game-stage{width:100%;height:calc(100svh - 34px);height:calc(100dvh - 34px);min-height:0;padding:2px max(5px,env(safe-area-inset-right)) 3px max(5px,env(safe-area-inset-left));display:grid;grid-template-rows:48px minmax(0,1fr) 70px;gap:2px;overflow:hidden}
+  .opponent-zone{grid-row:1!important;display:grid!important;grid-template-columns:minmax(135px,180px) minmax(145px,1fr) minmax(175px,220px)!important;grid-template-rows:48px!important;margin:0!important;padding:0!important;gap:4px!important}
+  .cpu-status-component,.opponent-hand,.opponent-zone .cpu-capture-panel{grid-row:1!important}.cpu-status-component{grid-column:1!important}.opponent-hand{grid-column:2!important;height:48px;min-width:0;padding:1px;overflow:hidden;justify-content:center}.opponent-zone .cpu-capture-panel{grid-column:3!important}
+  .opponent-hand .mini-back{width:28px;height:45px;margin-left:-11px;border-width:2px}
+  .table{grid-row:2;height:100%;min-height:0;margin:0!important;border-width:6px;border-radius:18px;transform:none;overflow:hidden}
+  .table-center{inset:5px 7px 4px;grid-template-columns:48px minmax(0,1fr);gap:2px}.deck-stack{width:39px;height:63px}.deck-label{padding:1px 3px;font-size:7px}
+  .floor{height:100%;min-height:0;padding:1px 4px;grid-template-columns:repeat(6,minmax(var(--card-w),1fr));grid-template-rows:repeat(2,minmax(var(--card-h),1fr));grid-auto-rows:minmax(var(--card-h),1fr);gap:1px 3px;align-content:center}
   .floor-slot{height:100%;min-height:var(--card-h);min-width:var(--card-w)}
-  .player-zone{grid-row:3;display:grid;grid-template-columns:minmax(145px,190px) minmax(280px,1fr) minmax(190px,240px)!important;grid-template-rows:calc(var(--card-h) + 12px)!important;padding:0!important;gap:5px!important;align-items:center}
-  .player-row{grid-column:1!important;grid-row:1!important}.hand{grid-column:2!important;grid-row:1!important;width:100%;height:calc(var(--card-h) + 12px);justify-content:center;overflow:visible;padding:2px 0}.player-capture-panel{grid-column:3!important;grid-row:1!important}
-  .hand-card-slot{height:calc(var(--card-h) + 8px);margin-left:clamp(-15px,-1.7vw,-11px)}
+  .player-zone{grid-row:3;display:grid;grid-template-columns:minmax(135px,180px) minmax(250px,1fr) minmax(175px,220px)!important;grid-template-rows:70px!important;padding:0!important;gap:4px!important;align-items:center}
+  .player-row{grid-column:1!important;grid-row:1!important}.hand{position:static;grid-column:2!important;grid-row:1!important;width:100%;height:70px;justify-content:center;overflow:visible;padding:1px 0}.player-capture-panel{grid-column:3!important;grid-row:1!important}
+  .hand-card-slot{height:calc(var(--card-h) + 2px);margin-left:clamp(-13px,-1.5vw,-10px)}
   .player-status-component{gap:3px}.player-chip{grid-template-columns:30px minmax(54px,1fr) 38px;gap:3px;padding:3px 4px}.avatar{width:29px;height:29px;white-space:nowrap;font-size:8px;line-height:1}.player-chip strong{font-size:11px}.session-stats{font-size:7px!important}.score-pill{min-width:38px;height:30px;padding-left:4px}.score-pill b{font-size:16px}.score-pill small{font-size:7px}.status-badges .multiplier-chip{min-width:48px!important;max-width:58px;padding:3px!important;font-size:8px!important}.go-count-badge{padding:1px 4px;font-size:8px!important}
-  .game-capture-panel{width:100%!important;height:54px;min-height:54px;max-height:54px;padding:2px 4px!important;justify-self:stretch!important}.capture-panel-title{font-size:8px;line-height:9px;margin:0}.captured-strip{gap:1px}.capture-group{padding:0}.capture-group-head{font-size:7px!important;line-height:8px;margin:0}.capture-stack{width:34px;height:35px;padding:0}.captured-mini{width:22px!important;height:auto!important;aspect-ratio:var(--card-aspect)}.capture-empty{height:30px}.capture-count{right:0;font-size:8px;line-height:12px;min-width:19px;padding:0 3px}
-  .language-menu,.options-menu{position:fixed;top:38px;right:max(6px,env(safe-area-inset-right));max-width:calc(100vw - 12px - env(safe-area-inset-left) - env(safe-area-inset-right));max-height:calc(100dvh - 44px);overflow-y:auto;overscroll-behavior:contain}
+  .game-capture-panel{width:100%!important;height:48px;min-height:48px;max-height:48px;padding:1px 3px!important;justify-self:stretch!important}.capture-panel-title{font-size:7px;line-height:8px;margin:0}.captured-strip{gap:1px}.capture-group{padding:0}.capture-group-head{font-size:7px!important;line-height:8px;margin:0}.capture-stack{width:30px;height:29px;padding:0}.captured-mini{width:18px!important;height:auto!important;aspect-ratio:var(--card-aspect)}.capture-empty{height:25px}.capture-count{right:0;font-size:8px;line-height:11px;min-width:18px;padding:0 2px}
+  .language-menu,.options-menu{position:fixed;top:34px;right:max(6px,env(safe-area-inset-right));max-width:calc(100vw - 12px - env(safe-area-inset-left) - env(safe-area-inset-right));max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain}
   dialog{width:calc(100vw - 12px);max-width:none;max-height:calc(100dvh - 8px);padding:0;overflow:hidden}.dialog-card{max-height:calc(100dvh - 8px);overflow:auto;padding:12px}
   .tutorial-dialog{width:calc(100vw - 12px);max-height:calc(100dvh - 8px)}.tutorial-card{max-height:calc(100dvh - 8px);overflow-x:hidden}.tutorial-card>h2{margin:2px 0 8px;padding-right:44px}.tutorial-card>.dialog-close{min-width:44px;min-height:40px;transform:none;margin:0;right:0}.tutorial-nav{max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
   .solo-start-overlay{padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));gap:8px;overflow-y:auto}.solo-start-overlay strong{font-size:clamp(2rem,8vh,3rem)}.play-solo-btn{padding:9px 20px;font-size:1rem}.online-join-form input{padding:7px}.online-status{min-height:1em}

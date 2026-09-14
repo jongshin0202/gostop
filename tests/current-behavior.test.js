@@ -49,10 +49,10 @@ function loadCurrentGame(){
   vm.runInContext(authoritySource,context,{filename:'session-authority.js'});
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   vm.runInContext(source,context,{filename:'app.js'});
-  return {api:context.GOSTOP_TEST_API,elements,selectors};
+  return {api:context.GOSTOP_TEST_API,elements,selectors,document};
 }
 
-const {api,elements,selectors}=loadCurrentGame();
+const {api,elements,selectors,document}=loadCurrentGame();
 const card=id=>api.card(id);
 const cards=(...ids)=>ids.map(card);
 
@@ -1901,19 +1901,45 @@ test('user-facing settlement formatting translates penalty terminology to Englis
   assert.equal(/Ppeok|Meong|Pi-bak|Gwang|Go-bak/.test(formatted),false);
 });
 
-test('responsive CSS defines compact portrait and short-height landscape strategies without destabilizing cards',()=>{
+test('moving-card sizing uses an untransformed in-stage probe for responsive CSS expressions',()=>{
+  const originalCreateElement=document.createElement;
+  document.createElement=()=>({...fakeElement(),getBoundingClientRect(){return {left:12,top:20,width:52.5,height:85};}});
+  const size=api.cardSize();
+  const fullSize=api.fullSizeSourceRect({left:100,top:200,width:26,height:42});
+  document.createElement=originalCreateElement;
+  assert.deepEqual({...size},{w:52.5,h:85});
+  assert.deepEqual({...fullSize},{left:86.75,top:178.5,width:52.5,height:85});
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const sizing=source.slice(source.indexOf('function cardSize()'),source.indexOf('function approximateAiSource'));
+  assert.doesNotMatch(sizing,/parseFloat|getPropertyValue|stage\.offsetWidth|\{w:78,h:127\}/);
+  assert.doesNotMatch(sizing,/querySelector\(['"]\.hand|querySelector\(['"]\.floor/);
+  assert.match(sizing,/getBoundingClientRect\(\)/);
+  assert.match(sizing,/card-size-probe/);
+  assert.match(sizing,/return \{w:76,h:123\}/);
+});
+
+test('responsive CSS defines compact portrait and one-viewport short landscape strategies without destabilizing cards',()=>{
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  const landscape=css.slice(css.indexOf('@media (orientation:landscape) and (max-height:600px) and (max-width:1000px)'));
+  const portrait=css.slice(css.indexOf('@media (max-width:700px) and (orientation:portrait)'),css.indexOf('/* Phones wider than the portrait breakpoint'));
   assert.match(css,/@media \(max-width:700px\) and \(orientation:portrait\)/);
   assert.match(css,/@media \(orientation:landscape\) and \(max-height:600px\) and \(max-width:1000px\)/);
   assert.match(css,/--card-aspect:76 \/ 123/);
-  assert.match(css,/html,body\{width:100%;max-width:100%;overflow-x:hidden\}/);
+  assert.match(landscape,/\.app-shell\{height:100svh;height:100dvh;min-height:0;[^}]*overflow:hidden/);
+  assert.match(landscape,/\.game-stage\{[^}]*height:calc\(100dvh - 34px\);min-height:0;[^}]*grid-template-rows:48px minmax\(0,1fr\) 70px;[^}]*overflow:hidden/);
+  assert.match(landscape,/\.table\{[^}]*height:100%;min-height:0/);
+  assert.doesNotMatch(landscape,/222px/);
+  assert.match(landscape,/\.floor\{[^}]*grid-template-columns:repeat\(6,[^}]*grid-template-rows:repeat\(2,/);
+  assert.match(portrait,/\.floor\{[^}]*grid-template-columns:repeat\(4,[^}]*grid-template-rows:repeat\(3,/);
   assert.match(css,/\.avatar\{[^}]*white-space:nowrap/);
   assert.match(css,/\.tutorial-nav\{[^}]*overflow-x:auto;overflow-y:hidden/);
-  assert.match(css,/@media \(orientation:landscape\) and \(max-height:600px\) and \(max-width:1000px\)[\s\S]*?\.captured-mini\{[^}]*width:22px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)/,'landscape captured cards override the fixed desktop height');
+  assert.match(landscape,/\.captured-mini\{[^}]*height:auto!important;aspect-ratio:var\(--card-aspect\)/,'landscape captured cards override the fixed desktop height');
+  assert.match(landscape,/\.captured-strip\{gap:1px\}/,'all four base capture-grid categories remain represented');
   assert.match(css,/\.table\{position:relative;z-index:10;min-height:565px/,'desktop table geometry remains the base');
   assert.match(css,/--card-w:76px;--card-h:123px/,'desktop card geometry remains the base');
   assert.doesNotMatch(css,/\.hand(?:-card-slot)?\{[^}]*(?:position:fixed|position:sticky)/);
-  assert.match(css,/\.hand\{[^}]*justify-content:center;overflow:visible/,'the full mobile hand fits without its own horizontal scroller');
+  assert.match(landscape,/\.hand\{position:static;[^}]*justify-content:center;overflow:visible/,'the full landscape hand fits without scrolling or fixed positioning');
+  assert.match(landscape,/dialog\{[^}]*max-height:calc\(100dvh - 8px\)[^}]*overflow:hidden\}\.dialog-card\{[^}]*overflow:auto/);
 });
 
 test('Keep for Bomb is silent while accepted Shake alone enters the acknowledgment presenter',()=>{
@@ -2440,7 +2466,8 @@ test('session gate invokes dice presentation once across later hands and once af
 test('normal staged and deck cards keep viewport-scaled canonical dimensions without scale transforms',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   const staging=source.slice(source.indexOf('function cardSize'),source.indexOf('function captureTargetRect'));
-  assert.match(staging,/getBoundingClientRect\(\)\.width\/stage\.offsetWidth/);
+  assert.match(staging,/probeRect\.width>0&&probeRect\.height>0/);
+  assert.doesNotMatch(staging,/stage\.offsetWidth/);
   assert.match(staging,/normal-gameplay-card/);assert.doesNotMatch(staging,/magnified-card|tutorial-game-card|scale\(/);
   assert.match(staging,/deck-draw-front card canonical-card-face/);
   assert.doesNotMatch(css,/targetPulse[^}]*scale\(/);
@@ -2461,8 +2488,8 @@ test('normal gameplay semantic class leaves the approved card shell untouched',(
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.doesNotMatch(css,/\.normal-gameplay-card\s*\{/);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
-  assert.match(source,/getPropertyValue\('--card-w'\)/);
-  assert.doesNotMatch(source,/const resting=document\.querySelector\('\.floor \.floor-card'\)/);
+  assert.match(source,/probe\.className='card normal-gameplay-card card-size-probe'/);
+  assert.doesNotMatch(source,/getPropertyValue\('--card-w'\)/);
   assert.match(source,/el\.style\.width=`\$\{rect\.width\}px`.*el\.style\.height=`\$\{rect\.height\}px`/s);
 });
 
@@ -2648,10 +2675,9 @@ test('played and deck-drawn temporary cards retain the settled card class withou
 test('player-played and deck-drawn cards use untransformed canonical dimensions for every moving frame',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const sizing=source.slice(source.indexOf('function cardSize'),source.indexOf('function approximateAiSource'));
-  assert.match(sizing,/getPropertyValue\('--card-w'\)/);
-  assert.match(sizing,/getPropertyValue\('--card-h'\)/);
-  assert.match(sizing,/stage\.getBoundingClientRect\(\)\.width\/stage\.offsetWidth/);
-  assert.doesNotMatch(sizing,/resting|getBoundingClientRect\(\).*floor-card|getBoundingClientRect\(\).*hand-card/);
+  assert.match(sizing,/probe\.getBoundingClientRect\(\)/);
+  assert.doesNotMatch(sizing,/querySelector\(['"]\.hand|querySelector\(['"]\.floor/);
+  assert.doesNotMatch(sizing,/stage\.getBoundingClientRect\(\)\.width\/stage\.offsetWidth|parseFloat/);
   const hand=source.slice(source.indexOf('async function animateHandCardSlap'),source.indexOf('async function animateBombSlap'));
   const deckHit=source.slice(source.indexOf('async function animateStagedSlap'),source.indexOf('function captureTargetRect'));
   assert.match(hand,/sourceRect=fullSizeSourceRect\(sourceRect\)/);
