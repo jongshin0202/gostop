@@ -1,16 +1,22 @@
 (() => {
   'use strict';
 
-  const FLICK_DEFAULTS=Object.freeze({minDistance:36,maxDuration:500,minSpeed:.14,maxHorizontalRatio:1.35});
+  const FLICK_DEFAULTS=Object.freeze({
+    minUpwardDistance:18,
+    minTravelDistance:42,
+    maxDuration:320,
+    minSpeed:.20,
+    maxHorizontalRatio:4
+  });
 
   function isUpwardFlick(sample,options={}){
     if(!sample)return false;
     const config={...FLICK_DEFAULTS,...options};
     const startX=Number(sample.startX),startY=Number(sample.startY),endX=Number(sample.endX),endY=Number(sample.endY),duration=Math.max(1,Number(sample.duration)||1);
     if(![startX,startY,endX,endY].every(Number.isFinite))return false;
-    const dx=endX-startX,up=startY-endY;
-    if(up<config.minDistance||duration>config.maxDuration)return false;
-    if(up/duration<config.minSpeed)return false;
+    const dx=endX-startX,up=startY-endY,travel=Math.hypot(dx,up);
+    if(up<config.minUpwardDistance||travel<config.minTravelDistance||duration>config.maxDuration)return false;
+    if(travel/duration<config.minSpeed)return false;
     return Math.abs(dx)<=up*config.maxHorizontalRatio;
   }
 
@@ -29,6 +35,8 @@
         #playerHand .hand-card:hover{transform:none!important}
         #playerHand .hand-card-slot.is-hovered{z-index:40!important}
         #playerHand .hand-card-slot.is-hovered .hand-card{transform:translate3d(0,-18px,0) rotate(-1deg)!important;box-shadow:0 12px 18px rgba(0,0,0,.38)!important}
+        #playerHand.gostop-touch-selection-cleared .hand-card-slot.is-hovered{z-index:auto!important}
+        #playerHand.gostop-touch-selection-cleared .hand-card-slot.is-hovered .hand-card{transform:none!important;box-shadow:0 7px 10px rgba(0,0,0,.34)!important}
       }
     `;
     (doc.head||doc.documentElement).appendChild(style);
@@ -38,15 +46,26 @@
     let suppressTouchClicksUntil=0;
 
     const now=()=>globalThis.performance?.now?.()??Date.now();
+    const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
     const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
     const allHandCards=()=>[...doc.querySelectorAll('#playerHand .hand-card')].filter(canUseCard);
-    const handRect=()=>doc.getElementById('playerHand')?.getBoundingClientRect?.()||null;
+    const handRect=()=>playerHand()?.getBoundingClientRect?.()||null;
+
+    const clearSelection=()=>{
+      playerHand()?.classList.add('gostop-touch-selection-cleared');
+      doc.querySelectorAll('#playerHand .hand-card-slot').forEach(slot=>{
+        slot.classList.remove('is-hovered');
+        const card=slot.querySelector('.hand-card');
+        if(card)card.title='';
+      });
+    };
 
     const selectCard=card=>{
       if(!canUseCard(card))return false;
       const slot=card.closest('.hand-card-slot');
       if(!slot)return false;
+      playerHand()?.classList.remove('gostop-touch-selection-cleared');
       try{slot.dispatchEvent(new Event('pointerenter'));}catch(_){ }
       doc.querySelectorAll('#playerHand .hand-card-slot').forEach(node=>node.classList.toggle('is-hovered',node===slot));
       return true;
@@ -81,12 +100,30 @@
       }
     };
 
+    const pushSample=(state,x,y,time=now())=>{
+      if(!state)return;
+      if(!state.samples)state.samples=[];
+      state.samples.push({x,y,t:time});
+      const cutoff=time-240;
+      while(state.samples.length>2&&state.samples[0].t<cutoff)state.samples.shift();
+    };
+
+    const recentFlickSample=(state,endX,endY,endTime=now())=>{
+      const points=[...(state.samples||[]),{x:endX,y:endY,t:endTime}].filter(point=>Number.isFinite(point.x)&&Number.isFinite(point.y)&&Number.isFinite(point.t));
+      if(!points.length)return null;
+      const cutoff=endTime-180;
+      const recent=points.filter(point=>point.t>=cutoff);
+      const start=(recent.length>=2?recent[0]:points[0])||points[0];
+      return {startX:start.x,startY:start.y,endX,endY,duration:Math.max(1,endTime-start.t)};
+    };
+
     const setActiveCard=(state,card,x,y)=>{
       if(!state||!canUseCard(card)||card===state.card)return;
       restoreDraggedCard(state);
       selectCard(card);
       const rect=card.getBoundingClientRect();
       state.card=card;
+      state.wasSelected=false;
       state.anchorX=x;
       state.anchorY=y;
       state.anchorTime=now();
@@ -96,6 +133,9 @@
       state.previousZIndex=card.style.zIndex;
       state.dragging=false;
       state.switched=true;
+      state.browsing=true;
+      state.samples=[];
+      pushSample(state,x,y,state.anchorTime);
     };
 
     const ensureGhost=state=>{
@@ -120,26 +160,30 @@
     const beginTouch=(event,touch,card)=>{
       if(!canUseCard(card))return false;
       const slot=card.closest('.hand-card-slot');
-      const wasSelected=!!slot?.classList.contains('is-hovered');
+      const wasSelected=!!slot?.classList.contains('is-hovered')&&!playerHand()?.classList.contains('gostop-touch-selection-cleared');
       selectCard(card);
       const rect=card.getBoundingClientRect();
+      const startTime=now();
       touchState={
         id:touch.identifier,
         card,
         wasSelected,
         switched:false,
+        browsing:false,
         dragging:false,
         anchorX:touch.clientX,
         anchorY:touch.clientY,
-        anchorTime:now(),
+        anchorTime:startTime,
         lastX:touch.clientX,
         lastY:touch.clientY,
         startRect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height},
         previousVisibility:card.style.visibility,
         previousTransform:card.style.transform,
         previousZIndex:card.style.zIndex,
-        ghost:null
+        ghost:null,
+        samples:[]
       };
+      pushSample(touchState,touch.clientX,touch.clientY,startTime);
       suppressTouchClicksUntil=Date.now()+900;
       event.preventDefault();
       return true;
@@ -148,14 +192,17 @@
     const moveTouch=(event,touch)=>{
       const state=touchState;
       if(!state)return;
+      const time=now();
       state.lastX=touch.clientX;
       state.lastY=touch.clientY;
+      pushSample(state,touch.clientX,touch.clientY,time);
 
       const up=state.anchorY-touch.clientY;
       const sideways=Math.abs(touch.clientX-state.anchorX);
-      const verticalIntent=up>=8&&up>=sideways*.65;
+      const radialIntent=up>=14&&(up>=sideways*.28||touch.clientY<state.startRect.top-8);
 
-      if(!state.dragging&&!verticalIntent){
+      if(!state.dragging&&!radialIntent){
+        if(sideways>=10)state.browsing=true;
         const hovered=nearestHandCard(touch.clientX,touch.clientY);
         if(hovered&&hovered!==state.card){
           setActiveCard(state,hovered,touch.clientX,touch.clientY);
@@ -164,7 +211,7 @@
         }
       }
 
-      if(!state.dragging&&verticalIntent){
+      if(!state.dragging&&radialIntent){
         state.dragging=true;
         state.wasSelected=false;
       }
@@ -192,17 +239,24 @@
       if(!state)return;
       const endX=touch?.clientX??state.lastX;
       const endY=touch?.clientY??state.lastY;
-      const duration=Math.max(1,now()-state.anchorTime);
-      const flick=state.dragging&&isUpwardFlick({startX:state.anchorX,startY:state.anchorY,endX,endY,duration});
+      const endTime=now();
+      pushSample(state,endX,endY,endTime);
+      const flickSample=recentFlickSample(state,endX,endY,endTime);
+      const flick=state.dragging&&isUpwardFlick(flickSample);
       const card=state.card;
-      const secondTap=!state.dragging&&!state.switched&&state.wasSelected&&Math.abs(endX-state.anchorX)<8&&Math.abs(endY-state.anchorY)<8;
+      const secondTap=!state.dragging&&!state.browsing&&!state.switched&&state.wasSelected&&Math.abs(endX-state.anchorX)<8&&Math.abs(endY-state.anchorY)<8;
+      const browsed=state.browsing||state.switched;
 
       restoreDraggedCard(state);
       touchState=null;
       event.preventDefault();
       event.stopPropagation();
 
-      if(flick||secondTap){
+      if(flick){
+        triggerPlay(card);
+      }else if(browsed){
+        clearSelection();
+      }else if(secondTap){
         triggerPlay(card);
       }else{
         selectCard(card);
@@ -211,11 +265,13 @@
 
     const cancelTouch=event=>{
       if(!touchState)return;
-      const card=touchState.card;
-      restoreDraggedCard(touchState);
+      const state=touchState;
+      const card=state.card;
+      const browsed=state.browsing||state.switched;
+      restoreDraggedCard(state);
       touchState=null;
       event?.preventDefault?.();
-      selectCard(card);
+      if(browsed)clearSelection();else selectCard(card);
     };
 
     const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
