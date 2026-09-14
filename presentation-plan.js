@@ -22,7 +22,7 @@
     style.dataset.gostopMotionLayer='true';
     style.textContent=`
       #playerHand .hand-card{touch-action:none}
-      .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;transform:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:left,top,transform}
+      .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
       .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2147482000!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
       .physical-card.moving-card,.capture-flight-card,.sliding-capture{contain:paint}
     `;
@@ -50,6 +50,7 @@
       ghost.removeAttribute('id');ghost.removeAttribute('disabled');ghost.setAttribute('aria-hidden','true');ghost.tabIndex=-1;
       ghost.classList.add('gostop-flick-ghost');
       ghost.style.left=`${startRect.left}px`;ghost.style.top=`${startRect.top}px`;ghost.style.width=`${startRect.width}px`;ghost.style.height=`${startRect.height}px`;
+      ghost.style.transform='translate3d(0,0,0)';
       doc.body.appendChild(ghost);
       gesture.ghost=ghost;
       card.style.visibility='hidden';
