@@ -65,6 +65,11 @@
     onlineHandSourceRects.clear();onlineHandSourceRects.set(cardId,saved);return {...saved};
   }
   function takeOnlineHandSource(cardId){const rect=onlineHandSourceRects.get(cardId)||null;onlineHandSourceRects.delete(cardId);return rect&&{...rect};}
+  function hasUnpresentedLocalHandMovement(incomingState,presentationEvents=[]){
+    if(presentationEvents.length||!onlineHandSourceRects.size)return false;
+    const incomingIds=new Set((incomingState?.human?.hand||[]).map(card=>card.id));
+    return [...onlineHandSourceRects.keys()].some(cardId=>!incomingIds.has(cardId));
+  }
   let onlineMode=false,onlinePendingCardId=null,onlineLastEvents=[],onlineSubmit=()=>null,onlinePlayAgain=()=>false,onlineQuitFromResult=false,latestOnlineSnapshot=null;
   const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
   let soloMatchId=null,soloRevision=0,soloActionSequence=0;
@@ -2097,7 +2102,7 @@
       soloViewerId:SOLO_VIEWER_ID,
       otherPlayerId,legacySideForPlayerId,playerIdForLegacySide,
       onlineValueForViewer,
-      canSubmitPlayAgain,isOnlineSessionFlowAction,rememberOnlineHandSource,takeOnlineHandSource,
+      canSubmitPlayAgain,isOnlineSessionFlowAction,rememberOnlineHandSource,takeOnlineHandSource,hasUnpresentedLocalHandMovement,
       viewerSeatMap,viewerRelativePlayers,seatForLegacySide,
       monthListHas,monthListAdd,monthListDelete,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
       masterDeck:()=>MASTER_DECK.map(cloneCard),
@@ -2153,7 +2158,7 @@
     const onlineStatus=document.getElementById('onlineStatus'),createOnlineBtn=document.getElementById('createOnlineBtn'),joinOnlineForm=document.getElementById('joinOnlineForm');
     const onlineActions=new Map();let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set();
     onlineSubmit=function(action){
-      if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){onlineStatus.textContent='Online authority is disconnected. Reconnect before acting.';presentation.locked=true;render();return null;}
+      if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){onlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);presentation.locked=true;return id;}catch(error){onlineStatus.textContent=error.message;return null;}
     };
     onlinePlayAgain=async function(){
@@ -2223,7 +2228,12 @@
       reconcileOnlineFlow(snapshot);
       if(snapshot.sessionFlow?.ended)return;
       if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
-      if(!presentationEvents.length){presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};state=incomingMapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;}
+      if(!presentationEvents.length){
+        // Authority can advance before the physical play event arrives. Do not render the
+        // selected card on the floor until a presentation step claims its exact source.
+        if(hasUnpresentedLocalHandMovement(incomingMapped.state,presentationEvents))return;
+        presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};state=incomingMapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;
+      }
       let bombEvent=null;
       const incoming=incomingMapped.state;
       const onlinePlayed=state.pendingTurn?.played?.card,onlineDrawn=state.pendingTurn?.drawn?.card;
@@ -2277,16 +2287,18 @@
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
       onlineMode=true;
       refreshModeLocalizedLabels();
-      sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));onlineStatus.textContent=`Room ${room.roomCode} — waiting for connection…`;
-      adapter.addEventListener('connected',()=>{onlineStatus.textContent=`Room ${room.roomCode} — waiting for opponent`;});
-      adapter.addEventListener('roomReady',()=>{onlineStatus.textContent='Match ready.';els.soloStartOverlay.hidden=true;});
-      adapter.addEventListener('opponentConnected',()=>{onlineStatus.textContent='Opponent connected. Match ready.';els.soloStartOverlay.hidden=true;});
-      adapter.addEventListener('disconnected',()=>{onlineHandSourceRects.clear();onlineStatus.textContent='Disconnected from the authoritative server. Reconnect before playing.';presentation.locked=true;render();});
+      sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));onlineStatus.textContent=t('roomWaitingConnection',{roomCode:room.roomCode});
+      adapter.addEventListener('connected',()=>{onlineStatus.textContent=t('roomWaitingOpponent',{roomCode:room.roomCode});});
+      adapter.addEventListener('roomReady',()=>{onlineStatus.textContent=t('matchReady');els.soloStartOverlay.hidden=true;});
+      adapter.addEventListener('opponentConnected',()=>{onlineStatus.textContent=t('opponentConnectedMatchReady');els.soloStartOverlay.hidden=true;});
+      adapter.addEventListener('disconnected',()=>{onlineHandSourceRects.clear();onlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
       adapter.addEventListener('snapshot',event=>{latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:event.detail}));});
       adapter.addEventListener('actionAccepted',async event=>{
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
-        const automatic=latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'?latestOnlineSnapshot?.nextAction:null;
         await onlinePresentationQueue;
+        // Snapshot-before-ack can advance authority while presentation is queued. Derive the
+        // continuation only now so an action from an older revision is never replayed.
+        const automatic=latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'?latestOnlineSnapshot?.nextAction:null;
         if(action?.type==='attemptPlayCard'&&!state.pendingDecision){if(automatic)onlineSubmit(automatic);else await submitOnlineCardPlay();return;}
         if(['declareShake','keepShakeSecret','declineBomb'].includes(action?.type)&&!state.pendingDecision&&onlinePendingCardId){await submitOnlineCardPlay();return;}
         if(automatic){onlineSubmit(automatic);return;}
@@ -2296,12 +2308,14 @@
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
         if(action?.cardId)onlineHandSourceRects.delete(action.cardId);
         onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=true;render();
-        if(isOnlineSessionFlowAction(action))adapter.sync();
+        // Stay fail-closed, then let a fresh authoritative snapshot decide whether input can
+        // resume. This also recovers safely from a continuation rejected after an ack race.
+        adapter.sync();
       });
       adapter.addEventListener('error',event=>{onlineStatus.textContent=event.detail.message||event.detail.code||'Online connection error.';});adapter.connect();
     };
     addEventListener('gostop-online-snapshot',event=>{const {snapshot}=event.detail,events=(event.detail.events||[]).filter(item=>{const key=Number.isInteger(item.revision)&&Number.isInteger(item.eventIndex)?`${snapshot.matchId}:${item.revision}:${item.eventIndex}`:null;if(!key)return true;if(onlinePresentedEvents.has(key))return false;onlinePresentedEvents.add(key);if(onlinePresentedEvents.size>256)onlinePresentedEvents.delete(onlinePresentedEvents.values().next().value);return true;});onlinePresentationQueue=onlinePresentationQueue.then(()=>presentOnlineTransition(snapshot,events)).catch(error=>{onlineStatus.textContent=error.message;presentation.locked=true;});});
-    createOnlineBtn?.addEventListener('click',async()=>{try{onlineStatus.textContent='Creating room…';const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();onlineStatus.textContent=`Share room code: ${room.roomCode}`;await beginOnline(room);}catch(error){onlineStatus.textContent=error.message;}});
-    joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();try{onlineStatus.textContent='Joining room…';const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase(),existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null'),room=await adapter.join(code,existing?.credential);await beginOnline(room);els.soloStartOverlay.hidden=true;}catch(error){onlineStatus.textContent=error.message;}});
+    createOnlineBtn?.addEventListener('click',async()=>{try{onlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();onlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room);}catch(error){onlineStatus.textContent=error.message;}});
+    joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();try{onlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase(),existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null'),room=await adapter.join(code,existing?.credential);await beginOnline(room);els.soloStartOverlay.hidden=true;}catch(error){onlineStatus.textContent=error.message;}});
   }
 })();

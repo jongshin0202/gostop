@@ -129,8 +129,8 @@
   <dialog id="scoreDialog"><form method="dialog" class="dialog-card score-breakdown-card"><button class="dialog-close" aria-label="Close">×</button><h2 data-i18n="scoreBreakdown">Score Breakdown</h2><div id="scoreBreakdownContent"></div></form></dialog>
   <dialog id="newGameDialog"><div class="dialog-card"><p data-i18n="newGameResetWarning"></p><div class="decision-actions"><button id="newGameYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="newGameNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
   <dialog id="replayWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2></div></dialog>
-  <dialog id="newGameWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponent">Waiting for Opponent</h2><p data-i18n="newGameResetWarning"></p><button id="cancelNewGameBtn" class="stop-btn" type="button" data-i18n="cancel">Cancel</button></div></dialog>
-  <dialog id="incomingNewGameDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="opponentNewGameRequest">Your opponent has requested to start a new game.</h2><p data-i18n="newGameResetWarning"></p><div class="decision-actions"><button id="acceptNewGameBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="rejectNewGameBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
+  <dialog id="newGameWaitingDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="waitingForOpponentToAcceptNewGame">Waiting for Opponent to Accept New Game</h2><p data-i18n="newGameResetWarning"></p><button id="cancelNewGameBtn" class="stop-btn" type="button" data-i18n="cancel">Cancel</button></div></dialog>
+  <dialog id="incomingNewGameDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="opponentNewGameRequest">Opponent Has Requested to Start a New Game</h2><p data-i18n="newGameResetWarning"></p><div class="decision-actions"><button id="acceptNewGameBtn" class="go-btn" type="button" data-i18n="accept">Accept</button><button id="rejectNewGameBtn" class="stop-btn" type="button" data-i18n="decline">Decline</button></div></div></dialog>
   <dialog id="quitConfirmDialog"><div class="dialog-card flow-dialog-card"><h2 id="quitConfirmTitle" data-i18n="quitConfirmTitle">Quit. Are you sure?</h2><p id="quitConfirmMessage" data-i18n="quitConfirmMessage">Quitting will end the game for both players</p><div class="decision-actions"><button id="quitYesBtn" class="go-btn" type="button" data-i18n="yes">YES</button><button id="quitNoBtn" class="stop-btn" type="button" data-i18n="no">NO</button></div></div></dialog>
   <dialog id="opponentEndedDialog"><div class="dialog-card flow-dialog-card"><h2 data-i18n="opponentEnded">Your opponent has ended the game</h2><button id="opponentEndedOkBtn" class="go-btn" type="button" data-i18n="ok">OK</button></div></dialog>
 
@@ -192,8 +192,8 @@
   </div>
   <div id="soloStartOverlay" class="solo-start-overlay">
     <strong>GoStop <em>Live!</em></strong>
-    <div class="start-actions"><button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button><button id="createOnlineBtn" class="play-solo-btn" type="button">Create Online Game</button></div>
-    <form id="joinOnlineForm" class="online-join-form"><label for="onlineRoomCode">Room code</label><input id="onlineRoomCode" autocomplete="off" maxlength="14" pattern="[A-Za-z2-9]{14}" required><button type="submit" class="glass-btn strong">Join Game</button></form>
+    <div class="start-actions"><button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button><button id="createOnlineBtn" class="play-solo-btn" type="button" data-i18n="createOnlineGame">Create Online Game</button></div>
+    <form id="joinOnlineForm" class="online-join-form"><label for="onlineRoomCode" data-i18n="roomCode">Room code</label><input id="onlineRoomCode" autocomplete="off" maxlength="14" pattern="[A-Za-z2-9]{14}" required><button type="submit" class="glass-btn strong" data-i18n="joinGame">Join Game</button></form>
     <p id="onlineStatus" class="online-status" role="status" aria-live="polite"></p>
   </div>
   <div id="openingOverlay" class="opening-overlay" aria-live="polite" aria-hidden="true">
