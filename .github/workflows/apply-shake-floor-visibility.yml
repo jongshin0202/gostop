@@ -4,6 +4,7 @@ on:
     branches: [fix/shake-floor-visible]
     paths:
       - '.github/workflows/apply-shake-floor-visibility.yml'
+      - '.github/scripts/apply_shake_floor_visibility.py'
 permissions:
   contents: write
 jobs:
