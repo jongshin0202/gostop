@@ -57,7 +57,7 @@ css=r'''
   #shakeDialog .go-btn,#shakeDialog .stop-btn{padding:9px 12px}
 }
 '''
-path.write_text(text.rstrip()+css+'\n')
+path.write_text((text.rstrip()+css).rstrip()+'\n')
 
 test=Path('tests/shake-floor-visibility.test.js')
 test.write_text(r'''import test from 'node:test';
