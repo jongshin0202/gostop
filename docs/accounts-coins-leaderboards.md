@@ -72,15 +72,13 @@ Session summaries include games played, opponent, total Coins won/lost/net, comp
 - If the opponent declines, quitting is scheduled for the end of the current game.
 - Deliberately leaving before the allowed exit point is treated as abandonment and penalized.
 
-## Invite paths
+## Online Play entry paths
 
-Target Online Play entry paths:
+1. **Invite by email** — enter the opponent's email and send a signed, expiring game link. An authenticated recipient enters the game flow directly; a new recipient completes account creation first, receives signup/daily awards, then returns to the invitation.
+2. **Find an online player** — search by Nickname or choose from five recommended players who are online and available now. Each recommendation displays Nickname, Score, Games Played, and current Wallet Coins. Recommendations are ordered by closest normalized similarity using Score, Games Played, and Wallet Coins with equal weighting. Clicking a player sends a real-time play request. The recipient receives an accept/decline dialog; acceptance creates the authoritative ranked room for both players. Requests expire after 60 seconds and are rate-limited to reduce spam.
+3. **Room code / share link** — retain the existing direct room-entry path for players who already have a code/link.
 
-1. Invite by email with signed expiring link.
-2. Shareable invite link.
-3. Room code.
-
-An authenticated invite recipient joins directly. A new recipient registers, receives signup/daily awards, and is returned to the pending invite after authentication. Email delivery requires a provider integration; signed invite tokens and server-side room binding should be implemented independently of the provider.
+Online-lobby presence is ephemeral: a user is recommended only while actively connected to the authenticated lobby and marked available. Starting a game marks both participants unavailable so they cannot be recommended/challenged again until they return to the lobby. Email addresses are never exposed in the public lobby or recommendations.
 
 ## Leaderboard display / attract mode
 
