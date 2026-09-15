@@ -14,6 +14,7 @@ function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(r
 function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region']){const value=source.get(name);if(value)target.set(name,value);}return target;}
 async function forwardAccount(request,env,path){const headers=geoHeadersFor(request),auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
 async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
+async function requireAccount(request,env){const account=await resolveAccount(request,env);return account||null;}
 async function allocateRoom(env,{solo=false,account=null}={}){
   for(let attempt=0;attempt<5;attempt++){
     const code=roomCode(globalThis.crypto),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(code)),path=solo?'/initialize-solo':'/initialize',body=solo?{roomCode:code}:{roomCode:code,account};
@@ -41,14 +42,16 @@ export default {async fetch(request,env){
     if(request.method==='GET'&&url.pathname==='/api/me')return withCors(await forwardAccount(request,env,'/me'),origin);
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
-      const account=await resolveAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
+      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
       const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
     }
     if(request.method==='POST'&&url.pathname==='/api/rooms'){
-      const account=await resolveAccount(request,env);return withCors(await allocateRoom(env,{account}),origin);
+      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required for Online Play.'}},401),origin);
+      return withCors(await allocateRoom(env,{account}),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/join$/))&&request.method==='POST'){
-      const account=await resolveAccount(request,env),body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
+      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required for Online Play.'}},401),origin);
+      const body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/ws$/))&&request.method==='GET'){
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return stub.fetch(new Request('https://room/connect',{headers:request.headers}));
