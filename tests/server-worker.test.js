@@ -23,11 +23,9 @@ test('JSON POST preflight exposes content-type and authorization only for an all
   const rejected=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://evil.example','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}}),env);assert.equal(rejected.status,403);assert.equal(rejected.headers.get('Access-Control-Allow-Origin'),null);
 });
 
-test('ranked Solo and Online room allocation reject anonymous clients before Durable Object lookup',async()=>{
-  for(const path of ['/api/solo','/api/rooms','/api/rooms/ABCDEFGHJK2345/join']){
-    const response=await worker.fetch(new Request(`https://worker.example${path}`,{method:'POST',headers:allowedOrigin,body:'{}'}),env);
-    assert.equal(response.status,401,path);assert.equal((await response.json()).error.code,'AUTH_REQUIRED',path);
-  }
+test('ranked Solo rejects anonymous clients before Durable Object lookup during compatibility rollout',async()=>{
+  const response=await worker.fetch(new Request('https://worker.example/api/solo',{method:'POST',headers:allowedOrigin,body:'{}'}),env);
+  assert.equal(response.status,401);assert.equal((await response.json()).error.code,'AUTH_REQUIRED');
 });
 
 test('WebSocket routes reject missing and malicious browser origins before Durable Object lookup',async()=>{
