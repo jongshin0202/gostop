@@ -1,6 +1,8 @@
+import {adminHtml} from './admin-ui.mjs';
 export {GameRoom} from './game-room.mjs';
 export {AccountStore} from './ranked-account-store.mjs';
 export {Lobby} from './lobby.mjs';
+
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode(cryptoApi){const bytes=new Uint8Array(14),limit=256-(256%alphabet.length);cryptoApi.getRandomValues(bytes);let result='';for(const byte of bytes){if(byte>=limit)return roomCode(cryptoApi);result+=alphabet[byte%alphabet.length];}return result;}
 export function configuredOrigins(env){return new Set(String(env.ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(Boolean));}
@@ -22,8 +24,20 @@ async function allocateRoom(env,{solo=false,account=null}={}){
   }
   return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
 }
+function adminRequestAllowed(request,url){
+  const origin=request.headers.get('Origin');
+  return !origin||origin===url.origin;
+}
+
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname),adminApi=url.pathname.startsWith('/api/admin/');
+  if(request.method==='GET'&&(url.pathname==='/admin'||url.pathname==='/admin/'))return adminHtml();
+  if(adminApi){
+    if(!adminRequestAllowed(request,url))return json({ok:false,error:{code:'ADMIN_ORIGIN_NOT_ALLOWED',message:'Admin requests must come from this server admin page.'}},403);
+    if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'cache-control':'no-store'}});
+    const path=url.pathname.replace(/^\/api\/admin/,'/admin')+url.search;
+    return forwardAccount(request,env,path);
+  }
   if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
     if(!apiRoute)return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
