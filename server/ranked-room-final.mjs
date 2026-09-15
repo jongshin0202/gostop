@@ -12,6 +12,7 @@ export class FinalRankedRoomCore extends RankedRoomCore{
     for(const participant of this.room.participants)flow.pauseRemaining[participant.playerId]=participant.bot?0:2;
   }
   async load(){const room=await super.load();if(room)this.resetPauseBudgetForCurrentGame();return room;}
+  flowFor(participant){const flow=super.flowFor(participant),rank=this.room.rankFlow||{},opponent=this.room.participants.find(item=>item.playerId!==participant.playerId);return {...flow,pausesRemaining:{you:rank.pauseRemaining?.[participant.playerId]??(participant.bot?0:2),opponent:rank.pauseRemaining?.[opponent?.playerId]??(opponent?.bot?0:2)},opponentReconnectUntil:rank.disconnectDeadlines?.[opponent?.playerId]||null};}
   async refreshInactivity(){this.resetPauseBudgetForCurrentGame();return super.refreshInactivity();}
   async startFreshSoloSession(participant,reason='new-game'){
     await this.endRankedSession(reason);
@@ -34,6 +35,10 @@ export class FinalRankedRoomCore extends RankedRoomCore{
     if(message.type==='action'&&message.action.type==='respondQuit'&&typeof message.action.accept!=='boolean'){
       const response=envelope('actionRejected',{actionId:message.actionId,error:{code:'MALFORMED_ACTION',message:'Quit response must be Accept or Decline.'}});this.send(socket,response);return response;
     }
-    const beforeSequence=this.room?.gameSequence||0,response=await super.handle(socket,input);if(this.room&&(this.room.gameSequence||0)!==beforeSequence){this.resetPauseBudgetForCurrentGame();await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}return response;
+    const beforeSequence=this.room?.gameSequence||0,response=await super.handle(socket,input);
+    if(response?.type==='actionAccepted'&&this.room&&!this.room.sessionFlow.ended){this.resetPauseBudgetForCurrentGame();await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}
+    if(this.room&&(this.room.gameSequence||0)!==beforeSequence){this.resetPauseBudgetForCurrentGame();await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}
+    return response;
   }
+  async disconnect(socket){const playerId=socket.__playerId;await super.disconnect(socket);if(this.room&&playerId){await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}}
 }
