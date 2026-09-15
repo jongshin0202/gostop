@@ -45,7 +45,8 @@ test('online quit decline schedules requester exit after current game',async()=>
 
 test('ranked Solo Play Again immediately creates the next hand without waiting for the computer seat',async()=>{
   const {core,user,socket}=await soloRoom(),oldSession=core.room.sessionId,oldSequence=core.room.gameSequence;
-  const state=core.authority.readTrustedState(core.room.matchId);state.terminalResult={type:'stop',winnerId:user.playerId,finalPoints:7};state.winner=user.playerId;core.authority.restoreMatch({...core.authority.exportMatch(core.room.matchId),state});core.room.terminalResult=structuredClone(state.terminalResult);core.room.status='completed';await core.persist();
+  const record=core.authority.exportMatch(core.room.matchId),seatId=record.seatByPlayer[user.playerId];record.state.terminalResult={type:'stop',winnerId:seatId,finalPoints:7};record.state.winner=seatId;record.completedAt=now();
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);core.room.terminalResult=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).terminalResult;core.room.status='completed';await core.persist();
   const before=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}),result=await core.handle(socket,flow('solo-replay',before.revision,{type:'playAgainReady'}));
   assert.equal(result.type,'actionAccepted');assert.equal(core.room.sessionId,oldSession);assert.equal(core.room.gameSequence,oldSequence+1);assert.equal(core.room.sessionFlow.replayReady.playerA,false);assert.equal(core.room.sessionFlow.replayReady.playerB,false);assert.equal(core.room.terminalResult,null);assert.equal(socket.last('snapshot').snapshot.terminalResult,null);assert.equal(socket.last('snapshot').snapshot.sessionFlow.replayReady.you,false);
 });
