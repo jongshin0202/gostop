@@ -31,6 +31,7 @@
       #appShell,#appShell img,#scoreDialog,#scoreDialog img,#captureDialog,#captureDialog img,#resultDialog,#resultDialog img{-webkit-touch-callout:none}
       #scoreDialog{overscroll-behavior:contain}
       #scoreDialog .score-breakdown-card{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+      .milestone-overlay[data-effect="flush"] .milestone-title:after{display:block!important;font-size:clamp(5.5rem,18vw,11rem)!important;line-height:1;margin:.18em auto 0!important;transform-origin:center}
       .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
       .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2147482000!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
       .physical-card.moving-card,.capture-flight-card,.sliding-capture{contain:paint}
