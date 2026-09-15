@@ -1,5 +1,4 @@
 const encoder=new TextEncoder();
-const decoder=new TextDecoder();
 const COMMON_PASSWORDS=new Set(['12345','123456','12345678','password','password1','qwerty','qwerty123','abc123','letmein','111111','000000']);
 const PROVISIONAL_GAMES=10;
 const SESSION_TTL_MS=1000*60*60*24*30;
@@ -11,12 +10,12 @@ const normalizeNickname=value=>String(value||'').trim().replace(/\s+/g,' ');
 const nicknameKey=value=>normalizeNickname(value).toLowerCase();
 const utcDay=iso=>String(iso).slice(0,10);
 const utcMonth=iso=>String(iso).slice(0,7);
-const clone=value=>JSON.parse(JSON.stringify(value));
 const randomHex=(cryptoApi,bytes=24)=>{const data=new Uint8Array(bytes);cryptoApi.getRandomValues(data);return Array.from(data,b=>b.toString(16).padStart(2,'0')).join('');};
 const randomId=(cryptoApi,prefix)=>`${prefix}_${randomHex(cryptoApi,16)}`;
 const toHex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,'0')).join('');
 const fromHex=hex=>new Uint8Array(String(hex).match(/../g)?.map(v=>parseInt(v,16))||[]);
 const safeEqual=(a,b)=>{if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;};
+const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
 
 async function hashToken(cryptoApi,token){return toHex(await cryptoApi.subtle.digest('SHA-256',encoder.encode(token)));}
 async function hashPassword(cryptoApi,password,saltHex,iterations=PBKDF2_ITERATIONS){
@@ -31,12 +30,16 @@ function passwordProblem(password){
   if(/^(.)(\1)+$/.test(value))return 'Choose a less predictable password.';
   return null;
 }
+function locationFromRequest(request){
+  const countryCode=coarseCode(request.headers.get('x-gostop-country'),2),regionCode=coarseCode(request.headers.get('x-gostop-region'));
+  return countryCode?{countryCode,regionCode}:null;
+}
 function publicAccount(account){
-  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false};
+  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};
 }
 function blankStats(){return {gamesPlayed:0,wins:0,totalCoinsWon:0,milestones:{}};}
 function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
-function leaderboardRow(account,stats){return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed:stats.gamesPlayed,provisional:stats.gamesPlayed<PROVISIONAL_GAMES};}
+function leaderboardRow(account,stats){return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed:stats.gamesPlayed,provisional:stats.gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
 function sortRows(rows){return rows.sort((a,b)=>b.score-a.score||b.gamesPlayed-a.gamesPlayed||b.totalCoins-a.totalCoins||a.nickname.localeCompare(b.nickname));}
 
 export class AccountStore{
@@ -51,6 +54,11 @@ export class AccountStore{
     return this.accountById(session.accountId);
   }
   bearer(request){const value=request.headers.get('Authorization')||'';return value.startsWith('Bearer ')?value.slice(7).trim():'';}
+  applyCoarseLocation(account,request){
+    const location=locationFromRequest(request);if(!location)return false;
+    if(account.location?.countryCode===location.countryCode&&account.location?.regionCode===location.regionCode)return false;
+    account.location={countryCode:location.countryCode,regionCode:location.regionCode,source:'edge-coarse',updatedAt:this.now()};account.updatedAt=this.now();return true;
+  }
   async awardDaily(account){
     const today=utcDay(this.now());
     if(account.lastDailyAwardDate===today)return false;
@@ -76,8 +84,8 @@ export class AccountStore{
     const problem=passwordProblem(password);if(problem)return json({ok:false,error:{code:'WEAK_PASSWORD',message:problem}},400);
     if(await this.storage.get(`email:${email}`))return json({ok:false,error:{code:'EMAIL_IN_USE',message:'An account already exists for this email.'}},409);
     const nickKey=nicknameKey(nickname);if(await this.storage.get(`nickname:${nickKey}`))return json({ok:false,error:{code:'NICKNAME_IN_USE',message:'That nickname is already in use.'}},409);
-    const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt);
-    const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:true,walletCoins:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},createdAt:this.now(),updatedAt:this.now()};
+    const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt),coarseLocation=locationFromRequest(request);
+    const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:true,walletCoins:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},location:coarseLocation?{...coarseLocation,source:'edge-coarse',updatedAt:this.now()}:null,createdAt:this.now(),updatedAt:this.now()};
     await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
     await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});await this.awardDaily(account);
     const session=await this.createSession(account);
@@ -89,11 +97,11 @@ export class AccountStore{
     const account=await this.accountByEmail(email);if(!account)return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
     const candidate=await hashPassword(this.crypto,password,account.passwordSalt,account.passwordIterations||PBKDF2_ITERATIONS);
     if(!safeEqual(candidate,account.passwordHash))return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
-    const dailyAwarded=await this.awardDaily(account),session=await this.createSession(account);
+    const locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);const session=await this.createSession(account);
     return json({ok:true,account:publicAccount(account),session,awards:{dailyCoins:dailyAwarded?100:0}});
   }
 
-  async me(request){const account=await this.requireAccount(request),dailyAwarded=await this.awardDaily(account);return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0}});}
+  async me(request){const account=await this.requireAccount(request),locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0}});}
   async logout(request){const token=this.bearer(request);if(token)await this.storage.delete(`auth:${await hashToken(this.crypto,token)}`);return json({ok:true});}
 
   async leaderboard(){
@@ -128,7 +136,7 @@ export class AccountStore{
     await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'force-quit',amount:-penalty,gameId,createdAt:this.now()});await this.storage.put(`forceQuit:${gameId}`,{...body,gameId,penaltyCoins:penalty,recordedAt:this.now()});return json({ok:true,penaltyCoins:penalty,account:publicAccount(account)});
   }
 
-  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));return json({ok:true,account:account?publicAccount(account):null});}
+  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account&&this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);return json({ok:true,account:account?publicAccount(account):null});}
 
   async fetch(request){
     const path=new URL(request.url).pathname;
@@ -148,4 +156,4 @@ export class AccountStore{
   }
 }
 
-export {PROVISIONAL_GAMES,blankStats,scoreFor,passwordProblem};
+export {PROVISIONAL_GAMES,blankStats,scoreFor,passwordProblem,locationFromRequest};
