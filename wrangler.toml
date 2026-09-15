@@ -6,7 +6,15 @@ compatibility_date = "2026-09-01"
 name = "GAME_ROOMS"
 class_name = "GameRoom"
 
+[[durable_objects.bindings]]
+name = "ACCOUNT_STORE"
+class_name = "AccountStore"
+
 [exports.GameRoom]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.AccountStore]
 type = "durable-object"
 storage = "sqlite"
 
