@@ -729,7 +729,8 @@
   async function humanPlay(cardId, clickedEl){
     if(onlineMode){
       if(presentation.targetChoice){
-        if(onlinePendingCardId===cardId){syncTargetChoiceUi();return;}
+        const authoritativeTargetChoice=state?.pendingDecision?.type==='chooseFloorTarget'||state?.pendingTurn?.phase==='awaitingFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
+        if(onlinePendingCardId===cardId||authoritativeTargetChoice){syncTargetChoiceUi();return;}
         cleanupTargetChoice();onlineHandSourceRects.clear();
       }
       onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);if(!onlineSubmit({type:'attemptPlayCard',cardId}))onlineHandSourceRects.delete(cardId);return;

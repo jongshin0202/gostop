@@ -15,6 +15,7 @@ test('floor target input uses delegated handlers so rebuilt card nodes stay sele
   assert.match(source,/els\.floor\.addEventListener\('keydown',[\s\S]*?finishTargetChoice\(cardId\)/);
 });
 
-test('repeat tap on same ranked hand card cannot start a duplicate target submission',()=>{
-  assert.match(source,/if\(presentation\.targetChoice\)\{\s*if\(onlinePendingCardId===cardId\)\{syncTargetChoiceUi\(\);return;\}/);
+test('repeat taps cannot cancel or duplicate an active ranked target choice',()=>{
+  assert.match(source,/const authoritativeTargetChoice=state\?\.pendingDecision\?\.type==='chooseFloorTarget'\|\|state\?\.pendingTurn\?\.phase==='awaitingFloorTarget'\|\|latestOnlineSnapshot\?\.nextAction\?\.type==='chooseFloorTarget'/);
+  assert.match(source,/if\(onlinePendingCardId===cardId\|\|authoritativeTargetChoice\)\{syncTargetChoiceUi\(\);return;\}/);
 });
