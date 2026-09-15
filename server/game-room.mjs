@@ -1,4 +1,4 @@
-import {RankedRoomCore} from './ranked-room-core.mjs';
+import {FinalRankedRoomCore} from './ranked-room-final.mjs';
 import {RoomError} from './room-core.mjs';
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const errorResponse=error=>json({ok:false,error:{code:error.code||'INTERNAL_ERROR',message:error.message}},error.status||500);
@@ -7,7 +7,7 @@ export class GameRoom{
   constructor(state,env){
     this.state=state;this.env=env;
     const accountStore=env.ACCOUNT_STORE?.get(env.ACCOUNT_STORE.idFromName('global'))||null;
-    this.core=new RankedRoomCore({storage:state.storage,accountStore,durableState:state});
+    this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state});
   }
   async fetch(request){
     const url=new URL(request.url);
