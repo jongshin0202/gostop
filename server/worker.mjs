@@ -1,5 +1,6 @@
 export {GameRoom} from './game-room.mjs';
 export {AccountStore} from './account-store.mjs';
+export {Lobby} from './lobby.mjs';
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode(cryptoApi){const bytes=new Uint8Array(14),limit=256-(256%alphabet.length);cryptoApi.getRandomValues(bytes);let result='';for(const byte of bytes){if(byte>=limit)return roomCode(cryptoApi);result+=alphabet[byte%alphabet.length];}return result;}
 export function configuredOrigins(env){return new Set(String(env.ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(Boolean));}
@@ -11,7 +12,7 @@ const accountStub=env=>env.ACCOUNT_STORE.get(env.ACCOUNT_STORE.idFromName('globa
 async function forwardAccount(request,env,path){const headers=new Headers();const auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
 async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers:{Authorization:auth}}));if(!response.ok)return null;return (await response.json()).account||null;}
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|auth|me|leaderboards)(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|auth|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
   if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
     if(!apiRoute)return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
@@ -21,6 +22,9 @@ export default {async fetch(request,env){
   }
   let match;
   try{
+    if(request.method==='GET'&&url.pathname==='/api/lobby/ws'){
+      const stub=env.LOBBY.get(env.LOBBY.idFromName('global'));return stub.fetch(new Request('https://lobby/connect',{headers:request.headers}));
+    }
     if(request.method==='POST'&&url.pathname==='/api/auth/register')return withCors(await forwardAccount(request,env,'/register'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/logout')return withCors(await forwardAccount(request,env,'/logout'),origin);
