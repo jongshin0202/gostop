@@ -338,8 +338,12 @@
 
     doc.addEventListener('touchstart',event=>{
       if(event.touches.length!==1)return;
-      const touch=event.touches[0];
       const card=cardFromTarget(event.target);
+      if(!card){
+        if(touchSelectedCard&&!event.target?.closest?.('#playerHand'))clearSelection();
+        return;
+      }
+      const touch=event.touches[0];
       beginTouch(event,touch,card);
     },{capture:true,passive:false});
 
@@ -392,6 +396,13 @@
         if(distance<10)scoreDialog.close();
       });
       scoreDialog.addEventListener('pointercancel',()=>{dismissPointer=null;});
+    }
+
+    const captureDialog=doc.getElementById('captureDialog');
+    if(captureDialog){
+      captureDialog.addEventListener('click',()=>{
+        if(captureDialog.open)captureDialog.close();
+      });
     }
 
     return true;
