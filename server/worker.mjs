@@ -9,8 +9,11 @@ const corsHeaders=origin=>({'access-control-allow-origin':origin,'access-control
 function withCors(response,origin){const next=new Response(response.body,response);for(const [key,value] of Object.entries(corsHeaders(origin)))next.headers.set(key,value);return next;}
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const accountStub=env=>env.ACCOUNT_STORE.get(env.ACCOUNT_STORE.idFromName('global'));
-async function forwardAccount(request,env,path){const headers=new Headers();const auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
-async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers:{Authorization:auth}}));if(!response.ok)return null;return (await response.json()).account||null;}
+const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
+function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(request.cf?.country||request.headers.get('CF-IPCountry'),2),region=coarseCode(request.cf?.regionCode);if(country)headers.set('x-gostop-country',country);if(region)headers.set('x-gostop-region',region);return headers;}
+function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region']){const value=source.get(name);if(value)target.set(name,value);}return target;}
+async function forwardAccount(request,env,path){const headers=geoHeadersFor(request),auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
+async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
 export default {async fetch(request,env){
   const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|auth|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
   if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
@@ -23,7 +26,7 @@ export default {async fetch(request,env){
   let match;
   try{
     if(request.method==='GET'&&url.pathname==='/api/lobby/ws'){
-      const stub=env.LOBBY.get(env.LOBBY.idFromName('global'));return stub.fetch(new Request('https://lobby/connect',{headers:request.headers}));
+      const headers=new Headers(request.headers);copyGeoHeaders(geoHeadersFor(request),headers);const stub=env.LOBBY.get(env.LOBBY.idFromName('global'));return stub.fetch(new Request('https://lobby/connect',{headers}));
     }
     if(request.method==='POST'&&url.pathname==='/api/auth/register')return withCors(await forwardAccount(request,env,'/register'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
