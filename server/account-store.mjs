@@ -2,7 +2,7 @@ const encoder=new TextEncoder();
 const COMMON_PASSWORDS=new Set(['12345','123456','12345678','password','password1','qwerty','qwerty123','abc123','letmein','111111','000000']);
 const PROVISIONAL_GAMES=10;
 const SESSION_TTL_MS=1000*60*60*24*30;
-const PBKDF2_ITERATIONS=210000;
+const PBKDF2_ITERATIONS=100000;
 
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const normalizeEmail=value=>String(value||'').trim().toLowerCase();

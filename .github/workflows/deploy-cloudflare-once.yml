@@ -3,17 +3,26 @@ name: Deploy Cloudflare Authority
 on:
   push:
     branches:
-      - feature/accounts-coins-leaderboards
+      - main
     paths:
+      - server/**
+      - wrangler.toml
+      - package.json
+      - package-lock.json
       - .github/workflows/deploy-cloudflare-once.yml
-      - .github/deploy-cloudflare-now.txt
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: deploy-cloudflare-authority
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,5 +45,3 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.131.2'
           command: deploy
-
-# Deployment retry trigger

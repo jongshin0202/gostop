@@ -1,4 +1,7 @@
 /* Fullscreen only: reclaim browser-chrome space without changing normal mobile geometry. */
+/* Auth forms are toggled with the HTML hidden attribute; force it to win over .account-form display:grid. */
+.account-form[hidden]{display:none!important}
+
 @media (max-width:700px) and (orientation:portrait){
   :fullscreen .app-shell{height:100vh;height:100dvh}
   :fullscreen .topbar{
