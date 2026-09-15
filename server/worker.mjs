@@ -1,32 +1,59 @@
 export {GameRoom} from './game-room.mjs';
+export {AccountStore} from './ranked-account-store.mjs';
+export {Lobby} from './lobby.mjs';
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode(cryptoApi){const bytes=new Uint8Array(14),limit=256-(256%alphabet.length);cryptoApi.getRandomValues(bytes);let result='';for(const byte of bytes){if(byte>=limit)return roomCode(cryptoApi);result+=alphabet[byte%alphabet.length];}return result;}
 export function configuredOrigins(env){return new Set(String(env.ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(Boolean));}
 export function isAllowedOrigin(origin,env){if(!origin)return false;try{const url=new URL(origin);if(url.origin!==origin)return false;if((url.hostname==='localhost'||url.hostname==='127.0.0.1'||url.hostname==='[::1]')&&['http:','https:'].includes(url.protocol))return true;return configuredOrigins(env).has(origin);}catch(_){return false;}}
-const corsHeaders=origin=>({'access-control-allow-origin':origin,'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type','access-control-max-age':'86400','vary':'Origin'});
+const corsHeaders=origin=>({'access-control-allow-origin':origin,'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,authorization','access-control-max-age':'86400','vary':'Origin'});
 function withCors(response,origin){const next=new Response(response.body,response);for(const [key,value] of Object.entries(corsHeaders(origin)))next.headers.set(key,value);return next;}
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+const accountStub=env=>env.ACCOUNT_STORE.get(env.ACCOUNT_STORE.idFromName('global'));
+const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
+function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(request.cf?.country||request.headers.get('CF-IPCountry'),2),region=coarseCode(request.cf?.regionCode);if(country)headers.set('x-gostop-country',country);if(region)headers.set('x-gostop-region',region);return headers;}
+function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region']){const value=source.get(name);if(value)target.set(name,value);}return target;}
+async function forwardAccount(request,env,path){const headers=geoHeadersFor(request),auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
+async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
+async function requireAccount(request,env){const account=await resolveAccount(request,env);return account||null;}
+async function allocateRoom(env,{solo=false,account=null}={}){
+  for(let attempt=0;attempt<5;attempt++){
+    const code=roomCode(globalThis.crypto),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(code)),path=solo?'/initialize-solo':'/initialize',body=solo?{roomCode:code}:{roomCode:code,account};
+    const response=await stub.fetch(new Request(`https://room${path}`,{method:'POST',body:JSON.stringify(body),headers:{'content-type':'application/json'}}));if(response.status!==409)return response;
+  }
+  return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
+}
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/rooms(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
   if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
     if(!apiRoute)return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     const requestedMethod=request.headers.get('Access-Control-Request-Method'),requestedHeaders=(request.headers.get('Access-Control-Request-Headers')||'').toLowerCase().split(',').map(value=>value.trim()).filter(Boolean);
-    if(requestedMethod!=='POST'||requestedHeaders.some(header=>header!=='content-type'))return withCors(json({ok:false,error:{code:'CORS_PREFLIGHT_REJECTED',message:'Requested CORS method or headers are not allowed.'}},403),origin);
+    if(!['GET','POST'].includes(requestedMethod)||requestedHeaders.some(header=>!['content-type','authorization'].includes(header)))return withCors(json({ok:false,error:{code:'CORS_PREFLIGHT_REJECTED',message:'Requested CORS method or headers are not allowed.'}},403),origin);
     return new Response(null,{status:204,headers:corsHeaders(origin)});
   }
   let match;
   try{
+    if(request.method==='GET'&&url.pathname==='/api/lobby/ws'){
+      const headers=new Headers(request.headers);copyGeoHeaders(geoHeadersFor(request),headers);const stub=env.LOBBY.get(env.LOBBY.idFromName('global'));return stub.fetch(new Request('https://lobby/connect',{headers}));
+    }
+    if(request.method==='POST'&&url.pathname==='/api/auth/register')return withCors(await forwardAccount(request,env,'/register'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/auth/logout')return withCors(await forwardAccount(request,env,'/logout'),origin);
+    if(request.method==='GET'&&url.pathname==='/api/me')return withCors(await forwardAccount(request,env,'/me'),origin);
+    if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/solo'){
+      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
+      const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
+    }
     if(request.method==='POST'&&url.pathname==='/api/rooms'){
-      for(let attempt=0;attempt<5;attempt++){const code=roomCode(globalThis.crypto),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(code)),response=await stub.fetch(new Request('https://room/initialize',{method:'POST',body:JSON.stringify({roomCode:code}),headers:{'content-type':'application/json'}}));if(response.status!==409)return withCors(response,origin);}
-      return withCors(json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503),origin);
+      const account=await resolveAccount(request,env);return withCors(await allocateRoom(env,{account}),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/join$/))&&request.method==='POST'){
-      const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:await request.text(),headers:{'content-type':'application/json'}})),origin);
+      const account=await resolveAccount(request,env),body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/ws$/))&&request.method==='GET'){
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return stub.fetch(new Request('https://room/connect',{headers:request.headers}));
     }
     return withCors(json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404),origin);
-  }catch(_){return withCors(json({ok:false,error:{code:'INTERNAL_ERROR',message:'The room service could not complete the request.'}},500),origin);}
+  }catch(_){return withCors(json({ok:false,error:{code:'INTERNAL_ERROR',message:'The service could not complete the request.'}},500),origin);}
 }};

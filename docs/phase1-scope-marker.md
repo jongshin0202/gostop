@@ -1,0 +1,1 @@
+This branch implements the current Accounts + Coins + Global/Monthly Leaderboards phase. Future Android/iPhone, referrals, ads, personalization, leagues, and 3+ player features remain roadmap items outside this release.

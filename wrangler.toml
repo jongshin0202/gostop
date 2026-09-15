@@ -1,12 +1,29 @@
 name = "gostop-authority"
 main = "server/worker.mjs"
 compatibility_date = "2026-09-01"
+keep_vars = true
 
 [[durable_objects.bindings]]
 name = "GAME_ROOMS"
 class_name = "GameRoom"
 
+[[durable_objects.bindings]]
+name = "ACCOUNT_STORE"
+class_name = "AccountStore"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
 [exports.GameRoom]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.AccountStore]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.Lobby]
 type = "durable-object"
 storage = "sqlite"
 

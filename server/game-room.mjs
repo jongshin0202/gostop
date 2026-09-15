@@ -1,14 +1,20 @@
-import {RoomCore,RoomError} from './room-core.mjs';
+import {FinalRankedRoomCore} from './ranked-room-final.mjs';
+import {RoomError} from './room-core.mjs';
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const errorResponse=error=>json({ok:false,error:{code:error.code||'INTERNAL_ERROR',message:error.message}},error.status||500);
 
 export class GameRoom{
-  constructor(state,env){this.state=state;this.env=env;this.core=new RoomCore({storage:state.storage});}
+  constructor(state,env){
+    this.state=state;this.env=env;
+    const accountStore=env.ACCOUNT_STORE?.get(env.ACCOUNT_STORE.idFromName('global'))||null;
+    this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state});
+  }
   async fetch(request){
     const url=new URL(request.url);
     try{
-      if(request.method==='POST'&&url.pathname==='/initialize'){const {roomCode}=await request.json();return json({ok:true,room:await this.core.create(roomCode)},201);}
-      if(request.method==='POST'&&url.pathname==='/join'){const body=await request.json().catch(()=>({}));return json({ok:true,room:await this.core.join(body.credential)},201);}
+      if(request.method==='POST'&&url.pathname==='/initialize'){const {roomCode,account=null}=await request.json();return json({ok:true,room:await this.core.create(roomCode,account)},201);}
+      if(request.method==='POST'&&url.pathname==='/initialize-solo'){const {roomCode}=await request.json();return json({ok:true,room:await this.core.createSolo(roomCode)},201);}
+      if(request.method==='POST'&&url.pathname==='/join'){const body=await request.json().catch(()=>({}));return json({ok:true,room:await this.core.join(body.credential,body.account||null)},201);}
       if(request.method==='GET'&&url.pathname==='/connect'){
         if(request.headers.get('Upgrade')!=='websocket')throw new RoomError('UPGRADE_REQUIRED','WebSocket upgrade required.',426);
         const credential=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(v=>v.trim()).find(v=>v.startsWith('gostop-token.'))?.slice(13);
@@ -19,4 +25,5 @@ export class GameRoom{
       throw new RoomError('NOT_FOUND','Endpoint not found.',404);
     }catch(error){return errorResponse(error);}
   }
+  async alarm(){return this.core.alarm();}
 }
