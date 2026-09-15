@@ -409,6 +409,10 @@
     return true;
   }
 
+  function pendingOnlineStageIds(state={}){
+    return [state?.pendingTurn?.played?.card?.id,state?.pendingTurn?.drawn?.card?.id].filter(Boolean);
+  }
+
   function planOnlinePresentation(events,initialStages={},context={}){
     const stages=new Map(Object.entries(initialStages)),steps=[];
     for(const event of events){
@@ -431,7 +435,7 @@
     return {steps,stages:Object.fromEntries(stages)};
   }
 
-  const api=Object.freeze({planOnlinePresentation,isUpwardFlick,installHandFlickGestures,FLICK_DEFAULTS});
+  const api=Object.freeze({planOnlinePresentation,pendingOnlineStageIds,isUpwardFlick,installHandFlickGestures,FLICK_DEFAULTS});
   globalThis.GoStopPresentationPlan=api;
   if(typeof document!=='undefined')installHandFlickGestures(document);
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
