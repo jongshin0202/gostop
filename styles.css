@@ -591,3 +591,53 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .tutorial-dialog{width:calc(100vw - 12px);max-height:calc(100dvh - 8px)}.tutorial-card{max-height:calc(100dvh - 8px);overflow-x:hidden}.tutorial-card>h2{margin:2px 0 8px;padding-right:44px}.tutorial-card>.dialog-close{min-width:44px;min-height:40px;transform:none;margin:0;right:0}.tutorial-nav{max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
   .solo-start-overlay{padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));gap:8px;overflow-y:auto}.solo-start-overlay strong{font-size:clamp(2rem,8vh,3rem)}.play-solo-btn{padding:9px 20px;font-size:1rem}.online-join-form input{padding:7px}.online-status{min-height:1em}
 }
+
+/* Shake decision: keep the floor visible while choosing Shake vs Keep for Bomb. */
+#shakeDialog::backdrop{
+  background:rgba(4,3,2,.10);
+  backdrop-filter:none;
+}
+#shakeDialog[open]{
+  position:fixed;
+  left:18px;
+  right:auto;
+  top:50%;
+  bottom:auto;
+  transform:translateY(-50%);
+  margin:0;
+  width:min(480px,calc(100vw - 36px));
+  max-width:none;
+  max-height:calc(100vh - 24px);
+  overflow:visible;
+}
+#shakeDialog .special-rule-card{
+  width:100%;
+  max-width:none;
+  padding:18px 20px;
+  background:linear-gradient(180deg,rgba(42,27,19,.98),rgba(23,16,12,.98));
+  box-shadow:0 18px 55px rgba(0,0,0,.48);
+}
+#shakeDialog .special-rule-card h2{font-size:clamp(22px,2.2vw,32px);margin:14px 0 10px}
+#shakeDialog .shake-cards{margin:12px 0 16px;gap:8px;flex-wrap:nowrap}
+#shakeDialog .shake-cards .magnified-card{width:76px}
+#shakeDialog .decision-actions{justify-content:center;flex-wrap:wrap}
+
+@media(max-width:900px){
+  #shakeDialog[open]{
+    left:8px;
+    right:8px;
+    top:auto;
+    bottom:8px;
+    transform:none;
+    margin:0 auto;
+    width:auto;
+    max-height:min(44vh,390px);
+    overflow:auto;
+  }
+  #shakeDialog .special-rule-card{padding:12px 14px}
+  #shakeDialog .special-rule-card h2{font-size:clamp(18px,5vw,25px);margin:8px 0 6px}
+  #shakeDialog .special-rule-card p{margin:6px 0}
+  #shakeDialog .shake-cards{margin:8px 0 10px}
+  #shakeDialog .shake-cards .magnified-card{width:56px}
+  #shakeDialog .go-btn,#shakeDialog .stop-btn{padding:9px 12px}
+}
