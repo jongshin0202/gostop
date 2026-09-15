@@ -13,6 +13,15 @@ export class FinalRankedRoomCore extends RankedRoomCore{
   }
   async load(){const room=await super.load();if(room)this.resetPauseBudgetForCurrentGame();return room;}
   flowFor(participant){const flow=super.flowFor(participant),rank=this.room.rankFlow||{},opponent=this.room.participants.find(item=>item.playerId!==participant.playerId);return {...flow,pausesRemaining:{you:rank.pauseRemaining?.[participant.playerId]??(participant.bot?0:2),opponent:rank.pauseRemaining?.[opponent?.playerId]??(opponent?.bot?0:2)},opponentReconnectUntil:rank.disconnectDeadlines?.[opponent?.playerId]||null};}
+  milestonesForCurrentGame(){
+    const result=super.milestonesForCurrentGame(),state=this.engineState();if(!state)return result;
+    for(const participant of this.room.participants){const player=state[participant.seatId==='playerA'?'human':'ai'],bucket=result[participant.playerId]||(result[participant.playerId]={}),captured=player?.captured||[];
+      const godori=[2,4,8].every(month=>captured.some(card=>card.month===month&&card.flags?.includes('godori')));if(godori)bucket['5_BIRDIES']=(bucket['5_BIRDIES']||0)+1;
+      let stripeSets=0;for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]}))if(months.every(month=>captured.some(card=>card.month===month&&card.ribbonSet===set)))stripeSets++;if(stripeSets)bucket['3_STRIPES']=(bucket['3_STRIPES']||0)+stripeSets;
+      if(captured.filter(card=>card.type==='bright').length>=5)bucket['5_BRIGHTS']=(bucket['5_BRIGHTS']||0)+1;
+    }
+    return result;
+  }
   async refreshInactivity(){this.resetPauseBudgetForCurrentGame();return super.refreshInactivity();}
   async startFreshSoloSession(participant,reason='new-game'){
     await this.endRankedSession(reason);
