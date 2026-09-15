@@ -1,0 +1,26 @@
+name: Apply authoritative target choice
+on:
+  push:
+    branches: [fix/persistent-floor-target-choice]
+    paths:
+      - '.github/workflows/apply-authoritative-target-choice.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/persistent-floor-target-choice
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python .github/scripts/apply_authoritative_target_choice.py
+      - run: |
+          git config user.name gostop-bot
+          git config user.email gostop-bot@users.noreply.github.com
+          git add app.js tests/authoritative-target-choice.test.js
+          git diff --cached --check
+          git commit -m "Keep ranked floor target choice authoritative"
+          git push origin HEAD:fix/persistent-floor-target-choice
