@@ -1,0 +1,24 @@
+name: Run ranked Solo patch
+on:
+  push:
+    branches: [fix/ranked-solo-presentation-i18n]
+    paths: [.github/workflows/run-ranked-solo-patch.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ranked-solo-presentation-i18n
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python .github/scripts/apply_ranked_solo_i18n.py
+      - run: |
+          git config user.name 'Jong-Wook Shin'
+          git config user.email 'jwshin1@gmail.com'
+          git add app.js ranked-client.js presentation-plan.js tests/presentation-plan.test.js
+          git commit -m 'Fix ranked Solo presentation and localize ranked UI'
+          git push origin HEAD:fix/ranked-solo-presentation-i18n
