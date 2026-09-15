@@ -48,6 +48,8 @@
     }
     if(orientationRecoveryArmed&&isGameplayInteraction(event.target)){
       orientationRecoveryArmed=false;
+      orientationChangeAt=0;
+      fullscreenExitAt=0;
       requestGameFullscreen(document);
     }
   }
@@ -64,7 +66,7 @@
       fullscreenExitAt=0;
     }else{
       fullscreenExitAt=now;
-      if(now-orientationChangeAt<=ORIENTATION_RECOVERY_WINDOW_MS)orientationRecoveryArmed=true;
+      if(orientationChangeAt&&now-orientationChangeAt<=ORIENTATION_RECOVERY_WINDOW_MS)orientationRecoveryArmed=true;
     }
     refreshLayout();
   }
