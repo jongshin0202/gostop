@@ -46,12 +46,10 @@ export default {async fetch(request,env){
       const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
     }
     if(request.method==='POST'&&url.pathname==='/api/rooms'){
-      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required for Online Play.'}},401),origin);
-      return withCors(await allocateRoom(env,{account}),origin);
+      const account=await resolveAccount(request,env);return withCors(await allocateRoom(env,{account}),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/join$/))&&request.method==='POST'){
-      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required for Online Play.'}},401),origin);
-      const body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
+      const account=await resolveAccount(request,env),body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/ws$/))&&request.method==='GET'){
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return stub.fetch(new Request('https://room/connect',{headers:request.headers}));
