@@ -2246,10 +2246,14 @@
       if(snapshot.sessionFlow?.ended)return;
       if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!presentationEvents.length){
-        // Authority can advance before the physical play event arrives. Do not render the
-        // selected card on the floor until a presentation step claims its exact source.
+        // Sync/flow snapshots carry no new physical action. Preserve any staged cards that
+        // authority still owns in pendingTurn so the played card cannot disappear between
+        // the hand slap and the deck reveal in ranked Solo/Online play.
         if(hasUnpresentedLocalHandMovement(incomingMapped.state,presentationEvents))return;
-        presentation.stagedCards.forEach((_,cardId)=>cleanupStagedCard(cardId));onlineStageState={};state=incomingMapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;
+        const pendingStageIds=new Set(globalThis.GoStopPresentationPlan.pendingOnlineStageIds(incomingMapped.state));
+        for(const cardId of [...presentation.stagedCards.keys()])if(!pendingStageIds.has(cardId))cleanupStagedCard(cardId);
+        onlineStageState=Object.fromEntries(Object.entries(onlineStageState).filter(([cardId])=>pendingStageIds.has(cardId)));
+        state=incomingMapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;
       }
       let bombEvent=null;
       const incoming=incomingMapped.state;

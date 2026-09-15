@@ -1,6 +1,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {planOnlinePresentation,isUpwardFlick}=require('../presentation-plan.js');
+const {planOnlinePresentation,pendingOnlineStageIds,isUpwardFlick}=require('../presentation-plan.js');
 const engine=require('../game-engine.js');
 
 const card=id=>structuredClone(engine.masterDeck.find(item=>item.id===id));
@@ -101,4 +101,11 @@ test('matching deck capture conserves all 48 authoritative cards with no floor d
   assert.equal(engine.assertCardConservation(state),true);apply({type:'playCard',cardId:'m2-1'});apply({type:'drawNextCard'});apply({type:'resolveNormalCard',source:'played'});apply({type:'resolveNormalCard',source:'drawn'});
   assert.equal(state.floor.some(item=>item.id==='m1-2'),false);assert.deepEqual(state.human.captured.map(item=>item.id).sort(),['m1-1','m1-2']);
   const a=engine.projectStateForViewer(state,'playerA'),b=engine.projectStateForViewer(state,'playerB');assert.deepEqual(a.floor.map(item=>item.id),b.floor.map(item=>item.id));assert.deepEqual(a.human.captured.map(item=>item.id),b.human.captured.map(item=>item.id));
+});
+
+test('eventless authority sync preserves cards still owned by pending turn staging',()=>{
+  const state={pendingTurn:{played:{card:card('m2-1')},drawn:{card:card('m3-1')}}};
+  assert.deepEqual(pendingOnlineStageIds(state),['m2-1','m3-1']);
+  assert.deepEqual(pendingOnlineStageIds({pendingTurn:{played:{card:card('m2-1')},drawn:null}}),['m2-1']);
+  assert.deepEqual(pendingOnlineStageIds({}),[]);
 });
