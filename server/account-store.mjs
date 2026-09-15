@@ -1,0 +1,151 @@
+const encoder=new TextEncoder();
+const decoder=new TextDecoder();
+const COMMON_PASSWORDS=new Set(['12345','123456','12345678','password','password1','qwerty','qwerty123','abc123','letmein','111111','000000']);
+const PROVISIONAL_GAMES=10;
+const SESSION_TTL_MS=1000*60*60*24*30;
+const PBKDF2_ITERATIONS=210000;
+
+const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+const normalizeEmail=value=>String(value||'').trim().toLowerCase();
+const normalizeNickname=value=>String(value||'').trim().replace(/\s+/g,' ');
+const nicknameKey=value=>normalizeNickname(value).toLowerCase();
+const utcDay=iso=>String(iso).slice(0,10);
+const utcMonth=iso=>String(iso).slice(0,7);
+const clone=value=>JSON.parse(JSON.stringify(value));
+const randomHex=(cryptoApi,bytes=24)=>{const data=new Uint8Array(bytes);cryptoApi.getRandomValues(data);return Array.from(data,b=>b.toString(16).padStart(2,'0')).join('');};
+const randomId=(cryptoApi,prefix)=>`${prefix}_${randomHex(cryptoApi,16)}`;
+const toHex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,'0')).join('');
+const fromHex=hex=>new Uint8Array(String(hex).match(/../g)?.map(v=>parseInt(v,16))||[]);
+const safeEqual=(a,b)=>{if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;};
+
+async function hashToken(cryptoApi,token){return toHex(await cryptoApi.subtle.digest('SHA-256',encoder.encode(token)));}
+async function hashPassword(cryptoApi,password,saltHex,iterations=PBKDF2_ITERATIONS){
+  const key=await cryptoApi.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveBits']);
+  const bits=await cryptoApi.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:fromHex(saltHex),iterations},key,256);
+  return toHex(bits);
+}
+function passwordProblem(password){
+  const value=String(password||'');
+  if(value.length<8)return 'Password must be at least 8 characters.';
+  if(COMMON_PASSWORDS.has(value.toLowerCase()))return 'Choose a less common password.';
+  if(/^(.)(\1)+$/.test(value))return 'Choose a less predictable password.';
+  return null;
+}
+function publicAccount(account){
+  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false};
+}
+function blankStats(){return {gamesPlayed:0,wins:0,totalCoinsWon:0,milestones:{}};}
+function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
+function leaderboardRow(account,stats){return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed:stats.gamesPlayed,provisional:stats.gamesPlayed<PROVISIONAL_GAMES};}
+function sortRows(rows){return rows.sort((a,b)=>b.score-a.score||b.gamesPlayed-a.gamesPlayed||b.totalCoins-a.totalCoins||a.nickname.localeCompare(b.nickname));}
+
+export class AccountStore{
+  constructor(state,env,{cryptoApi=globalThis.crypto,now=()=>new Date().toISOString()}={}){this.state=state;this.storage=state.storage;this.env=env;this.crypto=cryptoApi;this.now=now;}
+
+  async accountById(id){return id?await this.storage.get(`account:${id}`):null;}
+  async accountByEmail(email){const id=await this.storage.get(`email:${normalizeEmail(email)}`);return id?this.accountById(id):null;}
+  async accountFromToken(token){
+    if(!token)return null;
+    const hash=await hashToken(this.crypto,token),session=await this.storage.get(`auth:${hash}`);
+    if(!session||Date.parse(session.expiresAt)<=Date.parse(this.now()))return null;
+    return this.accountById(session.accountId);
+  }
+  bearer(request){const value=request.headers.get('Authorization')||'';return value.startsWith('Bearer ')?value.slice(7).trim():'';}
+  async awardDaily(account){
+    const today=utcDay(this.now());
+    if(account.lastDailyAwardDate===today)return false;
+    account.lastDailyAwardDate=today;account.walletCoins+=100;await this.storage.put(`account:${account.id}`,account);
+    await this.appendLedger(account.id,{type:'daily-login',amount:100,createdAt:this.now()});
+    return true;
+  }
+  async appendLedger(accountId,entry){const id=randomId(this.crypto,'ledger');await this.storage.put(`ledger:${accountId}:${entry.createdAt}:${id}`,{id,accountId,...entry});}
+  async createSession(account){
+    const token=randomHex(this.crypto,32),hash=await hashToken(this.crypto,token),expiresAt=new Date(Date.parse(this.now())+SESSION_TTL_MS).toISOString();
+    await this.storage.put(`auth:${hash}`,{accountId:account.id,createdAt:this.now(),expiresAt});
+    return {token,expiresAt};
+  }
+  async requireAccount(request){const account=await this.accountFromToken(this.bearer(request));if(!account)throw Object.assign(new Error('Login required.'),{status:401,code:'AUTH_REQUIRED'});return account;}
+
+  async register(request){
+    const body=await request.json().catch(()=>({}));
+    const email=normalizeEmail(body.email),nickname=normalizeNickname(body.nickname),password=String(body.password||''),confirm=String(body.confirmPassword??password);
+    if(!email||!nickname||!password||!confirm)return json({ok:false,error:{code:'INCOMPLETE_REGISTRATION',message:'Please fill out all registration information.'}},400);
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({ok:false,error:{code:'INVALID_EMAIL',message:'Enter a valid email address.'}},400);
+    if(nickname.length<3||nickname.length>16||!/^[\p{L}\p{N}_ -]+$/u.test(nickname))return json({ok:false,error:{code:'INVALID_NICKNAME',message:'Nickname must be 3-16 letters, numbers, spaces, underscores, or hyphens.'}},400);
+    if(password!==confirm)return json({ok:false,error:{code:'PASSWORD_MISMATCH',message:'Password and confirmation do not match.'}},400);
+    const problem=passwordProblem(password);if(problem)return json({ok:false,error:{code:'WEAK_PASSWORD',message:problem}},400);
+    if(await this.storage.get(`email:${email}`))return json({ok:false,error:{code:'EMAIL_IN_USE',message:'An account already exists for this email.'}},409);
+    const nickKey=nicknameKey(nickname);if(await this.storage.get(`nickname:${nickKey}`))return json({ok:false,error:{code:'NICKNAME_IN_USE',message:'That nickname is already in use.'}},409);
+    const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt);
+    const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:true,walletCoins:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},createdAt:this.now(),updatedAt:this.now()};
+    await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
+    await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});await this.awardDaily(account);
+    const session=await this.createSession(account);
+    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100}},201);
+  }
+
+  async login(request){
+    const body=await request.json().catch(()=>({})),email=normalizeEmail(body.email),password=String(body.password||'');
+    const account=await this.accountByEmail(email);if(!account)return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
+    const candidate=await hashPassword(this.crypto,password,account.passwordSalt,account.passwordIterations||PBKDF2_ITERATIONS);
+    if(!safeEqual(candidate,account.passwordHash))return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
+    const dailyAwarded=await this.awardDaily(account),session=await this.createSession(account);
+    return json({ok:true,account:publicAccount(account),session,awards:{dailyCoins:dailyAwarded?100:0}});
+  }
+
+  async me(request){const account=await this.requireAccount(request),dailyAwarded=await this.awardDaily(account);return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0}});}
+  async logout(request){const token=this.bearer(request);if(token)await this.storage.delete(`auth:${await hashToken(this.crypto,token)}`);return json({ok:true});}
+
+  async leaderboard(){
+    const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()];
+    const global=sortRows(accounts.map(account=>leaderboardRow(account,account.stats?.global||blankStats()))).map((row,index)=>({...row,rank:index+1}));
+    const monthly=sortRows(accounts.map(account=>leaderboardRow(account,account.stats?.monthly?.[month]||blankStats()))).map((row,index)=>({...row,rank:index+1}));
+    return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
+  }
+
+  async startGameSession(request){const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds:[],opponent:body.opponent||null,startedAt:body.startedAt||this.now(),endedAt:null,summary:null};await this.storage.put(`gameSession:${record.id}`,record);return json({ok:true,session:record},201);}
+  async endGameSession(request){const body=await request.json().catch(()=>({})),key=`gameSession:${body.sessionId}`,record=await this.storage.get(key);if(!record)return json({ok:false,error:{code:'SESSION_NOT_FOUND',message:'Session not found.'}},404);record.endedAt=body.endedAt||this.now();record.summary=body.summary||{};await this.storage.put(key,record);return json({ok:true,session:record});}
+
+  async settleGame(request){
+    const body=await request.json().catch(()=>({}));if(!body.gameId||!Array.isArray(body.participants)||!body.participants.length)return json({ok:false,error:{code:'INVALID_SETTLEMENT',message:'Game settlement is incomplete.'}},400);
+    if(await this.storage.get(`game:${body.gameId}`))return json({ok:true,duplicate:true});
+    const recordedAt=body.recordedAt||this.now(),month=utcMonth(recordedAt),storedParticipants=[];
+    for(const item of body.participants){
+      const account=await this.accountById(item.accountId);if(!account)continue;
+      const walletDelta=Number(item.walletDelta)||0,coinsWon=Math.max(0,Number(item.coinsWon)||0),won=!!item.won;
+      account.walletCoins+=walletDelta;account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};account.stats.monthly[month]=account.stats.monthly[month]||blankStats();
+      for(const stats of [account.stats.global,account.stats.monthly[month]]){stats.gamesPlayed+=1;if(won){stats.wins+=1;stats.totalCoinsWon+=coinsWon;}for(const [name,count] of Object.entries(item.milestones||{}))stats.milestones[name]=(stats.milestones[name]||0)+(Number(count)||0);}
+      if(Number(item.computerBankruptcies)>0)account.computerBankruptcies=(account.computerBankruptcies||0)+Number(item.computerBankruptcies);
+      account.updatedAt=recordedAt;await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'game',amount:walletDelta,gameId:body.gameId,createdAt:recordedAt});storedParticipants.push({...item,walletAfter:account.walletCoins});
+    }
+    const game={...body,participants:storedParticipants,recordedAt};await this.storage.put(`game:${body.gameId}`,game);return json({ok:true,game});
+  }
+
+  async forceQuit(request){
+    const body=await request.json().catch(()=>({})),account=await this.accountById(body.accountId);if(!account)return json({ok:false,error:{code:'ACCOUNT_NOT_FOUND',message:'Account not found.'}},404);
+    const penalty=Math.max(0,Math.trunc(Number(body.penaltyCoins)||0)),gameId=body.gameId||randomId(this.crypto,'abandon');account.walletCoins-=penalty;account.forceQuits=(account.forceQuits||0)+1;
+    const month=utcMonth(this.now());account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};account.stats.monthly[month]=account.stats.monthly[month]||blankStats();account.stats.global.gamesPlayed+=1;account.stats.monthly[month].gamesPlayed+=1;account.updatedAt=this.now();
+    await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'force-quit',amount:-penalty,gameId,createdAt:this.now()});await this.storage.put(`forceQuit:${gameId}`,{...body,gameId,penaltyCoins:penalty,recordedAt:this.now()});return json({ok:true,penaltyCoins:penalty,account:publicAccount(account)});
+  }
+
+  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));return json({ok:true,account:account?publicAccount(account):null});}
+
+  async fetch(request){
+    const path=new URL(request.url).pathname;
+    try{
+      if(request.method==='POST'&&path==='/register')return await this.register(request);
+      if(request.method==='POST'&&path==='/login')return await this.login(request);
+      if(request.method==='POST'&&path==='/logout')return await this.logout(request);
+      if(request.method==='GET'&&path==='/me')return await this.me(request);
+      if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
+      if(request.method==='GET'&&path==='/internal/resolve')return await this.resolveSession(request);
+      if(request.method==='POST'&&path==='/internal/session/start')return await this.startGameSession(request);
+      if(request.method==='POST'&&path==='/internal/session/end')return await this.endGameSession(request);
+      if(request.method==='POST'&&path==='/internal/game/settle')return await this.settleGame(request);
+      if(request.method==='POST'&&path==='/internal/force-quit')return await this.forceQuit(request);
+      return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
+    }catch(error){return json({ok:false,error:{code:error.code||'INTERNAL_ERROR',message:error.message||'Request failed.'}},error.status||500);}
+  }
+}
+
+export {PROVISIONAL_GAMES,blankStats,scoreFor,passwordProblem};
