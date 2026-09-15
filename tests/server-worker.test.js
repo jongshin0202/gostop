@@ -15,10 +15,11 @@ test('CORS permits configured exact Vercel origins and localhost but rejects unr
   assert.equal(isAllowedOrigin(null,env),false);
 });
 
-test('JSON POST preflight returns explicit CORS headers only for an allowed origin',async()=>{
-  const allowed=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://gostop.example.vercel.app','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'}}),env);
-  assert.equal(allowed.status,204);assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),'https://gostop.example.vercel.app');assert.equal(allowed.headers.get('Access-Control-Allow-Methods'),'GET,POST,OPTIONS');assert.equal(allowed.headers.get('Access-Control-Allow-Headers'),'content-type');assert.equal(allowed.headers.get('Vary'),'Origin');
-  const rejected=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://evil.example','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'}}),env);assert.equal(rejected.status,403);assert.equal(rejected.headers.get('Access-Control-Allow-Origin'),null);
+test('JSON POST preflight exposes content-type and authorization only for an allowed origin',async()=>{
+  const allowed=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://gostop.example.vercel.app','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}}),env);
+  assert.equal(allowed.status,204);assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),'https://gostop.example.vercel.app');assert.equal(allowed.headers.get('Access-Control-Allow-Methods'),'GET,POST,OPTIONS');assert.equal(allowed.headers.get('Access-Control-Allow-Headers'),'content-type,authorization');assert.equal(allowed.headers.get('Vary'),'Origin');
+  const badHeader=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://gostop.example.vercel.app','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,x-unsafe-header'}}),env);assert.equal(badHeader.status,403);
+  const rejected=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://evil.example','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}}),env);assert.equal(rejected.status,403);assert.equal(rejected.headers.get('Access-Control-Allow-Origin'),null);
 });
 
 test('WebSocket routes reject missing and malicious browser origins before Durable Object lookup',async()=>{
