@@ -2331,7 +2331,14 @@
       else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       await driveOnline(snapshot,presentationEvents);
     }
-    async function submitOnlineCardPlay(){const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?matchesFor(card):[];let target=null;if(matches.length===1)target=matches[0];else if(matches.length>1)target=await chooseFloorTarget(matches,'Choose which floor card to hit');if(target||matches.length<2)onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});}
+    async function submitOnlineCardPlay(){
+      const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?matchesFor(card):[];
+      // Two-match choices are authority-owned. Do not start a second local chooser here;
+      // driveOnline presents the server's chooseFloorTarget decision and keeps it alive.
+      if(matches.length>1){await driveOnline(latestOnlineSnapshot,onlineLastEvents);return;}
+      const target=matches[0]||null;
+      onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});
+    }
     const beginOnline=async room=>{
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
       onlineMode=true;
@@ -2347,7 +2354,9 @@
         await onlinePresentationQueue;
         // Snapshot-before-ack can advance authority while presentation is queued. Derive the
         // continuation only now so an action from an older revision is never replayed.
+        const authoritativeTargetChoice=state.pendingDecision?.type==='chooseFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
         const automatic=latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'?latestOnlineSnapshot?.nextAction:null;
+        if(action?.type==='attemptPlayCard'&&authoritativeTargetChoice){await driveOnline(latestOnlineSnapshot,onlineLastEvents);return;}
         if(action?.type==='attemptPlayCard'&&!state.pendingDecision){if(automatic)onlineSubmit(automatic);else await submitOnlineCardPlay();return;}
         if(['declareShake','keepShakeSecret','declineBomb'].includes(action?.type)&&!state.pendingDecision&&onlinePendingCardId){await submitOnlineCardPlay();return;}
         if(automatic){onlineSubmit(automatic);return;}
