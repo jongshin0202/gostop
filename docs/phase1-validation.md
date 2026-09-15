@@ -1,0 +1,1 @@
+Validation requirements: run syntax checks for browser/server JavaScript, execute `node --test tests/*.test.js`, verify deployment preview, then merge and verify production deployment. Do not claim S22/A17 validation until the user tests it.
