@@ -4,6 +4,7 @@ import {envelope,parseClientMessage} from './protocol.mjs';
 
 const randomHex=(cryptoApi,words=2)=>{const data=new Uint32Array(words);cryptoApi.getRandomValues(data);return Array.from(data,v=>v.toString(16).padStart(8,'0')).join('');};
 const randomMatchId=cryptoApi=>`match_${randomHex(cryptoApi,4)}`;
+const sideForSeat=seat=>seat==='playerA'?'human':'ai';
 
 export class FinalRankedRoomCore extends RankedRoomCore{
   resetPauseBudgetForCurrentGame(){
@@ -16,12 +17,37 @@ export class FinalRankedRoomCore extends RankedRoomCore{
   flowFor(participant){const flow=super.flowFor(participant),rank=this.room.rankFlow||{},opponent=this.room.participants.find(item=>item.playerId!==participant.playerId);return {...flow,pausesRemaining:{you:rank.pauseRemaining?.[participant.playerId]??(participant.bot?0:2),opponent:rank.pauseRemaining?.[opponent?.playerId]??(opponent?.bot?0:2)},opponentReconnectUntil:rank.disconnectDeadlines?.[opponent?.playerId]||null};}
   milestonesForCurrentGame(){
     const result=super.milestonesForCurrentGame(),state=this.engineState();if(!state)return result;
-    for(const participant of this.room.participants){const player=state[participant.seatId==='playerA'?'human':'ai'],bucket=result[participant.playerId]||(result[participant.playerId]={}),captured=player?.captured||[];
+    for(const participant of this.room.participants){const player=state[sideForSeat(participant.seatId)],bucket=result[participant.playerId]||(result[participant.playerId]={}),captured=player?.captured||[];
       const godori=[2,4,8].every(month=>captured.some(card=>card.month===month&&card.flags?.includes('godori')));if(godori)bucket['5_BIRDIES']=(bucket['5_BIRDIES']||0)+1;
       let stripeSets=0;for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]}))if(months.every(month=>captured.some(card=>card.month===month&&card.ribbonSet===set)))stripeSets++;if(stripeSets)bucket['3_STRIPES']=(bucket['3_STRIPES']||0)+stripeSets;
       if(captured.filter(card=>card.type==='bright').length>=5)bucket['5_BRIGHTS']=(bucket['5_BRIGHTS']||0)+1;
     }
     return result;
+  }
+  rankedScores(finalPoints,winnerId){
+    const state=this.engineState(),scores={};for(const participant of this.room.participants){const raw=state?globalThis.GoStopEngine.scorePlayer(state[sideForSeat(participant.seatId)]).total:0;scores[participant.playerId]={rawScore:raw,points:participant.playerId===winnerId?finalPoints:raw};}return scores;
+  }
+  async settleTerminal(snapshot){
+    if(!snapshot?.terminalResult)return null;
+    const gameId=this.currentGameId();if(this.room.settledGameIds.includes(gameId))return null;
+    const terminal=snapshot.terminalResult,winnerId=terminal.winnerId||null,finalPoints=Math.max(0,Math.trunc(Number(terminal.result?.score??terminal.result?.finalPoints??terminal.finalPoints??0))),milestones=this.milestonesForCurrentGame(),scores=this.rankedScores(finalPoints,winnerId);this.room.settledGameIds.push(gameId);
+    if(!this.isRanked())return null;
+    if(this.isSolo()){
+      const user=this.room.participants.find(item=>!item.bot),bot=this.room.participants.find(item=>item.bot);let walletDelta=0,coinsWon=0,won=false,bankruptcies=0;
+      if(winnerId===user.playerId){walletDelta=finalPoints;coinsWon=finalPoints;won=true;bot.walletCoins-=finalPoints;}else if(winnerId===bot.playerId){walletDelta=-finalPoints;bot.walletCoins+=finalPoints;}
+      const completedComputer={level:bot.computerLevel,walletAfter:bot.walletCoins,points:scores[bot.playerId]?.points||0,rawScore:scores[bot.playerId]?.rawScore||0};
+      if(bot.walletCoins<=0&&winnerId===user.playerId){bankruptcies=1;this.room.solo.computerBankruptcies=(this.room.solo.computerBankruptcies||0)+1;this.room.solo.computerLevel=(this.room.solo.computerLevel||1)+1;this.room.solo.computerBankroll=this.room.solo.computerLevel*100;bot.computerLevel=this.room.solo.computerLevel;bot.nickname=`Computer #${bot.computerLevel}`;bot.walletCoins=this.room.solo.computerBankroll;}
+      const participant={accountId:user.accountId,playerId:user.playerId,nickname:user.nickname,won,walletDelta,coinsWon,points:scores[user.playerId]?.points||0,rawScore:scores[user.playerId]?.rawScore||0,milestones:milestones[user.playerId]||{},computerBankruptcies:bankruptcies};
+      const response=await this.accountRequest('/internal/game/settle',{gameId,sessionId:this.room.sessionId,mode:'solo',winnerPlayerId:winnerId,finalPoints,scores,computer:completedComputer,participants:[participant],recordedAt:this.now()});
+      const settled=response?.game?.participants?.[0];if(settled&&Number.isFinite(settled.walletAfter))user.walletCoins=settled.walletAfter;
+      this.room.sessionStats.gamesPlayed++;if(walletDelta>0)this.room.sessionStats.coinsWonByAccount[user.accountId]=(this.room.sessionStats.coinsWonByAccount[user.accountId]||0)+walletDelta;if(walletDelta<0)this.room.sessionStats.coinsLostByAccount[user.accountId]=(this.room.sessionStats.coinsLostByAccount[user.accountId]||0)+Math.abs(walletDelta);this.room.sessionStats.computerBankruptcies=(this.room.sessionStats.computerBankruptcies||0)+bankruptcies;
+      const target=this.room.sessionStats.milestonesByAccount[user.accountId]||(this.room.sessionStats.milestonesByAccount[user.accountId]={});for(const [name,count] of Object.entries(participant.milestones||{}))target[name]=(target[name]||0)+count;return response;
+    }
+    const participants=this.room.participants.map(item=>({accountId:item.accountId,playerId:item.playerId,nickname:item.nickname,won:!!winnerId&&item.playerId===winnerId,walletDelta:!winnerId?0:(item.playerId===winnerId?finalPoints:-finalPoints),coinsWon:item.playerId===winnerId?finalPoints:0,points:scores[item.playerId]?.points||0,rawScore:scores[item.playerId]?.rawScore||0,milestones:milestones[item.playerId]||{}}));
+    const response=await this.accountRequest('/internal/game/settle',{gameId,sessionId:this.room.sessionId,mode:'online',winnerPlayerId:winnerId,finalPoints,scores,participants,recordedAt:this.now()});
+    for(const settled of response?.game?.participants||[]){const participant=this.room.participants.find(item=>item.accountId===settled.accountId);if(participant&&Number.isFinite(settled.walletAfter))participant.walletCoins=settled.walletAfter;}
+    this.room.sessionStats.gamesPlayed++;for(const item of participants){const accountId=item.accountId;if(!accountId)continue;if(item.walletDelta>0)this.room.sessionStats.coinsWonByAccount[accountId]=(this.room.sessionStats.coinsWonByAccount[accountId]||0)+item.walletDelta;if(item.walletDelta<0)this.room.sessionStats.coinsLostByAccount[accountId]=(this.room.sessionStats.coinsLostByAccount[accountId]||0)+Math.abs(item.walletDelta);const target=this.room.sessionStats.milestonesByAccount[accountId]||(this.room.sessionStats.milestonesByAccount[accountId]={});for(const [name,count] of Object.entries(item.milestones||{}))target[name]=(target[name]||0)+count;}
+    if(this.room.rankFlow?.scheduledQuitBy&&!this.room.sessionFlow.ended){await this.endRankedSession('scheduled-quit');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=this.room.rankFlow.scheduledQuitBy;this.room.status='ended';}return response;
   }
   async startRankedSession(){
     if(!this.isRanked())return null;if(!this.isSolo())return super.startRankedSession();
