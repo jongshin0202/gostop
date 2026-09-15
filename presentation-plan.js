@@ -28,6 +28,9 @@
     style.dataset.gostopMotionLayer='true';
     style.textContent=`
       #playerHand .hand-card{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+      #appShell,#appShell img,#scoreDialog,#scoreDialog img,#captureDialog,#captureDialog img,#resultDialog,#resultDialog img{-webkit-touch-callout:none}
+      #scoreDialog{overscroll-behavior:contain}
+      #scoreDialog .score-breakdown-card{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
       .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
       .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2147482000!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
       .physical-card.moving-card,.capture-flight-card,.sliding-capture{contain:paint}
@@ -369,6 +372,27 @@
         event.stopImmediatePropagation();
       }
     },true);
+
+    const isGameSurface=target=>!!target?.closest?.('#appShell,#scoreDialog,#captureDialog,#resultDialog');
+    doc.addEventListener('contextmenu',event=>{
+      if(isGameSurface(event.target))event.preventDefault();
+    },{capture:true});
+
+    const scoreDialog=doc.getElementById('scoreDialog');
+    if(scoreDialog){
+      let dismissPointer=null;
+      scoreDialog.addEventListener('pointerdown',event=>{
+        if(!scoreDialog.open)return;
+        dismissPointer={id:event.pointerId,x:event.clientX,y:event.clientY};
+      });
+      scoreDialog.addEventListener('pointerup',event=>{
+        if(!scoreDialog.open||!dismissPointer||dismissPointer.id!==event.pointerId)return;
+        const distance=Math.hypot(event.clientX-dismissPointer.x,event.clientY-dismissPointer.y);
+        dismissPointer=null;
+        if(distance<10)scoreDialog.close();
+      });
+      scoreDialog.addEventListener('pointercancel',()=>{dismissPointer=null;});
+    }
 
     return true;
   }
