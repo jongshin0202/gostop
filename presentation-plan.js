@@ -37,26 +37,43 @@
         #playerHand .hand-card-slot.is-hovered .hand-card{transform:translate3d(0,-18px,0) rotate(-1deg)!important;box-shadow:0 12px 18px rgba(0,0,0,.38)!important}
         #playerHand.gostop-touch-selection-cleared .hand-card-slot.is-hovered{z-index:auto!important}
         #playerHand.gostop-touch-selection-cleared .hand-card-slot.is-hovered .hand-card{transform:none!important;box-shadow:0 7px 10px rgba(0,0,0,.34)!important}
+        #playerHand.gostop-touch-browsing .hand-card{transition:none!important}
+        #playerHand.gostop-touch-browsing .hand-card-slot.is-hovered .hand-card{box-shadow:0 7px 10px rgba(0,0,0,.34)!important;will-change:transform}
       }
     `;
     (doc.head||doc.documentElement).appendChild(style);
 
     let touchState=null;
     let touchSelectedCard=null;
+    let visualSelectedSlot=null;
     let bypassClickCard=null;
     let suppressTouchClicksUntil=0;
 
     const now=()=>globalThis.performance?.now?.()??Date.now();
+    const requestFrame=globalThis.requestAnimationFrame?.bind(globalThis)||(callback=>setTimeout(callback,16));
+    const cancelFrame=globalThis.cancelAnimationFrame?.bind(globalThis)||(id=>clearTimeout(id));
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
     const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
     const allHandCards=()=>[...doc.querySelectorAll('#playerHand .hand-card')].filter(canUseCard);
-    const handRect=()=>playerHand()?.getBoundingClientRect?.()||null;
+
+    const snapshotHandGeometry=()=>{
+      const hand=playerHand()?.getBoundingClientRect?.()||null;
+      const cards=allHandCards().map(card=>{
+        const rect=card.getBoundingClientRect();
+        return {card,centerX:rect.left+rect.width/2,rect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height}};
+      });
+      return {top:hand?.top??-Infinity,bottom:hand?.bottom??Infinity,cards};
+    };
 
     const clearSelection=()=>{
       touchSelectedCard=null;
-      playerHand()?.classList.add('gostop-touch-selection-cleared');
-      doc.querySelectorAll('#playerHand .hand-card-slot').forEach(slot=>{
+      const hand=playerHand();
+      hand?.classList.add('gostop-touch-selection-cleared');
+      hand?.classList.remove('gostop-touch-browsing');
+      if(visualSelectedSlot?.isConnected)visualSelectedSlot.classList.remove('is-hovered');
+      visualSelectedSlot=null;
+      doc.querySelectorAll('#playerHand .hand-card-slot.is-hovered').forEach(slot=>{
         slot.classList.remove('is-hovered');
         const card=slot.querySelector('.hand-card');
         if(card)card.title='';
@@ -69,23 +86,33 @@
       if(!slot)return false;
       touchSelectedCard=card;
       playerHand()?.classList.remove('gostop-touch-selection-cleared');
-      try{slot.dispatchEvent(new Event('pointerenter'));}catch(_){ }
-      doc.querySelectorAll('#playerHand .hand-card-slot').forEach(node=>node.classList.toggle('is-hovered',node===slot));
+      if(visualSelectedSlot?.isConnected&&visualSelectedSlot!==slot)visualSelectedSlot.classList.remove('is-hovered');
+      else if(!visualSelectedSlot?.isConnected){
+        const stale=doc.querySelector('#playerHand .hand-card-slot.is-hovered');
+        if(stale&&stale!==slot)stale.classList.remove('is-hovered');
+      }
+      slot.classList.add('is-hovered');
+      visualSelectedSlot=slot;
       return true;
     };
 
-    const nearestHandCard=(x,y)=>{
-      const hand=handRect();
-      if(!hand||y<hand.top-28||y>hand.bottom+24)return null;
-      const cards=allHandCards();
+    const nearestHandCard=(state,x,y)=>{
+      const geometry=state?.handGeometry;
+      if(!geometry||y<geometry.top-28||y>geometry.bottom+24)return null;
       let best=null,bestDistance=Infinity;
-      for(const card of cards){
-        const rect=card.getBoundingClientRect();
-        const centerX=rect.left+rect.width/2;
-        const distance=Math.abs(x-centerX);
-        if(distance<bestDistance){best=card;bestDistance=distance;}
+      for(const entry of geometry.cards){
+        if(!canUseCard(entry.card))continue;
+        const distance=Math.abs(x-entry.centerX);
+        if(distance<bestDistance){best=entry.card;bestDistance=distance;}
       }
       return best;
+    };
+
+    const geometryRectFor=(state,card,raised=false)=>{
+      const rect=state?.handGeometry?.cards?.find(entry=>entry.card===card)?.rect;
+      if(rect)return {left:rect.left,top:rect.top-(raised?18:0),width:rect.width,height:rect.height};
+      const measured=card?.getBoundingClientRect?.();
+      return measured?{left:measured.left,top:measured.top,width:measured.width,height:measured.height}:{left:0,top:0,width:0,height:0};
     };
 
     const removeGhost=state=>{
@@ -120,23 +147,29 @@
       return {startX:start.x,startY:start.y,endX,endY,duration:Math.max(1,endTime-start.t)};
     };
 
+    const markBrowsing=state=>{
+      if(!state||state.browsing)return;
+      state.browsing=true;
+      playerHand()?.classList.add('gostop-touch-browsing');
+    };
+
     const setActiveCard=(state,card,x,y)=>{
       if(!state||!canUseCard(card)||card===state.card)return;
       restoreDraggedCard(state);
       selectCard(card);
-      const rect=card.getBoundingClientRect();
+      const rect=geometryRectFor(state,card,true);
       state.card=card;
       state.wasSelected=false;
       state.anchorX=x;
       state.anchorY=y;
       state.anchorTime=now();
-      state.startRect={left:rect.left,top:rect.top,width:rect.width,height:rect.height};
+      state.startRect=rect;
       state.previousVisibility=card.style.visibility;
       state.previousTransform=card.style.transform;
       state.previousZIndex=card.style.zIndex;
       state.dragging=false;
       state.switched=true;
-      state.browsing=true;
+      markBrowsing(state);
       state.samples=[];
       pushSample(state,x,y,state.anchorTime);
     };
@@ -163,8 +196,8 @@
     const beginTouch=(event,touch,card)=>{
       if(!canUseCard(card))return false;
       const wasSelected=touchSelectedCard===card;
+      const handGeometry=snapshotHandGeometry();
       selectCard(card);
-      const rect=card.getBoundingClientRect();
       const startTime=now();
       touchState={
         id:touch.identifier,
@@ -178,12 +211,15 @@
         anchorTime:startTime,
         lastX:touch.clientX,
         lastY:touch.clientY,
-        startRect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height},
+        startRect:geometryRectFor({handGeometry},card,!wasSelected),
         previousVisibility:card.style.visibility,
         previousTransform:card.style.transform,
         previousZIndex:card.style.zIndex,
         ghost:null,
-        samples:[]
+        handGeometry,
+        samples:[],
+        pendingMove:null,
+        moveFrame:null
       };
       pushSample(touchState,touch.clientX,touch.clientY,startTime);
       suppressTouchClicksUntil=Date.now()+900;
@@ -191,24 +227,17 @@
       return true;
     };
 
-    const moveTouch=(event,touch)=>{
-      const state=touchState;
-      if(!state)return;
-      const time=now();
-      state.lastX=touch.clientX;
-      state.lastY=touch.clientY;
-      pushSample(state,touch.clientX,touch.clientY,time);
-
-      const up=state.anchorY-touch.clientY;
-      const sideways=Math.abs(touch.clientX-state.anchorX);
-      const radialIntent=up>=14&&(up>=sideways*.28||touch.clientY<state.startRect.top-8);
+    const processTouchMove=(state,x,y)=>{
+      if(!state||touchState!==state)return;
+      const up=state.anchorY-y;
+      const sideways=Math.abs(x-state.anchorX);
+      const radialIntent=up>=14&&(up>=sideways*.28||y<state.startRect.top-8);
 
       if(!state.dragging&&!radialIntent){
-        if(sideways>=10)state.browsing=true;
-        const hovered=nearestHandCard(touch.clientX,touch.clientY);
+        if(sideways>=10)markBrowsing(state);
+        const hovered=nearestHandCard(state,x,y);
         if(hovered&&hovered!==state.card){
-          setActiveCard(state,hovered,touch.clientX,touch.clientY);
-          event.preventDefault();
+          setActiveCard(state,hovered,x,y);
           return;
         }
       }
@@ -221,17 +250,38 @@
       if(state.dragging){
         const ghost=ensureGhost(state);
         if(ghost){
-          const dx=touch.clientX-state.anchorX;
-          const dy=touch.clientY-state.anchorY;
+          const dx=x-state.anchorX;
+          const dy=y-state.anchorY;
           ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
         }
       }
-      event.preventDefault();
+    };
+
+    const queueTouchMove=(state,x,y)=>{
+      if(!state)return;
+      state.pendingMove={x,y};
+      if(state.moveFrame!=null)return;
+      state.moveFrame=requestFrame(()=>{
+        state.moveFrame=null;
+        if(touchState!==state)return;
+        const pending=state.pendingMove;
+        state.pendingMove=null;
+        if(pending)processTouchMove(state,pending.x,pending.y);
+      });
+    };
+
+    const flushTouchMove=state=>{
+      if(!state)return;
+      if(state.moveFrame!=null){cancelFrame(state.moveFrame);state.moveFrame=null;}
+      const pending=state.pendingMove;
+      state.pendingMove=null;
+      if(pending)processTouchMove(state,pending.x,pending.y);
     };
 
     const triggerPlay=card=>{
       if(!canUseCard(card))return false;
       touchSelectedCard=null;
+      playerHand()?.classList.remove('gostop-touch-browsing');
       bypassClickCard=card;
       try{card.click();}finally{bypassClickCard=null;}
       return true;
@@ -240,6 +290,7 @@
     const finishTouch=(event,touch)=>{
       const state=touchState;
       if(!state)return;
+      flushTouchMove(state);
       const endX=touch?.clientX??state.lastX;
       const endY=touch?.clientY??state.lastY;
       const endTime=now();
@@ -251,6 +302,7 @@
       const browsed=state.browsing||state.switched;
 
       restoreDraggedCard(state);
+      playerHand()?.classList.remove('gostop-touch-browsing');
       touchState=null;
       event.preventDefault();
       event.stopPropagation();
@@ -269,9 +321,11 @@
     const cancelTouch=event=>{
       if(!touchState)return;
       const state=touchState;
+      if(state.moveFrame!=null){cancelFrame(state.moveFrame);state.moveFrame=null;}
       const card=state.card;
       const browsed=state.browsing||state.switched;
       restoreDraggedCard(state);
+      playerHand()?.classList.remove('gostop-touch-browsing');
       touchState=null;
       event?.preventDefault?.();
       if(browsed)clearSelection();else selectCard(card);
@@ -290,7 +344,12 @@
       if(!touchState)return;
       const touch=touchById(event.touches,touchState.id);
       if(!touch){cancelTouch(event);return;}
-      moveTouch(event,touch);
+      const time=now();
+      touchState.lastX=touch.clientX;
+      touchState.lastY=touch.clientY;
+      pushSample(touchState,touch.clientX,touch.clientY,time);
+      queueTouchMove(touchState,touch.clientX,touch.clientY);
+      event.preventDefault();
     },{capture:true,passive:false});
 
     doc.addEventListener('touchend',event=>{
