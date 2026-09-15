@@ -1,0 +1,26 @@
+name: Refine target-choice fix
+on:
+  push:
+    branches: [fix/two-floor-target-choice]
+    paths:
+      - '.github/workflows/refine-target-choice-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/two-floor-target-choice
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python .github/scripts/refine_target_choice_fix.py
+      - run: |
+          git config user.name gostop-bot
+          git config user.email gostop-bot@users.noreply.github.com
+          git add app.js tests/target-choice-persistence.test.js
+          git diff --cached --check
+          git commit -m "Guard authoritative floor target choices"
+          git push origin HEAD:fix/two-floor-target-choice
