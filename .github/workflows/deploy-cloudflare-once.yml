@@ -1,0 +1,37 @@
+name: Deploy Cloudflare Authority
+
+on:
+  push:
+    branches:
+      - feature/accounts-coins-leaderboards
+    paths:
+      - .github/workflows/deploy-cloudflare-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run regression tests
+        run: npm test
+
+      - name: Deploy authoritative Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.102.0'
+          command: deploy --yes
