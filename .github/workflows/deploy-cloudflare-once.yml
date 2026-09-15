@@ -6,6 +6,7 @@ on:
       - feature/accounts-coins-leaderboards
     paths:
       - .github/workflows/deploy-cloudflare-once.yml
+      - .github/deploy-cloudflare-now.txt
 
 permissions:
   contents: read
