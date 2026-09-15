@@ -127,6 +127,7 @@ export class RoomCore{
           const current=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId});
           if(!current.terminalResult)throw Object.assign(new Error('The current hand is not complete.'),{code:'HAND_IN_PROGRESS'});
           flow.replayReady[participant.seatId]=true;
+          if(this.isSolo?.()){const bot=this.room.participants.find(item=>item.bot);if(bot)flow.replayReady[bot.seatId]=true;}
           if(flow.replayReady.playerA&&flow.replayReady.playerB){const next=this.authority.createNewHand({matchId:this.room.matchId});this.room.gameSequence++;this.room.currentGameStartRevision=next.revision;flowEvents=this.authority.getEventsSince({matchId:this.room.matchId,viewerId:participant.playerId,revision:current.revision}).events;flow.replayReady={playerA:false,playerB:false};this.room.status='ready';this.room.terminalResult=null;}
         }else if(message.action.type==='requestNewGame'){
           if(!flow.newGameRequest)flow.newGameRequest={requestId:`request-${++flow.requestGeneration}`,requesterPlayerId:participant.playerId,createdAt:this.now()};
