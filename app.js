@@ -841,8 +841,8 @@
     const event=result.events[0];
     if(event.type==='cardLanded'){
       presentation.floorSlotReservations.delete(event.card.id);
-      removeStage(event.card.id);
       render();
+      removeStage(event.card.id);
       await presentationPause('cardLandCleanup');
       return;
     }
@@ -2251,9 +2251,11 @@
         // the hand slap and the deck reveal in ranked Solo/Online play.
         if(hasUnpresentedLocalHandMovement(incomingMapped.state,presentationEvents))return;
         const pendingStageIds=new Set(globalThis.GoStopPresentationPlan.pendingOnlineStageIds(incomingMapped.state));
-        for(const cardId of [...presentation.stagedCards.keys()])if(!pendingStageIds.has(cardId))cleanupStagedCard(cardId);
+        const staleStageIds=[...presentation.stagedCards.keys()].filter(cardId=>!pendingStageIds.has(cardId));
         onlineStageState=Object.fromEntries(Object.entries(onlineStageState).filter(([cardId])=>pendingStageIds.has(cardId)));
-        state=incomingMapped.state;onlineLastEvents=[];render();await driveOnline(snapshot,[]);return;
+        state=incomingMapped.state;onlineLastEvents=[];render();
+        staleStageIds.forEach(cleanupStagedCard);
+        await driveOnline(snapshot,[]);return;
       }
       let bombEvent=null;
       const incoming=incomingMapped.state;
@@ -2273,7 +2275,7 @@
           onlineHandSourceRects.clear();
           const cards=step.cardIds.map(id=>state[side].hand.find(card=>card.id===id)||MASTER_DECK.find(card=>card.id===id)).filter(Boolean),target=state.floor.find(card=>card.month===bombEvent?.month),sources=cards.map((card,index)=>side==='human'?els.playerHand.querySelector(`[data-card-id="${card.id}"]`)?.getBoundingClientRect()||approximateHumanSource(index,cards.length):approximateAiSource());if(target)await runPhysicalMotion(()=>animateBombSlap(side,cards,target,sources));
         }else if(step.kind==='capture'){await runPhysicalMotion(()=>animateCaptureBatch(step.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean),side));step.cardIds.forEach(cleanupStagedCard);}
-        else if(step.kind==='landedCleanup')cleanupStagedCard(step.cardId);
+        else if(step.kind==='landedCleanup'){ /* DOM cleanup is deferred until after the authoritative floor render below. */ }
         else if(event.type==='piTransferred')await presentPiTransferEvents(side,[event]);
       }
       state=incomingMapped.state;onlineLastEvents=presentationEvents;render();

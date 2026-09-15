@@ -43,6 +43,14 @@ test('online quit decline schedules requester exit after current game',async()=>
   const {core,a,sa,sb}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;await core.handle(sa,flow('quit-request-2',revision,{type:'quitGame'}));const request=sb.last('snapshot').snapshot.sessionFlow.quitRequest;await core.handle(sb,flow('quit-decline',revision,{type:'respondQuit',requestId:request.requestId,accept:false}));assert.equal(core.room.sessionFlow.ended,false);assert.equal(core.room.rankFlow.scheduledQuitBy,a.playerId);assert.equal(sa.last('snapshot').snapshot.sessionFlow.scheduledQuitByYou,true);
 });
 
+test('ranked Solo Play Again immediately creates the next hand without waiting for the computer seat',async()=>{
+  const {core,user,socket}=await soloRoom(),oldSession=core.room.sessionId,oldSequence=core.room.gameSequence;
+  const record=core.authority.exportMatch(core.room.matchId),seatId=record.seatByPlayer[user.playerId];record.state.terminalResult={type:'stop',winnerId:seatId,finalPoints:7};record.state.winner=seatId;record.completedAt=now();
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);core.room.terminalResult=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).terminalResult;core.room.status='completed';await core.persist();
+  const before=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}),result=await core.handle(socket,flow('solo-replay',before.revision,{type:'playAgainReady'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.room.sessionId,oldSession);assert.equal(core.room.gameSequence,oldSequence+1);assert.equal(core.room.sessionFlow.replayReady.playerA,false);assert.equal(core.room.sessionFlow.replayReady.playerB,false);assert.equal(core.room.terminalResult,null);assert.equal(socket.last('snapshot').snapshot.terminalResult,null);assert.equal(socket.last('snapshot').snapshot.sessionFlow.replayReady.you,false);
+});
+
 test('ranked Solo is server-owned, starts Computer #1 at 100 Coins, New Game starts a new session, and Quit ends immediately',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),bot=core.room.participants.find(item=>item.bot);assert.equal(core.isRanked(),true);assert.equal(bot.nickname,'Computer #1');assert.equal(bot.walletCoins,100);assert.equal(socket.last('snapshot').snapshot.sessionFlow.rankedMode,'solo');
   const oldMatch=core.room.matchId,oldSession=core.room.sessionId,revision=socket.last('snapshot').snapshot.revision;const newGame=await core.handle(socket,flow('solo-new',revision,{type:'requestNewGame'}));assert.equal(newGame.type,'actionAccepted');assert.notEqual(core.room.matchId,oldMatch);assert.notEqual(core.room.sessionId,oldSession);assert.equal(core.room.sessionFlow.ended,false);assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'));
