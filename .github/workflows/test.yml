@@ -1,0 +1,28 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          node --check app.js
+          node --check ranked-client.js
+          node --check online-client.js
+          node --check server/worker.mjs
+          node --check server/game-room.mjs
+          node --check server/ranked-room-core.mjs
+          node --check server/ranked-room-final.mjs
+          node --check server/ranked-account-store.mjs
+      - name: Regression tests
+        run: node --test tests/*.test.js
