@@ -2,7 +2,8 @@ import {RankedRoomCore} from './ranked-room-core.mjs';
 import {RoomError} from './room-core.mjs';
 import {envelope,parseClientMessage} from './protocol.mjs';
 
-const randomMatchId=cryptoApi=>{const data=new Uint32Array(4);cryptoApi.getRandomValues(data);return `match_${Array.from(data,v=>v.toString(16).padStart(8,'0')).join('')}`;};
+const randomHex=(cryptoApi,words=2)=>{const data=new Uint32Array(words);cryptoApi.getRandomValues(data);return Array.from(data,v=>v.toString(16).padStart(8,'0')).join('');};
+const randomMatchId=cryptoApi=>`match_${randomHex(cryptoApi,4)}`;
 
 export class FinalRankedRoomCore extends RankedRoomCore{
   resetPauseBudgetForCurrentGame(){
@@ -21,6 +22,11 @@ export class FinalRankedRoomCore extends RankedRoomCore{
       if(captured.filter(card=>card.type==='bright').length>=5)bucket['5_BRIGHTS']=(bucket['5_BRIGHTS']||0)+1;
     }
     return result;
+  }
+  async startRankedSession(){
+    if(!this.isRanked())return null;if(!this.isSolo())return super.startRankedSession();
+    const user=this.room.participants.find(item=>!item.bot&&item.accountId);this.room.soloSessionSequence=(this.room.soloSessionSequence||0)+1;this.room.sessionId=`solo-${this.room.roomCode}-${this.room.soloSessionSequence}-${randomHex(this.crypto)}`;this.room.sessionStats={gamesPlayed:0,coinsWonByAccount:{},coinsLostByAccount:{},milestonesByAccount:{},computerBankruptcies:0,forceQuits:0};
+    await this.accountRequest('/internal/session/start',{sessionId:this.room.sessionId,mode:'solo',accountIds:[user.accountId],opponent:{type:'computer',level:this.room.solo?.computerLevel||1},startedAt:this.now()});return this.room.sessionId;
   }
   async refreshInactivity(){this.resetPauseBudgetForCurrentGame();return super.refreshInactivity();}
   async startFreshSoloSession(participant,reason='new-game'){
