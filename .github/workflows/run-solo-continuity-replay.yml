@@ -1,6 +1,9 @@
 name: Solo continuity patch
 on:
-  workflow_dispatch:
+  push:
+    branches: [fix/solo-card-continuity-replay]
+    paths:
+      - '.github/workflows/run-solo-continuity-replay.yml'
 permissions:
   contents: write
 jobs:
