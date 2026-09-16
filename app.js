@@ -2339,12 +2339,12 @@
       await driveOnline(snapshot,presentationEvents);
     }
     async function submitOnlineCardPlay(){
-      const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?matchesFor(card):[];
-      // Two-match choices are authority-owned. Do not start a second local chooser here;
-      // driveOnline presents the server's chooseFloorTarget decision and keeps it alive.
-      if(matches.length>1){await driveOnline(latestOnlineSnapshot,onlineLastEvents);return;}
-      const target=matches[0]||null;
-      onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});
+      const cardId=onlinePendingCardId;
+      if(!cardId)return;
+      // Authority owns floor matching. Always submit the card first without a client-picked
+      // target: zero/one-match plays resolve normally, while two matches make the server
+      // enter awaitingFloorTarget and publish the authoritative chooseFloorTarget action.
+      onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async room=>{
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
