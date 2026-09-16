@@ -29,3 +29,25 @@ test('ordinary ranked cards use one-click authoritative play while Shake/Bomb ca
   assert.match(app,/const action=needsPrePlayDecision\?\{type:'attemptPlayCard',cardId\}:\{type:'playCard',cardId,targetId:null\}/);
   assert.match(app,/clickedEl\?\.classList\.add\('pending-card'\)/);
 });
+
+
+test('ranked card input serializes rapid/repeated taps until the authority responds',()=>{
+  const humanPlay=app.slice(app.indexOf('async function humanPlay'),app.indexOf('async function aiTurn'));
+  assert.match(humanPlay,/if\(onlineMode\)\{[\s\S]*?if\(onlineActions\.size>0\)return;/);
+});
+
+test('ranked targetless play leaves zero/one floor matches to authority without opening a false chooser',()=>{
+  const makePlayer=hand=>({hand,captured:[],go:0,shakes:0,shakeMultiplier:1,bombs:0,bombFreeTurns:0,ppeoks:0,hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0});
+  const makeState=floor=>({deck:[card('m2-1')],floor,human:makePlayer([card('m1-1')]),ai:makePlayer([]),floorStacks:{},floorSlotByCard:Object.fromEntries(floor.map((item,index)=>[item.id,index])),floorSlotCount:12,startingPlayerId:'playerA',turn:'playerA',winner:null,specialWinner:null,openingResolved:true,openingSpecialsComplete:true,matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0}});
+  for(const floor of [[],[card('m1-2')]]){
+    const state=makeState(floor);
+    const result=engine.applyNormalTurnAction(state,{type:'playCard',actorId:'playerA',cardId:'m1-1',targetId:null});
+    assert.notEqual(result.pendingDecision?.type,'chooseFloorTarget');
+    assert.notEqual(result.state.pendingTurn?.phase,'awaitingFloorTarget');
+  }
+});
+
+test('ranked click pipeline keeps special pre-decisions and clears rejected pending-card ownership',()=>{
+  assert.match(app,/needsPrePlayDecision=state\.human\.armedBombMonths\?\.includes\(card\.month\)\|\|state\.human\.hiddenTripleMonths\?\.includes\(card\.month\)/);
+  assert.match(app,/actionRejected[\s\S]*?if\(onlinePendingCardId===action\.cardId\)onlinePendingCardId=null/);
+});

@@ -152,7 +152,10 @@ test('Online semantic floor candidates collapse every registered stack but retai
   useState(stateWith({floor:[card('m2-1')]}));assert.equal(api.effectiveFloorMatchCards(played).map(item=>item.id).join(','),'m2-1');
   useState(stateWith({floor:[card('m3-1')]}));assert.equal(api.effectiveFloorMatchCards(played).length,0);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),submit=source.slice(source.indexOf('async function submitOnlineCardPlay'),source.indexOf('const beginOnline'));
-  assert.match(submit,/matches=card\?matchesFor\(card\):\[\]/);
+  // Ranked authority, not the browser, owns floor matching. The client must send the
+  // card targetless so zero/one/two-match resolution uses the same authoritative path.
+  assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId:null\}\)/);
+  assert.doesNotMatch(submit,/matchesFor\(/);
   assert.doesNotMatch(submit,/state\.floor\.filter\(item=>item\.month===card\.month\)/);
 });
 
