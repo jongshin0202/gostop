@@ -22,3 +22,10 @@ test('server engine turns a targetless play with two floor matches into chooseFl
   assert.equal(result.pendingDecision.type,'chooseFloorTarget');
   assert.deepEqual(new Set(result.pendingDecision.legalTargetIds),new Set([floorA.id,floorB.id]));
 });
+
+
+test('ordinary ranked cards use one-click authoritative play while Shake/Bomb cards keep the pre-decision path',()=>{
+  assert.match(app,/const needsPrePlayDecision=state\.human\.armedBombMonths\?\.includes\(card\.month\)\|\|state\.human\.hiddenTripleMonths\?\.includes\(card\.month\)/);
+  assert.match(app,/const action=needsPrePlayDecision\?\{type:'attemptPlayCard',cardId\}:\{type:'playCard',cardId,targetId:null\}/);
+  assert.match(app,/clickedEl\?\.classList\.add\('pending-card'\)/);
+});

@@ -733,7 +733,11 @@
         if(onlinePendingCardId===cardId||authoritativeTargetChoice){syncTargetChoiceUi();return;}
         cleanupTargetChoice();onlineHandSourceRects.clear();
       }
-      onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);if(!onlineSubmit({type:'attemptPlayCard',cardId}))onlineHandSourceRects.delete(cardId);return;
+      const card=state.human.hand.find(item=>item.id===cardId);if(!card)return;
+      onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);clickedEl?.classList.add('pending-card');
+      const needsPrePlayDecision=state.human.armedBombMonths?.includes(card.month)||state.human.hiddenTripleMonths?.includes(card.month);
+      const action=needsPrePlayDecision?{type:'attemptPlayCard',cardId}:{type:'playCard',cardId,targetId:null};
+      if(!onlineSubmit(action)){onlineHandSourceRects.delete(cardId);onlinePendingCardId=null;clickedEl?.classList.remove('pending-card');}return;
     }
     if(state.turn!==PLAYER_A || state.winner)return;
 
@@ -2371,7 +2375,11 @@
       });
       adapter.addEventListener('actionRejected',event=>{
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
-        if(action?.cardId)onlineHandSourceRects.delete(action.cardId);
+        if(action?.cardId){
+          onlineHandSourceRects.delete(action.cardId);
+          if(onlinePendingCardId===action.cardId)onlinePendingCardId=null;
+          els.playerHand.querySelector(`[data-card-id="${action.cardId}"]`)?.classList.remove('pending-card');
+        }
         onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=true;render();
         // Stay fail-closed, then let a fresh authoritative snapshot decide whether input can
         // resume. This also recovers safely from a continuation rejected after an ack race.
