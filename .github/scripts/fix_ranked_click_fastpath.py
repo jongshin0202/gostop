@@ -40,3 +40,5 @@ test('ordinary ranked cards use one-click authoritative play while Shake/Bomb ca
 if "ordinary ranked cards use one-click authoritative play" not in text:
     text += insert
 test.write_text(text)
+
+# Trigger after workflow installation.
