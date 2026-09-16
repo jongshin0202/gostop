@@ -1,0 +1,29 @@
+name: Apply two-floor click pipeline fix
+on:
+  push:
+    branches: [fix/two-floor-click-pipeline]
+    paths:
+      - '.github/scripts/fix_two_floor_pipeline.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/two-floor-click-pipeline
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python .github/scripts/fix_two_floor_pipeline.py
+      - run: |
+          node --check app.js
+          node --test tests/two-floor-click-pipeline.test.js
+      - run: |
+          git config user.name gostop-bot
+          git config user.email gostop-bot@users.noreply.github.com
+          git add app.js tests/two-floor-click-pipeline.test.js
+          git diff --cached --check
+          git commit -m "Fix authoritative two-floor card click pipeline"
+          git push origin HEAD:fix/two-floor-click-pipeline
