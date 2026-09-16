@@ -49,3 +49,5 @@ test('server engine turns a targetless play with two floor matches into chooseFl
   assert.deepEqual(new Set(result.pendingDecision.legalTargetIds),new Set([floorA.id,floorB.id]));
 });
 """)
+
+# Triggered intentionally after the one-time workflow is installed.
