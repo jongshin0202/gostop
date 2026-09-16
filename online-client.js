@@ -2,8 +2,16 @@
   'use strict';
   const PROTOCOL_VERSION=1;
   function viewerCanStartTurn(snapshot){
-    const state=snapshot?.state;
-    return !!state&&state.turn===snapshot.seatId&&!state.pendingDecision&&Array.isArray(state.legalActions)&&state.legalActions.includes('attemptPlayCard');
+    const state=snapshot?.state,seatId=snapshot?.seatId;
+    if(!state||!['playerA','playerB'].includes(seatId)||state.turn!==seatId||state.winner||state.pendingTurn||state.pendingDecision)return false;
+    if(Array.isArray(state.legalActions)&&state.legalActions.includes('attemptPlayCard'))return true;
+    // Replay fallback: a fresh authoritative hand can briefly expose an empty/stale
+    // convenience legalActions list after the computer auto-finishes its opening turn.
+    // Derive the same permission from projected authoritative state so the UI cannot
+    // remain locked even though it is already the viewer's playable turn.
+    if(state.openingSpecialsComplete!==true)return false;
+    const viewer=seatId==='playerA'?state.human:state.ai;
+    return Array.isArray(viewer?.hand)&&viewer.hand.length>0;
   }
   function viewerCanInteract(snapshot,{connected,pendingActionId=null,blocked=false}={}){return !!connected&&!pendingActionId&&!blocked&&viewerCanStartTurn(snapshot);}
   class OnlineSessionAdapter extends EventTarget{

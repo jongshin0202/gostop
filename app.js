@@ -2306,7 +2306,14 @@
       }
       state=incomingMapped.state;onlineLastEvents=presentationEvents;render();
       for(const cardId of [...presentation.stagedCards.keys()])if(!Object.hasOwn(onlineStageState,cardId))cleanupStagedCard(cardId);
-      if(presentationEvents.some(event=>event.type==='newHandCreated')){presentation.roundNo++;resetHandPresentationState();await presentDealSequence();}
+      if(presentationEvents.some(event=>event.type==='newHandCreated')){
+        presentation.roundNo++;
+        resetHandPresentationState();
+        onlinePendingCardId=null;
+        onlineStageState={};
+        presentation.recordedTerminal=null;
+        await presentDealSequence();
+      }
       for(const event of presentationEvents){
         const side=legacySideForPlayerId(event.actorId||PLAYER_A),cardIds=event.cardIds||[];
         if(event.type==='cardLanded'){removeStage(event.card?.id||event.cardId);await presentationPause('cardLandCleanup');}
