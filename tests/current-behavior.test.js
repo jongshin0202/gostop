@@ -2607,7 +2607,9 @@ test('Online hand play captures the live source before animation and preserves e
   assert.equal(JSON.stringify(api.takeOnlineHandSource('m2-1')),JSON.stringify(exact));assert.equal(api.takeOnlineHandSource('m2-1'),null);
   api.rememberOnlineHandSource('m2-1',exact);api.resetHandPresentationState();assert.equal(api.takeOnlineHandSource('m2-1'),null);
   const onlineClick=source.slice(source.indexOf('async function humanPlay'),source.indexOf('// While choosing between two floor targets'));
-  assert.ok(onlineClick.indexOf('rememberOnlineHandSource(cardId,clickedEl)')<onlineClick.indexOf("onlineSubmit({type:'attemptPlayCard',cardId})"));
+  const remembered=onlineClick.indexOf('rememberOnlineHandSource(cardId,clickedEl)');
+  const submitted=onlineClick.indexOf('onlineSubmit(action)');
+  assert.ok(remembered>=0&&submitted>remembered);
   const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
   assert.match(transition,/side==='human'\?takeOnlineHandSource\(event\.card\.id\)\|\|els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
   assert.match(transition,/target=state\.floor\.find\(card=>card\.id===step\.targetCardId\)/);

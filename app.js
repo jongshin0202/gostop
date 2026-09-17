@@ -732,7 +732,7 @@
       // competing revisions or duplicate card plays before the authority responds.
       if(onlineActions.size>0)return;
       if(presentation.targetChoice){
-        const authoritativeTargetChoice=state?.pendingDecision?.type==='chooseFloorTarget'||state?.pendingTurn?.phase==='awaitingFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
+        const authoritativeTargetChoice=state?.pendingDecision?.type==='chooseFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
         if(onlinePendingCardId===cardId||authoritativeTargetChoice){syncTargetChoiceUi();return;}
         cleanupTargetChoice();onlineHandSourceRects.clear();
       }

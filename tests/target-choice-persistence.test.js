@@ -16,6 +16,7 @@ test('floor target input uses delegated handlers so rebuilt card nodes stay sele
 });
 
 test('repeat taps cannot cancel or duplicate an active ranked target choice',()=>{
-  assert.match(source,/const authoritativeTargetChoice=state\?\.pendingDecision\?\.type==='chooseFloorTarget'\|\|state\?\.pendingTurn\?\.phase==='awaitingFloorTarget'\|\|latestOnlineSnapshot\?\.nextAction\?\.type==='chooseFloorTarget'/);
+  assert.match(source,/const authoritativeTargetChoice=state\?\.pendingDecision\?\.type==='chooseFloorTarget'\|\|latestOnlineSnapshot\?\.nextAction\?\.type==='chooseFloorTarget'/);
+  assert.doesNotMatch(source,/const authoritativeTargetChoice=[^\n]*pendingTurn\?\.phase==='awaitingFloorTarget'/);
   assert.match(source,/if\(onlinePendingCardId===cardId\|\|authoritativeTargetChoice\)\{syncTargetChoiceUi\(\);return;\}/);
 });
