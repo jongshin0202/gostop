@@ -41,7 +41,7 @@
   function preloadCardFaces(){MASTER_DECK.forEach(preloadCardFace);}
 
   const ids = [
-    'playerHand','aiHand','floor','playerCaptured','aiCaptured','deckCount','deckCountTop','deckCorner','roundCorner',
+    'cardMotionLayer','playerHand','aiHand','floor','playerCaptured','aiCaptured','deckCount','deckCountTop','deckCorner','roundCorner',
     'playerScore','aiScore','goCount','turnLabel','aiThinking','eventBanner','coachText','promptText','howToBtn','newGameBtn',
     'howToDialog','decisionDialog','decisionText','goBtn','stopBtn','resultDialog','resultTitle','resultScore','resultBreakdown',
     'playAgainBtn','resultQuitBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
@@ -490,6 +490,7 @@
 
     renderCaptured(els.playerCaptured,bottomPlayer.captured,view.bottom.id);
     renderCaptured(els.aiCaptured,topPlayer.captured,view.top.id);
+    syncStageOwnedCards();
   }
   function notePresentationRender(){if(presentation.activePhysicalMotions>0)presentation.rendersDuringPhysicalMotion++;}
   async function runPhysicalMotion(job){presentation.activePhysicalMotions++;try{return await job();}finally{presentation.activePhysicalMotions--;}}
@@ -592,7 +593,7 @@
       head.innerHTML=`<b>${t(group.key)}</b><em>${displayedCount}</em>`;
       const stack=document.createElement('span'); stack.className='capture-stack';
       groupCards.forEach((c,i)=>{
-        const img=document.createElement('img'); img.className='captured-mini'; img.src=artUrl(c.file); img.alt='';
+        const img=document.createElement('img'); img.className='captured-mini'; img.dataset.cardId=c.id; img.src=artUrl(c.file); img.alt='';
         img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
         if((c.flags.includes('doublePi')||(c.id==='m9-1'&&owner.gukjinMode==='pi'))){const badge=document.createElement('span');badge.className='double-single-badge';badge.textContent='×2';stack.appendChild(badge);}
         if(isViewer&&c.id==='m9-1'){
@@ -1406,15 +1407,18 @@
 
   function makePhysicalFace(card,rect,className='physical-card'){
     const el=document.createElement('div'); el.className=`${className} card canonical-card-face normal-gameplay-card`; el.dataset.cardId=card.id;
-    el.appendChild(createCardFaceImage(card)); document.body.appendChild(el);
+    el.appendChild(createCardFaceImage(card)); (els.cardMotionLayer||document.body).appendChild(el);
     normalizeFixed(el,rect); return el;
   }
   function normalizeFixed(el,rect){
     el.getAnimations().forEach(a=>a.cancel());
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
-    el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='1160';
+    el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='2';
   }
-  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } }
+  function syncStageOwnedCard(id){const owner=presentation.stagedCards.get(id);if(TEST_MODE||!owner)return;document.querySelectorAll(`[data-card-id="${id}"]`).forEach(node=>{if(node!==owner)node.style.visibility='hidden';});}
+  function syncStageOwnedCards(){presentation.stagedCards.forEach((_,id)=>syncStageOwnedCard(id));}
+  function stagePhysicalCard(id,el){presentation.stagedCards.set(id,el);syncStageOwnedCard(id);return el;}
+  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } if(!TEST_MODE)document.querySelectorAll(`[data-card-id="${id}"]`).forEach(node=>node.style.visibility=''); }
 
   function resetHandPresentationState(){
     cleanupTargetChoice();
@@ -1435,7 +1439,7 @@
     // CPU backs are intentionally smaller in the rack, but the card entering play is always full GoStop Card size.
     sourceRect=fullSizeSourceRect(sourceRect);
     await preloadCardFace(card);
-    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); presentation.stagedCards.set(card.id,el);
+    const el=makePhysicalFace(card,sourceRect,'physical-card moving-card'); stagePhysicalCard(card.id,el);
     document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
     if(!landing)return el;
@@ -1468,7 +1472,7 @@
       const src=sourceRects[i] || (seatForLegacySide(side)==='bottom'?approximateHumanSource(i,cards.length):approximateAiSource());
       const full=fullSizeSourceRect(src);
       const el=makePhysicalFace(card,full,'physical-card moving-card bomb-moving-card');
-      presentation.stagedCards.set(card.id,el);
+      stagePhysicalCard(card.id,el);
       return {card,el,start:full,i};
     });
     if(prefersReducedMotion()){
@@ -1509,8 +1513,8 @@
     const inner=document.createElement('div'); inner.className='deck-draw-inner';
     const back=document.createElement('div'); back.className='deck-draw-face deck-draw-back';
     const front=document.createElement('div'); front.className='deck-draw-face deck-draw-front card canonical-card-face';
-    front.appendChild(createCardFaceImage(card)); inner.append(back,front); el.appendChild(inner); document.body.appendChild(el); normalizeFixed(el,start);
-    presentation.stagedCards.set(card.id,el);
+    front.appendChild(createCardFaceImage(card)); inner.append(back,front); el.appendChild(inner); (els.cardMotionLayer||document.body).appendChild(el); normalizeFixed(el,start);
+    stagePhysicalCard(card.id,el);
     if(prefersReducedMotion()){ inner.style.transform='rotateY(180deg)'; return el; }
 
     const tableR=els.table.getBoundingClientRect();
@@ -1546,7 +1550,7 @@
   }
 
   async function stageHandCardForChoice(side,card,sourceRect){
-    await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');presentation.stagedCards.set(card.id,el);
+    await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');stagePhysicalCard(card.id,el);
     document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
     if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:240,easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
     return el;

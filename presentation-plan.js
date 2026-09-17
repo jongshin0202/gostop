@@ -32,8 +32,8 @@
       #scoreDialog{overscroll-behavior:contain}
       #scoreDialog .score-breakdown-card{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
       .milestone-overlay[data-effect="flush"] .milestone-title:after{display:block!important;font-size:clamp(5.5rem,18vw,11rem)!important;line-height:1;margin:.18em auto 0!important;transform-origin:center}
-      .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:2147483000!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
-      .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2147482000!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
+      .gostop-flick-ghost{position:fixed!important;margin:0!important;pointer-events:none!important;z-index:3!important;transition:none!important;filter:none!important;contain:paint;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;will-change:transform}
+      .physical-card,.physical-card.moving-card,.physical-card.deck-draw-card,.capture-flight-card,.sliding-capture{z-index:2!important;isolation:isolate;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
       .physical-card.moving-card,.capture-flight-card,.sliding-capture{contain:paint}
       @media (hover:none),(pointer:coarse){
         #playerHand .hand-card:hover{transform:none!important}
@@ -52,6 +52,8 @@
     let visualSelectedSlot=null;
     let bypassClickCard=null;
     let suppressTouchClicksUntil=0;
+    let pointerState=null;
+    let suppressPointerClicksUntil=0;
 
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const requestFrame=globalThis.requestAnimationFrame?.bind(globalThis)||(callback=>setTimeout(callback,16));
@@ -191,7 +193,7 @@
       ghost.style.width=`${state.startRect.width}px`;
       ghost.style.height=`${state.startRect.height}px`;
       ghost.style.transform='translate3d(0,0,0)';
-      doc.body.appendChild(ghost);
+      (doc.getElementById('cardMotionLayer')||doc.body).appendChild(ghost);
       state.ghost=ghost;
       state.card.style.visibility='hidden';
       return ghost;
@@ -258,7 +260,19 @@
           const dy=y-state.anchorY;
           ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
         }
+        const time=now();
+        const flickSample=recentFlickSample(state,x,y,time);
+        if(isUpwardFlick(flickSample)){
+          const card=state.card;
+          restoreDraggedCard(state);
+          playerHand()?.classList.remove('gostop-touch-browsing');
+          touchState=null;
+          suppressTouchClicksUntil=Date.now()+900;
+          triggerPlay(card);
+          return true;
+        }
       }
+      return false;
     };
 
     const queueTouchMove=(state,x,y)=>{
@@ -368,11 +382,38 @@
 
     doc.addEventListener('touchcancel',event=>cancelTouch(event),{capture:true,passive:false});
 
+    doc.addEventListener('pointerdown',event=>{
+      if(event.pointerType==='touch'||event.button!==0)return;
+      const card=cardFromTarget(event.target);
+      if(!canUseCard(card))return;
+      const time=now();
+      pointerState={id:event.pointerId,card,startX:event.clientX,startY:event.clientY,samples:[]};
+      pushSample(pointerState,event.clientX,event.clientY,time);
+    },true);
+
+    doc.addEventListener('pointermove',event=>{
+      const state=pointerState;
+      if(!state||event.pointerId!==state.id)return;
+      const time=now();
+      pushSample(state,event.clientX,event.clientY,time);
+      const sample=recentFlickSample(state,event.clientX,event.clientY,time);
+      if(!isUpwardFlick(sample))return;
+      pointerState=null;
+      suppressPointerClicksUntil=Date.now()+900;
+      event.preventDefault();
+      event.stopPropagation();
+      triggerPlay(state.card);
+    },{capture:true,passive:false});
+
+    const finishPointer=event=>{if(pointerState&&event.pointerId===pointerState.id)pointerState=null;};
+    doc.addEventListener('pointerup',finishPointer,true);
+    doc.addEventListener('pointercancel',finishPointer,true);
+
     doc.addEventListener('click',event=>{
       const card=cardFromTarget(event.target);
       if(!card)return;
       if(card===bypassClickCard)return;
-      if(Date.now()<suppressTouchClicksUntil){
+      if(Date.now()<suppressTouchClicksUntil||Date.now()<suppressPointerClicksUntil){
         event.preventDefault();
         event.stopImmediatePropagation();
       }
