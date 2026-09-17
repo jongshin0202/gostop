@@ -101,7 +101,11 @@
     }
     function dispatchAuthoritative(match,action){
       const state=match.state;
-      const initial=dispatch(state,action);
+      let initial;
+      if(action.type==='playCard'){
+        const preflight=dispatch(state,{type:'attemptPlayCard',actorId:action.actorId,cardId:action.cardId});
+        initial=preflight.pendingDecision||preflight.state.pendingTurn?preflight:dispatch(preflight.state,action);
+      }else initial=dispatch(state,action);
       if(match.gameMode!=='online-2player'||action.type!=='completeTurn')return initial;
       const evaluated=engine.evaluateGoStop(initial.state,{actorId:action.actorId});
       let result={...evaluated,events:[...(initial.events||[]),...(evaluated.events||[])]};

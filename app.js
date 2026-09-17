@@ -728,12 +728,19 @@
 
   async function humanPlay(cardId, clickedEl){
     if(onlineMode){
+      // Exactly one ranked action may be in flight. Rapid/repeated taps must not create
+      // competing revisions or duplicate card plays before the authority responds.
+      if(onlineActions.size>0)return;
       if(presentation.targetChoice){
-        const authoritativeTargetChoice=state?.pendingDecision?.type==='chooseFloorTarget'||state?.pendingTurn?.phase==='awaitingFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
+        const authoritativeTargetChoice=state?.pendingDecision?.type==='chooseFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
         if(onlinePendingCardId===cardId||authoritativeTargetChoice){syncTargetChoiceUi();return;}
         cleanupTargetChoice();onlineHandSourceRects.clear();
       }
-      onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);if(!onlineSubmit({type:'attemptPlayCard',cardId}))onlineHandSourceRects.delete(cardId);return;
+      const card=state.human.hand.find(item=>item.id===cardId);if(!card)return;
+      onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);clickedEl?.classList.add('pending-card');
+      const needsPrePlayDecision=state.human.armedBombMonths?.includes(card.month)||state.human.hiddenTripleMonths?.includes(card.month);
+      const action=needsPrePlayDecision?{type:'attemptPlayCard',cardId}:{type:'playCard',cardId,targetId:null};
+      if(!onlineSubmit(action)){onlineHandSourceRects.delete(cardId);onlinePendingCardId=null;clickedEl?.classList.remove('pending-card');}return;
     }
     if(state.turn!==PLAYER_A || state.winner)return;
 
@@ -2339,12 +2346,12 @@
       await driveOnline(snapshot,presentationEvents);
     }
     async function submitOnlineCardPlay(){
-      const card=state.human.hand.find(item=>item.id===onlinePendingCardId),matches=card?matchesFor(card):[];
-      // Two-match choices are authority-owned. Do not start a second local chooser here;
-      // driveOnline presents the server's chooseFloorTarget decision and keeps it alive.
-      if(matches.length>1){await driveOnline(latestOnlineSnapshot,onlineLastEvents);return;}
-      const target=matches[0]||null;
-      onlineSubmit({type:'playCard',cardId:onlinePendingCardId,targetId:target?.id||null});
+      const cardId=onlinePendingCardId;
+      if(!cardId)return;
+      // Authority owns floor matching. Always submit the card first without a client-picked
+      // target: zero/one-match plays resolve normally, while two matches make the server
+      // enter awaitingFloorTarget and publish the authoritative chooseFloorTarget action.
+      onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async room=>{
       const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();adapter.room=room;globalThis.goStopOnlineSession=adapter;
@@ -2371,7 +2378,11 @@
       });
       adapter.addEventListener('actionRejected',event=>{
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
-        if(action?.cardId)onlineHandSourceRects.delete(action.cardId);
+        if(action?.cardId){
+          onlineHandSourceRects.delete(action.cardId);
+          if(onlinePendingCardId===action.cardId)onlinePendingCardId=null;
+          els.playerHand.querySelector(`[data-card-id="${action.cardId}"]`)?.classList.remove('pending-card');
+        }
         onlineStatus.textContent=event.detail.error?.message||'The server rejected that action.';presentation.locked=true;render();
         // Stay fail-closed, then let a fresh authoritative snapshot decide whether input can
         // resume. This also recovers safely from a continuation rejected after an ack race.
