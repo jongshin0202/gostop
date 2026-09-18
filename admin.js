@@ -1,8 +1,8 @@
 'use strict';
 (()=>{
   const $=id=>document.getElementById(id);
-  const DEFAULT_SERVER_URL='https://gostop-authority.jwshin1.workers.dev';
-  const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
+  const baseUrl='';
+  const authorityLabel=`${location.origin}/api/admin → Cloudflare authority`;
   const TOKEN_KEY='gostop-admin-token';
   let token=sessionStorage.getItem(TOKEN_KEY)||'',currentView='overview',currentExport=[],currentExportName='admin-export';
 
@@ -40,11 +40,11 @@
   function fail(error){$('serverStatus').textContent='● Error';$('serverStatus').style.color='#ff8f8f';console.error(error);alert(error.message||String(error));}
   function resetStatus(){$('serverStatus').style.color='';}
   function showFailureDialog(error,message){
-    const finalMessage=message||error?.message||'Admin connection failed.',code=error?.code||'NETWORK_OR_UNKNOWN',status=error?.status||'—',server=baseUrl||'—';
+    const finalMessage=message||error?.message||'Admin connection failed.',code=error?.code||'NETWORK_OR_UNKNOWN',status=error?.status||'—',server=authorityLabel;
     $('failureMessage').textContent=finalMessage;
     $('failureCode').textContent=code;
     $('failureStatus').textContent=status;
-    $('failureServer').textContent=server;
+    $('failureServer').textContent=authorityLabel;
     $('loginError').textContent=`${finalMessage} [${code} / HTTP ${status}] Server: ${server}`;
     $('failureOverlay').hidden=false;
   }

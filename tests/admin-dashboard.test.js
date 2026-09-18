@@ -26,6 +26,8 @@ test('admin gateway requires configured secret and valid bearer token',async()=>
   assert.equal(unauthorized.status,401);
   const authorized=await worker.fetch(new Request('https://worker/api/admin/health',{headers:{...origin,Authorization:'Bearer top-secret'}}),{ADMIN_TOKEN:'top-secret'});
   assert.equal(authorized.status,200);assert.equal((await authorized.json()).admin,true);
+  const proxied=await worker.fetch(new Request('https://worker/api/admin/health',{headers:{Authorization:'Bearer top-secret'}}),{ADMIN_TOKEN:'top-secret'});
+  assert.equal(proxied.status,200);assert.equal((await proxied.json()).admin,true);
 });
 
 test('player-facing account omits raw IP while protected admin detail exposes connection history',async()=>{
@@ -84,15 +86,15 @@ test('new ranked settlements persist authoritative history and admin files stay 
 
 test('admin dashboard uses authoritative GoStop server configuration with Worker fallback',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
-  assert.match(adminJs,/globalThis\.GOSTOP_CONFIG\?\.serverUrl\|\|DEFAULT_SERVER_URL/);
-  assert.match(adminJs,/https:\/\/gostop-authority\.jwshin1\.workers\.dev/);
+  assert.match(adminJs,/const baseUrl='';/);
+  assert.match(adminJs,/Cloudflare authority/);
   assert.doesNotMatch(adminJs,/globalThis\.GOSTOP_SERVER_URL/);
 });
 
 test('admin login uses explicit button handler, visible connection feedback, and cache-busted script',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
-  assert.match(adminHtml,/admin\.js\?v=20260918-6/);
+  assert.match(adminHtml,/admin\.js\?v=20260918-7/);
   assert.match(adminJs,/openDashboardBtn'\)\.addEventListener\('click',submitAdminLogin\)/);
   assert.match(adminJs,/Connecting…/);
   assert.match(adminJs,/Connecting securely to the GoStop authority/);
@@ -127,10 +129,18 @@ test('admin authentication failure uses a deterministic in-page diagnostic overl
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.match(adminHtml,/Admin build 2026-09-18\.6/);
+  assert.match(adminHtml,/Admin build 2026-09-18\.7/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
     const headers=bySource.get(source);assert.ok(headers,source);
     assert.ok(headers.some(item=>item.key==='Cache-Control'&&/no-store/.test(item.value)),source);
   }
+});
+
+
+test('Vercel proxies admin APIs to Cloudflare authority on the same browser origin',()=>{
+  const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  assert.ok((vercel.rewrites||[]).some(rule=>rule.source==='/api/admin/:path*'&&rule.destination==='https://gostop-authority.jwshin1.workers.dev/api/admin/:path*'));
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminJs,/const baseUrl='';/);
 });
