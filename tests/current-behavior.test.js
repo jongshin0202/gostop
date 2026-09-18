@@ -2583,6 +2583,8 @@ test('deterministic Go Stop risk model goes early with a lead, can stop late, an
   assert.equal(api.aiGoStopDecision({...view,human:{...view.human,firstPpeokPoints:2}},{total:8}).decision,'go');
   const twoBrights={...view,human:{...view.human,captured:cards('m1-1','m3-1'),firstPpeokPoints:0}};assert.equal(api.aiGoStopDecision(twoBrights,{total:7}).decision,'go');
   const hiddenVariant={...view,deckCount:view.deckCount,ai:{...view.ai,hand:cards('m8-1','m9-1','m10-1','m11-1')}};assert.deepEqual(api.aiGoStopDecision(hiddenVariant,{total:9}),live);
+  const lateSafe={...view,deckCount:2,ai:{...view.ai,hand:[card('m1-1')]},human:{...view.human,handCount:1,captured:[],firstPpeokPoints:0}};
+  const lateSafeDecision=api.aiGoStopDecision(lateSafe,{total:7});assert.equal(lateSafeDecision.decision,'go');assert.ok(lateSafeDecision.expectedGoValue>lateSafeDecision.stopValue);
   const late={...view,deckCount:2,ai:{...view.ai,hand:[card('m1-1')]},human:{...view.human,handCount:1,firstPpeokPoints:6}};assert.equal(api.aiGoStopDecision(late,{total:7}).decision,'stop');
 });
 
@@ -2839,10 +2841,10 @@ test('intentional Online exits clean room UI and ignore only their resulting dis
   const reconcile=source.slice(source.indexOf('function reconcileOnlineFlow'),source.indexOf('function returnOnlineToMenu'));
   const cleanup=source.slice(source.indexOf('function returnOnlineToMenu'),source.indexOf("els.opponentEndedOkBtn.addEventListener"));
   const disconnect=source.slice(source.indexOf("adapter.addEventListener('disconnected'"),source.indexOf("adapter.addEventListener('snapshot'"));
-  assert.match(reconcile,/if\(flow\.endedByYou\)returnOnlineToMenu\(\);else setDialog\(els\.opponentEndedDialog,true\)/,'the local quitter returns automatically while the opponent sees the ended dialog');
+  assert.match(reconcile,/if\(flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\);else setDialog\(els\.opponentEndedDialog,true\)/,'local quit or no-penalty disconnect cancellation returns automatically while a normal opponent-ended session keeps its dialog');
   assert.match(source,/opponentEndedOkBtn\.addEventListener\('click',returnOnlineToMenu\)/,'the opponent OK path uses the same cleanup');
   assert.match(cleanup,/onlineMode=false/);
-  assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);
+  assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);assert.match(cleanup,/localStorage\.removeItem\('gostop-active-ranked-room'\)/);
   assert.match(cleanup,/getElementById\('onlineRoomCode'\)\.value=''/);
   assert.match(cleanup,/onlineStatus\.textContent=''/);
   assert.match(cleanup,/goStopOnlineSession\?\.close\(\);globalThis\.goStopOnlineSession=null/);

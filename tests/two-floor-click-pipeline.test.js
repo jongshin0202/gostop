@@ -33,7 +33,7 @@ test('ordinary ranked cards use one-click authoritative play while Shake/Bomb ca
 
 test('ranked card input serializes rapid/repeated taps until the authority responds',()=>{
   const humanPlay=app.slice(app.indexOf('async function humanPlay'),app.indexOf('async function aiTurn'));
-  assert.match(humanPlay,/if\(onlineMode\)\{[\s\S]*?if\(onlineActions\.size>0\)return;/);
+  assert.match(humanPlay,/if\(onlineActions\.size>0\)\{[\s\S]*?pendingActionId[\s\S]*?if\(pendingActionId\)return;[\s\S]*?onlineActions\.clear\(\)/);
 });
 
 test('ranked targetless play leaves zero/one floor matches to authority without opening a false chooser',()=>{

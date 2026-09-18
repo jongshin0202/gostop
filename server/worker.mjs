@@ -4,7 +4,7 @@ export {Lobby} from './lobby.mjs';
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode(cryptoApi){const bytes=new Uint8Array(14),limit=256-(256%alphabet.length);cryptoApi.getRandomValues(bytes);let result='';for(const byte of bytes){if(byte>=limit)return roomCode(cryptoApi);result+=alphabet[byte%alphabet.length];}return result;}
 export function configuredOrigins(env){return new Set(String(env.ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(Boolean));}
-export function isAllowedOrigin(origin,env){if(!origin)return false;try{const url=new URL(origin);if(url.origin!==origin)return false;if((url.hostname==='localhost'||url.hostname==='127.0.0.1'||url.hostname==='[::1]')&&['http:','https:'].includes(url.protocol))return true;return configuredOrigins(env).has(origin);}catch(_){return false;}}
+export function isAllowedOrigin(origin,env){if(!origin)return false;try{const url=new URL(origin);if(url.origin!==origin)return false;if((url.hostname==='localhost'||url.hostname==='127.0.0.1'||url.hostname==='[::1]')&&['http:','https:'].includes(url.protocol))return true;if(url.protocol==='https:'&&(url.hostname==='gostoplive.com'||url.hostname==='www.gostoplive.com'))return true;if(url.protocol==='https:'&&url.hostname.endsWith('.vercel.app')&&(url.hostname==='gostop.vercel.app'||url.hostname.startsWith('gostop-')))return true;return configuredOrigins(env).has(origin);}catch(_){return false;}}
 const corsHeaders=origin=>({'access-control-allow-origin':origin,'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,authorization','access-control-max-age':'86400','vary':'Origin'});
 function withCors(response,origin){const next=new Response(response.body,response);for(const [key,value] of Object.entries(corsHeaders(origin)))next.headers.set(key,value);return next;}
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
@@ -23,7 +23,7 @@ async function allocateRoom(env,{solo=false,account=null}={}){
   return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
 }
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|account|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
   if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
     if(!apiRoute)return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
@@ -40,6 +40,7 @@ export default {async fetch(request,env){
     if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/logout')return withCors(await forwardAccount(request,env,'/logout'),origin);
     if(request.method==='GET'&&url.pathname==='/api/me')return withCors(await forwardAccount(request,env,'/me'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/account/notices/ack')return withCors(await forwardAccount(request,env,'/notices/ack'),origin);
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);

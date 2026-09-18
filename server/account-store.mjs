@@ -59,11 +59,14 @@ export class AccountStore{
     if(account.location?.countryCode===location.countryCode&&account.location?.regionCode===location.regionCode)return false;
     account.location={countryCode:location.countryCode,regionCode:location.regionCode,source:'edge-coarse',updatedAt:this.now()};account.updatedAt=this.now();return true;
   }
+  noticeList(account){return (Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>!item.acknowledgedAt);}
+  async prepareNotices(account){return account;}
   async awardDaily(account){
     const today=utcDay(this.now());
     if(account.lastDailyAwardDate===today)return false;
-    account.lastDailyAwardDate=today;account.walletCoins+=100;await this.storage.put(`account:${account.id}`,account);
-    await this.appendLedger(account.id,{type:'daily-login',amount:100,createdAt:this.now()});
+    const createdAt=this.now(),notice={id:`daily:${today}`,type:'daily-login',coins:100,createdAt,displayAt:'first-game'};
+    account.lastDailyAwardDate=today;account.walletCoins+=100;account.pendingNotices=(Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>item.id!==notice.id);account.pendingNotices.push(notice);await this.storage.put(`account:${account.id}`,account);
+    await this.appendLedger(account.id,{type:'daily-login',amount:100,createdAt});
     return true;
   }
   async appendLedger(accountId,entry){const id=randomId(this.crypto,'ledger');await this.storage.put(`ledger:${accountId}:${entry.createdAt}:${id}`,{id,accountId,...entry});}
@@ -89,7 +92,7 @@ export class AccountStore{
     await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
     await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});await this.awardDaily(account);
     const session=await this.createSession(account);
-    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100}},201);
+    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100},notices:this.noticeList(account)},201);
   }
 
   async login(request){
@@ -97,11 +100,22 @@ export class AccountStore{
     const account=await this.accountByEmail(email);if(!account)return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
     const candidate=await hashPassword(this.crypto,password,account.passwordSalt,account.passwordIterations||PBKDF2_ITERATIONS);
     if(!safeEqual(candidate,account.passwordHash))return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
-    const locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);const session=await this.createSession(account);
-    return json({ok:true,account:publicAccount(account),session,awards:{dailyCoins:dailyAwarded?100:0}});
+    const locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);const session=await this.createSession(account);
+    return json({ok:true,account:publicAccount(account),session,awards:{dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});
   }
 
-  async me(request){const account=await this.requireAccount(request),locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0}});}
+  async me(request){const account=await this.requireAccount(request),locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});}
+  async acknowledgeNotice(request){
+    const account=await this.requireAccount(request);await this.prepareNotices(account);const body=await request.json().catch(()=>({})),noticeId=String(body.noticeId||''),acknowledged=Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[];
+    if(!noticeId)return json({ok:false,error:{code:'NOTICE_REQUIRED',message:'Notice ID is required.'}},400);
+    if(acknowledged.includes(noticeId))return json({ok:true,duplicate:true,account:publicAccount(account),notices:this.noticeList(account)});
+    const notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],index=notices.findIndex(item=>item.id===noticeId);if(index<0)return json({ok:true,duplicate:true,account:publicAccount(account),notices:this.noticeList(account)});
+    const notice=notices[index],createdAt=this.now();let appliedCoins=0;
+    if(notice.type==='abandonment'&&notice.refundable){appliedCoins=Math.max(0,Math.trunc(Number(notice.penaltyCoins)||0));account.walletCoins+=appliedCoins;if(appliedCoins)await this.appendLedger(account.id,{type:'abandonment-refund',amount:appliedCoins,gameId:notice.gameId,noticeId,createdAt});}
+    if(notice.type==='opponent-abandonment-reward'){appliedCoins=Math.max(0,Math.trunc(Number(notice.rewardCoins)||0));account.walletCoins+=appliedCoins;if(appliedCoins)await this.appendLedger(account.id,{type:'abandonment-win',amount:appliedCoins,gameId:notice.gameId,noticeId,createdAt});}
+    notices.splice(index,1);account.pendingNotices=notices;account.acknowledgedNoticeIds=[...acknowledged,noticeId].slice(-100);account.updatedAt=createdAt;await this.storage.put(`account:${account.id}`,account);
+    return json({ok:true,account:publicAccount(account),notice:{...notice,appliedCoins,acknowledgedAt:createdAt},notices:this.noticeList(account)});
+  }
   async logout(request){const token=this.bearer(request);if(token)await this.storage.delete(`auth:${await hashToken(this.crypto,token)}`);return json({ok:true});}
 
   async leaderboard(){
@@ -144,6 +158,7 @@ export class AccountStore{
       if(request.method==='POST'&&path==='/register')return await this.register(request);
       if(request.method==='POST'&&path==='/login')return await this.login(request);
       if(request.method==='POST'&&path==='/logout')return await this.logout(request);
+      if(request.method==='POST'&&path==='/notices/ack')return await this.acknowledgeNotice(request);
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
       if(request.method==='GET'&&path==='/internal/resolve')return await this.resolveSession(request);

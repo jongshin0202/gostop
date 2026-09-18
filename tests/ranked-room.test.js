@@ -52,7 +52,24 @@ test('ranked Solo Play Again immediately creates the next hand without waiting f
 });
 
 test('ranked Solo is server-owned, starts Computer #1 at 100 Coins, New Game starts a new session, and Quit ends immediately',async()=>{
-  const {core,user,socket,accountStore}=await soloRoom(),bot=core.room.participants.find(item=>item.bot);assert.equal(core.isRanked(),true);assert.equal(bot.nickname,'Computer #1');assert.equal(bot.walletCoins,100);assert.equal(socket.last('snapshot').snapshot.sessionFlow.rankedMode,'solo');
+  const {core,user,socket,accountStore}=await soloRoom(),bot=core.room.participants.find(item=>item.bot);assert.equal(core.isRanked(),true);assert.equal(bot.nickname,'Computer #1');assert.equal(core.room.solo.computerBankroll,100);assert.ok(bot.walletCoins>0);assert.equal(socket.last('snapshot').snapshot.sessionFlow.rankedMode,'solo');
   const oldMatch=core.room.matchId,oldSession=core.room.sessionId,revision=socket.last('snapshot').snapshot.revision;const newGame=await core.handle(socket,flow('solo-new',revision,{type:'requestNewGame'}));assert.equal(newGame.type,'actionAccepted');assert.notEqual(core.room.matchId,oldMatch);assert.notEqual(core.room.sessionId,oldSession);assert.equal(core.room.sessionFlow.ended,false);assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'));
   const latest=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).revision;const quit=await core.handle(socket,flow('solo-quit',latest,{type:'quitGame'}));assert.equal(quit.type,'actionAccepted');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.rankFlow.abandonment,null);
 });
+
+
+test('connected opponent can cancel during reconnect grace without force-quit settlement',async()=>{
+  const {core,a,sa,sb,accountStore}=await onlineRoom();
+  await core.disconnect(sa);
+  const snapshot=sb.last('snapshot').snapshot;
+  assert.ok(snapshot.sessionFlow.opponentReconnectUntil);
+  assert.equal(core.room.sessionFlow.ended,false);
+  const beforeForceQuits=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
+  const result=await core.handle(sb,flow('cancel-disconnected',snapshot.revision,{type:'cancelDisconnectedGame'}));
+  assert.equal(result.type,'actionAccepted');
+  assert.equal(core.room.sessionFlow.ended,true);
+  assert.equal(core.room.rankFlow.disconnectCancelled,true);
+  assert.equal(core.room.rankFlow.abandonment,null);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,beforeForceQuits);
+});
+
