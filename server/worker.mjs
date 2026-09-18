@@ -60,7 +60,7 @@ export default {async fetch(request,env){
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
-      const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
+      const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,account,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
     }
     if(request.method==='POST'&&url.pathname==='/api/rooms'){
       const account=await resolveAccount(request,env);return withCors(await allocateRoom(env,{account}),origin);
