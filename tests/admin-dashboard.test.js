@@ -94,7 +94,7 @@ test('admin dashboard uses authoritative GoStop server configuration with Worker
 test('admin login uses explicit button handler, visible connection feedback, and cache-busted script',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
-  assert.match(adminHtml,/admin\.js\?v=20260918-8/);
+  assert.match(adminHtml,/admin\.js\?v=20260918-9/);
   assert.match(adminJs,/openDashboardBtn'\)\.addEventListener\('click',submitAdminLogin\)/);
   assert.match(adminJs,/Connecting…/);
   assert.match(adminJs,/Connecting securely to the GoStop authority/);
@@ -129,7 +129,7 @@ test('admin authentication failure uses a deterministic in-page diagnostic overl
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.match(adminHtml,/Admin build 2026-09-18\.8/);
+  assert.match(adminHtml,/Admin build 2026-09-18\.9/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
     const headers=bySource.get(source);assert.ok(headers,source);
@@ -156,4 +156,11 @@ test('admin login cannot fail silently and exposes request trace plus runtime ex
   assert.match(adminJs,/window\.addEventListener\('error'/);
   assert.match(adminJs,/window\.addEventListener\('unhandledrejection'/);
   assert.match(adminJs,/Unexpected admin login error/);
+});
+
+test('admin hidden attribute always wins over shell display styles',()=>{
+  const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+  assert.match(adminCss,/\[hidden\]\{display:none!important\}/);
+  assert.match(adminCss,/\.login-shell\{[^}]*display:grid/);
+  assert.match(adminCss,/\.app-shell\{[^}]*display:grid/);
 });
