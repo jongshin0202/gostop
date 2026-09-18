@@ -43,7 +43,7 @@ test('leaderboards are public, render immediately, and page controls work even i
 });
 
 test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
-  const block=source.slice(source.indexOf('function closeLeaderboard'),source.indexOf('function lobbyUrl'));
+  const block=source.slice(source.indexOf('function restartLeaderboardTimer'),source.indexOf('function lobbyUrl'));
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;overlay\.hidden=false;\}/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
   assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
