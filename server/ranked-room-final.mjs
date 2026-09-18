@@ -68,7 +68,7 @@ export class FinalRankedRoomCore extends RankedRoomCore{
   async startRankedSession(){
     if(!this.isRanked())return null;if(!this.isSolo())return super.startRankedSession();
     const user=this.room.participants.find(item=>!item.bot&&item.accountId);this.room.soloSessionSequence=(this.room.soloSessionSequence||0)+1;this.room.sessionId=`solo-${this.room.roomCode}-${this.room.soloSessionSequence}-${randomHex(this.crypto)}`;this.room.sessionStats={gamesPlayed:0,coinsWonByAccount:{},coinsLostByAccount:{},milestonesByAccount:{},computerBankruptcies:0,forceQuits:0};
-    await this.accountRequest('/internal/session/start',{sessionId:this.room.sessionId,mode:'solo',accountIds:[user.accountId],opponent:{type:'computer',level:this.room.solo?.computerLevel||1},startedAt:this.now()});return this.room.sessionId;
+    await this.accountRequest('/internal/session/start',{sessionId:this.room.sessionId,mode:'solo',accountIds:[user.accountId],opponent:{type:'computer',level:this.room.solo?.computerLevel||1},roomCode:this.room.roomCode,matchId:this.room.matchId,gameSequence:this.room.gameSequence||0,startedAt:this.now()});return this.room.sessionId;
   }
   async refreshInactivity(){this.resetPauseBudgetForCurrentGame();return super.refreshInactivity();}
   async startFreshSoloSession(participant,reason='new-game'){
