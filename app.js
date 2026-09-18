@@ -150,7 +150,7 @@
       chip.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;event.preventDefault();event.stopPropagation();openPlayerInfo(chip);});
     }
     els.playerInfoOverlay?.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();});
-    addEventListener('resize',closePlayerInfo,{passive:true});addEventListener('scroll',closePlayerInfo,{passive:true,capture:true});
+    globalThis.addEventListener?.('resize',closePlayerInfo,{passive:true});globalThis.addEventListener?.('scroll',closePlayerInfo,{passive:true,capture:true});
     document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!els.playerInfoOverlay?.hidden)closePlayerInfo();});
   }
   setupPlayerInfoPopovers();
