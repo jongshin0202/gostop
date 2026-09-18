@@ -55,11 +55,14 @@ test('first timed-out technical disconnect is protected without deduct-then-refu
   assert.doesNotMatch(accountStore,/type:'abandonment-refund'/);
 });
 
-test('old automatic main-menu abandonment notice is removed from the active flow',()=>{
+test('disconnect outcome notices are deferred until ranked entry, including repeat-loss notices',()=>{
   assert.doesNotMatch(ranked,/queueMicrotask\(showNextAccountNotice\)/);
   assert.doesNotMatch(ranked,/function showNextAccountNotice/);
   assert.match(ranked,/showRankedEntryNotice/);
   assert.match(ranked,/type==='disconnect-forgiven'/);
+  assert.match(ranked,/type==='disconnect-loss'/);
+  assert.match(ranked,/disconnectLossText/);
+  assert.match(accountStore,/type:'disconnect-loss'/);
 });
 
 test('signup explains disconnect protection and requires OK before registration API call',()=>{
@@ -86,6 +89,14 @@ test('opponent gets one-minute technical-issue countdown with no-penalty Quit Ga
   assert.match(ranked,/cancelDisconnectedGame/);
   assert.match(room,/endRankedSession\('disconnect-cancelled'\)/);
   assert.match(room,/disconnectCancelled=true/);
+});
+
+test('disconnect grace freezes Solo computer play and settlement at disconnect-time state',()=>{
+  assert.match(room,/disconnectSettlements:\{\}/);
+  assert.match(room,/disconnectSettlements\[playerId\]=this\.calculateDisconnectSettlement\(playerId\)/);
+  assert.match(room,/const frozen=this\.room\?\.rankFlow\?\.disconnectSettlements\?\.\[playerId\]/);
+  const bot=room.slice(room.indexOf('async advanceBot()'),room.indexOf('}\n}\n\nexport {NUDGE_MS'));
+  assert.match(bot,/Object\.keys\(this\.room\.rankFlow\.disconnectDeadlines\|\|\{\}\)\.length/);
 });
 
 test('normal play and hand input are frozen while opponent reconnect window is active',()=>{
