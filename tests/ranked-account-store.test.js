@@ -21,3 +21,34 @@ test('daily login credits 198 to 298 immediately and notice acknowledgement does
   const ack=await (await store.fetch(post('/notices/ack',{noticeId:notice.id},user.session.token))).json();
   assert.equal(ack.account.walletCoins,298);assert.equal(ack.notice.appliedCoins,0);assert.equal((await store.accountById(account.id)).walletCoins,298);
 });
+
+test('daily reward follows player local calendar day and migrates legacy UTC award dates from ledger timestamps',async()=>{
+  let clock='2026-09-18T00:30:00.000Z';
+  const storage=new MemoryStorage(),store=new AccountStore({storage},{},{cryptoApi:webcrypto,now:()=>clock}),user=await registered(store,'timezone@example.com','TimeZonePlayer');
+  assert.equal(user.account.walletCoins,200);
+  const legacy=await store.accountById(user.account.id);
+  delete legacy.lastDailyAwardAt;delete legacy.dailyAwardTimeZone;
+  legacy.lastDailyAwardDate='2026-09-18';
+  await storage.put(`account:${legacy.id}`,legacy);
+
+  const meRequest=()=>new Request('https://accounts/me',{headers:{Authorization:`Bearer ${user.session.token}`,'x-gostop-country':'US','x-gostop-region':'IL','x-gostop-timezone':'America/Chicago'}});
+
+  clock='2026-09-18T14:00:00.000Z';
+  const migrated=await (await store.fetch(meRequest())).json();
+  assert.equal(migrated.awards.dailyCoins,100);
+  assert.equal(migrated.account.walletCoins,300);
+  let stored=await store.accountById(legacy.id);
+  assert.equal(stored.lastDailyAwardDate,'2026-09-18');
+  assert.equal(stored.lastDailyAwardAt,'2026-09-18T14:00:00.000Z');
+  assert.equal(stored.dailyAwardTimeZone,'America/Chicago');
+
+  clock='2026-09-19T01:00:00.000Z';
+  const sameLocalDay=await (await store.fetch(meRequest())).json();
+  assert.equal(sameLocalDay.awards.dailyCoins,0);
+  assert.equal(sameLocalDay.account.walletCoins,300);
+
+  clock='2026-09-19T06:00:00.000Z';
+  const nextLocalDay=await (await store.fetch(meRequest())).json();
+  assert.equal(nextLocalDay.awards.dailyCoins,100);
+  assert.equal(nextLocalDay.account.walletCoins,400);
+});
