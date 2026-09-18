@@ -37,7 +37,7 @@ test('leaderboards are public, render immediately, and page controls work even i
   const block=source.slice(source.indexOf('function renderLeaderboard'),source.indexOf('function lobbyUrl'));
   assert.match(block,/const key=leaderboardPage===0\?'global':'monthly'/);
   assert.match(block,/if\(!leaderboardData\).*leaderboardLoadFailed/s);
-  assert.match(block,/if\(!leaderboardScreen\.hidden\)leaderboardTimer=setInterval\(\(\)=>nextLeaderboard\(1\),LEADERBOARD_ROTATE_MS\)/);
+  assert.match(block,/leaderboardTimer=setTimeout\(\(\)=>\{[\s\S]*if\(attractMode&&leaderboardPage===1\)\{closeLeaderboard\(true\);return;\}[\s\S]*nextLeaderboard\(1\)[\s\S]*LEADERBOARD_ROTATE_MS/);
   assert.match(source,/class=\"leaderboard-controls\".*leaderboard-prev.*leaderboard-return.*leaderboard-next/s);
   assert.doesNotMatch(source,/\.leaderboard-nav\{position:absolute/);
 });
@@ -48,8 +48,8 @@ test('manual leaderboard Return always restores the main menu',()=>{
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
 });
 
-test('main-menu attract mode starts seven seconds after the visible menu becomes idle',()=>{
-  assert.match(source,/const ATTRACT_IDLE_MS=7000;/);
+test('main-menu attract mode starts ten seconds after the visible menu becomes idle',()=>{
+  assert.match(source,/const ATTRACT_IDLE_MS=10000;/);
   assert.match(source,/const LEADERBOARD_ROTATE_MS=5000;/);
   assert.match(source,/let lastMenuActivityAt=Date\.now\(\)/);
   assert.match(source,/function startAttractWatcher\(\)[\s\S]*setInterval/);
@@ -59,7 +59,7 @@ test('main-menu attract mode starts seven seconds after the visible menu becomes
   assert.match(source,/lastMenuActivityAt=Date\.now\(\);startAttractWatcher\(\)/);
   assert.match(source,/if\(event\.isTrusted&&!attractMode&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
   assert.match(source,/applyRankedLocale\(\);resetAttractTimer\(\);globalThis\.__gostopRankedBootComplete=true;[\s\S]*authRestorePromise=refreshAccount\(\)/);assert.match(source,/resumeActiveRankedRoom/);
-  assert.match(docs,/After 7 seconds of main-menu inactivity, attract mode begins/);
+  assert.match(docs,/After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats/);
   assert.doesNotMatch(docs,/After 10 seconds of main-menu inactivity/);
 });
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
@@ -85,4 +85,13 @@ test('saved account identity hydrates synchronously before background session ve
   assert.match(source,/localStorage\.removeItem\(TOKEN_KEY\);localStorage\.removeItem\(ACCOUNT_CACHE_KEY\)/);
 });
 
-test('attract idle resets only on trusted user input and diagnostics contract is seven seconds',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
+test('daily login account balance cannot be rolled back by a stale restored-room snapshot',()=>{
+  const update=source.slice(source.indexOf('function updateFromSnapshot'),source.indexOf('const style='));
+  assert.doesNotMatch(update,/snapshot\.youProfile\.walletCoins/);
+  assert.doesNotMatch(update,/walletCoins:wallet/);
+  const refresh=source.slice(source.indexOf('async function refreshAccount'),source.indexOf('function updateFromSnapshot'));
+  assert.match(refresh,/captureAccountPayload\(data\)/);
+  const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
+  assert.match(ack,/captureAccountPayload\(data\)/);
+});
+test('attract idle resets only on trusted user input and diagnostics contract is ten seconds',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
