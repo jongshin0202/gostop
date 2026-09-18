@@ -14,9 +14,15 @@
   const pill=(text,kind='')=>`<span class="pill ${kind}">${esc(text)}</span>`;
 
   async function api(path,{method='GET',body}={}){
-    const response=await fetch(`${baseUrl}/api/admin${path}`,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
-    let data={};try{data=await response.json();}catch(_){}
-    if(!response.ok||data.ok===false){const error=new Error(data?.error?.message||`Request failed (${response.status})`);error.code=data?.error?.code;error.status=response.status;throw error;}
+    const requestUrl=`${baseUrl}/api/admin${path}`;
+    const trace=document.getElementById('loginTrace');if(trace)trace.textContent=`Requesting ${requestUrl}…`;
+    let response;
+    try{response=await fetch(requestUrl,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});}
+    catch(error){if(trace)trace.textContent=`Network failure before HTTP response: ${error?.message||error}`;throw error;}
+    let textBody='';try{textBody=await response.text();}catch(_){}
+    let data={};if(textBody){try{data=JSON.parse(textBody);}catch(_){}}
+    if(trace)trace.textContent=`HTTP ${response.status} from ${requestUrl}`;
+    if(!response.ok||data.ok===false){const error=new Error(data?.error?.message||textBody.slice(0,300)||`Request failed (${response.status})`);error.code=data?.error?.code||'HTTP_ERROR';error.status=response.status;error.responseBody=textBody.slice(0,1000);throw error;}
     return data;
   }
   function queryRange(){
@@ -39,14 +45,29 @@
   function setBusy(busy){$('refreshBtn').disabled=busy;$('serverStatus').textContent=busy?'● Loading…':'● Connected';}
   function fail(error){$('serverStatus').textContent='● Error';$('serverStatus').style.color='#ff8f8f';console.error(error);alert(error.message||String(error));}
   function resetStatus(){$('serverStatus').style.color='';}
+  function ensureFailureOverlay(){
+    let overlay=document.getElementById('failureOverlay');
+    if(overlay)return overlay;
+    overlay=document.createElement('div');overlay.id='failureOverlay';
+    overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.86)';
+    overlay.innerHTML='<section role="alertdialog" aria-modal="true" style="width:min(720px,94vw);background:#12171c;color:#edf2f7;border:1px solid #6a3940;border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden"><div style="padding:18px;border-bottom:1px solid #303a44"><h2 style="margin:0">Admin Connection Failed</h2></div><div style="padding:18px"><p id="failureMessage" style="color:#ff8f8f;font-size:16px;line-height:1.5"></p><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0"><div style="background:#1a2027;border:1px solid #2f3944;border-radius:12px;padding:12px"><small>Error Code</small><strong id="failureCode" style="display:block;margin-top:4px"></strong></div><div style="background:#1a2027;border:1px solid #2f3944;border-radius:12px;padding:12px"><small>HTTP Status</small><strong id="failureStatus" style="display:block;margin-top:4px"></strong></div><div style="background:#1a2027;border:1px solid #2f3944;border-radius:12px;padding:12px"><small>Server</small><strong id="failureServer" style="display:block;margin-top:4px;word-break:break-word"></strong></div></div><p style="color:#9aa6b2">The dashboard did not open. No admin action was performed.</p><div style="display:flex;justify-content:flex-end"><button id="failureOk" type="button" style="border:0;border-radius:10px;padding:10px 24px;font-weight:800;background:#d59c35;color:#171009">OK</button></div></div></section>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#failureOk').addEventListener('click',()=>overlay.remove());
+    return overlay;
+  }
   function showFailureDialog(error,message){
     const finalMessage=message||error?.message||'Admin connection failed.',code=error?.code||'NETWORK_OR_UNKNOWN',status=error?.status||'—',server=authorityLabel;
-    $('failureMessage').textContent=finalMessage;
-    $('failureCode').textContent=code;
-    $('failureStatus').textContent=status;
-    $('failureServer').textContent=authorityLabel;
-    $('loginError').textContent=`${finalMessage} [${code} / HTTP ${status}] Server: ${server}`;
-    $('failureOverlay').hidden=false;
+    try{
+      const overlay=ensureFailureOverlay();
+      overlay.querySelector('#failureMessage').textContent=finalMessage;
+      overlay.querySelector('#failureCode').textContent=code;
+      overlay.querySelector('#failureStatus').textContent=status;
+      overlay.querySelector('#failureServer').textContent=server;
+      overlay.hidden=false;overlay.style.display='grid';
+    }catch(renderError){
+      window.alert(`Admin Connection Failed\n\n${finalMessage}\nCode: ${code}\nHTTP: ${status}\nServer: ${server}\n\nUI error: ${renderError?.message||renderError}`);
+    }
+    const inline=document.getElementById('loginError');if(inline)inline.textContent=`${finalMessage} [${code} / HTTP ${status}] Server: ${server}`;
   }
 
   async function authenticate(){
@@ -213,7 +234,13 @@
 
   async function refreshCurrent(){await selectView(currentView);}
 
-  async function submitAdminLogin(){token=$('adminToken').value.trim();sessionStorage.setItem(TOKEN_KEY,token);$('loginError').textContent='';await authenticate();}
+  async function submitAdminLogin(){
+    try{
+      token=$('adminToken').value.trim();sessionStorage.setItem(TOKEN_KEY,token);$('loginError').textContent='';const trace=document.getElementById('loginTrace');if(trace)trace.textContent='Click received. Starting admin authentication…';await authenticate();
+    }catch(error){
+      showFailureDialog(error,`Unexpected admin login error: ${error?.message||error}`);
+    }
+  }
   $('openDashboardBtn').addEventListener('click',submitAdminLogin);
   $('adminLoginForm').addEventListener('submit',async event=>{event.preventDefault();await submitAdminLogin();});
   $('adminToken').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();submitAdminLogin();}});
@@ -231,5 +258,7 @@
   $('gameSearchBtn').addEventListener('click',()=>loadGames());$('abandonSearchBtn').addEventListener('click',()=>loadGames('abandoned'));$('rankingRefresh').addEventListener('click',loadRankings);$('rankingMetric').addEventListener('change',loadRankings);$('sessionRefresh').addEventListener('click',loadSessions);
   $('resetGlobal').addEventListener('click',()=>leaderboardAction('resetGlobal'));$('resetMonth').addEventListener('click',()=>leaderboardAction('resetMonth'));$('rebuildGlobal').addEventListener('click',()=>leaderboardAction('rebuildGlobal'));$('rebuildMonth').addEventListener('click',()=>leaderboardAction('rebuildMonth'));$('leaderboardMonth').addEventListener('change',loadLeaderboards);
 
+  window.addEventListener('error',event=>{if(!$('adminApp')?.hidden)return;showFailureDialog(event.error||new Error(event.message),'JavaScript error prevented admin login from completing.');});
+  window.addEventListener('unhandledrejection',event=>{if(!$('adminApp')?.hidden)return;const error=event.reason instanceof Error?event.reason:new Error(String(event.reason));showFailureDialog(error,'Unhandled promise error prevented admin login from completing.');});
   if(token)authenticate();else{$('adminLogin').hidden=false;$('adminApp').hidden=true;}
 })();
