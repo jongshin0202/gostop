@@ -94,7 +94,7 @@ Online-lobby presence is ephemeral: a user is recommended only while actively co
 
 Normal leaderboard view rotates Global → Monthly every 5 seconds. Left/right arrows switch manually; tapping/clicking the page advances; Return exits to the main menu.
 
-After 7 seconds of main-menu inactivity, attract mode begins and rotates Global/Monthly every 5 seconds. Any interaction exits attract mode back to the main menu. Layout reserves space for future ads without making ads part of ranking logic.
+After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats. Any interaction exits attract mode back to the main menu. Layout reserves space for future ads without making ads part of ranking logic.
 
 ## Trust boundary
 
