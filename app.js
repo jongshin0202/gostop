@@ -2332,6 +2332,7 @@
       if(presentationEvents.some(event=>event.type==='newHandCreated')){
         presentation.roundNo++;
         resetHandPresentationState();
+        presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
         onlinePendingCardId=null;
         onlineStageState={};
         presentation.recordedTerminal=null;
