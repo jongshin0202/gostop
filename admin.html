@@ -213,6 +213,20 @@
     <div class="dialog-head"><h2 id="detailTitle">Details</h2><button id="detailClose" class="ghost">Close</button></div>
     <div id="detailBody"></div>
   </dialog>
+  <dialog id="failureDialog" class="action-dialog">
+    <div class="dialog-head"><h2>Admin Connection Failed</h2></div>
+    <div style="padding:18px">
+      <p id="failureMessage" class="error"></p>
+      <div class="detail-grid">
+        <div class="detail-box"><span>Error Code</span><strong id="failureCode">—</strong></div>
+        <div class="detail-box"><span>HTTP Status</span><strong id="failureStatus">—</strong></div>
+        <div class="detail-box"><span>Server</span><strong id="failureServer" class="mono">—</strong></div>
+      </div>
+      <p class="muted">The admin dashboard has not opened. No admin action was performed.</p>
+      <div class="dialog-actions"><button id="failureOk" class="primary" type="button">OK</button></div>
+    </div>
+  </dialog>
+
   <dialog id="actionDialog" class="action-dialog">
     <form id="actionForm" method="dialog">
       <div class="dialog-head"><h2 id="actionTitle">Admin Action</h2><button value="cancel" class="ghost">Cancel</button></div>
@@ -224,6 +238,6 @@
   </dialog>
 
   <script src="runtime-config.js"></script>
-  <script src="admin.js?v=20260918-3"></script>
+  <script src="admin.js?v=20260918-4"></script>
 </body>
 </html>

@@ -39,6 +39,13 @@
   function setBusy(busy){$('refreshBtn').disabled=busy;$('serverStatus').textContent=busy?'● Loading…':'● Connected';}
   function fail(error){$('serverStatus').textContent='● Error';$('serverStatus').style.color='#ff8f8f';console.error(error);alert(error.message||String(error));}
   function resetStatus(){$('serverStatus').style.color='';}
+  function showFailureDialog(error,message){
+    $('failureMessage').textContent=message||error?.message||'Admin connection failed.';
+    $('failureCode').textContent=error?.code||'NETWORK_OR_UNKNOWN';
+    $('failureStatus').textContent=error?.status||'—';
+    $('failureServer').textContent=baseUrl||'—';
+    const dialog=$('failureDialog');if(!dialog.open)dialog.showModal();
+  }
 
   async function authenticate(){
     if(!token){$('loginError').textContent='Enter the admin token.';return false;}
@@ -52,8 +59,10 @@
           ?'ADMIN_TOKEN is not active on the Cloudflare Worker yet. Save/deploy the secret in Cloudflare and try again.'
           :error?.code==='ADMIN_ORIGIN_NOT_ALLOWED'||error?.status===403
             ?'This admin page origin is not allowed by the Cloudflare Worker.'
-            :(error?.message||'Could not connect to the admin server.');
-      $('loginError').textContent=message;alert(message);return false;
+            :error?.name==='TypeError'
+              ?'The browser could not reach the GoStop authority. This usually means a network, CORS, or Worker routing problem.'
+              :(error?.message||'Could not connect to the admin server.');
+      $('loginError').textContent=message;showFailureDialog(error,message);return false;
     }
     finally{button.disabled=false;button.textContent='Open Dashboard';}
   }
@@ -210,6 +219,7 @@
   $('adminNav').addEventListener('click',event=>{const btn=event.target.closest('[data-view]');if(btn)selectView(btn.dataset.view);});
   document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit-json]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){$('detailTitle').textContent='Audit Record';$('detailBody').innerHTML=`<pre class="json">${esc(JSON.stringify(JSON.parse(decodeURIComponent(auditBtn.dataset.auditJson)),null,2))}</pre>`;$('detailDialog').showModal();}});
   $('detailClose').addEventListener('click',()=>$('detailDialog').close());
+  $('failureOk').addEventListener('click',()=>$('failureDialog').close());
   $('refreshBtn').addEventListener('click',refreshCurrent);$('exportBtn').addEventListener('click',exportCsv);
   function localInputValue(dateValue){const d=new Date(dateValue),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;}
   function applyPreset(value){const now=new Date();if(value==='all'){$('filterFrom').value='';$('filterTo').value='';}else if(value){let start=new Date(now);if(value==='today')start=new Date(now.getFullYear(),now.getMonth(),now.getDate());if(value==='month')start=new Date(now.getFullYear(),now.getMonth(),1);if(value==='year')start=new Date(now.getFullYear(),0,1);$('filterFrom').value=localInputValue(start);$('filterTo').value=localInputValue(now);}refreshCurrent();}

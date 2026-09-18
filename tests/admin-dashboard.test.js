@@ -92,7 +92,7 @@ test('admin dashboard uses authoritative GoStop server configuration with Worker
 test('admin login uses explicit button handler, visible connection feedback, and cache-busted script',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
-  assert.match(adminHtml,/admin\.js\?v=20260918-3/);
+  assert.match(adminHtml,/admin\.js\?v=20260918-4/);
   assert.match(adminJs,/openDashboardBtn'\)\.addEventListener\('click',submitAdminLogin\)/);
   assert.match(adminJs,/Connecting…/);
   assert.match(adminJs,/Connecting securely to the GoStop authority/);
@@ -102,5 +102,20 @@ test('admin authentication failures are explicit to the administrator',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/Admin token rejected\. Enter the exact value currently stored in Cloudflare as ADMIN_TOKEN\./);
   assert.match(adminJs,/ADMIN_TOKEN is not active on the Cloudflare Worker yet/);
-  assert.match(adminJs,/alert\(message\)/);
+  assert.match(adminJs,/showFailureDialog\(error,message\)/);
+  assert.doesNotMatch(adminJs,/alert\(message\)/);
+});
+
+test('admin authentication failure uses an in-page diagnostic dialog with OK button',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminHtml,/id="failureDialog"/);
+  assert.match(adminHtml,/id="failureMessage"/);
+  assert.match(adminHtml,/id="failureCode"/);
+  assert.match(adminHtml,/id="failureStatus"/);
+  assert.match(adminHtml,/id="failureServer"/);
+  assert.match(adminHtml,/id="failureOk"/);
+  assert.match(adminJs,/function showFailureDialog\(error,message\)/);
+  assert.match(adminJs,/showFailureDialog\(error,message\)/);
+  assert.match(adminJs,/failureOk'\)\.addEventListener\('click'/);
+  assert.doesNotMatch(adminJs,/alert\(message\)/);
 });
