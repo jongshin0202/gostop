@@ -97,31 +97,22 @@
   function ensureFailureOverlay(){
     let overlay=document.getElementById('failureOverlay');
     if(overlay)return overlay;
-    overlay=document.createElement('div');overlay.id='failureOverlay';
-    overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.86)';
-    overlay.innerHTML='<section role="alertdialog" aria-modal="true" style="width:min(720px,94vw);background:#12171c;color:#edf2f7;border:1px solid #6a3940;border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden"><div style="padding:18px;border-bottom:1px solid #303a44"><h2 style="margin:0">Admin Connection Failed</h2></div><div style="padding:18px"><p id="failureMessage" style="color:#ff8f8f;font-size:16px;line-height:1.5"></p><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0"><div style="background:#1a2027;border:1px solid #2f3944;border-radius:12px;padding:12px"><small>Error Code</small><strong id="failureCode" style="display:block;margin-top:4px"></strong></div><div style="background:#1a2027;border:1px solid #2f3944;border-radius:12px;padding:12px"><small>HTTP Status</small><strong id="failureStatus" style="display:block;margin-top:4px"></strong></div><div style="background:#1a2027;border:1px solid #2f3944;border-radius:12px;padding:12px"><small>Server</small><strong id="failureServer" style="display:block;margin-top:4px;word-break:break-word"></strong></div></div><p style="color:#9aa6b2">The dashboard did not open. No admin action was performed.</p><div style="display:flex;justify-content:flex-end"><button id="failureOk" type="button" style="border:0;border-radius:10px;padding:10px 24px;font-weight:800;background:#d59c35;color:#171009">OK</button></div></div></section>';
+    overlay=document.createElement('div');overlay.id='failureOverlay';overlay.className='failure-overlay';
+    overlay.innerHTML='<section class="failure-card" role="alertdialog" aria-modal="true" aria-labelledby="failureTitle"><div class="dialog-head"><h2 id="failureTitle">Could Not Open Admin</h2></div><div class="failure-body"><p id="failureMessage" class="error"></p><p class="muted">No admin change was performed. Check the message above and try again.</p><div class="dialog-actions"><button id="failureOk" class="primary" type="button">OK</button></div></div></section>';
     document.body.appendChild(overlay);
     overlay.querySelector('#failureOk').addEventListener('click',()=>overlay.remove());
     return overlay;
   }
   function showFailureDialog(error,message){
-    const finalMessage=message||error?.message||'Admin connection failed.',code=error?.code||'NETWORK_OR_UNKNOWN',status=error?.status||'—',server=authorityLabel;
-    try{
-      const overlay=ensureFailureOverlay();
-      overlay.querySelector('#failureMessage').textContent=finalMessage;
-      overlay.querySelector('#failureCode').textContent=code;
-      overlay.querySelector('#failureStatus').textContent=status;
-      overlay.querySelector('#failureServer').textContent=server;
-      overlay.hidden=false;overlay.style.display='grid';
-    }catch(renderError){
-      window.alert(`Admin Connection Failed\n\n${finalMessage}\nCode: ${code}\nHTTP: ${status}\nServer: ${server}\n\nUI error: ${renderError?.message||renderError}`);
-    }
-    const inline=document.getElementById('loginError');if(inline)inline.textContent=`${finalMessage} [${code} / HTTP ${status}] Server: ${server}`;
+    const finalMessage=message||error?.message||'The admin page could not connect.';
+    try{const overlay=ensureFailureOverlay();overlay.querySelector('#failureMessage').textContent=finalMessage;overlay.hidden=false;overlay.style.display='grid';}
+    catch(_){window.alert(`Could Not Open Admin\n\n${finalMessage}`);}
+    const inline=document.getElementById('loginError');if(inline)inline.textContent=finalMessage;
   }
 
   async function authenticate(){
-    if(!token){$('loginError').textContent='Enter the admin token.';return false;}
-    const button=$('openDashboardBtn');button.disabled=true;button.textContent='Connecting…';$('loginError').textContent='Connecting securely to the GoStop authority…';
+    if(!token){$('loginError').textContent='Enter the admin password.';return false;}
+    const button=$('openDashboardBtn');button.disabled=true;button.textContent='Connecting…';$('loginError').textContent='Connecting to the game server…';
     try{await api('/health');$('adminLogin').hidden=true;$('adminApp').hidden=false;$('loginError').textContent='';resetStatus();await selectView(currentView);return true;}
     catch(error){
       sessionStorage.removeItem(TOKEN_KEY);token='';$('adminLogin').hidden=false;$('adminApp').hidden=true;
