@@ -1788,7 +1788,10 @@
   async function presentOnlineGoStopDecision(decision){
     presentation.locked=true;render();
     await presentNewMilestones(decision.playerId);
+    const side=legacySideForPlayerId(decision.playerId),player=state[side],preview=calculateFinalScore(side);
     els.decisionText.textContent=`You have ${decision.score} points.`;
+    if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
+    els.goBtn.textContent=player.go===0?t('go'):`${player.go+1} ${t('go')}`;
     if(!els.decisionDialog.open)els.decisionDialog.showModal();
   }
 
