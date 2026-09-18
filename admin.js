@@ -103,13 +103,38 @@
     const params=new URLSearchParams({limit:'500'});appendRange(params);if($('sessionStatus').value)params.set('status',$('sessionStatus').value);
     setBusy(true);try{const data=await api(`/sessions?${params}`);const rows=data.sessions.map(s=>`<tr><td>${mono(s.id)}</td><td>${pill(s.mode||'unknown')}</td><td>${(s.accountIds||[]).map(mono).join('<br>')}</td><td>${s.endedAt?pill('Ended'):pill('Active','good')}</td><td>${date(s.startedAt)}</td><td>${date(s.endedAt)}</td><td><pre class="json">${esc(JSON.stringify(s.summary||{},null,2))}</pre></td></tr>`);$('sessionsTable').innerHTML=table(['Session','Mode','Accounts','Status','Started','Ended','Summary'],rows);setExport('sessions',data.sessions);}finally{setBusy(false);}
   }
+  async function loadGeography(){
+    const params=appendRange(new URLSearchParams());setBusy(true);try{const data=await api(`/geography?${params}`);
+      const aggRows=rows=>rows.map(r=>`<tr><td>${esc(r.key)}</td><td class="number">${fmt(r.accounts)}</td><td class="number">${fmt(r.connections)}</td><td>${date(r.lastSeen)}</td></tr>`);
+      $('geoCountries').innerHTML=table(['Country','Accounts','Connections','Last Seen'],aggRows(data.countries));
+      $('geoRegions').innerHTML=table(['State / Region','Accounts','Connections','Last Seen'],aggRows(data.regions));
+      $('geoCities').innerHTML=table(['City','Accounts','Connections','Last Seen'],aggRows(data.cities));
+      const ipRows=data.ips.map(r=>`<tr><td>${mono(r.ip)}</td><td class="number">${fmt(r.accounts)}</td><td class="number">${fmt(r.connections)}</td><td>${esc(r.cities.join(', ')||'—')}</td><td>${esc(r.regions.join(', ')||'—')}</td><td>${esc(r.countries.join(', ')||'—')}</td><td>${r.accountIds.map(id=>`<button class="clickable" data-player="${esc(id)}">${esc(id)}</button>`).join('<br>')}</td><td>${date(r.lastSeen)}</td></tr>`);
+      $('geoIps').innerHTML=table(['IP','Accounts','Connections','Cities','States','Countries','Player IDs','Last Seen'],ipRows);setExport('geography-ip',data.ips);
+    }finally{setBusy(false);}
+  }
+  async function loadAbuse(){
+    const params=appendRange(new URLSearchParams());setBusy(true);try{const data=await api(`/abuse?${params}`);
+      const abandonRows=data.highAbandonPlayers.map(r=>`<tr><td><button class="clickable" data-player="${esc(r.accountId)}">${esc(r.nickname)}</button></td><td class="number">${fmt(r.abandons)}</td><td class="number">${pct(r.abandonRate)}</td><td class="number">${fmt(r.games)}</td><td class="number">${fmt(r.coinsLost)}</td><td>${esc([r.location?.city,r.location?.region||r.location?.regionCode,r.location?.countryCode].filter(Boolean).join(', ')||'—')}</td></tr>`);
+      $('abuseAbandons').innerHTML=table(['Player','Abandons','Rate','Games','Coins Lost','Location'],abandonRows);
+      const ipRows=data.sharedIps.map(r=>`<tr><td>${mono(r.ip)}</td><td class="number">${fmt(r.accounts)}</td><td class="number">${fmt(r.connections)}</td><td>${r.accountIds.map(id=>`<button class="clickable" data-player="${esc(id)}">${esc(id)}</button>`).join('<br>')}</td><td>${esc(r.cities.join(', ')||'—')}</td><td>${date(r.lastSeen)}</td></tr>`);
+      $('abuseIps').innerHTML=table(['IP','Accounts','Connections','Player IDs','Cities','Last Seen'],ipRows);setExport('abuse-signals',[...data.highAbandonPlayers,...data.sharedIps]);
+    }finally{setBusy(false);}
+  }
+  async function loadSystem(){
+    setBusy(true);try{const [health,data]=await Promise.all([api('/health'),api('/system')]),s=data.storage;
+      $('systemCards').innerHTML=[metricCard('Players',fmt(s.players)),metricCard('Games',fmt(s.games)),metricCard('Active sessions',fmt(s.activeSessions)),metricCard('Stored connections',fmt(s.connections)),metricCard('Audit records',fmt(s.auditRecords)),metricCard('Leaderboard archives',fmt(s.leaderboardArchives))].join('');
+      $('systemJson').textContent=JSON.stringify({worker:health,accountStore:data},null,2);setExport('system-health',[{...s,generatedAt:data.generatedAt}]);
+    }finally{setBusy(false);}
+  }
+
   async function loadAudit(){
     setBusy(true);try{const data=await api('/audit?limit=1000');const rows=data.audit.map(a=>`<tr><td>${date(a.createdAt)}</td><td>${pill(a.action)}</td><td>${mono(a.target)}</td><td>${esc(a.reason)}</td><td>${a.actor?.ip?mono(a.actor.ip):'—'}</td><td>${esc([a.actor?.city,a.actor?.region,a.actor?.countryCode].filter(Boolean).join(', ')||'—')}</td><td><button class="clickable" data-audit="${esc(a.id)}" data-audit-json="${encodeURIComponent(JSON.stringify(a))}">View</button></td></tr>`);$('auditTable').innerHTML=table(['Time','Action','Target','Reason','Admin IP','Location','Detail'],rows);setExport('admin-audit',data.audit);}finally{setBusy(false);}
   }
 
   async function selectView(view){
-    currentView=view;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===`view-${view}`));document.querySelectorAll('#adminNav button').forEach(btn=>btn.classList.toggle('active',btn.dataset.view===view));$('viewTitle').textContent=({overview:'Overview',players:'All Players',games:'All Games',abandoned:'Forcefully Abandoned Games',rankings:'Player Rankings',leaderboards:'Leaderboards',sessions:'Game Sessions',audit:'Admin Audit Log'})[view]||view;
-    try{resetStatus();if(view==='overview')await loadOverview();else if(view==='players')await loadPlayers();else if(view==='games')await loadGames();else if(view==='abandoned')await loadGames('abandoned');else if(view==='rankings')await loadRankings();else if(view==='leaderboards')await loadLeaderboards();else if(view==='sessions')await loadSessions();else if(view==='audit')await loadAudit();}catch(error){fail(error);}
+    currentView=view;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===`view-${view}`));document.querySelectorAll('#adminNav button').forEach(btn=>btn.classList.toggle('active',btn.dataset.view===view));$('viewTitle').textContent=({overview:'Overview',players:'All Players',games:'All Games',abandoned:'Forcefully Abandoned Games',rankings:'Player Rankings',leaderboards:'Leaderboards',sessions:'Game Sessions',geography:'Geography / IP',abuse:'Fraud / Abuse Signals',system:'System Health',audit:'Admin Audit Log'})[view]||view;
+    try{resetStatus();if(view==='overview')await loadOverview();else if(view==='players')await loadPlayers();else if(view==='games')await loadGames();else if(view==='abandoned')await loadGames('abandoned');else if(view==='rankings')await loadRankings();else if(view==='leaderboards')await loadLeaderboards();else if(view==='sessions')await loadSessions();else if(view==='geography')await loadGeography();else if(view==='abuse')await loadAbuse();else if(view==='system')await loadSystem();else if(view==='audit')await loadAudit();}catch(error){fail(error);}
   }
 
   function detailBoxes(items){return `<div class="detail-grid">${items.map(([label,value])=>`<div class="detail-box"><span>${esc(label)}</span><strong>${value}</strong></div>`).join('')}</div>`;}
