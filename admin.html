@@ -57,6 +57,13 @@
       <section class="global-filter card">
         <label>From<input id="filterFrom" type="datetime-local"></label>
         <label>To<input id="filterTo" type="datetime-local"></label>
+        <select id="rangePreset" aria-label="Quick date range">
+          <option value="">Custom Range</option>
+          <option value="today">Today</option>
+          <option value="month">This Month</option>
+          <option value="year">This Year</option>
+          <option value="all">All Time</option>
+        </select>
         <button id="applyRange" class="secondary">Apply Range</button>
         <button id="clearRange" class="ghost">All Time</button>
       </section>
@@ -132,6 +139,9 @@
               </select>
             </label>
             <select id="rankingMode"><option value="">All modes</option><option value="solo">Solo</option><option value="online">Online</option></select>
+            <input id="rankingCountry" placeholder="Country code, e.g. US">
+            <input id="rankingRegion" placeholder="State / region, e.g. IL">
+            <input id="rankingCity" placeholder="City">
             <button id="rankingRefresh" class="secondary">Rank</button>
           </div>
           <div id="rankingsTable"></div>
