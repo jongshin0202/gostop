@@ -91,45 +91,98 @@ test('admin dashboard uses authoritative GoStop server configuration with Worker
   assert.doesNotMatch(adminJs,/globalThis\.GOSTOP_SERVER_URL/);
 });
 
-test('admin login uses explicit button handler, visible connection feedback, and cache-busted script',()=>{
+test('admin login uses explicit button handler, novice-friendly feedback, and cache-busted script',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
-  assert.match(adminHtml,/admin\.js\?v=20260918-9/);
+  assert.match(adminHtml,/Admin Password/);
+  assert.match(adminHtml,/admin\.js\?v=20260918-10/);
   assert.match(adminJs,/openDashboardBtn'\)\.addEventListener\('click',submitAdminLogin\)/);
   assert.match(adminJs,/Connecting…/);
-  assert.match(adminJs,/Connecting securely to the GoStop authority/);
+  assert.match(adminJs,/Connecting to the game server/);
   assert.match(adminJs,/adminLogin'\)\.hidden=false/);
 });
-test('admin authentication failures are explicit to the administrator',()=>{
+
+test('admin authentication failures use plain-language messages instead of infrastructure instructions',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
-  assert.match(adminJs,/Admin token rejected\. Enter the exact value currently stored in Cloudflare as ADMIN_TOKEN\./);
-  assert.match(adminJs,/ADMIN_TOKEN is not active on the Cloudflare Worker yet/);
+  assert.match(adminJs,/The admin password was not accepted\. Check it and try again\./);
+  assert.match(adminJs,/Admin access is not ready on the game server yet/);
   assert.match(adminJs,/showFailureDialog\(error,message\)/);
-  assert.doesNotMatch(adminJs,/alert\(message\)/);
+  assert.doesNotMatch(adminJs,/Admin token rejected/);
+  assert.doesNotMatch(adminJs,/ADMIN_TOKEN is not active/);
+  assert.doesNotMatch(adminJs,/CORS, or Worker routing/);
 });
 
-test('admin authentication failure uses a deterministic in-page diagnostic overlay with OK button',()=>{
+test('admin authentication failure uses a simple in-page message with no technical diagnostic fields',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
   assert.match(adminHtml,/id="failureOverlay"/);
   assert.match(adminHtml,/role="alertdialog"/);
   assert.match(adminHtml,/id="failureMessage"/);
-  assert.match(adminHtml,/id="failureCode"/);
-  assert.match(adminHtml,/id="failureStatus"/);
-  assert.match(adminHtml,/id="failureServer"/);
   assert.match(adminHtml,/id="failureOk"/);
+  assert.doesNotMatch(adminHtml,/failureCode|failureStatus|failureServer|Error Code|HTTP Status/);
   assert.match(adminJs,/function showFailureDialog\(error,message\)/);
   assert.match(adminJs,/overlay\.hidden=false;overlay\.style\.display='grid'/);
-  assert.match(adminJs,/inline\.textContent=.*HTTP/);
-  assert.match(adminJs,/failureOk'\)\.addEventListener\('click',\(\)=>\$\('failureOverlay'\)\.hidden=true\)/);
   assert.match(adminCss,/\.failure-overlay\{/);
-  assert.match(adminCss,/z-index:99999/);
-  const failureBlock=adminJs.slice(adminJs.indexOf('function showFailureDialog'),adminJs.indexOf('async function authenticate'));assert.doesNotMatch(failureBlock,/showModal\(\)/);
-  assert.doesNotMatch(adminJs,/alert\(message\)/);
+  const failureBlock=adminJs.slice(adminJs.indexOf('function showFailureDialog'),adminJs.indexOf('async function authenticate'));assert.doesNotMatch(failureBlock,/showModal\(\)|HTTP|failureCode|failureStatus|failureServer/);
+});
+
+test('admin action Cancel buttons never submit required fields or trigger validation',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminHtml,/id="actionCancelTop" type="button"/);
+  assert.match(adminHtml,/id="actionCancelBottom" type="button"/);
+  assert.match(adminHtml,/id="actionConfirm" type="submit"/);
+  assert.match(adminJs,/cancelTop\.addEventListener\('click',cancel\)/);
+  assert.match(adminJs,/cancelBottom\.addEventListener\('click',cancel\)/);
+  assert.match(adminJs,/const closed=\(\)=>finish\(null\),cancel=event=>\{event\?\.preventDefault\(\);finish\(null\);\}/);
+});
+
+test('admin UI never exposes raw structured-data editors or raw record blocks',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.doesNotMatch(adminHtml,/<pre|class="json"|>JSON</i);
+  assert.doesNotMatch(adminJs,/<pre|class="json"|data-audit-json|systemJson|Raw Admin Player Record|Game field patch JSON|Wallet adjustments JSON array|Correction JSON is invalid/);
+  assert.match(adminJs,/function friendlyData\(value,depth=0\)/);
+  assert.match(adminJs,/async function gameCorrectionPrompt\(id\)/);
+  assert.match(adminJs,/label:'Game mode',type:'select'/);
+  assert.match(adminJs,/Wallet Coin adjustment/);
+  assert.match(adminJs,/Only values you change|No values were changed|Save Correction/);
+});
+
+test('every generated admin table header has hover and keyboard explanation help',()=>{
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+  assert.match(adminJs,/const HEADER_HELP=Object\.freeze/);
+  assert.match(adminJs,/const headerHelp=label=>HEADER_HELP\[label\]\|\|/);
+  assert.match(adminJs,/<th tabindex="0" data-help="/);
+  assert.match(adminJs,/title="\$\{esc\(help\)\}"/);
+  assert.match(adminCss,/th\[data-help\]:hover::after,th\[data-help\]:focus::after/);
+  assert.match(adminCss,/content:attr\(data-help\)/);
+});
+
+test('sessions, system, player, game, and audit details use readable cards instead of raw developer payloads',()=>{
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
+  assert.match(adminJs,/friendlyData\(s\.summary\|\|\{\}\)/);
+  assert.match(adminHtml,/id="systemDetails"/);
+  assert.match(adminJs,/\$\('systemDetails'\)\.innerHTML/);
+  assert.match(adminJs,/Additional Player Information/);
+  assert.match(adminJs,/Settlement Details/);
+  assert.match(adminJs,/Game History/);
+  assert.match(adminJs,/auditById=new Map/);
+  assert.match(adminJs,/Admin Change Details/);
+});
+
+test('admin login still cannot fail silently and keeps simple request progress plus runtime safeguards',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminHtml,/id="loginTrace"/);
+  assert.match(adminJs,/function ensureFailureOverlay\(\)/);
+  assert.match(adminJs,/document\.createElement\('div'\)/);
+  assert.match(adminJs,/Checking your admin password/);
+  assert.match(adminJs,/Connected to the game server/);
+  assert.match(adminJs,/window\.addEventListener\('error'/);
+  assert.match(adminJs,/window\.addEventListener\('unhandledrejection'/);
+  assert.match(adminJs,/Unexpected admin login error/);
 });
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.match(adminHtml,/Admin build 2026-09-18\.10/);
+  assert.match(adminHtml,/Admin build 2026-09-18\.11/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
     const headers=bySource.get(source);assert.ok(headers,source);
