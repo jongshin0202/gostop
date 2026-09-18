@@ -2089,6 +2089,14 @@ test('ranked Go/Stop dialog shows authoritative Stop payout and the next Go coun
   }
 });
 
+test('ranked new hands reset milestone history so Godori can animate again before Go Stop',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const transition=source.slice(source.indexOf("if(presentationEvents.some(event=>event.type==='newHandCreated'))"),source.indexOf("for(const event of presentationEvents)"));
+  assert.match(transition,/presentation\.milestoneHistory=\{playerA:new Set\(\),playerB:new Set\(\)\}/);
+  const order=source.slice(source.indexOf("const completedTurn=presentationEvents.find"),source.indexOf("await driveOnline(snapshot,presentationEvents)"));
+  assert.ok(order.indexOf('await presentNewMilestones(completedTurn.actorId)')<order.indexOf("await driveOnline(snapshot,presentationEvents)"));
+});
+
 test('Stripe milestone titles are set-specific in Korean and remain generic elsewhere',()=>{
   const i18n=require('../i18n.js'),keys=['threeStripesRed','threeStripesBlue','threeStripesGrass'];
   assert.deepEqual(keys.map(key=>i18n.translate('ko',key)),['홍단!','청단!','초단!']);
