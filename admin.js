@@ -44,7 +44,17 @@
     if(!token){$('loginError').textContent='Enter the admin token.';return false;}
     const button=$('openDashboardBtn');button.disabled=true;button.textContent='Connecting…';$('loginError').textContent='Connecting securely to the GoStop authority…';
     try{await api('/health');$('adminLogin').hidden=true;$('adminApp').hidden=false;$('loginError').textContent='';resetStatus();await selectView(currentView);return true;}
-    catch(error){sessionStorage.removeItem(TOKEN_KEY);token='';$('adminLogin').hidden=false;$('adminApp').hidden=true;$('loginError').textContent=error.message||'Could not connect to the admin server.';return false;}
+    catch(error){
+      sessionStorage.removeItem(TOKEN_KEY);token='';$('adminLogin').hidden=false;$('adminApp').hidden=true;
+      const message=error?.code==='ADMIN_AUTH_REQUIRED'||error?.status===401
+        ?'Admin token rejected. Enter the exact value currently stored in Cloudflare as ADMIN_TOKEN.'
+        :error?.code==='ADMIN_NOT_CONFIGURED'||error?.status===503
+          ?'ADMIN_TOKEN is not active on the Cloudflare Worker yet. Save/deploy the secret in Cloudflare and try again.'
+          :error?.code==='ADMIN_ORIGIN_NOT_ALLOWED'||error?.status===403
+            ?'This admin page origin is not allowed by the Cloudflare Worker.'
+            :(error?.message||'Could not connect to the admin server.');
+      $('loginError').textContent=message;alert(message);return false;
+    }
     finally{button.disabled=false;button.textContent='Open Dashboard';}
   }
 
