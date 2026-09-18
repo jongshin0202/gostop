@@ -2073,6 +2073,31 @@ test('Online Go/Stop boundary awaits separated and multiple milestones without d
   assert.deepEqual(duplicateOrder,['go-stop']);
 });
 
+test('ranked Go/Stop dialog shows authoritative Stop payout and the next Go count',async()=>{
+  for(const [goCount,expectedLabel] of [[0,'GO'],[1,'2 GO'],[2,'3 GO']]){
+    const isolated=loadCurrentGame();
+    const player=isolated.api.makePlayer({go:goCount,firstPpeokPoints:7});
+    isolated.api.setState(isolated.api.makeState({
+      human:player,
+      ai:isolated.api.makePlayer(),
+      pendingDecision:{type:'goStopDecision',playerId:'playerA',score:7,previousGoScore:0,choices:['go','stop']}
+    }));
+    await isolated.api.presentOnlineGoStopDecision(isolated.api.getState().pendingDecision);
+    assert.equal(isolated.elements.get('goBtn').textContent,expectedLabel);
+    const expectedStop=7+(goCount>0&&goCount<3?goCount:0);
+    assert.match(isolated.elements.get('stopPreviewValue').textContent,new RegExp(String(expectedStop)));
+  }
+});
+
+test('ranked new hands reset milestone history so Godori can animate again before Go Stop',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const transition=source.slice(source.indexOf("if(presentationEvents.some(event=>event.type==='newHandCreated'))"),source.indexOf("for(const event of presentationEvents)"));
+  assert.match(transition,/presentation\.milestoneHistory=\{playerA:new Set\(\),playerB:new Set\(\)\}/);
+  const milestoneAt=source.indexOf('await presentNewMilestones(completedTurn.actorId)');
+  const driveAt=source.indexOf('await driveOnline(snapshot,presentationEvents)',milestoneAt);
+  assert.ok(milestoneAt>=0&&driveAt>milestoneAt);
+});
+
 test('Stripe milestone titles are set-specific in Korean and remain generic elsewhere',()=>{
   const i18n=require('../i18n.js'),keys=['threeStripesRed','threeStripesBlue','threeStripesGrass'];
   assert.deepEqual(keys.map(key=>i18n.translate('ko',key)),['홍단!','청단!','초단!']);
@@ -2583,6 +2608,8 @@ test('deterministic Go Stop risk model goes early with a lead, can stop late, an
   assert.equal(api.aiGoStopDecision({...view,human:{...view.human,firstPpeokPoints:2}},{total:8}).decision,'go');
   const twoBrights={...view,human:{...view.human,captured:cards('m1-1','m3-1'),firstPpeokPoints:0}};assert.equal(api.aiGoStopDecision(twoBrights,{total:7}).decision,'go');
   const hiddenVariant={...view,deckCount:view.deckCount,ai:{...view.ai,hand:cards('m8-1','m9-1','m10-1','m11-1')}};assert.deepEqual(api.aiGoStopDecision(hiddenVariant,{total:9}),live);
+  const lateSafe={...view,deckCount:2,ai:{...view.ai,hand:[card('m1-1')]},human:{...view.human,handCount:1,captured:[],firstPpeokPoints:0}};
+  const lateSafeDecision=api.aiGoStopDecision(lateSafe,{total:7});assert.equal(lateSafeDecision.decision,'go');assert.ok(lateSafeDecision.expectedGoValue>lateSafeDecision.stopValue);
   const late={...view,deckCount:2,ai:{...view.ai,hand:[card('m1-1')]},human:{...view.human,handCount:1,firstPpeokPoints:6}};assert.equal(api.aiGoStopDecision(late,{total:7}).decision,'stop');
 });
 
@@ -2839,10 +2866,10 @@ test('intentional Online exits clean room UI and ignore only their resulting dis
   const reconcile=source.slice(source.indexOf('function reconcileOnlineFlow'),source.indexOf('function returnOnlineToMenu'));
   const cleanup=source.slice(source.indexOf('function returnOnlineToMenu'),source.indexOf("els.opponentEndedOkBtn.addEventListener"));
   const disconnect=source.slice(source.indexOf("adapter.addEventListener('disconnected'"),source.indexOf("adapter.addEventListener('snapshot'"));
-  assert.match(reconcile,/if\(flow\.endedByYou\)returnOnlineToMenu\(\);else setDialog\(els\.opponentEndedDialog,true\)/,'the local quitter returns automatically while the opponent sees the ended dialog');
+  assert.match(reconcile,/if\(flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\);else setDialog\(els\.opponentEndedDialog,true\)/,'local quit or no-penalty disconnect cancellation returns automatically while a normal opponent-ended session keeps its dialog');
   assert.match(source,/opponentEndedOkBtn\.addEventListener\('click',returnOnlineToMenu\)/,'the opponent OK path uses the same cleanup');
   assert.match(cleanup,/onlineMode=false/);
-  assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);
+  assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);assert.match(cleanup,/localStorage\.removeItem\('gostop-active-ranked-room'\)/);
   assert.match(cleanup,/getElementById\('onlineRoomCode'\)\.value=''/);
   assert.match(cleanup,/onlineStatus\.textContent=''/);
   assert.match(cleanup,/goStopOnlineSession\?\.close\(\);globalThis\.goStopOnlineSession=null/);
