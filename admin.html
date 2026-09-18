@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>GoStop Live! Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="adminLogin" class="login-shell">
+    <form id="adminLoginForm" class="login-card">
+      <div class="brand-mark">GSL</div>
+      <p class="eyebrow">GoStop Live!</p>
+      <h1>Server Admin</h1>
+      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p>
+      <label>Admin Token<input id="adminToken" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">Open Dashboard</button>
+      <p id="loginError" class="error" aria-live="polite"></p>
+    </form>
+  </div>
+
+  <div id="adminApp" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark small">GSL</div>
+        <div><strong>GoStop Live!</strong><span>Server Admin</span></div>
+      </div>
+      <nav id="adminNav">
+        <button data-view="overview" class="active">Overview</button>
+        <button data-view="players">Players</button>
+        <button data-view="games">Games</button>
+        <button data-view="abandoned">Abandoned</button>
+        <button data-view="rankings">Rankings</button>
+        <button data-view="leaderboards">Leaderboards</button>
+        <button data-view="sessions">Sessions</button>
+        <button data-view="audit">Audit Log</button>
+      </nav>
+      <div class="side-footer">
+        <span id="serverStatus" class="status-dot">● Connected</span>
+        <button id="adminLogout" class="ghost">Lock Admin</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Authoritative server data</p>
+          <h1 id="viewTitle">Overview</h1>
+        </div>
+        <div class="top-actions">
+          <button id="refreshBtn" class="secondary">Refresh</button>
+          <button id="exportBtn" class="secondary">Export CSV</button>
+        </div>
+      </header>
+
+      <section class="global-filter card">
+        <label>From<input id="filterFrom" type="datetime-local"></label>
+        <label>To<input id="filterTo" type="datetime-local"></label>
+        <button id="applyRange" class="secondary">Apply Range</button>
+        <button id="clearRange" class="ghost">All Time</button>
+      </section>
+
+      <section id="view-overview" class="view active">
+        <div id="overviewCards" class="metric-grid"></div>
+        <div class="grid-two">
+          <section class="card">
+            <div class="section-head"><h2>Top Players</h2><button class="link-button" data-go="rankings">View rankings</button></div>
+            <div id="overviewTopPlayers"></div>
+          </section>
+          <section class="card">
+            <div class="section-head"><h2>Top Abandon Players</h2><button class="link-button" data-go="abandoned">View abandons</button></div>
+            <div id="overviewTopAbandons"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="view-players" class="view">
+        <section class="card">
+          <div class="toolbar">
+            <input id="playerSearch" class="wide" placeholder="Search nickname, email, account ID, IP, city, state, country">
+            <select id="playerSort">
+              <option value="createdAt">Newest accounts</option>
+              <option value="walletCoins">Wallet Coins</option>
+              <option value="gamesPlayed">Games played</option>
+              <option value="wins">Wins</option>
+              <option value="abandons">Abandons</option>
+              <option value="nickname">Nickname</option>
+            </select>
+            <button id="playerSearchBtn" class="secondary">Search</button>
+          </div>
+          <div id="playersTable"></div>
+        </section>
+      </section>
+
+      <section id="view-games" class="view">
+        <section class="card">
+          <div class="toolbar">
+            <input id="gameSearch" class="wide" placeholder="Player, nickname, game ID, session ID">
+            <select id="gameMode"><option value="">All modes</option><option value="solo">Solo</option><option value="online">Online</option></select>
+            <button id="gameSearchBtn" class="secondary">Filter</button>
+          </div>
+          <div id="gamesTable"></div>
+        </section>
+      </section>
+
+      <section id="view-abandoned" class="view">
+        <section class="card">
+          <div class="toolbar">
+            <input id="abandonSearch" class="wide" placeholder="Player, nickname, game ID">
+            <select id="abandonMode"><option value="">All modes</option><option value="solo">Solo</option><option value="online">Online</option></select>
+            <button id="abandonSearchBtn" class="secondary">Filter</button>
+          </div>
+          <div id="abandonedTable"></div>
+        </section>
+      </section>
+
+      <section id="view-rankings" class="view">
+        <section class="card">
+          <div class="toolbar">
+            <label>Rank by
+              <select id="rankingMetric">
+                <option value="wins">Wins</option>
+                <option value="games">Games played</option>
+                <option value="winRate">Win rate</option>
+                <option value="points">Points</option>
+                <option value="coinsWon">Coins won</option>
+                <option value="coinsLost">Coins lost</option>
+                <option value="netCoins">Net Coins</option>
+                <option value="abandons">Forced abandons</option>
+                <option value="abandonRate">Abandon rate</option>
+              </select>
+            </label>
+            <select id="rankingMode"><option value="">All modes</option><option value="solo">Solo</option><option value="online">Online</option></select>
+            <button id="rankingRefresh" class="secondary">Rank</button>
+          </div>
+          <div id="rankingsTable"></div>
+        </section>
+      </section>
+
+      <section id="view-leaderboards" class="view">
+        <section class="card danger-zone">
+          <div class="section-head"><div><h2>Leaderboard Controls</h2><p class="muted">Resets archive the prior stats. Underlying games are never deleted.</p></div></div>
+          <div class="toolbar">
+            <label>Month<input id="leaderboardMonth" type="month"></label>
+            <button id="resetGlobal" class="danger">Reset Global</button>
+            <button id="resetMonth" class="danger">Reset Selected Month</button>
+            <button id="rebuildGlobal" class="secondary">Rebuild Global from Games</button>
+            <button id="rebuildMonth" class="secondary">Rebuild Selected Month</button>
+          </div>
+        </section>
+        <div class="grid-two">
+          <section class="card"><h2>Global</h2><div id="globalLeaderboard"></div></section>
+          <section class="card"><h2 id="monthlyTitle">Monthly</h2><div id="monthlyLeaderboard"></div></section>
+        </div>
+      </section>
+
+      <section id="view-sessions" class="view">
+        <section class="card">
+          <div class="toolbar">
+            <select id="sessionStatus"><option value="">All sessions</option><option value="active">Active</option><option value="ended">Ended</option></select>
+            <button id="sessionRefresh" class="secondary">Filter</button>
+          </div>
+          <div id="sessionsTable"></div>
+        </section>
+      </section>
+
+      <section id="view-audit" class="view">
+        <section class="card">
+          <div class="section-head"><div><h2>Immutable Admin Audit</h2><p class="muted">Wallet, player, game and leaderboard admin changes are recorded with reason, time and admin connection metadata.</p></div></div>
+          <div id="auditTable"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="detailDialog" class="detail-dialog">
+    <div class="dialog-head"><h2 id="detailTitle">Details</h2><button id="detailClose" class="ghost">Close</button></div>
+    <div id="detailBody"></div>
+  </dialog>
+  <dialog id="actionDialog" class="action-dialog">
+    <form id="actionForm" method="dialog">
+      <div class="dialog-head"><h2 id="actionTitle">Admin Action</h2><button value="cancel" class="ghost">Cancel</button></div>
+      <div id="actionFields"></div>
+      <label>Required reason<textarea id="actionReason" rows="3" required placeholder="Why is this admin change necessary?"></textarea></label>
+      <p id="actionError" class="error"></p>
+      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button id="actionConfirm" value="default" class="danger">Confirm</button></div>
+    </form>
+  </dialog>
+
+  <script src="runtime-config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
