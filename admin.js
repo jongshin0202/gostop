@@ -41,9 +41,11 @@
   function resetStatus(){$('serverStatus').style.color='';}
 
   async function authenticate(){
-    if(!token)return false;
-    try{await api('/health');$('adminLogin').hidden=true;$('adminApp').hidden=false;resetStatus();await selectView(currentView);return true;}
-    catch(error){sessionStorage.removeItem(TOKEN_KEY);token='';$('loginError').textContent=error.message;return false;}
+    if(!token){$('loginError').textContent='Enter the admin token.';return false;}
+    const button=$('openDashboardBtn');button.disabled=true;button.textContent='Connecting…';$('loginError').textContent='Connecting securely to the GoStop authority…';
+    try{await api('/health');$('adminLogin').hidden=true;$('adminApp').hidden=false;$('loginError').textContent='';resetStatus();await selectView(currentView);return true;}
+    catch(error){sessionStorage.removeItem(TOKEN_KEY);token='';$('adminLogin').hidden=false;$('adminApp').hidden=true;$('loginError').textContent=error.message||'Could not connect to the admin server.';return false;}
+    finally{button.disabled=false;button.textContent='Open Dashboard';}
   }
 
   const metricCard=(label,value,sub='')=>`<div class="metric"><span class="label">${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(sub)}</small></div>`;
@@ -190,7 +192,10 @@
 
   async function refreshCurrent(){await selectView(currentView);}
 
-  $('adminLoginForm').addEventListener('submit',async event=>{event.preventDefault();token=$('adminToken').value.trim();sessionStorage.setItem(TOKEN_KEY,token);$('loginError').textContent='';await authenticate();});
+  async function submitAdminLogin(){token=$('adminToken').value.trim();sessionStorage.setItem(TOKEN_KEY,token);$('loginError').textContent='';await authenticate();}
+  $('openDashboardBtn').addEventListener('click',submitAdminLogin);
+  $('adminLoginForm').addEventListener('submit',async event=>{event.preventDefault();await submitAdminLogin();});
+  $('adminToken').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();submitAdminLogin();}});
   $('adminLogout').addEventListener('click',()=>{token='';sessionStorage.removeItem(TOKEN_KEY);$('adminApp').hidden=true;$('adminLogin').hidden=false;$('adminToken').value='';});
   $('adminNav').addEventListener('click',event=>{const btn=event.target.closest('[data-view]');if(btn)selectView(btn.dataset.view);});
   document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit-json]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){$('detailTitle').textContent='Audit Record';$('detailBody').innerHTML=`<pre class="json">${esc(JSON.stringify(JSON.parse(decodeURIComponent(auditBtn.dataset.auditJson)),null,2))}</pre>`;$('detailDialog').showModal();}});
