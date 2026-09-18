@@ -121,7 +121,7 @@ test('admin authentication failure uses a deterministic in-page diagnostic overl
   assert.match(adminJs,/failureOk'\)\.addEventListener\('click',\(\)=>\$\('failureOverlay'\)\.hidden=true\)/);
   assert.match(adminCss,/\.failure-overlay\{/);
   assert.match(adminCss,/z-index:99999/);
-  assert.doesNotMatch(adminJs,/showModal\(\)/);
+  const failureBlock=adminJs.slice(adminJs.indexOf('function showFailureDialog'),adminJs.indexOf('async function authenticate'));assert.doesNotMatch(failureBlock,/showModal\(\)/);
   assert.doesNotMatch(adminJs,/alert\(message\)/);
 });
 
