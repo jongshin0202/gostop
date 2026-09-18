@@ -119,6 +119,11 @@ async function listAudit(store,url){
   const limit=clampLimit(url.searchParams.get('limit')),all=(await values(store,'adminAudit:')).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
   return {total:all.length,audit:all.slice(0,limit)};
 }
+async function systemStatus(store){
+  const [playerRows,gameRows,sessionRows,connectionRows,auditRows,archiveRows]=await Promise.all([values(store,'account:'),values(store,'game:'),values(store,'gameSession:'),values(store,'connection:'),values(store,'adminAudit:'),values(store,'leaderboardArchive:')]);
+  return {generatedAt:store.now(),storage:{players:playerRows.length,games:gameRows.length,sessions:sessionRows.length,activeSessions:sessionRows.filter(item=>!item.endedAt).length,connections:connectionRows.length,auditRecords:auditRows.length,leaderboardArchives:archiveRows.length},features:{adminAudit:true,rawIpHistory:true,authoritativeGameHistory:true,leaderboardReset:true,leaderboardRebuild:true}};
+}
+
 async function geography(store,url){
   const {from,to}=queryRange(url),connections=(await values(store,'connection:')).filter(item=>inRange(item,from,to));
   const aggregate=keyFn=>{
@@ -214,6 +219,7 @@ export async function handleAdminRequest(store,request){
     if(request.method==='GET'&&path==='/admin/sessions')return json({ok:true,...await listSessions(store,url)});
     if(request.method==='GET'&&path==='/admin/geography')return json({ok:true,...await geography(store,url)});
     if(request.method==='GET'&&path==='/admin/abuse')return json({ok:true,...await abuseSignals(store,url)});
+    if(request.method==='GET'&&path==='/admin/system')return json({ok:true,...await systemStatus(store)});
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/wallet$/)))return await walletAdjust(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/disconnect-reset$/)))return await resetDisconnect(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/profile$/)))return await editProfile(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
