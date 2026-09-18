@@ -1,4 +1,5 @@
 import {AccountStore as BaseAccountStore,blankStats} from './account-store.mjs';
+import {handleAdminRequest} from './admin-api.mjs';
 
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const publicAccount=account=>({id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null});
@@ -25,4 +26,6 @@ export class AccountStore extends BaseAccountStore{
     let publicOpponent=null,opponentNotice=null;if(opponent){await this.prepareNotices(opponent);if(settlementType!=='nagari'){const opponentStats=ensureStats(opponent,month);for(const stats of opponentStats){stats.gamesPlayed+=1;stats.wins+=1;stats.totalCoinsWon+=rewardCoins;}addMilestones(opponentStats,body.opponentMilestones);opponentNotice={id:noticeId('opponent-abandonment-reward',gameId),type:'opponent-abandonment-reward',gameId,rewardCoins,fairPoints,settlementType,recordedAt,opponentNickname:account.nickname};opponent.pendingNotices=[...(opponent.pendingNotices||[]).filter(item=>item.id!==opponentNotice.id),opponentNotice];}opponent.updatedAt=recordedAt;await this.storage.put(`account:${opponent.id}`,opponent);publicOpponent=publicAccount(opponent);}
     const record={...body,gameId,type:'abandonment',settlementType,fairPoints,penaltyCoins:penalty,opponentRewardCoins:rewardCoins,firstOfMonth,recordedAt,account:publicAccount(account),opponent:publicOpponent,accountNotice,opponentNotice};await this.storage.put(`forceQuit:${gameId}`,record);await this.storage.put(`game:${gameId}`,record);
     return json({ok:true,penaltyCoins:penalty,opponentRewardCoins:rewardCoins,firstOfMonth,account:record.account,opponent:record.opponent,accountNotice,opponentNotice});
-  }}
+  }
+  async fetch(request){const path=new URL(request.url).pathname;if(path.startsWith('/admin/'))return handleAdminRequest(this,request);return super.fetch(request);}
+}
