@@ -161,7 +161,7 @@
   function buildText(){
     const menu=externalMenuState(),card=cardState(),session=globalThis.goStopOnlineSession,s=latestSnapshot?.state||{},flow=latestSnapshot?.sessionFlow||{};
     const idleFrom=Math.max(lastUserAt,menuVisibleAt||0),idleMs=menu.visible?Math.max(0,now()-idleFrom):0;
-    if(menu.eligible&&menu.leaderboardHidden&&idleMs>=7500&&!attractFailure)attractFailure={at:now(),idleMs,blockers:[...menu.blockers]};
+    if(menu.eligible&&menu.leaderboardHidden&&idleMs>=10500&&!attractFailure)attractFailure={at:now(),idleMs,blockers:[...menu.blockers]};
     const blockers=diagnoseBlockers();
     return [
       `${VERSION}  host=${location.hostname}`,
