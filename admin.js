@@ -276,17 +276,109 @@
     }catch(error){fail(error);}
   }
 
-  function actionPrompt({title,fields=[],danger=true}){
+  function actionFieldHtml(f){
+    const help=f.help?`<span class="action-help">${esc(f.help)}</span>`:'',full=f.full?' full':'';
+    if(f.type==='checkbox')return `<label class="checkbox-field${full}"><input name="${esc(f.name)}" type="checkbox" ${f.checked?'checked':''}><span>${esc(f.label)}${help}</span></label>`;
+    if(f.type==='select')return `<label class="${full.trim()}">${esc(f.label)}${help}<select name="${esc(f.name)}">${(f.options||[]).map(option=>{const value=typeof option==='object'?option.value:option,label=typeof option==='object'?option.label:option;return `<option value="${esc(value??'')}" ${String(value??'')===String(f.value??'')?'selected':''}>${esc(label)}</option>`;}).join('')}</select></label>`;
+    if(f.type==='textarea')return `<label class="${full.trim()}">${esc(f.label)}${help}<textarea rows="${f.rows||4}" name="${esc(f.name)}" placeholder="${esc(f.placeholder||'')}">${esc(f.value??'')}</textarea></label>`;
+    return `<label class="${full.trim()}">${esc(f.label)}${help}<input name="${esc(f.name)}" type="${esc(f.type||'text')}" value="${esc(f.value??'')}" placeholder="${esc(f.placeholder||'')}" ${f.step?`step="${esc(f.step)}"`:''}></label>`;
+  }
+  function actionPrompt({title,fields=[],danger=true,confirmText='Confirm'}){
     return new Promise(resolve=>{
       $('actionTitle').textContent=title;$('actionReason').value='';$('actionError').textContent='';
-      $('actionFields').innerHTML=fields.map(f=>`<label>${esc(f.label)}${f.type==='textarea'? `<textarea rows="${f.rows||5}" name="${esc(f.name)}" placeholder="${esc(f.placeholder||'')}">${esc(f.value??'')}</textarea>`:`<input name="${esc(f.name)}" type="${esc(f.type||'text')}" value="${esc(f.value??'')}" placeholder="${esc(f.placeholder||'')}">`}</label>`).join('');
-      $('actionConfirm').className=danger?'danger':'primary';$('actionConfirm').textContent='Confirm';
-      const dialog=$('actionDialog'),form=$('actionForm');
-      const close=()=>{form.removeEventListener('submit',submit);dialog.removeEventListener('close',closed);};
-      const closed=()=>{close();resolve(null);};
-      const submit=event=>{event.preventDefault();const submitter=event.submitter;if(submitter?.value==='cancel'){dialog.close();return;}const reason=$('actionReason').value.trim();if(reason.length<3){$('actionError').textContent='A reason is required.';return;}const data=Object.fromEntries(new FormData(form));delete data.reason;data.reason=reason;close();dialog.close();resolve(data);};
-      form.addEventListener('submit',submit);dialog.addEventListener('close',closed,{once:true});dialog.showModal();
+      $('actionFields').innerHTML=`<div class="action-field-grid">${fields.map(actionFieldHtml).join('')}</div>`;
+      $('actionConfirm').className=danger?'danger':'primary';$('actionConfirm').textContent=confirmText;
+      const dialog=$('actionDialog'),form=$('actionForm'),cancelTop=$('actionCancelTop'),cancelBottom=$('actionCancelBottom');let settled=false;
+      const cleanup=()=>{form.removeEventListener('submit',submit);dialog.removeEventListener('close',closed);cancelTop.removeEventListener('click',cancel);cancelBottom.removeEventListener('click',cancel);};
+      const finish=value=>{if(settled)return;settled=true;cleanup();if(dialog.open)dialog.close();resolve(value);};
+      const closed=()=>finish(null),cancel=event=>{event?.preventDefault();finish(null);};
+      const submit=event=>{event.preventDefault();const reason=$('actionReason').value.trim();if(reason.length<3){$('actionError').textContent='Please enter a short reason for this change.';$('actionReason').focus();return;}const data=Object.fromEntries(new FormData(form));for(const f of fields)if(f.type==='checkbox')data[f.name]=form.elements[f.name]?.checked?'true':'false';data.reason=reason;finish(data);};
+      form.addEventListener('submit',submit);dialog.addEventListener('close',closed,{once:true});cancelTop.addEventListener('click',cancel);cancelBottom.addEventListener('click',cancel);dialog.showModal();
     });
+  }
+  const lineList=value=>(Array.isArray(value)?value:[]).map(item=>String(item??'')).filter(Boolean).join('\n');
+  const changed=(a,b)=>JSON.stringify(a)!==JSON.stringify(b);
+  async function gameCorrectionPrompt(id){
+    const data=await api(`/games/${encodeURIComponent(id)}`),g=data.game;
+    const participantRows=Array.isArray(g.participants)?g.participants:[];
+    const playerChoices=[];
+    const seenPlayers=new Set();
+    const addPlayer=(value,label)=>{if(!value||seenPlayers.has(value))return;seenPlayers.add(value);playerChoices.push({value,label:label||'Player'});};
+    for(const p of participantRows)addPlayer(p.playerId||p.accountId,p.nickname||'Player');
+    if(g.account)addPlayer(g.account.playerId||g.account.id||g.accountId,g.account.nickname||'Player');
+    if(g.opponent)addPlayer(g.opponent.playerId||g.opponent.id||g.opponentAccountId,g.opponent.nickname||'Opponent');
+    const fields=[
+      {name:'mode',label:'Game mode',type:'select',value:g.mode||'',options:[{value:'solo',label:'Solo'},{value:'online',label:'Online'}],help:'Choose whether this saved game was Solo or Online.'},
+      {name:'recordedAt',label:'Recorded time',type:'datetime-local',value:g.recordedAt?localInputValue(g.recordedAt):'',help:'When this game should appear as recorded.'},
+      {name:'winnerPlayerId',label:'Winner',type:'select',value:g.winnerPlayerId||'',options:[{value:'',label:'No winner'},...playerChoices],help:'Select the player who won, or No winner.'},
+      {name:'finalPoints',label:'Final points',type:'number',value:g.finalPoints??'',help:'Final points awarded for the completed game.'},
+      {name:'settlementType',label:'Settlement type',type:'select',value:g.settlementType||'normal',options:[{value:'normal',label:'Normal completed game'},{value:'current-settlement',label:'Interrupted game — current score settlement'},{value:'nagari',label:'No winner / Nagari'}],help:'How the server settled the result.'},
+      {name:'fairPoints',label:'Fair settlement points',type:'number',value:g.fairPoints??'',help:'Points used for a fair interrupted-game settlement.'},
+      {name:'penaltyCoins',label:'Penalty Coins',type:'number',value:g.penaltyCoins??'',help:'Wallet Coins charged to the quitting player.'},
+      {name:'opponentRewardCoins',label:'Opponent reward Coins',type:'number',value:g.opponentRewardCoins??'',help:'Wallet Coins awarded to the other player.'},
+      {name:'quitterScore',label:'Quitter score',type:'number',value:g.quitterScore??'',help:'Score held by the player who left.'},
+      {name:'opponentScore',label:'Opponent score',type:'number',value:g.opponentScore??'',help:'Score held by the other player.'},
+      {name:'firstOfMonth',label:'Monthly disconnect protection',type:'select',value:g.firstOfMonth===true?'true':g.firstOfMonth===false?'false':'',options:[{value:'',label:'Not recorded'},{value:'true',label:'Protected first disconnect'},{value:'false',label:'Not protected'}],help:'Whether monthly disconnect protection applied.'},
+      {name:'recordReason',label:'Recorded game reason',value:g.reason||'',full:true,help:'The reason already stored with this game, such as disconnect timeout.'},
+      {name:'settlementReasons',label:'Settlement explanation',type:'textarea',value:lineList(g.settlementReasons),full:true,help:'One plain-language explanation per line.'},
+      {name:'formulaSteps',label:'Score calculation steps',type:'textarea',value:lineList(g.formulaSteps),full:true,help:'One plain-language calculation step per line.'}
+    ];
+    participantRows.forEach((p,index)=>{
+      const name=p.nickname||`Player ${index+1}`;
+      fields.push(
+        {name:`p_${index}_won`,label:`${name} — Won`,type:'select',value:p.won?'true':'false',options:[{value:'true',label:'Yes'},{value:'false',label:'No'}]},
+        {name:`p_${index}_points`,label:`${name} — Points`,type:'number',value:p.points??''},
+        {name:`p_${index}_rawScore`,label:`${name} — Raw score`,type:'number',value:p.rawScore??''},
+        {name:`p_${index}_walletDelta`,label:`${name} — Coin change`,type:'number',value:p.walletDelta??''},
+        {name:`p_${index}_coinsWon`,label:`${name} — Coins won`,type:'number',value:p.coinsWon??''}
+      );
+    });
+    const scoreEntries=Object.entries(g.scores||{});
+    scoreEntries.forEach(([playerId,score],index)=>{
+      const label=playerChoices.find(x=>x.value===playerId)?.label||`Player ${index+1}`;
+      fields.push(
+        {name:`score_${index}_points`,label:`${label} — Settlement points`,type:'number',value:score?.points??''},
+        {name:`score_${index}_rawScore`,label:`${label} — Score before settlement`,type:'number',value:score?.rawScore??''}
+      );
+    });
+    if(g.computer&&typeof g.computer==='object')fields.push(
+      {name:'computerLevel',label:'Computer level',type:'number',value:g.computer.level??''},
+      {name:'computerWalletAfter',label:'Computer Wallet after game',type:'number',value:g.computer.walletAfter??''},
+      {name:'computerPoints',label:'Computer points',type:'number',value:g.computer.points??''},
+      {name:'computerRawScore',label:'Computer raw score',type:'number',value:g.computer.rawScore??''}
+    );
+    const walletPlayers=[],seenAccounts=new Set();
+    const addAccount=(accountId,nickname)=>{if(!accountId||seenAccounts.has(accountId))return;seenAccounts.add(accountId);walletPlayers.push({accountId,nickname:nickname||`Player ${walletPlayers.length+1}`});};
+    for(const p of participantRows)addAccount(p.accountId,p.nickname);
+    addAccount(g.accountId||g.account?.id,g.account?.nickname);
+    addAccount(g.opponentAccountId||g.opponent?.id,g.opponent?.nickname||'Opponent');
+    walletPlayers.forEach((p,index)=>fields.push({name:`wallet_${index}`,label:`${p.nickname} — Wallet Coin adjustment`,type:'number',value:'',placeholder:'0',help:'Enter only the Coin correction, for example 13 or -5. Leave blank for no Wallet change.'}));
+    const form=await actionPrompt({title:'Correct Game',fields,confirmText:'Save Correction'});if(!form)return null;
+    const patch={};
+    const addScalar=(field,current,convert=value=>value)=>{const raw=form[field]??'',next=convert(raw);if(changed(next,current))patch[field==='recordReason'?'reason':field]=next;};
+    addScalar('mode',g.mode||'');
+    const nextRecorded=form.recordedAt?new Date(form.recordedAt).toISOString():'';if(form.recordedAt&&nextRecorded!==g.recordedAt)patch.recordedAt=nextRecorded;
+    addScalar('winnerPlayerId',g.winnerPlayerId||'');
+    for(const key of ['finalPoints','fairPoints','penaltyCoins','opponentRewardCoins','quitterScore','opponentScore']){const raw=form[key];if(raw!==''&&raw!==undefined){const next=Math.trunc(Number(raw));if(Number.isFinite(next)&&next!==g[key])patch[key]=next;}}
+    addScalar('settlementType',g.settlementType||'normal');
+    const protectedValue=form.firstOfMonth===''?undefined:form.firstOfMonth==='true';if(protectedValue!==undefined&&protectedValue!==g.firstOfMonth)patch.firstOfMonth=protectedValue;
+    addScalar('recordReason',g.reason||'');
+    const settlementReasons=String(form.settlementReasons||'').split('\n').map(x=>x.trim()).filter(Boolean);if(changed(settlementReasons,g.settlementReasons||[]))patch.settlementReasons=settlementReasons;
+    const formulaSteps=String(form.formulaSteps||'').split('\n').map(x=>x.trim()).filter(Boolean);if(changed(formulaSteps,g.formulaSteps||[]))patch.formulaSteps=formulaSteps;
+    if(participantRows.length){
+      const participants=participantRows.map((p,index)=>({...p,won:form[`p_${index}_won`]==='true',points:Number(form[`p_${index}_points`]||0),rawScore:Number(form[`p_${index}_rawScore`]||0),walletDelta:Number(form[`p_${index}_walletDelta`]||0),coinsWon:Number(form[`p_${index}_coinsWon`]||0)}));
+      if(changed(participants,participantRows))patch.participants=participants;
+    }
+    if(scoreEntries.length){
+      const scores=Object.fromEntries(scoreEntries.map(([playerId,score],index)=>[playerId,{...score,points:Number(form[`score_${index}_points`]||0),rawScore:Number(form[`score_${index}_rawScore`]||0)}]));
+      if(changed(scores,g.scores||{}))patch.scores=scores;
+    }
+    if(g.computer&&typeof g.computer==='object'){
+      const computer={...g.computer,level:Number(form.computerLevel||0),walletAfter:Number(form.computerWalletAfter||0),points:Number(form.computerPoints||0),rawScore:Number(form.computerRawScore||0)};
+      if(changed(computer,g.computer))patch.computer=computer;
+    }
+    const walletAdjustments=walletPlayers.map((p,index)=>({accountId:p.accountId,delta:Math.trunc(Number(form[`wallet_${index}`]||0))})).filter(item=>Number.isFinite(item.delta)&&item.delta!==0);
+    return {patch,walletAdjustments,reason:form.reason};
   }
   async function adminAction(kind,id,button){
     try{
@@ -295,7 +387,7 @@
       else if(kind==='suspend'){const suspended=button.dataset.suspended!=='1',form=await actionPrompt({title:suspended?'Suspend Player':'Unsuspend Player',fields:suspended?[{name:'suspensionReason',label:'Suspension reason'}]:[]});if(!form)return;await api(`/players/${encodeURIComponent(id)}/profile`,{method:'POST',body:{suspended,suspensionReason:form.suspensionReason,reason:form.reason}});await showPlayer(id);}
       else if(kind==='disconnect'){const month=new Date().toISOString().slice(0,7),form=await actionPrompt({title:'Reset Monthly Disconnect Allowance',fields:[{name:'month',label:'Month (YYYY-MM)',value:month}]});if(!form)return;await api(`/players/${encodeURIComponent(id)}/disconnect-reset`,{method:'POST',body:{month:form.month,reason:form.reason}});await showPlayer(id);}
       else if(kind==='player-global'||kind==='player-month'){const month=$('leaderboardMonth').value||new Date().toISOString().slice(0,7),form=await actionPrompt({title:kind==='player-global'?'Reset Player Global Leaderboard':'Reset Player Monthly Leaderboard',fields:kind==='player-month'?[{name:'month',label:'Month',type:'month',value:month}]:[]});if(!form)return;await api('/leaderboards/reset',{method:'POST',body:{scope:kind,accountId:id,month:form.month||month,reason:form.reason}});await showPlayer(id);}
-      else if(kind==='game-correct'){const form=await actionPrompt({title:'Correct Game',fields:[{name:'patch',label:'Game field patch JSON',type:'textarea',placeholder:'{"finalPoints":5}'},{name:'wallet',label:'Wallet adjustments JSON array',type:'textarea',placeholder:'[{"accountId":"acct_...","delta":13}]'}]});if(!form)return;let patch={},walletAdjustments=[];try{patch=form.patch.trim()?JSON.parse(form.patch):{};walletAdjustments=form.wallet.trim()?JSON.parse(form.wallet):[];}catch(_){throw new Error('Correction JSON is invalid.');}await api(`/games/${encodeURIComponent(id)}/correct`,{method:'POST',body:{patch,walletAdjustments,reason:form.reason}});await showGame(id);}
+      else if(kind==='game-correct'){const correction=await gameCorrectionPrompt(id);if(!correction)return;if(!Object.keys(correction.patch).length&&!correction.walletAdjustments.length){alert('No values were changed.');return;}await api(`/games/${encodeURIComponent(id)}/correct`,{method:'POST',body:correction});await showGame(id);}
       await refreshCurrent();
     }catch(error){fail(error);}
   }
