@@ -43,6 +43,23 @@ test('online quit decline schedules requester exit after current game',async()=>
   const {core,a,sa,sb}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;await core.handle(sa,flow('quit-request-2',revision,{type:'quitGame'}));const request=sb.last('snapshot').snapshot.sessionFlow.quitRequest;await core.handle(sb,flow('quit-decline',revision,{type:'respondQuit',requestId:request.requestId,accept:false}));assert.equal(core.room.sessionFlow.ended,false);assert.equal(core.room.rankFlow.scheduledQuitBy,a.playerId);assert.equal(sa.last('snapshot').snapshot.sessionFlow.scheduledQuitByYou,true);
 });
 
+test('ranked Solo browser return during reconnect grace restores the same seat and game with no coin settlement',async()=>{
+  const {core,user,socket,accountStore}=await soloRoom();
+  const oldMatch=core.room.matchId,oldSequence=core.room.gameSequence,oldWallet=core.room.participants.find(item=>item.playerId===user.playerId).walletCoins;
+  const settlementsBefore=accountStore.calls.filter(call=>call.path==='/internal/game/settle'||call.path==='/internal/force-quit').length;
+  await core.disconnect(socket);
+  assert.ok(core.room.rankFlow.disconnectDeadlines[user.playerId]>Date.parse(now()));
+  const restored=await core.join(user.credential,account('solo-user','SoloPlayer',oldWallet));
+  assert.equal(restored.playerId,user.playerId);assert.equal(restored.seatId,user.seatId);assert.equal(restored.credential,user.credential);
+  assert.equal(core.room.matchId,oldMatch);assert.equal(core.room.gameSequence,oldSequence);
+  const reconnect=new Socket();await core.connect(restored.credential,reconnect);
+  assert.equal(core.room.rankFlow.disconnectDeadlines[user.playerId],undefined);
+  assert.equal(reconnect.last('snapshot').snapshot.matchId,oldMatch);
+  assert.equal(core.room.participants.find(item=>item.playerId===user.playerId).walletCoins,oldWallet);
+  const settlementsAfter=accountStore.calls.filter(call=>call.path==='/internal/game/settle'||call.path==='/internal/force-quit').length;
+  assert.equal(settlementsAfter,settlementsBefore);
+});
+
 test('ranked Solo Play Again immediately creates the next hand without waiting for the computer seat',async()=>{
   const {core,user,socket}=await soloRoom(),oldSession=core.room.sessionId,oldSequence=core.room.gameSequence;
   const record=core.authority.exportMatch(core.room.matchId),seatId=record.seatByPlayer[user.playerId];record.state.terminalResult={type:'stop',winnerId:seatId,finalPoints:7};record.state.winner=seatId;record.completedAt=now();
