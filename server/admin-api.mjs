@@ -119,6 +119,24 @@ async function listAudit(store,url){
   const limit=clampLimit(url.searchParams.get('limit')),all=(await values(store,'adminAudit:')).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
   return {total:all.length,audit:all.slice(0,limit)};
 }
+async function geography(store,url){
+  const {from,to}=queryRange(url),connections=(await values(store,'connection:')).filter(item=>inRange(item,from,to));
+  const aggregate=keyFn=>{
+    const map=new Map();
+    for(const item of connections){const key=clean(keyFn(item));if(!key)continue;const row=map.get(key)||{key,connections:0,accounts:new Set(),lastSeen:null};row.connections++;row.accounts.add(item.accountId);if(!row.lastSeen||Date.parse(item.recordedAt)>Date.parse(row.lastSeen))row.lastSeen=item.recordedAt;map.set(key,row);}
+    return [...map.values()].map(row=>({key:row.key,connections:row.connections,accounts:row.accounts.size,lastSeen:row.lastSeen})).sort((a,b)=>b.connections-a.connections||b.accounts-a.accounts||a.key.localeCompare(b.key));
+  };
+  const ipMap=new Map();
+  for(const item of connections){if(!item.ip)continue;const row=ipMap.get(item.ip)||{ip:item.ip,connections:0,accountIds:new Set(),cities:new Set(),regions:new Set(),countries:new Set(),lastSeen:null};row.connections++;row.accountIds.add(item.accountId);if(item.city)row.cities.add(item.city);if(item.region||item.regionCode)row.regions.add(item.region||item.regionCode);if(item.countryCode)row.countries.add(item.countryCode);if(!row.lastSeen||Date.parse(item.recordedAt)>Date.parse(row.lastSeen))row.lastSeen=item.recordedAt;ipMap.set(item.ip,row);}
+  const ips=[...ipMap.values()].map(row=>({ip:row.ip,connections:row.connections,accounts:row.accountIds.size,accountIds:[...row.accountIds],cities:[...row.cities],regions:[...row.regions],countries:[...row.countries],lastSeen:row.lastSeen})).sort((a,b)=>b.accounts-a.accounts||b.connections-a.connections);
+  return {connections:connections.length,ips:ips.slice(0,500),countries:aggregate(item=>item.countryCode).slice(0,250),regions:aggregate(item=>[item.countryCode,item.region||item.regionCode].filter(Boolean).join(' / ')).slice(0,250),cities:aggregate(item=>[item.city,item.region||item.regionCode,item.countryCode].filter(Boolean).join(', ')).slice(0,250)};
+}
+async function abuseSignals(store,url){
+  const rankUrl=new URL(url);rankUrl.searchParams.set('metric','abandons');rankUrl.searchParams.set('limit','500');
+  const abandon=(await rankings(store,rankUrl)).rankings,geo=await geography(store,url);
+  return {generatedAt:store.now(),note:'Signals only. No automatic enforcement.',highAbandonPlayers:abandon.filter(row=>row.abandons>=2||row.abandonRate>=0.2).sort((a,b)=>b.abandons-a.abandons||b.abandonRate-a.abandonRate).slice(0,200),sharedIps:geo.ips.filter(row=>row.accounts>1).slice(0,200)};
+}
+
 async function listSessions(store,url){
   const {from,to}=queryRange(url),status=lower(url.searchParams.get('status'));
   let rows=(await values(store,'gameSession:')).filter(item=>inRange(item,from,to));
@@ -194,6 +212,8 @@ export async function handleAdminRequest(store,request){
     if(request.method==='GET'&&path==='/admin/leaderboards')return json({ok:true,...await leaderboards(store,url)});
     if(request.method==='GET'&&path==='/admin/audit')return json({ok:true,...await listAudit(store,url)});
     if(request.method==='GET'&&path==='/admin/sessions')return json({ok:true,...await listSessions(store,url)});
+    if(request.method==='GET'&&path==='/admin/geography')return json({ok:true,...await geography(store,url)});
+    if(request.method==='GET'&&path==='/admin/abuse')return json({ok:true,...await abuseSignals(store,url)});
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/wallet$/)))return await walletAdjust(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/disconnect-reset$/)))return await resetDisconnect(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/profile$/)))return await editProfile(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
