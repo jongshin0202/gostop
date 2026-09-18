@@ -63,7 +63,7 @@ function filteredGames(all,url){
     return true;
   });
 }
-function gameSummary(game){return {gameId:game.gameId,type:gameKind(game),mode:game.mode||'unknown',recordedAt:game.recordedAt||null,sessionId:game.sessionId||null,winnerPlayerId:game.winnerPlayerId||null,finalPoints:Number(game.finalPoints??game.fairPoints)||0,settlementType:game.settlementType||null,reason:game.reason||null,penaltyCoins:Number(game.penaltyCoins)||0,opponentRewardCoins:Number(game.opponentRewardCoins)||0,firstOfMonth:!!game.firstOfMonth,participants:clone(game.participants||[]),account:clone(game.account||null),opponent:clone(game.opponent||null),accountIds:gameAccountIds(game),hasHistory:!!game.history,adminCorrections:clone(game.adminCorrections||[])};}
+function gameSummary(game){return {gameId:game.gameId,type:gameKind(game),mode:game.mode||'unknown',recordedAt:game.recordedAt||null,sessionId:game.sessionId||null,winnerPlayerId:game.winnerPlayerId||null,finalPoints:Number(game.finalPoints??game.fairPoints)||0,settlementType:game.settlementType||null,reason:game.reason||null,penaltyCoins:Number(game.penaltyCoins)||0,opponentRewardCoins:Number(game.opponentRewardCoins)||0,firstOfMonth:!!game.firstOfMonth,participants:clone(game.participants||[]),account:clone(game.account||null),opponent:clone(game.opponent||null),accountIds:gameAccountIds(game),hasHistory:!!game.history,adminCorrections:clone(game.adminCorrections||[]),adminConnections:clone(game.adminConnections||null),adminLocations:clone(game.adminLocations||null)};}
 
 async function overview(store,url){
   const allAccounts=await accounts(store),allGames=filteredGames(await games(store),url),sessions=await values(store,'gameSession:'),ledgers=await values(store,'ledger:');
@@ -104,10 +104,11 @@ async function rankings(store,url){
       const opponentId=game.opponentAccountId||game.opponent?.id,opp=ensure(opponentId);if(opp&&game.settlementType!=='nagari'){opp.nickname=game.opponent?.nickname||opp.nickname;opp.games++;opp.wins++;opp.coinsWon+=Math.max(0,Number(game.opponentRewardCoins)||0);opp.netCoins+=Math.max(0,Number(game.opponentRewardCoins)||0);}
     }
   }
-  const accountMap=new Map((await accounts(store)).map(item=>[item.id,item]));
-  for(const row of rows.values()){const account=accountMap.get(row.accountId);row.nickname=row.nickname||account?.nickname||row.accountId;row.abandonRate=row.games?row.abandons/row.games:row.abandons?1:0;row.winRate=row.games?row.wins/row.games:0;}
+  const accountMap=new Map((await accounts(store)).map(item=>[item.id,item])),country=lower(url.searchParams.get('country')),region=lower(url.searchParams.get('region')),city=lower(url.searchParams.get('city'));
+  for(const row of rows.values()){const account=accountMap.get(row.accountId);row.nickname=row.nickname||account?.nickname||row.accountId;row.abandonRate=row.games?row.abandons/row.games:row.abandons?1:0;row.winRate=row.games?row.wins/row.games:0;row.location=clone(account?.location||null);}
+  const eligible=[...rows.values()].filter(row=>{const loc=row.location||{};return (!country||lower(loc.countryCode)===country)&&(!region||(lower(loc.regionCode)===region||lower(loc.region)===region))&&(!city||lower(loc.city)===city);});
   const getter=row=>metric==='games'?row.games:metric==='winRate'?row.winRate:metric==='coinsWon'?row.coinsWon:metric==='coinsLost'?row.coinsLost:metric==='netCoins'?row.netCoins:metric==='points'?row.points:metric==='abandons'?row.abandons:metric==='abandonRate'?row.abandonRate:row.wins;
-  return {metric,rankings:[...rows.values()].sort((a,b)=>getter(b)-getter(a)||b.games-a.games||a.nickname.localeCompare(b.nickname)).slice(0,limit).map((row,index)=>({...row,rank:index+1}))};
+  return {metric,rankings:eligible.sort((a,b)=>getter(b)-getter(a)||b.games-a.games||a.nickname.localeCompare(b.nickname)).slice(0,limit).map((row,index)=>({...row,rank:index+1}))};
 }
 async function leaderboards(store,url){
   const month=clean(url.searchParams.get('month')||monthOf(store.now())),all=await accounts(store);
