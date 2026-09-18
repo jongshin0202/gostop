@@ -40,7 +40,7 @@ export class RoomCore{
   async startRankedSession(){
     if(!this.isRanked())return null;
     this.room.sessionId=randomId(this.crypto,'session');this.room.sessionStats=freshSessionStats();
-    await this.accountRequest('/internal/session/start',{sessionId:this.room.sessionId,mode:'online',accountIds:this.room.participants.map(item=>item.accountId),opponent:this.room.participants.map(item=>item.nickname),startedAt:this.now()});return this.room.sessionId;
+    await this.accountRequest('/internal/session/start',{sessionId:this.room.sessionId,mode:'online',accountIds:this.room.participants.map(item=>item.accountId),opponent:this.room.participants.map(item=>item.nickname),roomCode:this.room.roomCode,matchId:this.room.matchId,gameSequence:this.room.gameSequence||0,startedAt:this.now()});return this.room.sessionId;
   }
   async endRankedSession(reason='ended'){
     if(!this.room.sessionId||!this.accountStore)return;
