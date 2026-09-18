@@ -30,7 +30,7 @@ async function allocateRoom(env,{solo=false,account=null}={}){
 export default {async fetch(request,env){
   const url=new URL(request.url),origin=request.headers.get('Origin'),adminRoute=/^\/api\/admin(?:\/|$)/.test(url.pathname),apiRoute=/^\/api\/(?:rooms|solo|auth|account|me|leaderboards|lobby|admin)(?:\/|$)/.test(url.pathname);
   if(adminRoute&&origin&&!isAllowedAdminOrigin(origin,env))return json({ok:false,error:{code:'ADMIN_ORIGIN_NOT_ALLOWED',message:'Admin origin is not allowed.'}},403);
-  if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
+  if(apiRoute&&!adminRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
     if(!apiRoute)return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     const requestedMethod=request.headers.get('Access-Control-Request-Method'),requestedHeaders=(request.headers.get('Access-Control-Request-Headers')||'').toLowerCase().split(',').map(value=>value.trim()).filter(Boolean);
