@@ -49,7 +49,7 @@
     'bombDialog','bombText','bombCards','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
-    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedOkBtn'
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedOkBtn','playerInfoOverlay','playerInfoPopover','playerInfoAvatar','playerInfoName','playerInfoSession','playerInfoWallet','playerInfoPoints','playerInfoStatus'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
@@ -115,6 +115,45 @@
     const scale=Math.min(1,(innerWidth-20)/Math.max(1,stage.scrollWidth),availableHeight/Math.max(1,stage.scrollHeight));
     stage.style.setProperty('--stage-scale',String(scale));stage.style.marginBottom=`${stage.scrollHeight*(scale-1)}px`;
   }
+
+  function closePlayerInfo(){
+    if(els.playerInfoOverlay)els.playerInfoOverlay.hidden=true;
+  }
+  function positionPlayerInfo(chip,seat){
+    if(!chip||!els.playerInfoPopover||!els.playerInfoOverlay||els.playerInfoOverlay.hidden)return;
+    const rect=chip.getBoundingClientRect(),pop=els.playerInfoPopover.getBoundingClientRect(),pad=12;
+    let left=rect.left+rect.width/2-pop.width/2;left=Math.max(pad,Math.min(innerWidth-pop.width-pad,left));
+    let top=seat==='player'?rect.top-pop.height-12:rect.bottom+12;
+    if(top<pad)top=rect.bottom+12;
+    if(top+pop.height>innerHeight-pad)top=Math.max(pad,rect.top-pop.height-12);
+    els.playerInfoPopover.style.left=`${Math.round(left)}px`;els.playerInfoPopover.style.top=`${Math.round(top)}px`;
+  }
+  function openPlayerInfo(chip){
+    if(!chip||!els.playerInfoOverlay)return;
+    const seat=chip.dataset.playerInfo||'player',identity=chip.querySelector('.player-identity'),component=chip.closest('.player-status-component');
+    const name=identity?.querySelector('strong')?.textContent?.trim()|| (seat==='player'?t('you'):t('computer'));
+    const session=identity?.querySelector('.session-stats')?.textContent?.trim()||'';
+    const wallet=identity?.querySelector('.ranked-wallet-line')?.textContent?.trim()||'';
+    const score=chip.querySelector('.score-pill b')?.textContent?.trim()||'0';
+    const avatar=chip.querySelector('.avatar')?.textContent?.trim()|| (seat==='player'?'YOU':'OPP');
+    const statuses=[component?.querySelector('.multiplier-chip')?.textContent?.trim(),component?.querySelector('.go-count-badge')?.textContent?.trim(),identity?.querySelector('#turnLabel,#aiThinking')?.textContent?.trim()].filter(Boolean);
+    els.playerInfoAvatar.textContent=avatar;els.playerInfoName.textContent=name;els.playerInfoSession.textContent=session;
+    els.playerInfoWallet.textContent=wallet;els.playerInfoWallet.hidden=!wallet;
+    els.playerInfoPoints.textContent=`${score} ${t('points')}`;
+    els.playerInfoStatus.textContent=statuses.join(' · ');els.playerInfoStatus.hidden=!statuses.length;
+    els.playerInfoPopover.dataset.seat=seat;els.playerInfoOverlay.hidden=false;
+    requestAnimationFrame(()=>positionPlayerInfo(chip,seat));
+  }
+  function setupPlayerInfoPopovers(){
+    for(const chip of document.querySelectorAll('.player-chip[data-player-info]')){
+      chip.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();openPlayerInfo(chip);});
+      chip.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;event.preventDefault();event.stopPropagation();openPlayerInfo(chip);});
+    }
+    els.playerInfoOverlay?.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();});
+    globalThis.addEventListener?.('resize',closePlayerInfo,{passive:true});globalThis.addEventListener?.('scroll',closePlayerInfo,{passive:true,capture:true});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!els.playerInfoOverlay?.hidden)closePlayerInfo();});
+  }
+  setupPlayerInfoPopovers();
 
   function otherPlayerId(playerId){
     if(playerId===PLAYER_A)return PLAYER_B;

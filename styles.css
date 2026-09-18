@@ -641,3 +641,20 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   #shakeDialog .shake-cards .magnified-card{width:56px}
   #shakeDialog .go-btn,#shakeDialog .stop-btn{padding:9px 12px}
 }
+
+.player-chip[data-player-info]{cursor:pointer;transition:border-color .14s ease,box-shadow .14s ease,transform .14s ease}
+.player-chip[data-player-info]:hover,.player-chip[data-player-info]:focus-visible{border-color:rgba(255,215,136,.82);box-shadow:0 0 0 2px rgba(255,210,120,.18),0 10px 28px rgba(0,0,0,.42);outline:none}
+.player-chip[data-player-info]:active{transform:scale(.985)}
+.player-info-overlay{position:fixed;inset:0;z-index:2400;background:rgba(0,0,0,.16);touch-action:manipulation}
+.player-info-overlay[hidden]{display:none!important}
+.player-info-popover{position:fixed;width:min(430px,calc(100vw - 28px));display:grid;grid-template-columns:88px minmax(0,1fr);gap:18px;align-items:center;padding:20px 22px;border:2px solid rgba(235,190,104,.76);border-radius:20px;background:linear-gradient(180deg,rgba(39,25,17,.98),rgba(17,11,8,.98));box-shadow:0 24px 70px rgba(0,0,0,.66),inset 0 1px rgba(255,255,255,.08);color:#fff;pointer-events:none}
+.player-info-avatar{width:82px;height:82px;border-radius:50%;display:grid;place-items:center;border:3px solid #b88850;background:radial-gradient(circle at 40% 30%,#a86e50,#43251b 62%,#17100d);font:900 20px/1 system-ui,sans-serif}
+.player-info-popover[data-seat="player"] .player-info-avatar{background:radial-gradient(circle at 40% 30%,#c77f5e,#642d1e 60%,#21100c)}
+.player-info-copy{min-width:0;display:grid;gap:5px;font-family:system-ui,sans-serif}
+.player-info-copy strong{font-size:clamp(25px,3vw,34px);line-height:1.05;overflow-wrap:anywhere;color:#fff5df}
+.player-info-copy>span{font-size:clamp(15px,1.8vw,19px);color:#e0cfb1}
+.player-info-copy .player-info-wallet{color:#ffd877;font-weight:900}
+.player-info-copy .player-info-points{color:#fff;font-weight:800}
+.player-info-copy .player-info-status{color:#f0b66c;font-weight:750;min-height:1.2em}
+.player-info-copy small{margin-top:5px;color:#9d8a70;font-size:11px}
+@media(max-width:700px){.player-info-popover{grid-template-columns:64px minmax(0,1fr);gap:12px;padding:15px 16px}.player-info-avatar{width:60px;height:60px;font-size:15px}.player-info-copy strong{font-size:23px}.player-info-copy>span{font-size:14px}}

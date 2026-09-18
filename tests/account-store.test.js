@@ -52,3 +52,24 @@ test('duplicate game settlement is idempotent',async()=>{
 test('common and too-short passwords are rejected',()=>{
   assert.ok(passwordProblem('12345'));assert.ok(passwordProblem('qwerty'));assert.ok(passwordProblem('short7'));assert.equal(passwordProblem('UsefulPass9'),null);
 });
+
+test('daily award records Wallet before/after and acknowledgement never removes the credited Coins',async()=>{
+  const store=makeStore('2026-09-18T19:24:00.000Z');
+  const registered=await (await store.fetch(post('/register',{email:'wallet-transition@example.com',nickname:'WalletTransition',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const account=await store.accountById(registered.account.id);
+  account.walletCoins=539;
+  account.lastDailyAwardAt='2026-09-17T19:24:00.000Z';
+  account.lastDailyAwardDate='2026-09-17';
+  account.pendingNotices=[];
+  await store.storage.put(`account:${account.id}`,account);
+  const me=await (await store.fetch(new Request('https://accounts/me',{headers:{Authorization:`Bearer ${registered.session.token}`,'x-gostop-timezone':'America/Chicago'}}))).json();
+  assert.equal(me.account.walletCoins,639);
+  const daily=me.notices.find(item=>item.type==='daily-login');
+  assert.ok(daily);
+  assert.equal(daily.coins,100);
+  assert.equal(daily.walletBefore,539);
+  assert.equal(daily.walletAfter,639);
+  const ack=await (await store.fetch(post('/notices/ack',{noticeId:daily.id},{Authorization:`Bearer ${registered.session.token}`}))).json();
+  assert.equal(ack.account.walletCoins,639);
+  assert.equal((await store.accountById(account.id)).walletCoins,639);
+});
