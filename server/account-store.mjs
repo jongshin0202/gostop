@@ -104,8 +104,8 @@ export class AccountStore{
       if(changed)await this.storage.put(`account:${account.id}`,account);
       return false;
     }
-    const notice={id:`daily:${today}`,type:'daily-login',coins:100,createdAt,displayAt:'first-game',timeZone};
-    account.lastDailyAwardDate=today;account.lastDailyAwardAt=createdAt;account.dailyAwardTimeZone=timeZone;account.walletCoins+=100;account.pendingNotices=(Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>item.id!==notice.id);account.pendingNotices.push(notice);await this.storage.put(`account:${account.id}`,account);
+    const walletBefore=Number(account.walletCoins)||0,walletAfter=walletBefore+100,notice={id:`daily:${today}`,type:'daily-login',coins:100,walletBefore,walletAfter,createdAt,displayAt:'first-game',timeZone};
+    account.lastDailyAwardDate=today;account.lastDailyAwardAt=createdAt;account.dailyAwardTimeZone=timeZone;account.walletCoins=walletAfter;account.pendingNotices=(Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>item.id!==notice.id);account.pendingNotices.push(notice);await this.storage.put(`account:${account.id}`,account);
     await this.appendLedger(account.id,{type:'daily-login',amount:100,createdAt,day:today,timeZone});
     return true;
   }
