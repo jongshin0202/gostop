@@ -2073,6 +2073,22 @@ test('Online Go/Stop boundary awaits separated and multiple milestones without d
   assert.deepEqual(duplicateOrder,['go-stop']);
 });
 
+test('ranked Go/Stop dialog shows authoritative Stop payout and the next Go count',async()=>{
+  for(const [goCount,expectedLabel] of [[0,'GO'],[1,'2 GO'],[2,'3 GO']]){
+    const isolated=loadCurrentGame();
+    const player=isolated.api.makePlayer({go:goCount,firstPpeokPoints:7});
+    isolated.api.setState(isolated.api.makeState({
+      human:player,
+      ai:isolated.api.makePlayer(),
+      pendingDecision:{type:'goStopDecision',playerId:'playerA',score:7,previousGoScore:0,choices:['go','stop']}
+    }));
+    await isolated.api.presentOnlineGoStopDecision(isolated.api.getState().pendingDecision);
+    assert.equal(isolated.elements.get('goBtn').textContent,expectedLabel);
+    const expectedStop=7+(goCount>0&&goCount<3?goCount:0);
+    assert.match(isolated.elements.get('stopPreviewValue').textContent,new RegExp(String(expectedStop)));
+  }
+});
+
 test('Stripe milestone titles are set-specific in Korean and remain generic elsewhere',()=>{
   const i18n=require('../i18n.js'),keys=['threeStripesRed','threeStripesBlue','threeStripesGrass'];
   assert.deepEqual(keys.map(key=>i18n.translate('ko',key)),['홍단!','청단!','초단!']);
