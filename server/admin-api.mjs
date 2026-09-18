@@ -197,9 +197,9 @@ async function correctGame(store,request,id,body){
   const reason=reasonOf(body),key=`game:${id}`,game=await store.storage.get(key);if(!game)return json({ok:false,error:{code:'GAME_NOT_FOUND',message:'Game not found.'}},404);
   const before=clone(game),createdAt=store.now(),walletAdjustments=Array.isArray(body.walletAdjustments)?body.walletAdjustments:[],applied=[];
   for(const item of walletAdjustments){const accountId=clean(item.accountId),delta=Math.trunc(Number(item.delta));if(!accountId||!Number.isFinite(delta)||!delta)continue;const account=await store.accountById(accountId);if(!account)continue;account.walletCoins=(Number(account.walletCoins)||0)+delta;account.updatedAt=createdAt;await store.storage.put(`account:${accountId}`,account);await store.appendLedger(accountId,{type:'admin-game-correction',amount:delta,gameId:id,reason,createdAt});applied.push({accountId,delta,walletAfter:account.walletCoins});}
-  const patch=body.patch&&typeof body.patch==='object'?body.patch:{},allowed=['finalPoints','winnerPlayerId','settlementType','fairPoints','penaltyCoins','opponentRewardCoins','reason'];
-  const effective={};for(const name of allowed)if(Object.hasOwn(patch,name))effective[name]=patch[name];
-  const correction={id:`correction_${randomId(store)}`,reason,createdAt,patch:effective,walletAdjustments:applied};game.adminCorrections=[...(game.adminCorrections||[]),correction];game.adminOverride={...(game.adminOverride||{}),...effective};await store.storage.put(key,game);
+  const patch=body.patch&&typeof body.patch==='object'?body.patch:{},allowed=['mode','recordedAt','winnerPlayerId','finalPoints','scores','participants','computer','settlementType','fairPoints','penaltyCoins','opponentRewardCoins','reason','quitterScore','opponentScore','firstOfMonth','settlementReasons','formulaSteps'];
+  const effective={};for(const name of allowed)if(Object.hasOwn(patch,name))effective[name]=clone(patch[name]);
+  const correction={id:`correction_${randomId(store)}`,reason,createdAt,patch:effective,walletAdjustments:applied};game.adminCorrections=[...(game.adminCorrections||[]),correction];game.adminOverride={...(game.adminOverride||{}),...effective};for(const [name,value] of Object.entries(effective))game[name]=clone(value);await store.storage.put(key,game);
   await audit(store,request,{action:'game-correction',target:key,reason,before:gameSummary(before),after:gameSummary(game),details:correction});return json({ok:true,game,correction,leaderboardRebuildRecommended:true});
 }
 
