@@ -122,7 +122,7 @@
   function pendingDailyNotice(){return pendingAccountNotices.find(item=>item.type==='daily-login')||null;}
   function displayedWalletCoins(){
     if(!account)return null;
-    const notice=pendingDailyNotice();if(!notice)return account.walletCoins;
+    const notice=pendingDailyNotice(),holdForVisibleMenu=!!notice&&!!overlay&&!overlay.hidden;if(!holdForVisibleMenu)return account.walletCoins;
     const before=Number(notice.walletBefore);if(Number.isFinite(before))return before;
     const current=Number(account.walletCoins),coins=Math.max(0,Number(notice.coins)||100);return Number.isFinite(current)?Math.max(0,current-coins):account.walletCoins;
   }
