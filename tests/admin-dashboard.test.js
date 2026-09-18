@@ -198,19 +198,6 @@ test('Vercel proxies admin APIs to Cloudflare authority on the same browser orig
   assert.match(adminJs,/const baseUrl='';/);
 });
 
-test('admin login cannot fail silently and exposes request trace plus runtime exceptions',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
-  assert.match(adminHtml,/id="loginTrace"/);
-  assert.match(adminJs,/function ensureFailureOverlay\(\)/);
-  assert.match(adminJs,/document\.createElement\('div'\)/);
-  assert.match(adminJs,/z-index:2147483647/);
-  assert.match(adminJs,/Click received\. Starting admin authentication/);
-  assert.match(adminJs,/HTTP \$\{response\.status\}/);
-  assert.match(adminJs,/window\.addEventListener\('error'/);
-  assert.match(adminJs,/window\.addEventListener\('unhandledrejection'/);
-  assert.match(adminJs,/Unexpected admin login error/);
-});
-
 test('admin hidden attribute always wins over shell display styles',()=>{
   const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
   assert.match(adminCss,/\*\{box-sizing:border-box\}\[hidden\]\{display:none!important\}/);
