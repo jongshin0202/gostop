@@ -33,10 +33,35 @@ test('pause allowance resets to two for each human when game sequence changes',a
   const {core,a,b}=await onlineRoom();core.room.rankFlow.pauseRemaining[a.playerId]=0;core.room.rankFlow.pauseRemaining[b.playerId]=1;core.room.gameSequence++;core.resetPauseBudgetForCurrentGame();assert.equal(core.room.rankFlow.pauseRemaining[a.playerId],2);assert.equal(core.room.rankFlow.pauseRemaining[b.playerId],2);
 });
 
-test('online quit asks opponent; acceptance ends session without abandonment',async()=>{
-  const {core,sa,sb}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;
+test('online quit asks opponent; acceptance ends session normally with no force-quit record',async()=>{
+  const {core,sa,sb,accountStore}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;
+  const forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
   await core.handle(sa,flow('quit-request',revision,{type:'quitGame'}));const request=sb.last('snapshot').snapshot.sessionFlow.quitRequest;assert.ok(request);assert.equal(request.requestedByYou,false);assert.equal(core.room.sessionFlow.ended,false);
   const accepted=await core.handle(sb,flow('quit-accept',revision,{type:'respondQuit',requestId:request.requestId,accept:true}));assert.equal(accepted.type,'actionAccepted');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.rankFlow.abandonment,null);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,forceQuitsBefore);
+});
+
+test('quit after a completed ranked game ends immediately as a normal quit with no abandonment',async()=>{
+  const {core,a,sa,accountStore}=await onlineRoom(),record=core.authority.exportMatch(core.room.matchId),seatId=record.seatByPlayer[a.playerId];
+  record.state.terminalResult={type:'stop',winnerId:seatId,finalPoints:7};record.state.winner=seatId;record.completedAt=now();
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);core.room.terminalResult=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:a.playerId}).terminalResult;core.room.status='completed';await core.persist();
+  const forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,revision=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:a.playerId}).revision;
+  const result=await core.handle(sa,flow('quit-after-game',revision,{type:'quitGame'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,a.playerId);assert.equal(core.room.rankFlow.abandonment,null);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,forceQuitsBefore);
+});
+
+test('disconnect timeout before player first turn begins is a normal quit with zero force-quit settlement',async()=>{
+  const {core,a,b,sa,sb,accountStore}=await onlineRoom(),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?b:a,socket=quitter.playerId===a.playerId?sa:sb,side=quitter.seatId==='playerA'?'human':'ai';
+  assert.equal(Number(state[side]?.turnsTaken)||0,0);assert.notEqual(activeSeat,quitter.seatId);assert.equal(core.isBeforeFirstTurn(quitter.playerId),true);
+  const walletBefore=core.room.participants.find(item=>item.playerId===quitter.playerId).walletCoins,forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
+  await core.disconnect(socket);assert.ok(core.room.rankFlow.disconnectDeadlines[quitter.playerId]);
+  core.now=()=> '2026-09-15T04:46:01.000Z';await core.alarm();
+  assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,quitter.playerId);assert.equal(core.room.rankFlow.abandonment,null);assert.equal(core.room.status,'ended');
+  assert.equal(core.room.participants.find(item=>item.playerId===quitter.playerId).walletCoins,walletBefore);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,forceQuitsBefore);
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'&&call.body.summary?.reason==='pre-first-turn-disconnect'));
 });
 
 test('online quit decline schedules requester exit after current game',async()=>{
