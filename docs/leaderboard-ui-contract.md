@@ -9,4 +9,4 @@
 - Score is Total Coins Won divided by Games Played.
 - Global and Monthly leaderboards are public: viewing them never requires authentication. Manual Return always goes to the main menu.
 - A valid saved browser session restores automatically on page load.
-- Main-menu attract mode begins after 5 seconds of inactivity, starts on Global, alternates Global/Monthly every 5 seconds, and any interaction returns to the main menu.
+- Main-menu attract mode cycle is Main Menu 10 seconds → Global 5 seconds → Monthly 5 seconds → Main Menu, repeating until user interaction. Any interaction returns control to the main menu.
