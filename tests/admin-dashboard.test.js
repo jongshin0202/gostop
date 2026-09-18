@@ -160,7 +160,7 @@ test('admin login cannot fail silently and exposes request trace plus runtime ex
 
 test('admin hidden attribute always wins over shell display styles',()=>{
   const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
-  assert.match(adminCss,/\[hidden\]\{display:none!important\}/);
+  assert.match(adminCss,/\*\{box-sizing:border-box\}\[hidden\]\{display:none!important\}/);
   assert.match(adminCss,/\.login-shell\{[^}]*display:grid/);
   assert.match(adminCss,/\.app-shell\{[^}]*display:grid/);
 });
