@@ -58,13 +58,13 @@
 
   async function api(path,{method='GET',body}={}){
     const requestUrl=`${baseUrl}/api/admin${path}`;
-    const trace=document.getElementById('loginTrace');if(trace)trace.textContent=`Requesting ${requestUrl}…`;
+    const trace=document.getElementById('loginTrace');if(trace)trace.textContent='Connecting to the game server…';
     let response;
     try{response=await fetch(requestUrl,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});}
-    catch(error){if(trace)trace.textContent=`Network failure before HTTP response: ${error?.message||error}`;throw error;}
+    catch(error){if(trace)trace.textContent='Could not reach the game server.';throw error;}
     let textBody='';try{textBody=await response.text();}catch(_){}
     let data={};if(textBody){try{data=JSON.parse(textBody);}catch(_){}}
-    if(trace)trace.textContent=`HTTP ${response.status} from ${requestUrl}`;
+    if(trace)trace.textContent=response.ok?'Connected to the game server.':'The game server returned an error.';
     if(!response.ok||data.ok===false){const error=new Error(data?.error?.message||textBody.slice(0,300)||`Request failed (${response.status})`);error.code=data?.error?.code||'HTTP_ERROR';error.status=response.status;error.responseBody=textBody.slice(0,1000);throw error;}
     return data;
   }
@@ -126,13 +126,13 @@
     catch(error){
       sessionStorage.removeItem(TOKEN_KEY);token='';$('adminLogin').hidden=false;$('adminApp').hidden=true;
       const message=error?.code==='ADMIN_AUTH_REQUIRED'||error?.status===401
-        ?'Admin token rejected. Enter the exact value currently stored in Cloudflare as ADMIN_TOKEN.'
+        ?'The admin password was not accepted. Check it and try again.'
         :error?.code==='ADMIN_NOT_CONFIGURED'||error?.status===503
-          ?'ADMIN_TOKEN is not active on the Cloudflare Worker yet. Save/deploy the secret in Cloudflare and try again.'
+          ?'Admin access is not ready on the game server yet. Try again after the server setup is complete.'
           :error?.code==='ADMIN_ORIGIN_NOT_ALLOWED'||error?.status===403
-            ?'This admin page origin is not allowed by the Cloudflare Worker.'
+            ?'This admin page is not allowed to connect to the game server.'
             :error?.name==='TypeError'
-              ?'The browser could not reach the GoStop authority. This usually means a network, CORS, or Worker routing problem.'
+              ?'The admin page could not reach the game server. Check your connection and try again.'
               :(error?.message||'Could not connect to the admin server.');
       $('loginError').textContent=message;showFailureDialog(error,message);return false;
     }
@@ -401,7 +401,7 @@
 
   async function submitAdminLogin(){
     try{
-      token=$('adminToken').value.trim();sessionStorage.setItem(TOKEN_KEY,token);$('loginError').textContent='';const trace=document.getElementById('loginTrace');if(trace)trace.textContent='Click received. Starting admin authentication…';await authenticate();
+      token=$('adminToken').value.trim();sessionStorage.setItem(TOKEN_KEY,token);$('loginError').textContent='';const trace=document.getElementById('loginTrace');if(trace)trace.textContent='Checking your admin password…';await authenticate();
     }catch(error){
       showFailureDialog(error,`Unexpected admin login error: ${error?.message||error}`);
     }
@@ -411,7 +411,7 @@
   $('adminToken').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();submitAdminLogin();}});
   $('adminLogout').addEventListener('click',()=>{token='';sessionStorage.removeItem(TOKEN_KEY);$('adminApp').hidden=true;$('adminLogin').hidden=false;$('adminToken').value='';});
   $('adminNav').addEventListener('click',event=>{const btn=event.target.closest('[data-view]');if(btn)selectView(btn.dataset.view);});
-  document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit-json]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){$('detailTitle').textContent='Audit Record';$('detailBody').innerHTML=`<pre class="json">${esc(JSON.stringify(JSON.parse(decodeURIComponent(auditBtn.dataset.auditJson)),null,2))}</pre>`;$('detailDialog').showModal();}});
+  document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){const record=auditById.get(String(auditBtn.dataset.audit));if(!record)return;$('detailTitle').textContent='Admin Change Details';$('detailBody').innerHTML=`<section class="friendly-section">${friendlyData(record)}</section>`;$('detailDialog').showModal();}});
   $('detailClose').addEventListener('click',()=>$('detailDialog').close());
   $('failureOk').addEventListener('click',()=>$('failureOverlay').hidden=true);
   $('refreshBtn').addEventListener('click',refreshCurrent);$('exportBtn').addEventListener('click',exportCsv);
