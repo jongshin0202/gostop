@@ -21,7 +21,7 @@ test('saved authenticated sessions restore automatically and transient refresh f
   assert.match(source,/authRestorePromise=refreshAccount\(\)/);
 });
 
-test('worker accepts first-party production and GoStop Vercel preview origins',async()=>{
+test('worker accepts first-party origins and forwards Cloudflare timezone for local daily rewards',async()=>{
   const {isAllowedOrigin}=await import('../server/worker.mjs');
   const env={ALLOWED_ORIGINS:''};
   assert.equal(isAllowedOrigin('https://gostoplive.com',env),true);
@@ -29,6 +29,9 @@ test('worker accepts first-party production and GoStop Vercel preview origins',a
   assert.equal(isAllowedOrigin('https://gostop-abc-jwshin1-5345s-projects.vercel.app',env),true);
   assert.equal(isAllowedOrigin('https://unrelated-project.vercel.app',env),false);
   assert.equal(isAllowedOrigin('https://evil.example',env),false);
+  assert.match(worker,/request\.cf\?\.timezone/);
+  assert.match(worker,/x-gostop-timezone/);
+  assert.match(worker,/\['x-gostop-country','x-gostop-region','x-gostop-timezone'\]/);
 });
 
 test('leaderboards are public, render immediately, and page controls work even if data cannot load',()=>{
