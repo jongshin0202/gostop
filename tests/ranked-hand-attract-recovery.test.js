@@ -16,8 +16,8 @@ test('ranked hand remains blocked during active physical motion and session-flow
   assert.match(app,/flow\?\.ended\|\|flow\?\.replayReady\?\.you\|\|flow\?\.newGameRequest\|\|flow\?\.opponentReconnectUntil\|\|els\.quitConfirmDialog\?\.open\|\|presentation\.activePhysicalMotions>0/);
 });
 
-test('seven-second main-menu attract eligibility ignores stale gameplay dialogs but blocks account warnings',()=>{
-  assert.match(ranked,/const ATTRACT_IDLE_MS=7000/);
+test('ten-second main-menu attract eligibility ignores stale gameplay dialogs but blocks account warnings',()=>{
+  assert.match(ranked,/const ATTRACT_IDLE_MS=10000/);
   assert.match(ranked,/function mainMenuIdleEligible\(\)\{return !overlay\.hidden&&leaderboardScreen\.hidden&&onlinePanel\.hidden&&!authDialog\.open&&!registrationPolicyDialog\.open&&!successDialog\.open&&!requestDialog\.open&&!accountNoticeDialog\.open;\}/);
   assert.doesNotMatch(ranked,/mainMenuIdleEligible\(\)[^\n]*document\.querySelector\('dialog\[open\]'\)/);
 });
@@ -32,7 +32,7 @@ test('ranked click bookkeeping is in lexical scope for humanPlay',()=>{
   assert.ok(actions<production,'onlineActions must not be production-branch scoped');
 });
 
-test('attract mode uses a persistent seven-second visibility-aware idle watcher',()=>{
+test('attract mode uses a persistent ten-second visibility-aware idle watcher',()=>{
   assert.match(ranked,/let lastMenuActivityAt=Date\.now\(\)/);
   assert.match(ranked,/function startAttractWatcher\(\)[\s\S]*setInterval\(\(\)=>\{[\s\S]*Date\.now\(\)-lastMenuActivityAt<ATTRACT_IDLE_MS[\s\S]*openLeaderboard\(true\)/);
   assert.match(ranked,/void openLeaderboard\(true\)/);
