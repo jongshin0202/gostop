@@ -43,6 +43,15 @@ test('online quit decline schedules requester exit after current game',async()=>
   const {core,a,sa,sb}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;await core.handle(sa,flow('quit-request-2',revision,{type:'quitGame'}));const request=sb.last('snapshot').snapshot.sessionFlow.quitRequest;await core.handle(sb,flow('quit-decline',revision,{type:'respondQuit',requestId:request.requestId,accept:false}));assert.equal(core.room.sessionFlow.ended,false);assert.equal(core.room.rankFlow.scheduledQuitBy,a.playerId);assert.equal(sa.last('snapshot').snapshot.sessionFlow.scheduledQuitByYou,true);
 });
 
+test('ranked Solo disconnect freezes the five-point settlement and stops the computer during grace',async()=>{
+  const {core,user,socket}=await soloRoom(),bot=core.room.participants.find(item=>item.bot),record=core.authority.exportMatch(core.room.matchId),botSide=bot.seatId==='playerA'?'human':'ai';
+  const singles=globalThis.GoStopEngine.masterDeck.filter(item=>item.type==='pi'&&!item.flags.includes('doublePi')).slice(0,14);assert.equal(singles.length,14);record.state[botSide].captured=structuredClone(singles);record.state[botSide].firstPpeokPoints=0;record.state[botSide].go=0;record.state[botSide].shakes=0;record.state[botSide].shakeMultiplier=1;record.state.matchContext.nagariCarryPower=0;
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);await core.persist();assert.equal(core.calculateDisconnectSettlement(user.playerId).fairPoints,5);
+  await core.disconnect(socket);assert.equal(core.room.rankFlow.disconnectSettlements[user.playerId].fairPoints,5);const before=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).revision;
+  const changed=core.authority.exportMatch(core.room.matchId);changed.state[botSide].firstPpeokPoints=20;core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(changed);assert.equal(core.calculateDisconnectSettlement(user.playerId).fairPoints,5);
+  const frozenRevision=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).revision;await core.advanceBot();assert.equal(core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).revision,frozenRevision);assert.equal(before,frozenRevision);
+});
+
 test('ranked Solo browser return during reconnect grace restores the same seat and game with no coin settlement',async()=>{
   const {core,user,socket,accountStore}=await soloRoom();
   const oldMatch=core.room.matchId,oldSequence=core.room.gameSequence,oldWallet=core.room.participants.find(item=>item.playerId===user.playerId).walletCoins;
