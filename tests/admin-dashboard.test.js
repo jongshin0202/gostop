@@ -94,7 +94,7 @@ test('admin dashboard uses authoritative GoStop server configuration with Worker
 test('admin login uses explicit button handler, visible connection feedback, and cache-busted script',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
-  assert.match(adminHtml,/admin\.js\?v=20260918-7/);
+  assert.match(adminHtml,/admin\.js\?v=20260918-8/);
   assert.match(adminJs,/openDashboardBtn'\)\.addEventListener\('click',submitAdminLogin\)/);
   assert.match(adminJs,/Connecting…/);
   assert.match(adminJs,/Connecting securely to the GoStop authority/);
@@ -129,7 +129,7 @@ test('admin authentication failure uses a deterministic in-page diagnostic overl
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.match(adminHtml,/Admin build 2026-09-18\.7/);
+  assert.match(adminHtml,/Admin build 2026-09-18\.8/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
     const headers=bySource.get(source);assert.ok(headers,source);
@@ -143,4 +143,17 @@ test('Vercel proxies admin APIs to Cloudflare authority on the same browser orig
   assert.ok((vercel.rewrites||[]).some(rule=>rule.source==='/api/admin/:path*'&&rule.destination==='https://gostop-authority.jwshin1.workers.dev/api/admin/:path*'));
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/const baseUrl='';/);
+});
+
+test('admin login cannot fail silently and exposes request trace plus runtime exceptions',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminHtml,/id="loginTrace"/);
+  assert.match(adminJs,/function ensureFailureOverlay\(\)/);
+  assert.match(adminJs,/document\.createElement\('div'\)/);
+  assert.match(adminJs,/z-index:2147483647/);
+  assert.match(adminJs,/Click received\. Starting admin authentication/);
+  assert.match(adminJs,/HTTP \$\{response\.status\}/);
+  assert.match(adminJs,/window\.addEventListener\('error'/);
+  assert.match(adminJs,/window\.addEventListener\('unhandledrejection'/);
+  assert.match(adminJs,/Unexpected admin login error/);
 });
