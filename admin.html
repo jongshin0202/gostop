@@ -34,6 +34,9 @@
         <button data-view="rankings">Rankings</button>
         <button data-view="leaderboards">Leaderboards</button>
         <button data-view="sessions">Sessions</button>
+        <button data-view="geography">Geography / IP</button>
+        <button data-view="abuse">Fraud / Abuse</button>
+        <button data-view="system">System</button>
         <button data-view="audit">Audit Log</button>
       </nav>
       <div class="side-footer">
@@ -173,6 +176,28 @@
           </div>
           <div id="sessionsTable"></div>
         </section>
+      </section>
+
+      <section id="view-geography" class="view">
+        <div class="grid-two">
+          <section class="card"><h2>Top Countries</h2><div id="geoCountries"></div></section>
+          <section class="card"><h2>Top States / Regions</h2><div id="geoRegions"></div></section>
+        </div>
+        <div class="grid-two" style="margin-top:16px">
+          <section class="card"><h2>Top Cities</h2><div id="geoCities"></div></section>
+          <section class="card"><h2>IP Addresses</h2><p class="muted">Raw IP data is admin-only.</p><div id="geoIps"></div></section>
+        </div>
+      </section>
+
+      <section id="view-abuse" class="view">
+        <div class="grid-two">
+          <section class="card"><div class="section-head"><div><h2>High Abandon Signals</h2><p class="muted">Diagnostic only. No automatic enforcement.</p></div></div><div id="abuseAbandons"></div></section>
+          <section class="card"><div class="section-head"><div><h2>Shared IP Signals</h2><p class="muted">Shared IPs can be legitimate; use for investigation only.</p></div></div><div id="abuseIps"></div></section>
+        </div>
+      </section>
+
+      <section id="view-system" class="view">
+        <section class="card"><div class="section-head"><div><h2>Server / Storage Health</h2><p class="muted">Protected Worker and authoritative AccountStore status.</p></div></div><div id="systemCards" class="metric-grid"></div><pre id="systemJson" class="json"></pre></section>
       </section>
 
       <section id="view-audit" class="view">
