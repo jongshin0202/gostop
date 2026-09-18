@@ -13,8 +13,8 @@
       <div class="brand-mark">GSL</div>
       <p class="eyebrow">GoStop Live!</p>
       <h1>Server Admin</h1>
-      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p><p class="muted mono" id="adminBuild">Admin build 2026-09-18.10</p>
-      <label>Admin Token<input id="adminToken" type="password" autocomplete="current-password" required></label>
+      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p><p class="muted mono" id="adminBuild">Admin build 2026-09-18.11</p>
+      <label>Admin Password<input id="adminToken" type="password" autocomplete="current-password" required></label>
       <button id="openDashboardBtn" class="primary" type="button">Open Dashboard</button>
       <p id="loginError" class="error" aria-live="polite"></p><p id="loginTrace" class="muted mono" aria-live="polite"></p>
     </form>
@@ -197,7 +197,7 @@
       </section>
 
       <section id="view-system" class="view">
-        <section class="card"><div class="section-head"><div><h2>Server / Storage Health</h2><p class="muted">Protected Worker and authoritative AccountStore status.</p></div></div><div id="systemCards" class="metric-grid"></div><pre id="systemJson" class="json"></pre></section>
+        <section class="card"><div class="section-head"><div><h2>Server / Storage Health</h2><p class="muted">Plain-language status of the game server and saved data.</p></div></div><div id="systemCards" class="metric-grid"></div><div id="systemDetails"></div></section>
       </section>
 
       <section id="view-audit" class="view">
@@ -215,31 +215,26 @@
   </dialog>
   <div id="failureOverlay" class="failure-overlay" hidden>
     <section class="failure-card" role="alertdialog" aria-modal="true" aria-labelledby="failureTitle">
-      <div class="dialog-head"><h2 id="failureTitle">Admin Connection Failed</h2></div>
+      <div class="dialog-head"><h2 id="failureTitle">Could Not Open Admin</h2></div>
       <div class="failure-body">
         <p id="failureMessage" class="error"></p>
-        <div class="detail-grid">
-          <div class="detail-box"><span>Error Code</span><strong id="failureCode">—</strong></div>
-          <div class="detail-box"><span>HTTP Status</span><strong id="failureStatus">—</strong></div>
-          <div class="detail-box"><span>Server</span><strong id="failureServer" class="mono">—</strong></div>
-        </div>
-        <p class="muted">The admin dashboard has not opened. No admin action was performed.</p>
+        <p class="muted">No admin change was performed. Check the message above and try again.</p>
         <div class="dialog-actions"><button id="failureOk" class="primary" type="button">OK</button></div>
       </div>
     </section>
   </div>
 
   <dialog id="actionDialog" class="action-dialog">
-    <form id="actionForm" method="dialog">
-      <div class="dialog-head"><h2 id="actionTitle">Admin Action</h2><button value="cancel" class="ghost">Cancel</button></div>
+    <form id="actionForm">
+      <div class="dialog-head"><h2 id="actionTitle">Admin Action</h2><button id="actionCancelTop" type="button" class="ghost">Cancel</button></div>
       <div id="actionFields"></div>
       <label>Required reason<textarea id="actionReason" rows="3" required placeholder="Why is this admin change necessary?"></textarea></label>
       <p id="actionError" class="error"></p>
-      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button id="actionConfirm" value="default" class="danger">Confirm</button></div>
+      <div class="dialog-actions"><button id="actionCancelBottom" type="button" class="secondary">Cancel</button><button id="actionConfirm" type="submit" class="danger">Confirm</button></div>
     </form>
   </dialog>
 
   <script src="runtime-config.js"></script>
-  <script src="admin.js?v=20260918-9"></script>
+  <script src="admin.js?v=20260918-10"></script>
 </body>
 </html>
