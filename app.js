@@ -1909,7 +1909,7 @@
     els.resultTitle.textContent=winnerLabel;
     els.resultScore.textContent=scoreText;
     els.resultBreakdown.textContent=breakdown||'';
-    if(els.resultQuitBtn)els.resultQuitBtn.hidden=!onlineMode;
+    if(els.resultQuitBtn)els.resultQuitBtn.hidden=false;
     if(call!==t('conquer')&&els.resultCards&&typeof els.resultCards.replaceChildren==='function')els.resultCards.replaceChildren();
   }
 
@@ -2122,9 +2122,9 @@
   els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
   els.newGameNoBtn.addEventListener('click',()=>confirmNewGame(false));
   els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;startGame();}});
-  els.resultQuitBtn.addEventListener('click',()=>{if(!onlineMode)return;onlineQuitFromResult=true;if(els.resultDialog.open)els.resultDialog.close();els.quitConfirmTitle.textContent=t('resultQuit');els.quitConfirmMessage.textContent=t('resultQuitConfirm');els.quitConfirmDialog.showModal();});
-  els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromResult&&latestOnlineSnapshot?.terminalResult&&!els.resultDialog.open)els.resultDialog.showModal();onlineQuitFromResult=false;});
-  els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();els.soloStartOverlay.hidden=false;}});
+  els.resultQuitBtn.addEventListener('click',()=>{onlineQuitFromResult=true;if(els.resultDialog.open)els.resultDialog.close();els.quitConfirmTitle.textContent=t('resultQuitConfirm');els.quitConfirmMessage.textContent=t('resultQuit');els.quitConfirmDialog.showModal();});
+  els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromResult&&!els.resultDialog.open)els.resultDialog.showModal();onlineQuitFromResult=false;});
+  els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();onlineQuitFromResult=false;els.soloStartOverlay.hidden=false;}});
   els.cancelNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'cancelNewGame',requestId});});
   els.acceptNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'respondNewGame',requestId,accept:true});});
   els.rejectNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'respondNewGame',requestId,accept:false});});

@@ -106,6 +106,16 @@ export class RankedRoomCore extends RoomCore{
     return estimateFairDisconnectSettlement(state,{quitterSeatId:participant.seatId,opponentSeatId:opponent.seatId,gameId:this.currentGameId()});
   }
   calculatePenalty(playerId){return this.calculateDisconnectSettlement(playerId).fairPoints;}
+  isBeforeFirstTurn(playerId){
+    const state=this.engineState(),participant=this.room?.participants.find(item=>item.playerId===playerId);if(!state||!participant)return false;
+    const playerState=state[sideForSeat(participant.seatId)],activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+    return (Number(playerState?.turnsTaken)||0)===0&&activeSeat!==participant.seatId;
+  }
+  async endPreFirstTurnDisconnect(playerId){
+    if(!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return null;
+    this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.quitRequest=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};this.room.rankFlow.abandonment=null;
+    await this.endRankedSession('pre-first-turn-disconnect');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.status='ended';await this.persist();this.broadcastSnapshots();return {normalQuit:true,reason:'pre-first-turn-disconnect'};
+  }
   async abandon(playerId,reason='abandonment'){
     if(!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return null;
     const quitter=this.room.participants.find(item=>item.playerId===playerId);if(!quitter||quitter.bot||!quitter.accountId)return null;
@@ -128,7 +138,7 @@ export class RankedRoomCore extends RoomCore{
   async alarm(){
     await this.load();if(!this.room||this.room.sessionFlow.ended)return;const now=this.nowMs(),flow=this.room.rankFlow;
     if(flow.pause&&now>=flow.pause.until){flow.pause=null;await this.refreshInactivity();this.broadcastSnapshots();}
-    for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!participant.connected&&!this.room.terminalResult){await this.abandon(playerId,'disconnect-timeout');return;}}}
+    for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!participant.connected&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId)){await this.endPreFirstTurnDisconnect(playerId);return;}await this.abandon(playerId,'disconnect-timeout');return;}}}
     const inactivity=flow.inactivity;if(inactivity){if(now>=inactivity.abandonAt){await this.abandon(inactivity.playerId,'inactivity-timeout');return;}if(inactivity.phase!=='warning'&&now>=inactivity.warningAt){inactivity.phase='warning';inactivity.penaltyCoins=this.calculatePenalty(inactivity.playerId);this.broadcastSnapshots();}else if(inactivity.phase==='waiting'&&now>=inactivity.nudgeAt){inactivity.phase='nudge';this.broadcastSnapshots();}}
     await this.persist();await this.scheduleAlarm();
   }
