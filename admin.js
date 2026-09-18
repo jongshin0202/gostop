@@ -274,10 +274,10 @@
     if(f.type==='textarea')return `<label class="${full.trim()}">${esc(f.label)}${help}<textarea rows="${f.rows||4}" name="${esc(f.name)}" placeholder="${esc(f.placeholder||'')}">${esc(f.value??'')}</textarea></label>`;
     return `<label class="${full.trim()}">${esc(f.label)}${help}<input name="${esc(f.name)}" type="${esc(f.type||'text')}" value="${esc(f.value??'')}" placeholder="${esc(f.placeholder||'')}" ${f.step?`step="${esc(f.step)}"`:''}></label>`;
   }
-  function actionPrompt({title,fields=[],danger=true,confirmText='Confirm'}){
+  function actionPrompt({title,fields=[],danger=true,confirmText='Confirm',intro=''}){
     return new Promise(resolve=>{
       $('actionTitle').textContent=title;$('actionReason').value='';$('actionError').textContent='';
-      $('actionFields').innerHTML=`<div class="action-field-grid">${fields.map(actionFieldHtml).join('')}</div>`;
+      $('actionFields').innerHTML=`${intro?`<p class="correction-note">${esc(intro)}</p>`:''}<div class="action-field-grid">${fields.map(actionFieldHtml).join('')}</div>`;
       $('actionConfirm').className=danger?'danger':'primary';$('actionConfirm').textContent=confirmText;
       const dialog=$('actionDialog'),form=$('actionForm'),cancelTop=$('actionCancelTop'),cancelBottom=$('actionCancelBottom');let settled=false;
       const cleanup=()=>{form.removeEventListener('submit',submit);dialog.removeEventListener('close',closed);cancelTop.removeEventListener('click',cancel);cancelBottom.removeEventListener('click',cancel);};
@@ -344,7 +344,7 @@
     addAccount(g.accountId||g.account?.id,g.account?.nickname);
     addAccount(g.opponentAccountId||g.opponent?.id,g.opponent?.nickname||'Opponent');
     walletPlayers.forEach((p,index)=>fields.push({name:`wallet_${index}`,label:`${p.nickname} — Wallet Coin adjustment`,type:'number',value:'',placeholder:'0',help:'Enter only the Coin correction, for example 13 or -5. Leave blank for no Wallet change.'}));
-    const form=await actionPrompt({title:'Correct Game',fields,confirmText:'Save Correction'});if(!form)return null;
+    const form=await actionPrompt({title:'Correct Game',fields,confirmText:'Save Correction',intro:'Only values you change will be saved. Leave Wallet Coin adjustment fields blank for no Wallet change.'});if(!form)return null;
     const patch={};
     const addScalar=(field,current,convert=value=>value)=>{const raw=form[field]??'',next=convert(raw);if(changed(next,current))patch[field==='recordReason'?'reason':field]=next;};
     addScalar('mode',g.mode||'');
