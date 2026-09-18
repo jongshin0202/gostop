@@ -2093,8 +2093,9 @@ test('ranked new hands reset milestone history so Godori can animate again befor
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const transition=source.slice(source.indexOf("if(presentationEvents.some(event=>event.type==='newHandCreated'))"),source.indexOf("for(const event of presentationEvents)"));
   assert.match(transition,/presentation\.milestoneHistory=\{playerA:new Set\(\),playerB:new Set\(\)\}/);
-  const order=source.slice(source.indexOf("const completedTurn=presentationEvents.find"),source.indexOf("await driveOnline(snapshot,presentationEvents)"));
-  assert.ok(order.indexOf('await presentNewMilestones(completedTurn.actorId)')<order.indexOf("await driveOnline(snapshot,presentationEvents)"));
+  const milestoneAt=source.indexOf('await presentNewMilestones(completedTurn.actorId)');
+  const driveAt=source.indexOf('await driveOnline(snapshot,presentationEvents)',milestoneAt);
+  assert.ok(milestoneAt>=0&&driveAt>milestoneAt);
 });
 
 test('Stripe milestone titles are set-specific in Korean and remain generic elsewhere',()=>{
