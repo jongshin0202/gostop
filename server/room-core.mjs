@@ -79,7 +79,18 @@ export class RoomCore{
   async join(presentedCredential,account=null){
     if(!await this.load())throw new RoomError('ROOM_NOT_FOUND','Room does not exist or has expired.',404);
     if(this.room.sessionFlow?.ended||this.room.status==='ended')throw new RoomError('ROOM_NOT_FOUND','Room does not exist or has expired.',404);
-    if(presentedCredential&&await this.authenticate(presentedCredential))throw new RoomError('ALREADY_JOINED','This participant already owns a seat.',409);
+    if(presentedCredential){
+      const returning=await this.authenticate(presentedCredential);
+      if(returning){
+        if(returning.accountId&&account?.id&&returning.accountId!==account.id)throw new RoomError('ACCOUNT_MISMATCH','This room credential belongs to a different account.',403);
+        if(returning.accountId&&account?.id===returning.accountId){
+          returning.nickname=account.nickname||returning.nickname;
+          if(Number.isFinite(account.walletCoins))returning.walletCoins=account.walletCoins;
+          await this.persist();
+        }
+        return {...this.publicRoom(),playerId:returning.playerId,seatId:returning.seatId,credential:presentedCredential,profile:this.participantProfile(returning)};
+      }
+    }
     if(this.room.participants.length>=this.room.maxPlayers)throw new RoomError('ROOM_FULL','Room is full.',409);
     if(account?.id&&this.room.participants.some(item=>item.accountId===account.id))throw new RoomError('SAME_ACCOUNT','The same account cannot occupy both seats.',409);
     const credential=token(this.crypto),participant={playerId:randomId(this.crypto,'player'),seatId:'playerB',credentialHash:await tokenHash(this.crypto,credential),accountId:account?.id||null,nickname:account?.nickname||null,walletCoins:Number.isFinite(account?.walletCoins)?account.walletCoins:null,connected:false};this.room.participants.push(participant);
