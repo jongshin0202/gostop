@@ -12,10 +12,10 @@ test.before(async()=>{({RoomCore}=await import('../server/room-core.mjs'));({par
 const makeRoom=()=>new RoomCore({storage:new MemoryStorage(),cryptoApi:webcrypto,now:()=> '2026-09-12T00:00:00.000Z'});
 async function readyRoom(){const core=makeRoom(),a=await core.create('ABCDEFGHJK2345'),b=await core.join();return {core,a,b};}
 
-test('rooms create unique opaque identities, assign seats, join once, and reject a third player',async()=>{
+test('rooms create unique opaque identities, restore an owned seat by credential, and reject a third player',async()=>{
   const one=makeRoom(),two=makeRoom(),a=await one.create('ABCDEFGHJK2345'),other=await two.create('ABCDEFGHJK2346');
   assert.equal(a.seatId,'playerA');assert.notEqual(a.credential,other.credential);assert.match(a.credential,/^room_[a-f0-9]{64}$/);
-  await assert.rejects(one.join(a.credential),error=>error.code==='ALREADY_JOINED');
+  const restored=await one.join(a.credential);assert.equal(restored.playerId,a.playerId);assert.equal(restored.seatId,a.seatId);assert.equal(restored.credential,a.credential);
   const b=await one.join();assert.equal(b.seatId,'playerB');await assert.rejects(one.join(),error=>error.code==='ROOM_FULL');
   await assert.rejects(makeRoom().join(),error=>error.code==='ROOM_NOT_FOUND');
 });
