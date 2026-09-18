@@ -10,8 +10,51 @@
   const fmt=value=>Number(value||0).toLocaleString();
   const pct=value=>`${(Number(value||0)*100).toFixed(1)}%`;
   const date=value=>value?new Date(value).toLocaleString():'—';
-  const mono=value=>`<span class="mono">${esc(value||'—')}</span>`;
+  const mono=value=>`<span class="identifier">${esc(value||'—')}</span>`;
   const pill=(text,kind='')=>`<span class="pill ${kind}">${esc(text)}</span>`;
+  const FIELD_LABELS=Object.freeze({
+    id:'ID',accountId:'Player ID',accountIds:'Players',playerId:'Player ID',winnerPlayerId:'Winner',gameId:'Game ID',matchId:'Match ID',sessionId:'Session',
+    walletCoins:'Wallet Coins',walletAfter:'Wallet After',walletDelta:'Coin Change',coinsWon:'Coins Won',coinsLost:'Coins Lost',gamesPlayed:'Games Played',
+    finalPoints:'Final Points',fairPoints:'Fair Points',rawScore:'Raw Score',settlementType:'Settlement Type',settlementReasons:'Settlement Reasons',formulaSteps:'Score Calculation',
+    opponentRewardCoins:'Opponent Reward Coins',penaltyCoins:'Penalty Coins',quitterScore:'Quitter Score',opponentScore:'Opponent Score',firstOfMonth:'Protected First Disconnect',
+    createdAt:'Created',updatedAt:'Updated',recordedAt:'Recorded',startedAt:'Started',endedAt:'Ended',countryCode:'Country',regionCode:'State / Region Code',
+    timeZone:'Time Zone',adminOverride:'Admin Changes',adminCorrections:'Correction History',forceQuits:'Forced Abandons',disconnectProtection:'Disconnect Protection'
+  });
+  const humanize=key=>FIELD_LABELS[key]||String(key??'').replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/[_-]+/g,' ').replace(/\b\w/g,ch=>ch.toUpperCase()).replace(/\bId\b/g,'ID').replace(/\bIp\b/g,'IP');
+  const HEADER_HELP=Object.freeze({
+    '#':'Position in this list or ranking.','Player':'The player account or nickname.','Player ID':'The unique player account used by the server.','Account':'The player account connected to this record.','Accounts':'How many player accounts are included.',
+    'Nickname':'The public player name.','Email':'The player email address.','Wallet':'Current Wallet Coin balance.','Wallet Coins':'Current Wallet Coin balance.','Games':'Number of games in the selected period.','Games Played':'Number of games played.',
+    'Wins':'Number of games won.','Win Rate':'Wins divided by completed games.','Points':'Game points recorded for this player.','Score':'Leaderboard or ranking score.','Coins Won':'Wallet Coins earned from wins.','Coins Lost':'Wallet Coins lost from games or penalties.','Net Coins':'Coins won minus Coins lost.',
+    'Abandons':'Number of forced abandons.','Forced Abandons':'Number of games classified as forced abandons.','Abandon Rate':'Forced abandons divided by games.','Rate':'Percentage represented by this row.',
+    'Game ID':'Unique identifier for this saved game.','Status':'Current or final state of the record.','Mode':'Solo or Online play mode.','Players':'Players who participated in the game.','Reason':'Plain-language reason recorded for the event or admin change.',
+    'History':'Whether detailed authoritative game history is available.','Recorded':'When this record was saved.','Time':'When the event occurred.','Started':'When the session started.','Ended':'When the session ended.','Session':'The game session this record belongs to.',
+    'Type':'The kind of event or ledger entry.','Amount':'Number of Wallet Coins added or removed.','Game':'The game associated with this entry.','IP':'Internet address seen by the server.','IP Address':'Internet address seen by the server.',
+    'City':'City reported by the connection provider.','State / Region':'State, province, or region reported for the connection.','Country':'Country reported for the connection.','Timezone':'Time zone reported for the connection.','Event':'What kind of connection activity was recorded.',
+    'Connections':'Number of recorded connections.','Last Seen':'Most recent time this item appeared.','States':'States or regions associated with this item.','Countries':'Countries associated with this item.','Player IDs':'Player accounts associated with this item.',
+    'Location':'Most recent coarse location.','Summary':'Plain-language summary of what happened in the session.','Action':'Administrative action that was performed.','Target':'Player, game, leaderboard, or record changed by the action.','Admin IP':'Internet address used by the administrator.',
+    'Detail':'Opens a readable detail view.','Rank':'Current position in the ranking.','Metric':'Measurement used for this ranking.','Penalty':'Coins charged because of an enforced penalty.','Reward':'Coins awarded to the other player.','Final / Fair Points':'Final game points, or the fair settlement value used for an interrupted game.'
+  });
+  const headerHelp=label=>HEADER_HELP[label]||`This column shows ${String(label).toLowerCase()} for each row.`;
+  const primitiveHtml=value=>{
+    if(value===null||value===undefined||value==='')return '<span class="muted">—</span>';
+    if(typeof value==='boolean')return pill(value?'Yes':'No',value?'good':'');
+    if(typeof value==='number')return esc(Number.isInteger(value)?fmt(value):value);
+    if(typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T/.test(value)&&!Number.isNaN(Date.parse(value)))return esc(date(value));
+    return esc(value);
+  };
+  function friendlyData(value,depth=0){
+    if(value===null||value===undefined)return '<span class="muted">No information recorded.</span>';
+    if(Array.isArray(value)){
+      if(!value.length)return '<span class="muted">None recorded.</span>';
+      if(value.every(item=>item===null||typeof item!=='object'))return `<ul class="friendly-list">${value.map(item=>`<li>${primitiveHtml(item)}</li>`).join('')}</ul>`;
+      return `<div class="friendly-list">${value.map((item,index)=>`<details class="friendly-details" ${depth===0?'open':''}><summary>Item ${index+1}</summary>${friendlyData(item,depth+1)}</details>`).join('')}</div>`;
+    }
+    if(typeof value==='object'){
+      const entries=Object.entries(value);if(!entries.length)return '<span class="muted">No information recorded.</span>';
+      return `<div class="friendly-record">${entries.map(([key,item])=>{const nested=item&&typeof item==='object';return `<div class="friendly-label">${esc(humanize(key))}</div><div class="friendly-value">${nested?`<details class="friendly-details"><summary>View details</summary>${friendlyData(item,depth+1)}</details>`:primitiveHtml(item)}</div>`;}).join('')}</div>`;
+    }
+    return primitiveHtml(value);
+  }
 
   async function api(path,{method='GET',body}={}){
     const requestUrl=`${baseUrl}/api/admin${path}`;
@@ -33,13 +76,19 @@
   const appendRange=params=>{const range=queryRange();for(const [k,v] of range)params.set(k,v);return params;};
   function table(headers,rows){
     if(!rows.length)return '<div class="empty">No records found.</div>';
-    return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+    return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>{const label=typeof h==='string'?h:h.label,help=typeof h==='string'?headerHelp(label):(h.help||headerHelp(label));return `<th tabindex="0" data-help="${esc(help)}" title="${esc(help)}">${esc(label)}<span class="header-help" aria-hidden="true">?</span></th>`;}).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   }
   function setExport(name,rows){currentExportName=name;currentExport=rows||[];}
+  const plainExportValue=value=>{
+    if(value===null||value===undefined)return '';
+    if(Array.isArray(value))return value.map(plainExportValue).filter(Boolean).join(' | ');
+    if(typeof value==='object')return Object.entries(value).map(([key,item])=>`${humanize(key)}: ${plainExportValue(item)}`).join('; ');
+    return String(value);
+  };
   function exportCsv(){
     if(!currentExport.length){alert('There is no table data to export.');return;}
     const keys=[...new Set(currentExport.flatMap(row=>Object.keys(row)))],quote=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-    const csv=[keys.map(quote).join(','),...currentExport.map(row=>keys.map(key=>quote(typeof row[key]==='object'?JSON.stringify(row[key]):row[key])).join(','))].join('\n');
+    const csv=[keys.map(key=>quote(humanize(key))).join(','),...currentExport.map(row=>keys.map(key=>quote(plainExportValue(row[key]))).join(','))].join('\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${currentExportName}.csv`;a.click();URL.revokeObjectURL(url);
   }
   function setBusy(busy){$('refreshBtn').disabled=busy;$('serverStatus').textContent=busy?'● Loading…':'● Connected';}
