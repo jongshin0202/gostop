@@ -11,7 +11,7 @@ const clone=value=>JSON.parse(JSON.stringify(value));
 const sideForSeat=seat=>seat==='playerA'?'human':'ai';
 const otherSeat=seat=>seat==='playerA'?'playerB':'playerA';
 
-function freshRankFlow(){return {pauseRemaining:{},pause:null,quitRequest:null,quitGeneration:0,scheduledQuitBy:null,inactivity:null,disconnectDeadlines:{},disconnectCancelled:false,abandonment:null,botPendingCardId:null};}
+function freshRankFlow(){return {pauseRemaining:{},pause:null,quitRequest:null,quitGeneration:0,scheduledQuitBy:null,inactivity:null,disconnectDeadlines:{},disconnectSettlements:{},disconnectCancelled:false,abandonment:null,botPendingCardId:null};}
 function randomUnit(cryptoApi){const b=new Uint32Array(1);cryptoApi.getRandomValues(b);return b[0]/0x100000000;}
 function captureValue(card){let value={bright:12,animal:5,ribbon:4,pi:2}[card?.type]||1;if(card?.flags?.includes('doublePi'))value+=4;if(card?.flags?.includes('godori'))value+=4;if(card?.ribbonSet)value+=2;return value;}
 
@@ -38,7 +38,7 @@ export class RankedRoomCore extends RoomCore{
   nowMs(){return Date.parse(this.now());}
   async load(){
     const room=await super.load();if(!room)return null;
-    room.rankFlow={...freshRankFlow(),...(room.rankFlow||{}),pauseRemaining:{...(room.rankFlow?.pauseRemaining||{})},disconnectDeadlines:{...(room.rankFlow?.disconnectDeadlines||{})}};
+    room.rankFlow={...freshRankFlow(),...(room.rankFlow||{}),pauseRemaining:{...(room.rankFlow?.pauseRemaining||{})},disconnectDeadlines:{...(room.rankFlow?.disconnectDeadlines||{})},disconnectSettlements:{...(room.rankFlow?.disconnectSettlements||{})}};
     for(const participant of room.participants)if(room.rankFlow.pauseRemaining[participant.playerId]==null)room.rankFlow.pauseRemaining[participant.playerId]=2;
     return room;
   }
@@ -90,17 +90,19 @@ export class RankedRoomCore extends RoomCore{
   async connect(credential,socket){
     const participant=await super.connect(credential,socket);await this.load();
     if(this.room.rankFlow.disconnectDeadlines[participant.playerId])delete this.room.rankFlow.disconnectDeadlines[participant.playerId];
+    if(this.room.rankFlow.disconnectSettlements?.[participant.playerId])delete this.room.rankFlow.disconnectSettlements[participant.playerId];
     this.room.rankFlow.disconnectCancelled=false;if(this.isSolo())await this.advanceBot();else await this.refreshInactivity();await this.scheduleAlarm();await this.persist();this.broadcastSnapshots();return participant;
   }
   async disconnect(socket){
     const playerId=socket.__playerId;await super.disconnect(socket);if(!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return;
     const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot||!this.isRanked())return;
-    this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();
+    this.room.rankFlow.disconnectSettlements[playerId]=this.calculateDisconnectSettlement(playerId);this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();
   }
   engineState(){return this.room?.matchId?this.authority.readTrustedState(this.room.matchId):null;}
   calculateDisconnectSettlement(playerId){
+    const frozen=this.room?.rankFlow?.disconnectSettlements?.[playerId];if(frozen)return clone(frozen);
     const state=this.engineState(),participant=this.room.participants.find(item=>item.playerId===playerId),opponent=this.room.participants.find(item=>item.playerId!==playerId);
-    if(!state||!participant||!opponent)return {settlementType:'nagari',fairPoints:0,quitterScore:0,opponentScore:0,scenarios:0};
+    if(!state||!participant||!opponent)return {settlementType:'nagari',fairPoints:0,quitterScore:0,opponentScore:0,reasons:[],formulaSteps:[]};
     return estimateFairDisconnectSettlement(state,{quitterSeatId:participant.seatId,opponentSeatId:opponent.seatId,gameId:this.currentGameId()});
   }
   calculatePenalty(playerId){return this.calculateDisconnectSettlement(playerId).fairPoints;}
@@ -112,7 +114,7 @@ export class RankedRoomCore extends RoomCore{
     const penaltyCoins=Math.max(0,Math.trunc(Number(response?.penaltyCoins)||0)),rewardCoins=Math.max(0,Math.trunc(Number(response?.opponentRewardCoins)||0));
     if(response?.account&&Number.isFinite(response.account.walletCoins))quitter.walletCoins=response.account.walletCoins;if(response?.opponent&&opponent&&Number.isFinite(response.opponent.walletCoins))opponent.walletCoins=response.opponent.walletCoins;if(opponent?.bot)opponent.walletCoins=(Number(opponent.walletCoins)||0)+rewardCoins;
     this.room.sessionStats.forceQuits=(this.room.sessionStats.forceQuits||0)+1;this.room.rankFlow.abandonment={playerId,penaltyCoins,rewardCoins,fairPoints:settlement.fairPoints,settlementType:settlement.settlementType,quitterScore:settlement.quitterScore,opponentScore:settlement.opponentScore,firstOfMonth:!!response?.firstOfMonth,rewardNoticeId:response?.opponentNotice?.id||null,reason,at:this.now()};
-    this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.disconnectDeadlines={};await this.endRankedSession(reason);this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.status='ended';await this.persist();this.broadcastSnapshots();return response;
+    this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};await this.endRankedSession(reason);this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.status='ended';await this.persist();this.broadcastSnapshots();return response;
   }
   async refreshInactivity(){
     if(!this.room||this.isSolo()||!this.isRanked()||this.room.sessionFlow.ended||this.room.terminalResult||this.room.rankFlow.pause){this.room.rankFlow.inactivity=null;return;}
@@ -144,7 +146,7 @@ export class RankedRoomCore extends RoomCore{
     }
     if(message.action.type==='cancelDisconnectedGame'){
       if(this.isSolo())throw new RoomError('DISCONNECT_CANCEL_NOT_AVAILABLE','There is no online opponent to wait for.',409);const opponent=this.room.participants.find(item=>item.playerId!==participant.playerId),deadline=opponent&&flow.disconnectDeadlines?.[opponent.playerId];if(!opponent||opponent.connected||!deadline)throw new RoomError('NO_DISCONNECTED_OPPONENT','The opponent is no longer disconnected.',409);
-      await this.acceptFlowAction(socket,message,async()=>{flow.disconnectDeadlines={};flow.disconnectCancelled=true;flow.inactivity=null;flow.pause=null;flow.quitRequest=null;await this.endRankedSession('disconnect-cancelled');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=null;this.room.status='ended';});return true;
+      await this.acceptFlowAction(socket,message,async()=>{flow.disconnectDeadlines={};flow.disconnectSettlements={};flow.disconnectCancelled=true;flow.inactivity=null;flow.pause=null;flow.quitRequest=null;await this.endRankedSession('disconnect-cancelled');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=null;this.room.status='ended';});return true;
     }
     if(message.action.type==='respondQuit'){
       const request=flow.quitRequest;if(!request||request.requestId!==message.action.requestId||request.requesterPlayerId===participant.playerId)throw new RoomError('QUIT_REQUEST_NOT_FOUND','Quit request is no longer active.',409);
@@ -176,9 +178,9 @@ export class RankedRoomCore extends RoomCore{
     const before=this.authority.getSnapshot({matchId:this.room.matchId,viewerId:bot.playerId}).revision,result=this.authority.submitAction({matchId:this.room.matchId,playerId:bot.playerId,actionId:`bot-${++this.room.botActionSequence}-${this.nowMs()}`,expectedRevision:before,action});if(result.snapshot.terminalResult){this.room.status='completed';this.room.terminalResult=clone(result.snapshot.terminalResult);await this.settleTerminal(result.snapshot);}this.room.updatedAt=this.now();await this.persist();for(const viewer of this.room.participants){const events=this.authority.getEventsSince({matchId:this.room.matchId,viewerId:viewer.playerId,revision:before}).events;this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.snapshotFor(viewer),events}));}return result;
   }
   async advanceBot(){
-    await this.load();const bot=this.room.participants.find(item=>item.bot);if(!bot||!this.room.matchId||this.room.sessionFlow.ended||this.room.rankFlow.pause)return;this.room.botActionSequence=this.room.botActionSequence||0;
+    await this.load();const bot=this.room.participants.find(item=>item.bot);if(!bot||!this.room.matchId||this.room.sessionFlow.ended||this.room.rankFlow.pause||Object.keys(this.room.rankFlow.disconnectDeadlines||{}).length)return;this.room.botActionSequence=this.room.botActionSequence||0;
     for(let guard=0;guard<100;guard++){
-      if(this.room.sessionFlow.ended||this.room.rankFlow.pause)return;const state=this.engineState();if(!state||state.terminalResult)return;const side=sideForSeat(bot.seatId),player=state[side],decision=state.pendingDecision;
+      if(this.room.sessionFlow.ended||this.room.rankFlow.pause||Object.keys(this.room.rankFlow.disconnectDeadlines||{}).length)return;const state=this.engineState();if(!state||state.terminalResult)return;const side=sideForSeat(bot.seatId),player=state[side],decision=state.pendingDecision;
       if(player.captured.some(card=>card.id==='m9-1')){const mode=globalThis.GoStopEngine.score(player.captured,'pi').total>globalThis.GoStopEngine.score(player.captured,'animal').total?'pi':'animal';if(player.gukjinMode!==mode){await this.submitBot(bot,{type:'setGukjinMode',mode});continue;}}
       if(decision){if(decision.playerId!==bot.seatId)return;if(decision.type==='openingTripleDecision'){const shake=!decision.floorCardId&&randomUnit(this.crypto)<.72;await this.submitBot(bot,{type:shake?'declareShake':decision.floorCardId?'declareBomb':'armOpeningBomb'});continue;}if(decision.type==='shakeDecision'){await this.submitBot(bot,{type:'declareShake'});continue;}if(decision.type==='bombDecision'){this.room.rankFlow.botPendingCardId=null;await this.submitBot(bot,{type:'declareBomb'});continue;}if(decision.type==='goStopDecision'){await this.submitBot(bot,{type:this.botShouldGo(state,bot)?'declareGo':'declareStop'});continue;}return;}
       if(!state.openingSpecialsComplete){if(state.turn!==bot.seatId)return;await this.submitBot(bot,{type:'resolveOpening'});continue;}
