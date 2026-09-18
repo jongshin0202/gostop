@@ -19,6 +19,8 @@ jobs:
           node --check app.js
           node --check ranked-client.js
           node --check online-client.js
+          node --check admin.js
+          node --check server/admin-api.mjs
           node --check server/worker.mjs
           node --check server/game-room.mjs
           node --check server/ranked-room-core.mjs

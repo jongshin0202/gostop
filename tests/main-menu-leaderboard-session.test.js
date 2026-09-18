@@ -31,7 +31,7 @@ test('worker accepts first-party origins and forwards Cloudflare timezone for lo
   assert.equal(isAllowedOrigin('https://evil.example',env),false);
   assert.match(worker,/request\.cf\?\.timezone/);
   assert.match(worker,/x-gostop-timezone/);
-  assert.match(worker,/\['x-gostop-country','x-gostop-region','x-gostop-timezone'\]/);
+  assert.match(worker,/x-gostop-city/);assert.match(worker,/x-gostop-region-name/);assert.match(worker,/x-gostop-ip/);assert.match(worker,/x-gostop-timezone/);
 });
 
 test('leaderboards are public, render immediately, and page controls work even if data cannot load',()=>{
