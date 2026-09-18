@@ -6,14 +6,17 @@ function roomCode(cryptoApi){const bytes=new Uint8Array(14),limit=256-(256%alpha
 export function configuredOrigins(env){return new Set(String(env.ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(Boolean));}
 export function isAllowedOrigin(origin,env){if(!origin)return false;try{const url=new URL(origin);if(url.origin!==origin)return false;if((url.hostname==='localhost'||url.hostname==='127.0.0.1'||url.hostname==='[::1]')&&['http:','https:'].includes(url.protocol))return true;if(url.protocol==='https:'&&(url.hostname==='gostoplive.com'||url.hostname==='www.gostoplive.com'))return true;if(url.protocol==='https:'&&url.hostname.endsWith('.vercel.app')&&(url.hostname==='gostop.vercel.app'||url.hostname.startsWith('gostop-')))return true;return configuredOrigins(env).has(origin);}catch(_){return false;}}
 const corsHeaders=origin=>({'access-control-allow-origin':origin,'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,authorization','access-control-max-age':'86400','vary':'Origin'});
+const safeTokenEqual=(a,b)=>{a=String(a||'');b=String(b||'');if(!a||!b||a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0;};
+const adminAuthorized=(request,env)=>{const auth=request.headers.get('Authorization')||'',token=auth.startsWith('Bearer ')?auth.slice(7).trim():'';return !!env.ADMIN_TOKEN&&safeTokenEqual(token,env.ADMIN_TOKEN);};
 function withCors(response,origin){const next=new Response(response.body,response);for(const [key,value] of Object.entries(corsHeaders(origin)))next.headers.set(key,value);return next;}
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const accountStub=env=>env.ACCOUNT_STORE.get(env.ACCOUNT_STORE.idFromName('global'));
 const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
-function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(request.cf?.country||request.headers.get('CF-IPCountry'),2),region=coarseCode(request.cf?.regionCode),timeZone=String(request.cf?.timezone||'').trim();if(country)headers.set('x-gostop-country',country);if(region)headers.set('x-gostop-region',region);if(timeZone&&timeZone.length<=64&&/^[A-Za-z0-9_+./-]+$/.test(timeZone))headers.set('x-gostop-timezone',timeZone);return headers;}
-function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region','x-gostop-timezone']){const value=source.get(name);if(value)target.set(name,value);}return target;}
-async function forwardAccount(request,env,path){const headers=geoHeadersFor(request),auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
-async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
+function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(request.cf?.country||request.headers.get('CF-IPCountry'),2),region=coarseCode(request.cf?.regionCode),regionName=String(request.cf?.region||'').trim(),city=String(request.cf?.city||'').trim(),postalCode=String(request.cf?.postalCode||'').trim(),timeZone=String(request.cf?.timezone||'').trim(),ip=String(request.headers.get('CF-Connecting-IP')||'').trim();if(country)headers.set('x-gostop-country',country);if(region)headers.set('x-gostop-region',region);if(regionName&&regionName.length<=80)headers.set('x-gostop-region-name',regionName);if(city&&city.length<=100)headers.set('x-gostop-city',city);if(postalCode&&postalCode.length<=24)headers.set('x-gostop-postal',postalCode);if(timeZone&&timeZone.length<=64&&/^[A-Za-z0-9_+./-]+$/.test(timeZone))headers.set('x-gostop-timezone',timeZone);if(ip&&ip.length<=64)headers.set('x-gostop-ip',ip);return headers;}
+function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region','x-gostop-region-name','x-gostop-city','x-gostop-postal','x-gostop-timezone','x-gostop-ip']){const value=source.get(name);if(value)target.set(name,value);}return target;}
+async function forwardAccount(request,env,path){const headers=geoHeadersFor(request),auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);headers.set('x-gostop-event',path.replace(/^\//,'')||'request');if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
+async function forwardAdmin(request,env,path){const headers=geoHeadersFor(request);headers.set('x-gostop-admin','1');headers.set('x-gostop-event','admin');if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts/admin${path}`,init));}
+async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);headers.set('x-gostop-event','game-resolve');const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
 async function requireAccount(request,env){const account=await resolveAccount(request,env);return account||null;}
 async function allocateRoom(env,{solo=false,account=null}={}){
   for(let attempt=0;attempt<5;attempt++){
@@ -23,7 +26,7 @@ async function allocateRoom(env,{solo=false,account=null}={}){
   return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
 }
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|account|me|leaderboards|lobby)(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),apiRoute=/^\/api\/(?:rooms|solo|auth|account|me|leaderboards|lobby|admin)(?:\/|$)/.test(url.pathname);
   if(apiRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
     if(!apiRoute)return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
@@ -33,6 +36,16 @@ export default {async fetch(request,env){
   }
   let match;
   try{
+    if(url.pathname==='/api/admin/health'&&request.method==='GET'){
+      if(!env.ADMIN_TOKEN)return withCors(json({ok:false,error:{code:'ADMIN_NOT_CONFIGURED',message:'ADMIN_TOKEN is not configured.'}},503),origin);
+      if(!adminAuthorized(request,env))return withCors(json({ok:false,error:{code:'ADMIN_AUTH_REQUIRED',message:'Admin authorization required.'}},401),origin);
+      return withCors(json({ok:true,service:'gostop-authority',admin:true}),origin);
+    }
+    if(url.pathname.startsWith('/api/admin/')){
+      if(!env.ADMIN_TOKEN)return withCors(json({ok:false,error:{code:'ADMIN_NOT_CONFIGURED',message:'ADMIN_TOKEN is not configured.'}},503),origin);
+      if(!adminAuthorized(request,env))return withCors(json({ok:false,error:{code:'ADMIN_AUTH_REQUIRED',message:'Admin authorization required.'}},401),origin);
+      return withCors(await forwardAdmin(request,env,url.pathname.slice('/api/admin'.length)+url.search),origin);
+    }
     if(request.method==='GET'&&url.pathname==='/api/lobby/ws'){
       const headers=new Headers(request.headers);copyGeoHeaders(geoHeadersFor(request),headers);const stub=env.LOBBY.get(env.LOBBY.idFromName('global'));return stub.fetch(new Request('https://lobby/connect',{headers}));
     }
