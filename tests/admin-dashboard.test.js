@@ -102,7 +102,8 @@ test('admin authentication failures are explicit to the administrator',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/Admin token rejected\. Enter the exact value currently stored in Cloudflare as ADMIN_TOKEN\./);
   assert.match(adminJs,/ADMIN_TOKEN is not active on the Cloudflare Worker yet/);
-  assert.match(adminJs,/alert\(message\)/);
+  assert.match(adminJs,/showFailureDialog\(error,message\)/);
+  assert.doesNotMatch(adminJs,/alert\(message\)/);
 });
 
 test('admin authentication failure uses an in-page diagnostic dialog with OK button',()=>{
