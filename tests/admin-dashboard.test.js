@@ -118,7 +118,7 @@ test('admin authentication failure uses a deterministic in-page diagnostic overl
   assert.match(adminHtml,/id="failureServer"/);
   assert.match(adminHtml,/id="failureOk"/);
   assert.match(adminJs,/function showFailureDialog\(error,message\)/);
-  assert.match(adminJs,/failureOverlay'\)\.hidden=false/);
+  assert.match(adminJs,/overlay\.hidden=false;overlay\.style\.display='grid'/);
   assert.match(adminJs,/loginError'\)\.textContent=.*HTTP/);
   assert.match(adminJs,/failureOk'\)\.addEventListener\('click',\(\)=>\$\('failureOverlay'\)\.hidden=true\)/);
   assert.match(adminCss,/\.failure-overlay\{/);
