@@ -2316,8 +2316,8 @@ test('Online result offers localized Quit Game while replay waiting has no quit 
   assert.match(result,/id="playAgainBtn"[^]*id="resultQuitBtn"[^]*data-i18n="resultQuit"/);
   const waiting=html.slice(html.indexOf('id="replayWaitingDialog"'),html.indexOf('id="newGameWaitingDialog"'));
   assert.match(waiting,/Waiting for Opponent/);assert.doesNotMatch(waiting,/button|Quit Playing/);
-  assert.match(source,/quitConfirmTitle\.textContent=t\('resultQuit'\);els\.quitConfirmMessage\.textContent=t\('resultQuitConfirm'\)/);
-  assert.match(source,/onlineQuitFromResult&&latestOnlineSnapshot\?\.terminalResult[^]*els\.resultDialog\.showModal\(\)/);
+  assert.match(source,/quitConfirmTitle\.textContent=t\('resultQuitConfirm'\);els\.quitConfirmMessage\.textContent=t\('resultQuit'\)/);
+  assert.match(source,/onlineQuitFromResult&&!els\.resultDialog\.open[^]*els\.resultDialog\.showModal\(\)/);
   assert.match(source,/onlineSubmit\(\{type:'quitGame'\}\)/);
   assert.match(source,/quitConfirmTitle\.textContent=t\('quitConfirmTitle'\);els\.quitConfirmMessage\.textContent=t\('quitConfirmMessage'\)/);
   const css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),waitingRule=css.match(/#replayWaitingDialog\[open\]\{([^}]+)\}/)?.[1]||'',cardRule=css.match(/#replayWaitingDialog \.flow-dialog-card\{([^}]+)\}/)?.[1]||'';
