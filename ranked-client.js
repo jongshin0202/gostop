@@ -6,7 +6,7 @@
   const ACCOUNT_CACHE_KEY='gostop-account-cache';
   const DEFAULT_SERVER_URL='https://gostop-authority.jwshin1.workers.dev';
   const LEADERBOARD_ROTATE_MS=5000;
-  const ATTRACT_IDLE_MS=7000;
+  const ATTRACT_IDLE_MS=10000;
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false;
   let pendingChallengeCreate=null,pendingRequest=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[];
@@ -118,7 +118,7 @@
   async function acknowledgeAccountNotice(noticeId){const data=await api('/api/account/notices/ack',{method:'POST',body:{noticeId}});captureAccountPayload(data);renderAccountBox();return data;}
   function showRankedEntryNotice(next){const notice=pendingAccountNotices.find(item=>item.type==='disconnect-forgiven');if(!notice){next();return;}$('accountNoticeTitle').textContent=rt('disconnectForgivenTitle');$('accountNoticeText').textContent=rt('disconnectForgivenText',{points:Number(notice.fairPoints)||0});accountNoticeDialog.dataset.noticeId=notice.id;accountNoticeDialog.dataset.rankedEntry='1';accountNoticeDialog.__rankedNext=next;accountNoticeDialog.showModal();}
   function withDailyLoginNotice(next){const notice=pendingAccountNotices.find(item=>item.type==='daily-login');if(!notice){next();return;}$('accountNoticeTitle').textContent=rt('dailyBonusTitle');$('accountNoticeText').textContent=rt('dailyBonusText');accountNoticeDialog.dataset.noticeId=notice.id;accountNoticeDialog.dataset.dailyLaunch='1';accountNoticeDialog.showModal();accountNoticeDialog.__dailyNext=next;}
-  function updateFromSnapshot(snapshot){if(!snapshot?.youProfile||!account)return;const wallet=Number(snapshot.youProfile.walletCoins);if(Number.isFinite(wallet)){account={...account,walletCoins:wallet};persistAccountCache();}renderAccountBox();}
+  function updateFromSnapshot(snapshot){if(!snapshot?.youProfile||!account)return;renderAccountBox();}
 
   const style=document.createElement('style');style.textContent=`
     .solo-start-overlay{overflow:auto!important;padding:clamp(22px,4vw,48px)!important;align-content:center}
@@ -187,12 +187,12 @@
 
   function renderLeaderboard(){const key=leaderboardPage===0?'global':'monthly',rows=leaderboardData?.[key]||[];$('leaderboardHeading').textContent=leaderboardPage===0?rt('global'):rt('monthly');$('leaderboardSubheading').textContent=leaderboardPage===0?rt('globalSub'):rt('monthToDate',{month:leaderboardData?.month||rt('currentMonth')});$('leaderboardAttractNote').textContent=attractMode?rt('attractNote'):rt('rotateNote');if(!leaderboardData){$('leaderboardBody').innerHTML=`<tr><td colspan="5" style="text-align:center">${leaderboardLoadFailed?escapeHtml(rt('requestFailed')):'…'}</td></tr>`;return;}$('leaderboardBody').innerHTML=rows.map(row=>`<tr class="${row.provisional?'leaderboard-provisional':''}"><td>${row.provisional?'P ':''}${row.rank}</td><td>${flagEmoji(row.countryCode)} ${escapeHtml(row.nickname)}</td><td>${fmtScore(row.score)}</td><td>${Number(row.totalCoins)||0}</td><td>${Number(row.gamesPlayed)||0}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center">${escapeHtml(rt('noRankedGames'))}</td></tr>`;}
   function nextLeaderboard(delta=1){leaderboardPage=(leaderboardPage+delta+2)%2;renderLeaderboard();restartLeaderboardTimer();}
-  function restartLeaderboardTimer(){if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;if(!leaderboardScreen.hidden)leaderboardTimer=setInterval(()=>nextLeaderboard(1),LEADERBOARD_ROTATE_MS);}
+  function restartLeaderboardTimer(){if(leaderboardTimer)clearTimeout(leaderboardTimer);leaderboardTimer=null;if(leaderboardScreen.hidden)return;leaderboardTimer=setTimeout(()=>{if(leaderboardScreen.hidden)return;if(attractMode&&leaderboardPage===1){closeLeaderboard(true);return;}nextLeaderboard(1);},LEADERBOARD_ROTATE_MS);}
   async function openLeaderboard(isAttract=false){
     attractMode=isAttract;leaderboardPage=0;leaderboardLoadFailed=false;overlay.hidden=true;leaderboardScreen.hidden=false;renderLeaderboard();restartLeaderboardTimer();
     const data=await refreshLeaderboardData();
     if(leaderboardScreen.hidden||attractMode!==isAttract)return;
-    leaderboardLoadFailed=!data;renderLeaderboard();restartLeaderboardTimer();
+    leaderboardLoadFailed=!data;renderLeaderboard();
   }
   function closeLeaderboard(returnToMenu=false){leaderboardScreen.hidden=true;attractMode=false;if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;if(returnToMenu){onlinePanel.hidden=true;overlay.hidden=false;}resetAttractTimer();}
   leaderboardBtn.addEventListener('click',event=>{event.stopPropagation();openLeaderboard(false);});leaderboardScreen.querySelector('.leaderboard-prev').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(-1);});leaderboardScreen.querySelector('.leaderboard-next').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(1);});leaderboardScreen.querySelector('.leaderboard-return').addEventListener('click',event=>{event.stopPropagation();closeLeaderboard(true);});leaderboardScreen.addEventListener('click',event=>{if(event.target.closest('button'))return;if(attractMode){closeLeaderboard(true);return;}nextLeaderboard(1);});
