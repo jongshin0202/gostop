@@ -37,15 +37,19 @@ test('leaderboards are public, render immediately, and page controls work even i
   const block=source.slice(source.indexOf('function renderLeaderboard'),source.indexOf('function lobbyUrl'));
   assert.match(block,/const key=leaderboardPage===0\?'global':'monthly'/);
   assert.match(block,/if\(!leaderboardData\).*leaderboardLoadFailed/s);
-  assert.match(block,/leaderboardTimer=setTimeout\(\(\)=>\{[\s\S]*if\(attractMode&&leaderboardPage===1\)\{closeLeaderboard\(true\);return;\}[\s\S]*nextLeaderboard\(1\)[\s\S]*LEADERBOARD_ROTATE_MS/);
+  assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return;leaderboardTimer=setTimeout\(\(\)=>\{[\s\S]*if\(leaderboardPage===1\)\{closeLeaderboard\(true\);return;\}[\s\S]*nextLeaderboard\(1\)[\s\S]*LEADERBOARD_ROTATE_MS/);
   assert.match(source,/class=\"leaderboard-controls\".*leaderboard-prev.*leaderboard-return.*leaderboard-next/s);
   assert.doesNotMatch(source,/\.leaderboard-nav\{position:absolute/);
 });
 
-test('manual leaderboard Return always restores the main menu',()=>{
+test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
   const block=source.slice(source.indexOf('function closeLeaderboard'),source.indexOf('function lobbyUrl'));
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;overlay\.hidden=false;\}/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
+  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
+  assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return/);
+  assert.doesNotMatch(block,/if\(attractMode\)\{closeLeaderboard\(true\);return;\}nextLeaderboard\(1\)/);
+  assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
 test('main-menu attract mode starts ten seconds after the visible menu becomes idle',()=>{
@@ -84,10 +88,13 @@ test('saved account identity hydrates synchronously before background session ve
   assert.match(source,/localStorage\.removeItem\(TOKEN_KEY\);localStorage\.removeItem\(ACCOUNT_CACHE_KEY\)/);
 });
 
-test('daily login account balance cannot be rolled back by a stale restored-room snapshot',()=>{
+test('room wallet mismatch refreshes the authoritative account without directly overwriting cached wallet coins',()=>{
   const update=source.slice(source.indexOf('function updateFromSnapshot'),source.indexOf('const style='));
-  assert.doesNotMatch(update,/snapshot\.youProfile\.walletCoins/);
-  assert.doesNotMatch(update,/walletCoins:wallet/);
+  assert.match(update,/const roomWallet=Number\(snapshot\.youProfile\.walletCoins\),accountWallet=Number\(account\.walletCoins\)/);
+  assert.match(update,/roomWallet!==accountWallet/);
+  assert.match(update,/void refreshAccount\(\)/);
+  assert.doesNotMatch(update,/account=\{\.\.\.account,walletCoins:/);
+  assert.doesNotMatch(update,/account\.walletCoins=roomWallet/);
   const refresh=source.slice(source.indexOf('async function refreshAccount'),source.indexOf('function updateFromSnapshot'));
   assert.match(refresh,/captureAccountPayload\(data\)/);
   const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
