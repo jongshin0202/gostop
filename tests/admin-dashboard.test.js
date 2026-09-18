@@ -81,3 +81,10 @@ test('new ranked settlements persist authoritative history and admin files stay 
   assert.match(finalRoom,/adminGameHistory\(\)/);assert.match(finalRoom,/history:this\.adminGameHistory\(\)/);
   assert.doesNotMatch(index,/admin\.html/);assert.match(adminHtml,/noindex,nofollow,noarchive/);assert.match(adminHtml,/Authorized administrators only/);
 });
+
+test('admin dashboard uses authoritative GoStop server configuration with Worker fallback',()=>{
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminJs,/globalThis\.GOSTOP_CONFIG\?\.serverUrl\|\|DEFAULT_SERVER_URL/);
+  assert.match(adminJs,/https:\/\/gostop-authority\.jwshin1\.workers\.dev/);
+  assert.doesNotMatch(adminJs,/globalThis\.GOSTOP_SERVER_URL/);
+});

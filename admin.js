@@ -1,7 +1,8 @@
 'use strict';
 (()=>{
   const $=id=>document.getElementById(id);
-  const baseUrl=String(globalThis.GOSTOP_SERVER_URL||'').replace(/\/$/,'');
+  const DEFAULT_SERVER_URL='https://gostop-authority.jwshin1.workers.dev';
+  const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   const TOKEN_KEY='gostop-admin-token';
   let token=sessionStorage.getItem(TOKEN_KEY)||'',currentView='overview',currentExport=[],currentExportName='admin-export';
 
