@@ -60,7 +60,6 @@ test('main-menu attract mode starts ten seconds after the visible menu becomes i
   assert.match(source,/if\(event\.isTrusted&&!attractMode&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
   assert.match(source,/applyRankedLocale\(\);resetAttractTimer\(\);globalThis\.__gostopRankedBootComplete=true;[\s\S]*authRestorePromise=refreshAccount\(\)/);assert.match(source,/resumeActiveRankedRoom/);
   assert.match(docs,/After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats/);
-  assert.doesNotMatch(docs,/After 10 seconds of main-menu inactivity/);
 });
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
   assert.match(source,/totalCoins:'Total Coins Earned'/);
