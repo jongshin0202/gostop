@@ -41,9 +41,15 @@ function passwordProblem(password){
   return null;
 }
 function timeZoneFromRequest(request){return normalizeTimeZone(request?.headers?.get('x-gostop-timezone'));}
+const cleanText=(value,max=100)=>{const text=String(value||'').trim();return text&&text.length<=max?text:null;};
+function connectionFromRequest(request){
+  const ip=cleanText(request?.headers?.get('x-gostop-ip'),64),countryCode=coarseCode(request?.headers?.get('x-gostop-country'),2),regionCode=coarseCode(request?.headers?.get('x-gostop-region')),region=cleanText(request?.headers?.get('x-gostop-region-name'),80),city=cleanText(request?.headers?.get('x-gostop-city'),100),postalCode=cleanText(request?.headers?.get('x-gostop-postal'),24),timeZone=timeZoneFromRequest(request);
+  if(!ip&&!countryCode&&!regionCode&&!region&&!city)return null;
+  return {ip,countryCode,regionCode,region,city,postalCode,timeZone};
+}
 function locationFromRequest(request){
-  const countryCode=coarseCode(request.headers.get('x-gostop-country'),2),regionCode=coarseCode(request.headers.get('x-gostop-region')),timeZone=timeZoneFromRequest(request);
-  return countryCode?{countryCode,regionCode,timeZone}:null;
+  const connection=connectionFromRequest(request);
+  return connection?.countryCode?{countryCode:connection.countryCode,regionCode:connection.regionCode,region:connection.region,city:connection.city,postalCode:connection.postalCode,timeZone:connection.timeZone}:null;
 }
 function publicAccount(account){
   return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};
@@ -67,8 +73,14 @@ export class AccountStore{
   bearer(request){const value=request.headers.get('Authorization')||'';return value.startsWith('Bearer ')?value.slice(7).trim():'';}
   applyCoarseLocation(account,request){
     const location=locationFromRequest(request);if(!location)return false;
-    if(account.location?.countryCode===location.countryCode&&account.location?.regionCode===location.regionCode&&account.location?.timeZone===location.timeZone)return false;
-    account.location={countryCode:location.countryCode,regionCode:location.regionCode,timeZone:location.timeZone,source:'edge-coarse',updatedAt:this.now()};account.updatedAt=this.now();return true;
+    if(account.location?.countryCode===location.countryCode&&account.location?.regionCode===location.regionCode&&account.location?.region===location.region&&account.location?.city===location.city&&account.location?.postalCode===location.postalCode&&account.location?.timeZone===location.timeZone)return false;
+    account.location={...location,source:'edge-coarse',updatedAt:this.now()};account.updatedAt=this.now();return true;
+  }
+  async recordConnection(account,request,kind){
+    const connection=connectionFromRequest(request);if(!account||!connection)return null;
+    const recordedAt=this.now(),event={id:randomId(this.crypto,'conn'),accountId:account.id,kind:String(kind||request?.headers?.get('x-gostop-event')||'request').slice(0,40),...connection,recordedAt};
+    account.lastConnection={...connection,kind:event.kind,recordedAt};account.updatedAt=recordedAt;
+    await this.storage.put(`connection:${account.id}:${recordedAt}:${event.id}`,event);await this.storage.put(`account:${account.id}`,account);return event;
   }
   noticeList(account){return (Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>!item.acknowledgedAt);}
   async prepareNotices(account){return account;}
@@ -119,7 +131,7 @@ export class AccountStore{
     const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:true,walletCoins:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},location:coarseLocation?{...coarseLocation,source:'edge-coarse',updatedAt:this.now()}:null,createdAt:this.now(),updatedAt:this.now()};
     await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
     await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});await this.awardDaily(account,request);
-    const session=await this.createSession(account);
+    const session=await this.createSession(account);await this.recordConnection(account,request,'register');
     return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100},notices:this.noticeList(account)},201);
   }
 
@@ -128,11 +140,11 @@ export class AccountStore{
     const account=await this.accountByEmail(email);if(!account)return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
     const candidate=await hashPassword(this.crypto,password,account.passwordSalt,account.passwordIterations||PBKDF2_ITERATIONS);
     if(!safeEqual(candidate,account.passwordHash))return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
-    const locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account,request);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);const session=await this.createSession(account);
+    const locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account,request);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);const session=await this.createSession(account);await this.recordConnection(account,request,'login');
     return json({ok:true,account:publicAccount(account),session,awards:{dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});
   }
 
-  async me(request){const account=await this.requireAccount(request),locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account,request);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});}
+  async me(request){const account=await this.requireAccount(request),locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account,request);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,'me');return json({ok:true,account:publicAccount(account),awards:{dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});}
   async acknowledgeNotice(request){
     const account=await this.requireAccount(request);await this.prepareNotices(account);const body=await request.json().catch(()=>({})),noticeId=String(body.noticeId||''),acknowledged=Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[];
     if(!noticeId)return json({ok:false,error:{code:'NOTICE_REQUIRED',message:'Notice ID is required.'}},400);
@@ -178,7 +190,7 @@ export class AccountStore{
     await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'force-quit',amount:-penalty,gameId,createdAt:this.now()});await this.storage.put(`forceQuit:${gameId}`,{...body,gameId,penaltyCoins:penalty,recordedAt:this.now()});return json({ok:true,penaltyCoins:penalty,account:publicAccount(account)});
   }
 
-  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account&&this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);return json({ok:true,account:account?publicAccount(account):null});}
+  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account){if(this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,request.headers.get('x-gostop-event')||'game-resolve');}return json({ok:true,account:account?publicAccount(account):null});}
 
   async fetch(request){
     const path=new URL(request.url).pathname;
@@ -199,4 +211,4 @@ export class AccountStore{
   }
 }
 
-export {PROVISIONAL_GAMES,blankStats,scoreFor,passwordProblem,locationFromRequest,timeZoneFromRequest,dayInTimeZone};
+export {PROVISIONAL_GAMES,blankStats,scoreFor,passwordProblem,locationFromRequest,connectionFromRequest,timeZoneFromRequest,dayInTimeZone};
