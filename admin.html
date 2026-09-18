@@ -13,7 +13,7 @@
       <div class="brand-mark">GSL</div>
       <p class="eyebrow">GoStop Live!</p>
       <h1>Server Admin</h1>
-      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p><p class="muted mono" id="adminBuild">Admin build 2026-09-18.5</p>
+      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p><p class="muted mono" id="adminBuild">Admin build 2026-09-18.6</p>
       <label>Admin Token<input id="adminToken" type="password" autocomplete="current-password" required></label>
       <button id="openDashboardBtn" class="primary" type="button">Open Dashboard</button>
       <p id="loginError" class="error" aria-live="polite"></p>
@@ -213,19 +213,21 @@
     <div class="dialog-head"><h2 id="detailTitle">Details</h2><button id="detailClose" class="ghost">Close</button></div>
     <div id="detailBody"></div>
   </dialog>
-  <dialog id="failureDialog" class="action-dialog">
-    <div class="dialog-head"><h2>Admin Connection Failed</h2></div>
-    <div style="padding:18px">
-      <p id="failureMessage" class="error"></p>
-      <div class="detail-grid">
-        <div class="detail-box"><span>Error Code</span><strong id="failureCode">—</strong></div>
-        <div class="detail-box"><span>HTTP Status</span><strong id="failureStatus">—</strong></div>
-        <div class="detail-box"><span>Server</span><strong id="failureServer" class="mono">—</strong></div>
+  <div id="failureOverlay" class="failure-overlay" hidden>
+    <section class="failure-card" role="alertdialog" aria-modal="true" aria-labelledby="failureTitle">
+      <div class="dialog-head"><h2 id="failureTitle">Admin Connection Failed</h2></div>
+      <div class="failure-body">
+        <p id="failureMessage" class="error"></p>
+        <div class="detail-grid">
+          <div class="detail-box"><span>Error Code</span><strong id="failureCode">—</strong></div>
+          <div class="detail-box"><span>HTTP Status</span><strong id="failureStatus">—</strong></div>
+          <div class="detail-box"><span>Server</span><strong id="failureServer" class="mono">—</strong></div>
+        </div>
+        <p class="muted">The admin dashboard has not opened. No admin action was performed.</p>
+        <div class="dialog-actions"><button id="failureOk" class="primary" type="button">OK</button></div>
       </div>
-      <p class="muted">The admin dashboard has not opened. No admin action was performed.</p>
-      <div class="dialog-actions"><button id="failureOk" class="primary" type="button">OK</button></div>
-    </div>
-  </dialog>
+    </section>
+  </div>
 
   <dialog id="actionDialog" class="action-dialog">
     <form id="actionForm" method="dialog">
@@ -238,6 +240,6 @@
   </dialog>
 
   <script src="runtime-config.js"></script>
-  <script src="admin.js?v=20260918-5"></script>
+  <script src="admin.js?v=20260918-6"></script>
 </body>
 </html>

@@ -40,11 +40,13 @@
   function fail(error){$('serverStatus').textContent='● Error';$('serverStatus').style.color='#ff8f8f';console.error(error);alert(error.message||String(error));}
   function resetStatus(){$('serverStatus').style.color='';}
   function showFailureDialog(error,message){
-    $('failureMessage').textContent=message||error?.message||'Admin connection failed.';
-    $('failureCode').textContent=error?.code||'NETWORK_OR_UNKNOWN';
-    $('failureStatus').textContent=error?.status||'—';
-    $('failureServer').textContent=baseUrl||'—';
-    const dialog=$('failureDialog');if(!dialog.open)dialog.showModal();
+    const finalMessage=message||error?.message||'Admin connection failed.',code=error?.code||'NETWORK_OR_UNKNOWN',status=error?.status||'—',server=baseUrl||'—';
+    $('failureMessage').textContent=finalMessage;
+    $('failureCode').textContent=code;
+    $('failureStatus').textContent=status;
+    $('failureServer').textContent=server;
+    $('loginError').textContent=`${finalMessage} [${code} / HTTP ${status}] Server: ${server}`;
+    $('failureOverlay').hidden=false;
   }
 
   async function authenticate(){
@@ -219,7 +221,7 @@
   $('adminNav').addEventListener('click',event=>{const btn=event.target.closest('[data-view]');if(btn)selectView(btn.dataset.view);});
   document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit-json]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){$('detailTitle').textContent='Audit Record';$('detailBody').innerHTML=`<pre class="json">${esc(JSON.stringify(JSON.parse(decodeURIComponent(auditBtn.dataset.auditJson)),null,2))}</pre>`;$('detailDialog').showModal();}});
   $('detailClose').addEventListener('click',()=>$('detailDialog').close());
-  $('failureOk').addEventListener('click',()=>$('failureDialog').close());
+  $('failureOk').addEventListener('click',()=>$('failureOverlay').hidden=true);
   $('refreshBtn').addEventListener('click',refreshCurrent);$('exportBtn').addEventListener('click',exportCsv);
   function localInputValue(dateValue){const d=new Date(dateValue),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;}
   function applyPreset(value){const now=new Date();if(value==='all'){$('filterFrom').value='';$('filterTo').value='';}else if(value){let start=new Date(now);if(value==='today')start=new Date(now.getFullYear(),now.getMonth(),now.getDate());if(value==='month')start=new Date(now.getFullYear(),now.getMonth(),1);if(value==='year')start=new Date(now.getFullYear(),0,1);$('filterFrom').value=localInputValue(start);$('filterTo').value=localInputValue(now);}refreshCurrent();}
