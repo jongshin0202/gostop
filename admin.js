@@ -299,11 +299,11 @@
     if(g.account)addPlayer(g.account.playerId||g.account.id||g.accountId,g.account.nickname||'Player');
     if(g.opponent)addPlayer(g.opponent.playerId||g.opponent.id||g.opponentAccountId,g.opponent.nickname||'Opponent');
     const fields=[
-      {name:'mode',label:'Game mode',type:'select',value:g.mode||'',options:[{value:'solo',label:'Solo'},{value:'online',label:'Online'}],help:'Choose whether this saved game was Solo or Online.'},
+      {name:'mode',label:'Game mode',type:'select',value:g.mode||'',options:[{value:'',label:'Not recorded'},{value:'solo',label:'Solo'},{value:'online',label:'Online'}],help:'Choose whether this saved game was Solo or Online.'},
       {name:'recordedAt',label:'Recorded time',type:'datetime-local',value:g.recordedAt?localInputValue(g.recordedAt):'',help:'When this game should appear as recorded.'},
       {name:'winnerPlayerId',label:'Winner',type:'select',value:g.winnerPlayerId||'',options:[{value:'',label:'No winner'},...playerChoices],help:'Select the player who won, or No winner.'},
       {name:'finalPoints',label:'Final points',type:'number',value:g.finalPoints??'',help:'Final points awarded for the completed game.'},
-      {name:'settlementType',label:'Settlement type',type:'select',value:g.settlementType||'normal',options:[{value:'normal',label:'Normal completed game'},{value:'current-settlement',label:'Interrupted game — current score settlement'},{value:'nagari',label:'No winner / Nagari'}],help:'How the server settled the result.'},
+      {name:'settlementType',label:'Settlement type',type:'select',value:g.settlementType||'',options:[{value:'',label:'Not recorded'},{value:'normal',label:'Normal completed game'},{value:'current-settlement',label:'Interrupted game — current score settlement'},{value:'nagari',label:'No winner / Nagari'}],help:'How the server settled the result.'},
       {name:'fairPoints',label:'Fair settlement points',type:'number',value:g.fairPoints??'',help:'Points used for a fair interrupted-game settlement.'},
       {name:'penaltyCoins',label:'Penalty Coins',type:'number',value:g.penaltyCoins??'',help:'Wallet Coins charged to the quitting player.'},
       {name:'opponentRewardCoins',label:'Opponent reward Coins',type:'number',value:g.opponentRewardCoins??'',help:'Wallet Coins awarded to the other player.'},
@@ -317,7 +317,7 @@
     participantRows.forEach((p,index)=>{
       const name=p.nickname||`Player ${index+1}`;
       fields.push(
-        {name:`p_${index}_won`,label:`${name} — Won`,type:'select',value:p.won?'true':'false',options:[{value:'true',label:'Yes'},{value:'false',label:'No'}]},
+        {name:`p_${index}_won`,label:`${name} — Won`,type:'select',value:p.won===true?'true':p.won===false?'false':'',options:[{value:'',label:'Not recorded'},{value:'true',label:'Yes'},{value:'false',label:'No'}]},
         {name:`p_${index}_points`,label:`${name} — Points`,type:'number',value:p.points??''},
         {name:`p_${index}_rawScore`,label:`${name} — Raw score`,type:'number',value:p.rawScore??''},
         {name:`p_${index}_walletDelta`,label:`${name} — Coin change`,type:'number',value:p.walletDelta??''},
@@ -351,21 +351,21 @@
     const nextRecorded=form.recordedAt?new Date(form.recordedAt).toISOString():'';if(form.recordedAt&&nextRecorded!==g.recordedAt)patch.recordedAt=nextRecorded;
     addScalar('winnerPlayerId',g.winnerPlayerId||'');
     for(const key of ['finalPoints','fairPoints','penaltyCoins','opponentRewardCoins','quitterScore','opponentScore']){const raw=form[key];if(raw!==''&&raw!==undefined){const next=Math.trunc(Number(raw));if(Number.isFinite(next)&&next!==g[key])patch[key]=next;}}
-    addScalar('settlementType',g.settlementType||'normal');
+    addScalar('settlementType',g.settlementType||'');
     const protectedValue=form.firstOfMonth===''?undefined:form.firstOfMonth==='true';if(protectedValue!==undefined&&protectedValue!==g.firstOfMonth)patch.firstOfMonth=protectedValue;
     addScalar('recordReason',g.reason||'');
     const settlementReasons=String(form.settlementReasons||'').split('\n').map(x=>x.trim()).filter(Boolean);if(changed(settlementReasons,g.settlementReasons||[]))patch.settlementReasons=settlementReasons;
     const formulaSteps=String(form.formulaSteps||'').split('\n').map(x=>x.trim()).filter(Boolean);if(changed(formulaSteps,g.formulaSteps||[]))patch.formulaSteps=formulaSteps;
     if(participantRows.length){
-      const participants=participantRows.map((p,index)=>({...p,won:form[`p_${index}_won`]==='true',points:Number(form[`p_${index}_points`]||0),rawScore:Number(form[`p_${index}_rawScore`]||0),walletDelta:Number(form[`p_${index}_walletDelta`]||0),coinsWon:Number(form[`p_${index}_coinsWon`]||0)}));
+      const participants=participantRows.map((p,index)=>{const next={...p},won=form[`p_${index}_won`];if(won!=='')next.won=won==='true';for(const key of ['points','rawScore','walletDelta','coinsWon']){const raw=form[`p_${index}_${key}`];if(raw!==''&&raw!==undefined)next[key]=Number(raw);}return next;});
       if(changed(participants,participantRows))patch.participants=participants;
     }
     if(scoreEntries.length){
-      const scores=Object.fromEntries(scoreEntries.map(([playerId,score],index)=>[playerId,{...score,points:Number(form[`score_${index}_points`]||0),rawScore:Number(form[`score_${index}_rawScore`]||0)}]));
+      const scores=Object.fromEntries(scoreEntries.map(([playerId,score],index)=>{const next={...score},points=form[`score_${index}_points`],raw=form[`score_${index}_rawScore`];if(points!==''&&points!==undefined)next.points=Number(points);if(raw!==''&&raw!==undefined)next.rawScore=Number(raw);return [playerId,next];}));
       if(changed(scores,g.scores||{}))patch.scores=scores;
     }
     if(g.computer&&typeof g.computer==='object'){
-      const computer={...g.computer,level:Number(form.computerLevel||0),walletAfter:Number(form.computerWalletAfter||0),points:Number(form.computerPoints||0),rawScore:Number(form.computerRawScore||0)};
+      const computer={...g.computer};for(const [field,key] of [['computerLevel','level'],['computerWalletAfter','walletAfter'],['computerPoints','points'],['computerRawScore','rawScore']]){const raw=form[field];if(raw!==''&&raw!==undefined)computer[key]=Number(raw);}
       if(changed(computer,g.computer))patch.computer=computer;
     }
     const walletAdjustments=walletPlayers.map((p,index)=>({accountId:p.accountId,delta:Math.trunc(Number(form[`wallet_${index}`]||0))})).filter(item=>Number.isFinite(item.delta)&&item.delta!==0);
