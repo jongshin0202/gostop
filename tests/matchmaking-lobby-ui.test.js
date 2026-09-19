@@ -77,3 +77,17 @@ test('same-account tabs are excluded and any two-player tab makes that account b
   assert.match(server,/accountTwoPlayerBusy\(id\)/);
   assert.match(server,/this\.clientsForAccount\(accountId\)\.some\(client=>!!client\.twoPlayer\)/);
 });
+
+
+test('Competitive Solo handoff route ends the authoritative Solo session before multiplayer acceptance',()=>{
+  const worker=fs.readFileSync(new URL('../server/worker.mjs',import.meta.url),'utf8');
+  const gameRoom=fs.readFileSync(new URL('../server/game-room.mjs',import.meta.url),'utf8');
+  const rankedRoom=fs.readFileSync(new URL('../server/ranked-room-core.mjs',import.meta.url),'utf8');
+  assert.match(worker,/\/api\/solo\/leave-for-challenge/);
+  assert.match(worker,/leave-solo-for-challenge/);
+  assert.match(gameRoom,/url\.pathname==='\/leave-solo-for-challenge'/);
+  assert.match(rankedRoom,/async leaveSoloForChallenge\(accountId\)/);
+  assert.match(rankedRoom,/endRankedSession\('accepted-multiplayer-challenge'\)/);
+  const handoff=rankedRoom.slice(rankedRoom.indexOf('async leaveSoloForChallenge'),rankedRoom.indexOf('async connect',rankedRoom.indexOf('async leaveSoloForChallenge')));
+  assert.doesNotMatch(handoff,/force-quit|abandon\(/);
+});
