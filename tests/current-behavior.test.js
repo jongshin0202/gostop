@@ -1982,7 +1982,7 @@ test('First Poop notices cover both players while First and Triple Poop semantic
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   const i18n=require('../i18n.js');
-  assert.equal(source.includes("if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side)"),true);
+  assert.match(source,/if\(result\.events\.some\(event=>event\.type==='firstPpeokAwarded'\)\)await showFirstPoopNotice\(side(?:,localGeneration)?\)/);
   assert.equal(i18n.dictionaries.en.firstPoop,'FIRST POOP!');
   assert.equal(i18n.dictionaries.en.triplePoop,'TRIPLE POOP!');
   assert.equal(source.includes("setGrandResult(t('triplePoop')"),true);
