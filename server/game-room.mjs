@@ -16,6 +16,7 @@ export class GameRoom{
       if(request.method==='POST'&&url.pathname==='/initialize-solo'){const {roomCode}=await request.json();return json({ok:true,room:await this.core.createSolo(roomCode)},201);}
       if(request.method==='POST'&&url.pathname==='/join'){const body=await request.json().catch(()=>({}));return json({ok:true,room:await this.core.join(body.credential,body.account||null)},201);}
       if(request.method==='POST'&&url.pathname==='/leave-solo-for-challenge'){const body=await request.json().catch(()=>({}));return json(await this.core.leaveSoloForChallenge(body.accountId));}
+      if(request.method==='POST'&&url.pathname==='/reconcile-active'){const body=await request.json().catch(()=>({}));return json({ok:true,...await this.core.reconcileActiveRanked(body.accountId,body.sessionId)});}
       if(request.method==='GET'&&url.pathname==='/connect'){
         if(request.headers.get('Upgrade')!=='websocket')throw new RoomError('UPGRADE_REQUIRED','WebSocket upgrade required.',426);
         const credential=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(v=>v.trim()).find(v=>v.startsWith('gostop-token.'))?.slice(13);

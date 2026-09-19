@@ -28,6 +28,16 @@ test('daily login reward is awarded only once per UTC day',async()=>{
   assert.equal(me.awards.dailyCoins,0);assert.equal(me.account.walletCoins,200);
 });
 
+test('stale active ranked pointer can be cleared only for its expected session',async()=>{
+  const store=makeStore();
+  const registered=await (await store.fetch(post('/register',{email:'stale-active@example.com',nickname:'StaleActive',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const account=await store.accountById(registered.account.id);account.activeRanked={sessionId:'session-old',mode:'solo',roomCode:'ABCDEFGHJK2345',startedAt:'2026-09-15T03:00:00.000Z'};await store.storage.put(`account:${account.id}`,account);
+  const wrong=await (await store.fetch(post('/internal/active-ranked/clear',{accountId:account.id,sessionId:'different-session'}))).json();
+  assert.equal(wrong.account.activeRanked.sessionId,'session-old');
+  const cleared=await (await store.fetch(post('/internal/active-ranked/clear',{accountId:account.id,sessionId:'session-old'}))).json();
+  assert.equal(cleared.account.activeRanked,null);assert.equal((await store.accountById(account.id)).activeRanked,null);
+});
+
 test('leaderboard counts only coins won while wallet includes wins and losses',async()=>{
   const store=makeStore();
   const a=await (await store.fetch(post('/register',{email:'a@example.com',nickname:'Alpha',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();

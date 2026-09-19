@@ -18,7 +18,16 @@ function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(r
 function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region','x-gostop-region-name','x-gostop-city','x-gostop-postal','x-gostop-timezone','x-gostop-ip']){const value=source.get(name);if(value)target.set(name,value);}return target;}
 async function forwardAccount(request,env,path){const headers=geoHeadersFor(request),auth=request.headers.get('Authorization');if(auth)headers.set('Authorization',auth);headers.set('x-gostop-event',path.replace(/^\//,'')||'request');if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts${path}`,init));}
 async function forwardAdmin(request,env,path){const headers=geoHeadersFor(request);headers.set('x-gostop-admin','1');headers.set('x-gostop-event','admin');if(request.headers.get('content-type'))headers.set('content-type',request.headers.get('content-type'));const init={method:request.method,headers};if(!['GET','HEAD'].includes(request.method))init.body=await request.text();return accountStub(env).fetch(new Request(`https://accounts/admin${path}`,init));}
-async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);headers.set('x-gostop-event','game-resolve');const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
+async function reconcileActiveRanked(env,account){
+  const active=account?.activeRanked;if(!active?.roomCode||!active?.sessionId||!account?.id)return account;
+  try{
+    const room=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(active.roomCode)),response=await room.fetch(new Request('https://room/reconcile-active',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:active.sessionId})}));
+    if(!response.ok)return account;const status=await response.json();if(status.active!==false)return account;
+    const cleared=await accountStub(env).fetch(new Request('https://accounts/internal/active-ranked/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:active.sessionId})}));
+    if(!cleared.ok)return account;return (await cleared.json()).account||account;
+  }catch(_){return account;}
+}
+async function resolveAccount(request,env){const auth=request.headers.get('Authorization');if(!auth)return null;const headers=geoHeadersFor(request);headers.set('Authorization',auth);headers.set('x-gostop-event','game-resolve');const response=await accountStub(env).fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return reconcileActiveRanked(env,(await response.json()).account||null);}
 async function requireAccount(request,env){const account=await resolveAccount(request,env);return account||null;}
 async function allocateRoom(env,{solo=false,account=null}={}){
   for(let attempt=0;attempt<5;attempt++){
@@ -55,7 +64,7 @@ export default {async fetch(request,env){
     if(request.method==='POST'&&url.pathname==='/api/auth/register')return withCors(await forwardAccount(request,env,'/register'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/logout')return withCors(await forwardAccount(request,env,'/logout'),origin);
-    if(request.method==='GET'&&url.pathname==='/api/me')return withCors(await forwardAccount(request,env,'/me'),origin);
+    if(request.method==='GET'&&url.pathname==='/api/me'){const response=await forwardAccount(request,env,'/me');if(!response.ok)return withCors(response,origin);const data=await response.json();if(data.account)data.account=await reconcileActiveRanked(env,data.account);return withCors(json(data,response.status),origin);}
     if(request.method==='POST'&&url.pathname==='/api/account/notices/ack')return withCors(await forwardAccount(request,env,'/notices/ack'),origin);
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){

@@ -81,6 +81,15 @@ test('inactivity warning dismissal is sticky for the current warning while serve
   assert.doesNotMatch(source,/30-SECOND ABANDONMENT WARNING/);
 });
 
+test('stale ranked locks are server-reconciled and main menu rechecks them automatically',()=>{
+  assert.match(worker,/async function reconcileActiveRanked\(env,account\)/);
+  assert.match(worker,/\/reconcile-active/);
+  assert.match(worker,/\/internal\/active-ranked\/clear/);
+  assert.match(source,/activeRankedRefreshTimer/);
+  assert.match(source,/function scheduleActiveRankedRecheck\(\)/);
+  assert.match(source,/setTimeout\(\(\)=>\{activeRankedRefreshTimer=null;void refreshAccount\(\);\},20000\)/);
+});
+
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
   assert.match(source,/totalCoins:'Total Coins Earned'/);
   const identity=source.slice(source.indexOf('function patchGameIdentity'),source.indexOf('playPractice.addEventListener'));

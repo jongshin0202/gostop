@@ -203,6 +203,12 @@ export class AccountStore{
     return json({ok:true,players});
   }
 
+  async clearActiveRanked(request){
+    const body=await request.json().catch(()=>({})),account=await this.accountById(body.accountId);if(!account)return json({ok:false,error:{code:'ACCOUNT_NOT_FOUND',message:'Account not found.'}},404);
+    const expected=String(body.sessionId||'');if(account.activeRanked&&(!expected||account.activeRanked.sessionId===expected)){account.activeRanked=null;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}
+    return json({ok:true,account:publicAccount(account)});
+  }
+
   async startGameSession(request){
     const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds.filter(Boolean):[],opponent:body.opponent||null,roomCode:body.roomCode||null,matchId:body.matchId||null,gameSequence:Number(body.gameSequence)||0,startedAt:body.startedAt||this.now(),endedAt:null,summary:null},key=`gameSession:${record.id}`;
     const prior=await this.storage.get(key);if(prior&&!prior.endedAt)return json({ok:true,duplicate:true,session:prior});
@@ -255,6 +261,7 @@ export class AccountStore{
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
       if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
+      if(request.method==='POST'&&path==='/internal/active-ranked/clear')return await this.clearActiveRanked(request);
       if(request.method==='GET'&&path==='/internal/resolve')return await this.resolveSession(request);
       if(request.method==='POST'&&path==='/internal/session/start')return await this.startGameSession(request);
       if(request.method==='POST'&&path==='/internal/session/end')return await this.endGameSession(request);

@@ -32,6 +32,25 @@ test('online inactivity abandonment defaults to three minutes and accepts a serv
   assert.equal(configured.core.room.rankFlow.inactivity.warningAt-start,30000);
 });
 
+test('orphaned ranked lock gets a short runtime recovery grace then ends without abandonment',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
+  const {core,a,accountStore}=await onlineRoom({now:clock});
+  core.sockets.clear();core.room.rankFlow.disconnectDeadlines={};core.room.rankFlow.disconnectSettlements={};
+  const first=await core.reconcileActiveRanked('a',core.room.sessionId);
+  assert.equal(first.active,true);assert.equal(first.connected,false);assert.ok(first.runtimeOrphanUntil);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
+  instant='2026-09-15T04:45:16.000Z';await core.alarm();
+  assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,null);assert.equal(core.room.rankFlow.abandonment,null);
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'&&call.body.summary?.reason==='runtime-orphan-timeout'));
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
+});
+
+test('live ranked socket survives account reconciliation and clears any orphan deadline',async()=>{
+  const {core,a}=await onlineRoom();core.room.rankFlow.runtimeOrphanDeadlines[a.playerId]=Date.parse(now())+15000;
+  const status=await core.reconcileActiveRanked('a',core.room.sessionId);
+  assert.equal(status.active,true);assert.equal(status.connected,true);assert.equal(core.room.rankFlow.runtimeOrphanDeadlines[a.playerId],undefined);
+});
+
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
   assert.equal(core.room.sessionFlow.ended,false);

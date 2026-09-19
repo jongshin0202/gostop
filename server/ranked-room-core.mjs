@@ -8,11 +8,12 @@ const DEFAULT_ABANDONMENT_TIMEOUT_MS=180000;
 const ABANDON_WARNING_MS=DEFAULT_ABANDONMENT_TIMEOUT_MS-NUDGE_MS-WARNING_AFTER_NUDGE_MS;
 const PAUSE_MS=60000;
 const RECONNECT_GRACE_MS=60000;
+const RUNTIME_ORPHAN_GRACE_MS=15000;
 const clone=value=>JSON.parse(JSON.stringify(value));
 const sideForSeat=seat=>seat==='playerA'?'human':'ai';
 const otherSeat=seat=>seat==='playerA'?'playerB':'playerA';
 
-function freshRankFlow(){return {pauseRemaining:{},pause:null,quitRequest:null,quitGeneration:0,scheduledQuitBy:null,inactivity:null,disconnectDeadlines:{},disconnectSettlements:{},disconnectCancelled:false,abandonment:null,botPendingCardId:null};}
+function freshRankFlow(){return {pauseRemaining:{},pause:null,quitRequest:null,quitGeneration:0,scheduledQuitBy:null,inactivity:null,disconnectDeadlines:{},disconnectSettlements:{},runtimeOrphanDeadlines:{},disconnectCancelled:false,abandonment:null,botPendingCardId:null};}
 function randomUnit(cryptoApi){const b=new Uint32Array(1);cryptoApi.getRandomValues(b);return b[0]/0x100000000;}
 function captureValue(card){let value={bright:12,animal:5,ribbon:4,pi:2}[card?.type]||1;if(card?.flags?.includes('doublePi'))value+=4;if(card?.flags?.includes('godori'))value+=4;if(card?.ribbonSet)value+=2;return value;}
 
@@ -39,7 +40,7 @@ export class RankedRoomCore extends RoomCore{
   nowMs(){return Date.parse(this.now());}
   async load(){
     const room=await super.load();if(!room)return null;
-    room.rankFlow={...freshRankFlow(),...(room.rankFlow||{}),pauseRemaining:{...(room.rankFlow?.pauseRemaining||{})},disconnectDeadlines:{...(room.rankFlow?.disconnectDeadlines||{})},disconnectSettlements:{...(room.rankFlow?.disconnectSettlements||{})}};
+    room.rankFlow={...freshRankFlow(),...(room.rankFlow||{}),pauseRemaining:{...(room.rankFlow?.pauseRemaining||{})},disconnectDeadlines:{...(room.rankFlow?.disconnectDeadlines||{})},disconnectSettlements:{...(room.rankFlow?.disconnectSettlements||{})},runtimeOrphanDeadlines:{...(room.rankFlow?.runtimeOrphanDeadlines||{})}};
     for(const participant of room.participants)if(room.rankFlow.pauseRemaining[participant.playerId]==null)room.rankFlow.pauseRemaining[participant.playerId]=2;
     return room;
   }
@@ -104,6 +105,7 @@ export class RankedRoomCore extends RoomCore{
     const participant=await super.connect(credential,socket);await this.load();
     if(this.room.rankFlow.disconnectDeadlines[participant.playerId])delete this.room.rankFlow.disconnectDeadlines[participant.playerId];
     if(this.room.rankFlow.disconnectSettlements?.[participant.playerId])delete this.room.rankFlow.disconnectSettlements[participant.playerId];
+    if(this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId])delete this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId];
     this.room.rankFlow.disconnectCancelled=false;
     if(!this.room.matchId){await this.persist();return participant;}
     if(this.isSolo())await this.advanceBot();else await this.refreshInactivity();
@@ -112,7 +114,27 @@ export class RankedRoomCore extends RoomCore{
   async disconnect(socket){
     const playerId=socket.__playerId;await super.disconnect(socket);if(!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return;
     const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot||!this.isRanked())return;
+    if(this.room.rankFlow.runtimeOrphanDeadlines?.[playerId])delete this.room.rankFlow.runtimeOrphanDeadlines[playerId];
     this.room.rankFlow.disconnectSettlements[playerId]=this.calculateDisconnectSettlement(playerId);this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();
+  }
+  async endRuntimeOrphan(playerId){
+    if(!this.room||this.room.sessionFlow.ended)return {active:false,reason:'ended'};
+    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot)return {active:false,reason:'participant-missing'};
+    this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.quitRequest=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};this.room.rankFlow.runtimeOrphanDeadlines={};this.room.rankFlow.abandonment=null;
+    await this.endRankedSession('runtime-orphan-timeout');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=null;this.room.status='ended';await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();
+    return {active:false,reason:'runtime-orphan-timeout'};
+  }
+  async reconcileActiveRanked(accountId,sessionId){
+    await this.load();if(!this.room)return {active:false,reason:'room-missing'};
+    if(this.room.sessionFlow?.ended||this.room.status==='ended'||!this.room.sessionId)return {active:false,reason:'room-ended'};
+    if(sessionId&&this.room.sessionId!==sessionId)return {active:false,reason:'session-mismatch'};
+    const participant=this.room.participants.find(item=>item.accountId===accountId&&!item.bot);if(!participant)return {active:false,reason:'participant-missing'};
+    if(this.sockets.has(participant.playerId)){if(this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId]){delete this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId];await this.persist();await this.scheduleAlarm();}return {active:true,connected:true};}
+    const reconnectUntil=this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0;if(reconnectUntil)return {active:true,connected:false,reconnectUntil};
+    let orphanUntil=this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId]||0;
+    if(!orphanUntil){orphanUntil=this.nowMs()+RUNTIME_ORPHAN_GRACE_MS;this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId]=orphanUntil;await this.persist();await this.scheduleAlarm();}
+    if(this.nowMs()>=orphanUntil)return this.endRuntimeOrphan(participant.playerId);
+    return {active:true,connected:false,runtimeOrphanUntil:orphanUntil};
   }
   engineState(){return this.room?.matchId?this.authority.readTrustedState(this.room.matchId):null;}
   calculateDisconnectSettlement(playerId){
@@ -149,12 +171,13 @@ export class RankedRoomCore extends RoomCore{
     const now=this.nowMs();this.room.rankFlow.inactivity={playerId:participant.playerId,phase:'waiting',nudgeAt:now+NUDGE_MS,warningAt:now+NUDGE_MS+WARNING_AFTER_NUDGE_MS,abandonAt:now+this.abandonmentTimeoutMs,penaltyCoins:null};
   }
   async scheduleAlarm(){
-    if(!this.storage?.setAlarm||!this.room)return;const flow=this.room.rankFlow||freshRankFlow(),times=[];if(flow.pause?.until)times.push(flow.pause.until);for(const value of Object.values(flow.disconnectDeadlines||{}))if(value)times.push(value);if(flow.inactivity){if(flow.inactivity.phase==='waiting')times.push(flow.inactivity.nudgeAt);else if(flow.inactivity.phase==='nudge')times.push(flow.inactivity.warningAt);else if(flow.inactivity.phase==='warning')times.push(flow.inactivity.abandonAt);}if(times.length)await this.storage.setAlarm(Math.min(...times));else if(this.storage.deleteAlarm)await this.storage.deleteAlarm();
+    if(!this.storage?.setAlarm||!this.room)return;const flow=this.room.rankFlow||freshRankFlow(),times=[];if(flow.pause?.until)times.push(flow.pause.until);for(const value of Object.values(flow.disconnectDeadlines||{}))if(value)times.push(value);for(const value of Object.values(flow.runtimeOrphanDeadlines||{}))if(value)times.push(value);if(flow.inactivity){if(flow.inactivity.phase==='waiting')times.push(flow.inactivity.nudgeAt);else if(flow.inactivity.phase==='nudge')times.push(flow.inactivity.warningAt);else if(flow.inactivity.phase==='warning')times.push(flow.inactivity.abandonAt);}if(times.length)await this.storage.setAlarm(Math.min(...times));else if(this.storage.deleteAlarm)await this.storage.deleteAlarm();
   }
   async alarm(){
     await this.load();if(!this.room||this.room.sessionFlow.ended)return;const now=this.nowMs(),flow=this.room.rankFlow;
     if(flow.pause&&now>=flow.pause.until){flow.pause=null;await this.refreshInactivity();this.broadcastSnapshots();}
-    for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!participant.connected&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId)){await this.endPreFirstTurnDisconnect(playerId);return;}await this.abandon(playerId,'disconnect-timeout');return;}}}
+    for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!this.sockets.has(playerId)&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId)){await this.endPreFirstTurnDisconnect(playerId);return;}await this.abandon(playerId,'disconnect-timeout');return;}}}
+    for(const [playerId,deadline] of Object.entries({...flow.runtimeOrphanDeadlines})){if(now>=deadline){delete flow.runtimeOrphanDeadlines[playerId];if(!this.sockets.has(playerId)){await this.endRuntimeOrphan(playerId);return;}}}
     const inactivity=flow.inactivity;if(inactivity){if(now>=inactivity.abandonAt){await this.abandon(inactivity.playerId,'inactivity-timeout');return;}if(inactivity.phase!=='warning'&&now>=inactivity.warningAt){inactivity.phase='warning';inactivity.penaltyCoins=this.calculatePenalty(inactivity.playerId);this.broadcastSnapshots();}else if(inactivity.phase==='waiting'&&now>=inactivity.nudgeAt){inactivity.phase='nudge';this.broadcastSnapshots();}}
     await this.persist();await this.scheduleAlarm();
   }
@@ -221,4 +244,4 @@ export class RankedRoomCore extends RoomCore{
   }
 }
 
-export {NUDGE_MS,WARNING_AFTER_NUDGE_MS,DEFAULT_ABANDONMENT_TIMEOUT_MS,ABANDON_WARNING_MS,PAUSE_MS,RECONNECT_GRACE_MS};
+export {NUDGE_MS,WARNING_AFTER_NUDGE_MS,DEFAULT_ABANDONMENT_TIMEOUT_MS,ABANDON_WARNING_MS,PAUSE_MS,RECONNECT_GRACE_MS,RUNTIME_ORPHAN_GRACE_MS};
