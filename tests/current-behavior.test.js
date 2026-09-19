@@ -1109,7 +1109,7 @@ test('Shake sound presentation is driven only by public shakeDeclared events',()
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const humanFlow=source.slice(source.indexOf("const attempted=applyNormalAction(normalAction('human'"),source.indexOf('const matches=matchesFor(card)'));
   const shakeButton=source.slice(source.indexOf("if(els.shakeBtn)"),source.indexOf("if(els.keepSecretBtn)"));
-  assert.equal(humanFlow.includes('presentShakeDeclaration(declared.events)'),true);
+  assert.match(humanFlow,/presentShakeDeclaration\(declared\.events(?:,epoch)?\)/);
   assert.equal(shakeButton.includes('playShakeSound'),false);
 });
 
@@ -1324,7 +1324,7 @@ test('Chongtong fanfare and result presentation require the authoritative event'
   const opening=source.slice(source.indexOf('async function processOpeningSpecials'),source.indexOf('async function revealAiShake'));
   assert.equal(opening.includes('fourMonths('),false);
   assert.equal(opening.includes("event=>event.type==='chongtongDeclared'"),true);
-  assert.equal(opening.indexOf('presentChongtong(chongtong)')<opening.indexOf('function presentChongtong'),true);
+  assert.equal(opening.indexOf('presentChongtong(chongtong,epoch)')<opening.indexOf('function presentChongtong'),true);
   const presenter=opening.slice(opening.indexOf('function presentChongtong'));
   assert.equal(presenter.includes('playChongtongFanfare()'),true);
   assert.equal(presenter.includes('if(event.actorId===PLAYER_A)playChongtongFanfare()'),true);
@@ -1676,7 +1676,7 @@ test('browser presents Three-Ppeok only from authoritative terminal events',()=>
   assert.equal(presenter.includes('nagariCarryPower=0'),false);
   const extracted=source.slice(source.indexOf('async function resolveExtractedSpecialTurn'),source.indexOf('async function playFullTurn'));
   assert.equal(extracted.indexOf('playPpeokSound()')<extracted.indexOf('await sleep(450)'),true);
-  assert.equal(extracted.indexOf('await sleep(450)')<extracted.indexOf('presentThreePpeok(result)'),true);
+  assert.equal(extracted.indexOf('await sleep(450)')<extracted.indexOf('presentThreePpeok(result,epoch)'),true);
 });
 
 test('engine captures initial and opponent Ppeok floor stacks for both players',()=>{
@@ -1974,7 +1974,7 @@ test('Keep for Bomb is silent while accepted Shake alone enters the acknowledgme
   const presenter=source.slice(source.indexOf('async function presentShakeDeclaration'),source.indexOf('function openShakeReview'));
   assert.equal(presenter.includes("events.find(item=>item.type==='shakeDeclared')"),true);
   assert.equal(presenter.includes("event.actorId===PLAYER_B"),true);
-  assert.equal(presenter.includes('shakeRevealDialog.showModal()'),true);
+  assert.equal(presenter.includes('showGameplayModal(els.shakeRevealDialog,epoch)'),true);
   assert.equal(presenter.includes("shakeRevealDialog.addEventListener('close'"),true);
 });
 
@@ -1982,7 +1982,7 @@ test('First Poop notices cover both players while First and Triple Poop semantic
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   const i18n=require('../i18n.js');
-  assert.match(source,/if\(result\.events\.some\(event=>event\.type==='firstPpeokAwarded'\)\)await showFirstPoopNotice\(side(?:,localGeneration)?\)/);
+  assert.match(source,/if\(result\.events\.some\(event=>event\.type==='firstPpeokAwarded'\)\)await showFirstPoopNotice\(side,localGeneration,epoch\)/);
   assert.equal(i18n.dictionaries.en.firstPoop,'FIRST POOP!');
   assert.equal(i18n.dictionaries.en.triplePoop,'TRIPLE POOP!');
   assert.equal(source.includes("setGrandResult(t('triplePoop')"),true);
@@ -2215,7 +2215,7 @@ test('shared milestone overlay clears KISS effects before every scoring mileston
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const transient=source.slice(source.indexOf('async function showSpecialTransient'),source.indexOf('async function presentSemanticEvents'));
   const milestones=source.slice(source.indexOf('async function presentNewMilestones'),source.indexOf('function bestAiCard'));
-  assert.match(transient,/dataset\.effect=effect/);assert.match(source,/presentKiss\(cardIds\).*'kiss'/);
+  assert.match(transient,/dataset\.effect=effect/);const kiss=source.slice(source.indexOf('async function presentKiss'),source.indexOf('function detectNewMilestones'));assert.match(kiss,/showSpecialTransient\('KISS!',cardIds,'kiss',epoch\)/);
   assert.match(milestones,/milestoneOverlay\.dataset\.effect=''/);
   assert.match(milestones,/if\(milestone\.birds\)for\(let index=0;index<5;index\+\+\)/);
   assert.match(milestones,/if\(milestone\.birds\)playBirdSound\(\)/);
@@ -2287,7 +2287,7 @@ test('tutorial Overview renders every four-card month family through canonical c
 
 test('New Game confirmation rejection preserves authority while acceptance resets the session seam',()=>{
   const original=stateWith({human:api.makePlayer({hand:[card('m1-1')]})});api.setState(original);const before=JSON.stringify(api.getState());assert.equal(api.confirmNewGame(false),false);assert.equal(JSON.stringify(api.getState()),before);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("optionsNewGameBtn.addEventListener('click'"),true);assert.equal(source.includes('resetSession();startGame()'),true);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("optionsNewGameBtn.addEventListener('click'"),true);assert.match(source,/invalidateGameplayPresentation\(\);beginGameplayPresentation\(\);[^]*resetSession\(\);startGame\(gameplayPresentationEpoch\)/);
 });
 
 test('Online New Game submits to server authority without creating a local game',()=>{
@@ -2374,7 +2374,7 @@ test('starter dice remains presentation-only, rolls only for a new session, and 
   assert.ok(sequence.indexOf("classList.add('rolling')")<sequence.indexOf('playDiceSound()'));
   assert.ok(sequence.indexOf('await sleep(900)')<sequence.indexOf("classList.remove('rolling')"));
   assert.ok(sequence.indexOf("classList.remove('rolling')")<sequence.indexOf('els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1]'));
-  assert.equal(source.includes('const firstSessionHand=consumeSessionStart()'),true);assert.equal(source.includes('if(firstSessionHand)await presentOpeningSequence(starter,true)'),true);assert.equal(source.includes('else await presentDealSequence()'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
+  assert.equal(source.includes('const firstSessionHand=consumeSessionStart()'),true);assert.equal(source.includes('if(firstSessionHand)await presentOpeningSequence(starter,true,epoch)'),true);assert.equal(source.includes('else await presentDealSequence(epoch)'),true);assert.equal(source.includes('presentation.nextStarterId=terminal.winnerId||state.startingPlayerId'),true);assert.equal(source.includes('secureRandomInt(2)===0?PLAYER_A:PLAYER_B'),true);
 });
 
 test('opening setup scans both hands, offers floor-aware choices, and preserves starter until declarations finish',()=>{
@@ -2401,7 +2401,7 @@ test('ordinary opponent Pooped pickup emits and presents exactly one physical Si
 
 test('non-Sweep special presentation is awaited before threshold evaluation and handoff',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');const presenter=source.slice(source.indexOf('async function resolveExtractedSpecialTurn'),source.indexOf('async function playFullTurn'));assert.ok(presenter.includes("await showSpecialTransient('KISS!'"));assert.ok(presenter.includes("await showSpecialTransient('FLUSH!'"));
-  const turn=source.slice(source.indexOf('async function playFullTurn'),source.indexOf('async function executeDeckOnlyTurn'));assert.ok(turn.indexOf('await resolveExtractedSpecialTurn')<turn.indexOf('await concludeTurn(side)'));
+  const turn=source.slice(source.indexOf('async function playFullTurn'),source.indexOf('async function executeDeckOnlyTurn'));assert.ok(turn.indexOf('await resolveExtractedSpecialTurn')<turn.indexOf('await concludeTurn(side,epoch)'));
   const conclude=source.slice(source.indexOf('async function concludeTurn'),source.indexOf('function scheduleTurnStart'));assert.ok(conclude.indexOf('await presentNewMilestones')<conclude.indexOf('evaluateGoStop'));
 });
 
@@ -2762,7 +2762,7 @@ test('dice audio is a bounded sequence of discrete clacks rather than procedural
   assert.match(dice,/playDiceClatter\(\)/);assert.doesNotMatch(dice,/playProceduralNoise/);
   const procedural=source.slice(source.indexOf('function playProceduralNoise'),source.indexOf('let activeDiceSources'));
   assert.doesNotMatch(procedural,/kind==='dice'/);
-  assert.match(source,/async function unlockAudio\(\)/);assert.match(source,/if\(context\?\.state==='suspended'\)await context\.resume\(\)/);assert.match(source,/if\(firstSessionHand&&!TEST_MODE\)await unlockAudio\(\)/);const launch=source.slice(source.indexOf('async function launchLocalGame'),source.indexOf("document.addEventListener('pointerdown'",source.indexOf('async function launchLocalGame')));assert.match(launch,/await unlockAudio\(\)/);
+  assert.match(source,/async function unlockAudio\(\)/);assert.match(source,/if\(context\?\.state==='suspended'\)await context\.resume\(\)/);assert.match(source,/if\(firstSessionHand&&!TEST_MODE\)\{await unlockAudio\(\);if\(!isGameplayPresentationCurrent\(epoch\)\)return;\}/);const launch=source.slice(source.indexOf('async function launchLocalGame'),source.indexOf("document.addEventListener('pointerdown'",source.indexOf('async function launchLocalGame')));assert.match(launch,/await unlockAudio\(\)/);
   api.setSoundEnabled(false);api.resetAudioTrace();api.playDiceSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
 });
 
@@ -2795,13 +2795,13 @@ test('AI Bomb selection requires a current floor target and stale UI Bomb intent
   const played=extractedEngine.applyNormalTurnAction(attempted.state,{type:'playCard',actorId:'playerB',cardId:'m8-1'});assert.equal(played.events[0].type,'cardPlayed');assert.equal(played.state.ai.hand.length,2);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),bombWrapper=source.slice(source.indexOf('async function executeBombTurn'),source.indexOf('async function resolveCombinedTurn'));
   assert.match(bombWrapper,/decision\?\.type==='bombDecision'.*type:'declineBomb'/s);assert.match(bombWrapper,/return false/);
-  assert.match(source,/if\(await executeBombTurn\('human',card\.month\)\)return/);
+  assert.match(source,/if\(await executeBombTurn\('human',card\.month,epoch\)\)return/);
 });
 
 test('round boundary cleanup is idempotent and does not reset session authority',()=>{
   api.resetSession();assert.equal(api.consumeSessionStart(),true);api.reserveFloorSlot(card('m1-1'));assert.equal(Object.keys(api.getPresentationSnapshot().floorSlotReservations).length,1);
   api.resetHandPresentationState();api.resetHandPresentationState();const after=api.getPresentationSnapshot();assert.equal(Object.keys(after.floorSlotReservations).length,0);assert.equal(after.activeHoveredHandCardId,null);assert.equal(api.consumeSessionStart(),false);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/async function startGame\(\)\{\s*resetHandPresentationState\(\)/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/async function startGame\(epoch=gameplayPresentationEpoch\)\{[^]*resetHandPresentationState\(\)/);
 });
 
 test('authoritative unmatched deck landing keeps its reserved slot after earlier capture cleanup',()=>{
