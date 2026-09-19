@@ -27,14 +27,16 @@ test('Search reconnects instead of silently doing nothing when the lobby socket 
   assert.match(search,/sendLobbyMessage\(query\?\{type:'search',query\}:\{type:'recommendations'\}/);
 });
 
-test('lobby presence is available only while browsing Competitive Online Play or entering a match',()=>{
-  const launch=client.slice(client.indexOf('function launchRankedRoom'),client.indexOf("globalThis.addEventListener?.('gostop-online-launch-settled'"));
-  assert.match(launch,/setAvailability',available:false/);
+test('logged-in browsers keep global presence while gameplay activity controls availability',()=>{
+  assert.match(client,/function ensureLobbyPresence\(\)/);
+  assert.match(client,/function desiredLobbyAvailability\(\)\{return !!account&&!playerActivityActive&&!account\?\.activeRanked\?\.roomCode;\}/);
+  assert.match(client,/function saveSession\([^]*ensureLobbyPresence\(\)/);
+  assert.match(client,/async function refreshAccount\([^]*ensureLobbyPresence\(\)/);
+  assert.match(client,/gostop-player-activity/);
+  assert.match(client,/playerActivityActive=!!event\.detail\?\.active;syncLobbyAvailability\(\)/);
   const entry=client.slice(client.indexOf("onlinePlay.addEventListener"),client.indexOf("freeFriendBtn.addEventListener"));
-  assert.match(entry,/setAvailability',available:true/);
-  assert.match(entry,/onlineLobbyClose[^]*closeLobby\(\)/);
-  assert.match(entry,/createRoom\?\.addEventListener\('click'[^]*setAvailability',available:false/);
-  assert.match(entry,/joinForm\?\.addEventListener\('submit'[^]*setAvailability',available:false/);
+  assert.doesNotMatch(entry,/onlineLobbyClose[^]*closeLobby\(\)/);
+  assert.match(entry,/onlineLobbyClose[^]*autoMatchCancel/);
 });
 
 test('server pushes live recommendations when presence changes',()=>{
@@ -46,11 +48,22 @@ test('server pushes live recommendations when presence changes',()=>{
   assert.match(server,/type:query\?'searchResults':'recommendations'/);
 });
 
-test('Auto Match is an explicit opt-in queue and uses the existing authoritative room handoff',()=>{
+test('Auto Match selects the closest available online player and uses the existing authoritative room handoff',()=>{
   assert.match(client,/type:'autoMatchStart'/);
   assert.match(client,/type:'autoMatchCancel'/);
-  assert.match(server,/candidateClients\(client,\{autoOnly:true\}\)/);
+  assert.match(server,/candidateClients\(client,\{includeAutoMatching:true\}\)/);
+  assert.doesNotMatch(server,/candidateClients\(client,\{autoOnly:true\}\)/);
   assert.match(server,/createAcceptedMatch\(client,partner,rows,\{automatic:true\}\)/);
   assert.match(server,/type:'challengeAcceptedCreateRoom'/);
   assert.match(server,/type:'challengeAcceptedWaiting'/);
+});
+
+
+test('game code publishes presence activity for local and authoritative games',()=>{
+  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  assert.match(app,/function publishPlayerActivity\(active,mode=''\)/);
+  assert.match(app,/launchLocalGame\(training=false\)[^]*publishPlayerActivity\(true,training\?'training':'free-solo'\)/);
+  assert.match(app,/cancelLocalGamePresentation\(\)[^]*publishPlayerActivity\(false,'menu'\)/);
+  assert.match(app,/beginOnline=async[^]*publishPlayerActivity\(true,anonymous\?'free-friend':'competitive-online'\)/);
+  assert.match(app,/returnOnlineToMenu\(\)[^]*publishPlayerActivity\(false,'menu'\)/);
 });

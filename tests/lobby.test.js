@@ -80,7 +80,7 @@ test('nickname search only returns currently available players and preserves exa
   assert.deepEqual(result.map(player=>player.nickname),['Sonogong','Sonogong2']);
 });
 
-test('Auto Match pairs with the closest queued player and skips browsers who did not opt in',async()=>{
+test('Auto Match pairs with the closest available online player even when only the requester pressed Auto Match',async()=>{
   const rows=rowsFor([
     ['Jong',10,100,1000,1],
     ['Near',10.2,102,1040,2],
@@ -96,26 +96,25 @@ test('Auto Match pairs with the closest queued player and skips browsers who did
 
   assert.equal(await lobby.tryAutoMatch(me),true);
   assert.equal(me.available,false);
-  assert.equal(near.available,false);
+  assert.equal(browser.available,false);
   assert.equal(me.autoMatching,false);
-  assert.equal(near.autoMatching,false);
+  assert.equal(browser.autoMatching,false);
+  assert.equal(near.available,true);
   assert.equal(far.available,true);
-  assert.equal(browser.available,true);
 
   const creator=me.socket.messages.find(message=>message.type==='challengeAcceptedCreateRoom');
-  const waiting=near.socket.messages.find(message=>message.type==='challengeAcceptedWaiting');
+  const waiting=browser.socket.messages.find(message=>message.type==='challengeAcceptedWaiting');
   assert.equal(creator?.automatic,true);
-  assert.equal(creator?.opponent?.nickname,'Near');
+  assert.equal(creator?.opponent?.nickname,'Browser');
   assert.equal(waiting?.opponent?.nickname,'Jong');
-  assert.equal(browser.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'||message.type==='challengeAcceptedCreateRoom'),false);
 });
 
-test('Auto Match waits when no other opted-in player is available',async()=>{
-  const rows=rowsFor([['Jong',10,10,100,1],['Browser',10,10,100,2]]);
+test('Auto Match waits when no other available online player exists',async()=>{
+  const rows=rowsFor([['Jong',10,10,100,1],['Busy',10,10,100,2]]);
   const lobby=makeLobby(rows);
   const me={socket:socket(),account:account('me','Jong',100),available:true,autoMatching:true};
-  const browser={socket:socket(),account:account('browser','Browser',100),available:true,autoMatching:false};
-  lobby.clients.set(me.socket,me);lobby.clients.set(browser.socket,browser);
+  const busy={socket:socket(),account:account('busy','Busy',100),available:false,autoMatching:false};
+  lobby.clients.set(me.socket,me);lobby.clients.set(busy.socket,busy);
 
   assert.equal(await lobby.tryAutoMatch(me),false);
   assert.equal(me.available,true);
