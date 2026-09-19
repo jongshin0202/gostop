@@ -2650,6 +2650,11 @@
       // enter awaitingFloorTarget and publish the authoritative chooseFloorTarget action.
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
+    function enterOnlineMatchView(anonymous){
+      if(anonymous){if(freeFriendPanel)freeFriendPanel.hidden=true;}
+      else {const panel=document.getElementById('onlineLobbyPanel');if(panel)panel.hidden=true;}
+      els.soloStartOverlay.hidden=true;
+    }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
       const twoPlayer=!!anonymous||room?.rankedMode!=='solo';
       publishPlayerActivity(true,anonymous?'free-friend':room?.rankedMode==='solo'?'competitive-solo':'competitive-online',twoPlayer);
@@ -2665,11 +2670,11 @@
       onlineMode=true;
       refreshModeLocalizedLabels();
       sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));if(!anonymous){try{localStorage.setItem('gostop-active-ranked-room',JSON.stringify(room));}catch(_){}}activeOnlineStatus.textContent=t('roomWaitingConnection',{roomCode:room.roomCode});
-      adapter.addEventListener('connected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('roomWaitingOpponent',{roomCode:room.roomCode});});
-      adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
-      adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
+      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready)enterOnlineMatchView(anonymous);activeOnlineStatus.textContent=ready?t('matchReady'):t('roomWaitingOpponent',{roomCode:room.roomCode});});
+      adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);});
+      adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);return;}if(anonymous&&event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
