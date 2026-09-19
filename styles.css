@@ -658,3 +658,5 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 .player-info-copy .player-info-status{color:#f0b66c;font-weight:750;min-height:1.2em}
 .player-info-copy small{margin-top:5px;color:#9d8a70;font-size:11px}
 @media(max-width:700px){.player-info-popover{grid-template-columns:64px minmax(0,1fr);gap:12px;padding:15px 16px}.player-info-avatar{width:60px;height:60px;font-size:15px}.player-info-copy strong{font-size:23px}.player-info-copy>span{font-size:14px}}
+
+.solo-start-overlay[hidden]{display:none!important}

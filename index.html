@@ -203,7 +203,7 @@
     <div id="milestoneTitle" class="milestone-title"></div>
     <div id="milestoneCards" class="milestone-cards"></div>
   </div>
-  <div id="soloStartOverlay" class="solo-start-overlay">
+  <div id="soloStartOverlay" class="solo-start-overlay" hidden data-current-menu-ready="false">
     <strong>GoStop <em>Live!</em></strong>
     <div class="start-actions"><button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button><button id="createOnlineBtn" class="play-solo-btn" type="button" data-i18n="createOnlineGame">Create Online Game</button></div>
     <form id="joinOnlineForm" class="online-join-form"><label for="onlineRoomCode" data-i18n="roomCode">Room code</label><input id="onlineRoomCode" autocomplete="off" maxlength="14" pattern="[A-Za-z2-9]{14}" required><button type="submit" class="glass-btn strong" data-i18n="joinGame">Join Game</button></form>
@@ -239,7 +239,7 @@
   <script src="game-engine.js"></script>
   <script src="session-authority.js"></script>
   <script src="runtime-config.js"></script>
-  <script src="ranked-client.js?v=20260919-2"></script>
+  <script src="ranked-client.js?v=20260919-3"></script>
   <script src="online-client.js"></script>
   <script src="presentation-plan.js"></script>
   <script src="app.js?v=20260919-1"></script>

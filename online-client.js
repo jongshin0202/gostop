@@ -27,7 +27,7 @@
       const url=new URL(`${this.baseUrl}/api/rooms/${room.roomCode}/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';const socket=new this.WebSocketImpl(url,`gostop-token.${room.credential}`);this.socket=socket;
       socket.onopen=()=>{this.reconnectAttempts=0;};
       socket.onmessage=event=>this.receive(JSON.parse(event.data));
-      socket.onclose=()=>{if(this.socket===socket)this.socket=null;this.emit('disconnected',{});globalThis.dispatchEvent?.(new CustomEvent('gostop-online-message',{detail:{type:'selfDisconnected'}}));if(!this.explicitlyClosed&&this.room){const delay=Math.min(5000,750+this.reconnectAttempts*750);this.reconnectAttempts++;this.reconnectTimer=setTimeout(()=>{this.reconnectTimer=null;if(!this.explicitlyClosed&&this.room)this.connect(this.room);},delay);}};
+      socket.onclose=event=>{const takenOver=Number(event?.code)===4001;if(takenOver)this.explicitlyClosed=true;if(this.socket===socket)this.socket=null;this.emit('disconnected',{takenOver,code:event?.code||0});globalThis.dispatchEvent?.(new CustomEvent('gostop-online-message',{detail:{type:takenOver?'sessionTakenOver':'selfDisconnected',code:event?.code||0}}));if(!takenOver&&!this.explicitlyClosed&&this.room){const delay=Math.min(5000,750+this.reconnectAttempts*750);this.reconnectAttempts++;this.reconnectTimer=setTimeout(()=>{this.reconnectTimer=null;if(!this.explicitlyClosed&&this.room)this.connect(this.room);},delay);}};
       socket.onerror=()=>{};return socket;
     }
     receive(message){

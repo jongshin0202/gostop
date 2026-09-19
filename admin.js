@@ -200,12 +200,15 @@
     setBusy(true);try{const data=await api(`/leaderboards?month=${encodeURIComponent(month)}`);$('globalLeaderboard').innerHTML=table(['#','Player','Score','Games','Wins','Coins Won'],leaderboardRows(data.global));$('monthlyTitle').textContent=`Monthly — ${data.month}`;$('monthlyLeaderboard').innerHTML=table(['#','Player','Score','Games','Wins','Coins Won'],leaderboardRows(data.monthly));setExport(`leaderboard-${data.month}`,data.monthly);}finally{setBusy(false);}
   }
 
+  const milestoneValue=(player,key)=>fmt(player?.milestones?.[key]||0);
+  const sessionPlayerButton=(session,player)=>`<button class="clickable" data-session="${esc(session.id)}" data-session-player="${esc(player.key)}">${esc(player.nickname)}</button>`;
+  const sessionPairText=(session,field)=>session.players?.map(player=>`${esc(player.nickname)} <strong>${fmt(player[field])}</strong>`).join('<br>')||'—';
   async function loadSessions(){
     const params=new URLSearchParams({limit:'500'});appendRange(params);if($('sessionStatus').value)params.set('status',$('sessionStatus').value);
     setBusy(true);try{
       const data=await api(`/sessions?${params}`);
-      const rows=data.sessions.map(s=>`<tr><td>${mono(s.id)}</td><td>${pill(s.mode||'unknown')}</td><td>${(s.accountIds||[]).map(mono).join('<br>')}</td><td>${s.endedAt?pill('Ended'):pill('Active','good')}</td><td>${date(s.startedAt)}</td><td>${date(s.endedAt)}</td><td>${friendlyData(s.summary||{})}</td></tr>`);
-      $('sessionsTable').innerHTML=table(['Session','Mode','Accounts','Status','Started','Ended','Summary'],rows);setExport('sessions',data.sessions);
+      const rows=data.sessions.map(s=>`<tr><td><button class="clickable" data-session="${esc(s.id)}">${esc(s.id)}</button></td><td>${pill(s.mode||'unknown')}</td><td>${(s.players||[]).map(player=>sessionPlayerButton(s,player)).join(' vs ')||'—'}</td><td class="number"><button class="clickable" data-session="${esc(s.id)}" data-session-games="1">${fmt(s.gamesPlayed)}</button></td><td>${sessionPairText(s,'wins')}</td><td>${sessionPairText(s,'coinsWon')}</td><td>${s.status==='active'?pill('Active','good'):pill('Ended')}</td><td class="nowrap">${date(s.startedAt)}</td><td class="nowrap">${date(s.endedAt)}</td></tr>`);
+      $('sessionsTable').innerHTML=table(['Session','Mode','Players','Games','Wins by Player','Coins Won by Player','Status','Started','Ended'],rows);setExport('sessions',data.sessions);
     }finally{setBusy(false);}
   }
   async function loadGeography(){
@@ -251,6 +254,25 @@
   }
 
   function detailBoxes(items){return `<div class="detail-grid">${items.map(([label,value])=>`<div class="detail-box"><span>${esc(label)}</span><strong>${value}</strong></div>`).join('')}</div>`;}
+  function sessionMilestoneHeaders(){return ['5 Brights','5 Birdies','3 Stripes','Shakes','3-Go','Ttadak','Sweep','KISS','Pooped','First Poop','Bomb','Conquer','3 Ppeok'];}
+  function sessionMilestoneCells(player){return ['5_BRIGHTS','5_BIRDIES','3_STRIPES','SHAKE','THREE_GO','FLUSH','CLEAN_SWEEP','KISS','POOPED','FIRST_POOP','BOMB','CONQUER','THREE_PPEOK'].map(key=>`<td class="number">${milestoneValue(player,key)}</td>`).join('');}
+  async function showSession(id,playerKey=''){
+    try{
+      const data=await api(`/sessions/${encodeURIComponent(id)}`),s=data.session,selected=playerKey?(s.players||[]).find(player=>String(player.key)===String(playerKey)):null;
+      $('detailTitle').textContent=selected?`${selected.nickname} — Session`:`${s.mode==='solo'?'Solo':'Online'} Session`;
+      const playerRows=(selected?[selected]:(s.players||[])).map(player=>`<tr><td><button class="clickable" data-session="${esc(s.id)}" data-session-player="${esc(player.key)}">${esc(player.nickname)}</button></td><td class="number"><button class="clickable" data-session="${esc(s.id)}" data-session-player="${esc(player.key)}" data-session-games="1">${fmt(player.gamesPlayed)}</button></td><td class="number">${fmt(player.wins)}</td><td class="number">${fmt(player.losses)}</td><td class="number">${fmt(player.coinsWon)}</td><td class="number">${fmt(player.coinsLost)}</td><td class="number">${Number(player.netCoins)>0?'+':''}${fmt(player.netCoins)}</td><td class="number">${fmt(player.points)}</td>${sessionMilestoneCells(player)}</tr>`);
+      const games=[];
+      for(const game of s.games||[])for(const player of game.players||[]){if(selected&&String(player.key)!==String(selected.key))continue;games.push(`<tr><td><button class="clickable" data-game="${esc(game.gameId)}">${esc(game.gameId)}</button></td><td class="nowrap">${date(game.recordedAt)}</td><td>${esc(player.nickname)}</td><td>${player.won?pill('Win','good'):game.settlementType==='nagari'?pill('Nagari','warn'):pill('Loss','bad')}</td><td class="number">${fmt(player.points)}</td><td class="number">${fmt(player.coinsWon)}</td><td class="number">${fmt(Math.max(0,-Number(player.walletDelta||0)))}</td><td class="number">${Number(player.walletDelta)>0?'+':''}${fmt(player.walletDelta)}</td>${sessionMilestoneCells(player)}</tr>`);}
+      const returnAction=selected?`<div class="detail-actions"><button class="secondary" data-session="${esc(s.id)}">Show Both Players</button></div>`:'';
+      $('detailBody').innerHTML=
+        detailBoxes([['Session',mono(s.id)],['Mode',pill(s.mode||'unknown')],['Status',s.status==='active'?pill('Active','good'):pill('Ended')],['Games',`<button class="clickable" data-session="${esc(s.id)}" data-session-games="1">${fmt(s.gamesPlayed)}</button>`],['Started',date(s.startedAt)],['Ended',date(s.endedAt)],['Room',mono(s.roomCode||'—')]])+
+        returnAction+
+        `<h3 class="subheading">${selected?'Player Performance':'Players & Session Totals'}</h3>${table(['Player','Games','Wins','Losses','Coins Won','Coins Lost','Net Coins','Points',...sessionMilestoneHeaders()],playerRows)}`+
+        `<h3 class="subheading">${selected?esc(selected.nickname)+' — Game by Game':'All Games — Both Players'}</h3><p class="muted">Click any Game ID for the full authoritative settlement, events, cards, and stored game history.</p>${table(['Game ID','Played','Player','Result','Points','Coins Won','Coins Lost','Net Coins',...sessionMilestoneHeaders()],games)}`;
+      $('detailDialog').showModal();
+    }catch(error){fail(error);}
+  }
+
   async function showPlayer(id){
     try{
       const data=await api(`/players/${encodeURIComponent(id)}`),p=data.player;$('detailTitle').textContent=`${p.nickname} — Player`;
@@ -418,7 +440,7 @@
   $('adminToken').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();submitAdminLogin();}});
   $('adminLogout').addEventListener('click',()=>{token='';sessionStorage.removeItem(TOKEN_KEY);$('adminApp').hidden=true;$('adminLogin').hidden=false;$('adminToken').value='';});
   $('adminNav').addEventListener('click',event=>{const btn=event.target.closest('[data-view]');if(btn)selectView(btn.dataset.view);});
-  document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){const record=auditById.get(String(auditBtn.dataset.audit));if(!record)return;$('detailTitle').textContent='Admin Change Details';$('detailBody').innerHTML=`<section class="friendly-section">${friendlyData(record)}</section>`;$('detailDialog').showModal();}});
+  document.body.addEventListener('click',event=>{const p=event.target.closest('[data-player]'),g=event.target.closest('[data-game]'),sessionBtn=event.target.closest('[data-session]'),go=event.target.closest('[data-go]'),action=event.target.closest('[data-admin-action]'),auditBtn=event.target.closest('[data-audit]');if(p)showPlayer(p.dataset.player);else if(g)showGame(g.dataset.game);else if(sessionBtn)showSession(sessionBtn.dataset.session,sessionBtn.dataset.sessionPlayer||'');else if(go)selectView(go.dataset.go);else if(action)adminAction(action.dataset.adminAction,action.dataset.id,action);else if(auditBtn){const record=auditById.get(String(auditBtn.dataset.audit));if(!record)return;$('detailTitle').textContent='Admin Change Details';$('detailBody').innerHTML=`<section class="friendly-section">${friendlyData(record)}</section>`;$('detailDialog').showModal();}});
   $('detailClose').addEventListener('click',()=>$('detailDialog').close());
   $('failureOk').addEventListener('click',()=>$('failureOverlay').hidden=true);
   $('refreshBtn').addEventListener('click',refreshCurrent);$('exportBtn').addEventListener('click',exportCsv);

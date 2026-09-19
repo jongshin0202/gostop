@@ -66,7 +66,7 @@ test('main-menu attract mode starts ten seconds after the visible menu becomes i
   assert.doesNotMatch(source,/clearInterval\(attractTimer\)/);
   assert.match(source,/lastMenuActivityAt=Date\.now\(\);startAttractWatcher\(\)/);
   assert.match(source,/if\(event\.isTrusted&&!attractMode&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
-  assert.match(source,/applyRankedLocale\(\);resetAttractTimer\(\);globalThis\.__gostopRankedBootComplete=true;[\s\S]*authRestorePromise=refreshAccount\(\)/);assert.match(source,/resumeActiveRankedRoom/);
+  assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;authRestorePromise=refreshAccount\(\)/);assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false/);assert.match(source,/resumeActiveRankedRoom/);
   assert.match(docs,/After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats/);
 });
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
@@ -119,4 +119,32 @@ test('pending daily bonus never masks the authoritative Wallet on another device
   assert.match(worker,/json\(\{ok:true,account,room:\{roomCode:data\.room\.roomCode,rankedMode:'solo'\}\}\)/);
   const identity=source.slice(source.indexOf('function patchGameIdentity'),source.indexOf('playPractice.addEventListener'));
   assert.match(identity,/coinText\(displayedWalletCoins\(\)\)/);
+});
+
+
+test('legacy two-button shell is hidden until the current menu client has finished booting',()=>{
+  const html=fs.readFileSync(path.join(root,'index.html'),'utf8'),css=fs.readFileSync(path.join(root,'styles.css'),'utf8');
+  assert.match(html,/id="soloStartOverlay" class="solo-start-overlay" hidden data-current-menu-ready="false"/);
+  assert.match(css,/\.solo-start-overlay\[hidden\]\{display:none!important\}/);
+  assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
+  const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
+  assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
+  assert.match(boot,/if\(!resumeActiveRankedRoom\(\)\)revealCurrentMainMenu\(\)/);
+  assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
+});
+
+test('Coin mode buttons reflect the account-wide active ranked game and resume the same room',()=>{
+  const buttons=source.slice(source.indexOf('function activeRankedMode'),source.indexOf('async function refreshAccount'));
+  assert.match(buttons,/account\?\.activeRanked/);
+  assert.match(buttons,/rankedSolo\.disabled=busy\|\|!!active&&active!=='solo'/);
+  assert.match(buttons,/onlinePlay\.disabled=busy\|\|!!active&&active!=='online'/);
+  assert.match(buttons,/active==='solo'\?'↻ '\+rt\('solo'\)/);
+  assert.match(buttons,/active==='online'\?'↻ '\+rt\('online'\)/);
+  const launches=source.slice(source.indexOf('function launchRankedRoom'),source.indexOf('function renderLeaderboard'));
+  assert.match(launches,/account\?\.activeRanked\?\.mode==='solo'/);
+  assert.match(launches,/launchRankedRoom\(account\.activeRanked\.roomCode\)/);
+  assert.match(launches,/account\?\.activeRanked\?\.mode==='online'/);
+  assert.match(source,/\.menu-ranked:disabled\{/);
+  assert.match(worker,/code:'ACTIVE_RANKED_GAME'/);
+  assert.match(worker,/Only one Coin game can be active at a time/);
 });

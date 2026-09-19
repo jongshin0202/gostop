@@ -51,7 +51,11 @@ The top-right account box shows Nickname and Wallet Coins when authenticated. Wh
 
 A session begins when ranked Solo/Online begins. Selecting New Game closes the current session and starts a new one. Quit Game closes the session after the agreed/allowed exit behavior.
 
+Each authenticated account may own only **one active ranked Coin game** at a time across all devices. The authoritative account record stores the active session ID, mode, room code, and start time. A second device may reclaim the same account seat in that same room and continue the exact authoritative game state. The other ranked Coin mode is disabled while that session is active. Practice is device-local/non-ranked and may run independently on another device. Only one device controls the ranked seat at a time; connecting the same account from a second device deliberately hands the live socket to the new device instead of allowing competing input streams.
+
 Each game stores at least: Game ID, Session ID, mode, players/opponent (including Solo computer identity), winner/loser, final settlement points, score formula/reasons, wallet deltas, leaderboard Coins won, timestamps, force-quit/abandonment state, and milestone counts/events.
+
+The Admin Sessions view is a derived audit/reporting hierarchy over these authoritative records: **Session → Player → Game → Full Game History**. Session summaries show player names, start/end, games played, wins and Coins won by player. Player drill-downs show wins/losses, Coins won/lost/net, points, and milestone counts including 5-Brights, 5-Birdies, 3-Stripes, Shake, 3-Go, Ttadak/FLUSH, Clean Sweep, KISS, Pooped/First Poop, Bomb, Conquer, and Three-Ppeok. Game rows expose the same metrics for both participants and link to the full stored settlement/events/state for auditability.
 
 Milestones include every special event currently supported and future additions, including Shake, Bomb, POOPED, FIRST POOP, KISS, FLUSH, CLEAN SWEEP, CONQUER, 5-BIRDIES, 3-STRIPES, and 5-BRIGHTS.
 

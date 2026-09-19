@@ -60,13 +60,21 @@ export default {async fetch(request,env){
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
+      if(account.activeRanked?.roomCode){
+        if(account.activeRanked.mode==='solo')return withCors(json({ok:true,account,room:{roomCode:account.activeRanked.roomCode,rankedMode:'solo',resume:true}}),origin);
+        return withCors(json({ok:false,error:{code:'ACTIVE_RANKED_GAME',message:'Finish or leave the active Online Play game before starting Solo Play.',activeRanked:account.activeRanked}},409),origin);
+      }
       const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,account,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
     }
     if(request.method==='POST'&&url.pathname==='/api/rooms'){
-      const account=await resolveAccount(request,env);return withCors(await allocateRoom(env,{account}),origin);
+      const account=await resolveAccount(request,env);
+      if(account?.activeRanked?.roomCode)return withCors(json({ok:false,error:{code:'ACTIVE_RANKED_GAME',message:'Only one Coin game can be active at a time.',activeRanked:account.activeRanked}},409),origin);
+      return withCors(await allocateRoom(env,{account}),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/join$/))&&request.method==='POST'){
-      const account=await resolveAccount(request,env),body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
+      const account=await resolveAccount(request,env);
+      if(account?.activeRanked?.roomCode&&account.activeRanked.roomCode!==match[1])return withCors(json({ok:false,error:{code:'ACTIVE_RANKED_GAME',message:'Only one Coin game can be active at a time.',activeRanked:account.activeRanked}},409),origin);
+      const body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/ws$/))&&request.method==='GET'){
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return stub.fetch(new Request('https://room/connect',{headers:request.headers}));
