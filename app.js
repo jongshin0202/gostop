@@ -124,6 +124,10 @@
     if(!dialog.open)dialog.show();
     return true;
   }
+  function publishPlayerActivity(active,mode=''){
+    if(TEST_MODE)return;
+    globalThis.dispatchEvent(new CustomEvent('gostop-player-activity',{detail:{active:!!active,mode:String(mode||'')}}));
+  }
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
@@ -2287,9 +2291,10 @@
     await processOpeningSpecials(epoch);
   }
   function cancelLocalGamePresentation(){
-    localGameActive=false;localGameGeneration++;presentation.locked=true;invalidateGameplayPresentation();
+    localGameActive=false;localGameGeneration++;presentation.locked=true;invalidateGameplayPresentation();publishPlayerActivity(false,'menu');
   }
   async function launchLocalGame(training=false){
+    publishPlayerActivity(true,training?'training':'free-solo');
     if(globalThis.goStopOnlineSession){try{globalThis.goStopOnlineSession.close();}catch(_){}globalThis.goStopOnlineSession=null;}
     const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
     if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
@@ -2494,7 +2499,7 @@
       if(!snapshot.terminalResult&&els.quitConfirmDialog.open&&onlineQuitFromResult)setDialog(els.quitConfirmDialog,false);
     }
     function returnOnlineToMenu(){
-      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);
+      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);publishPlayerActivity(false,'menu');
       const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);if(!onlineAnonymousMode){try{localStorage.removeItem('gostop-active-ranked-room');}catch(_){}}
       document.getElementById('onlineRoomCode').value='';if(document.getElementById('freeRoomCode'))document.getElementById('freeRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;
       globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;onlineAnonymousMode=false;activeOnlineStatus=onlineStatus;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
@@ -2617,6 +2622,7 @@
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
+      publishPlayerActivity(true,anonymous?'free-friend':'competitive-online');
       localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;beginGameplayPresentation();setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
       if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
       const adapter=roomAdapter||new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});
