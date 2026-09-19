@@ -3,6 +3,9 @@ main = "server/worker.mjs"
 compatibility_date = "2026-09-01"
 keep_vars = true
 
+[vars]
+ABANDONMENT_TIMEOUT_SECONDS = "180"
+
 [[durable_objects.bindings]]
 name = "GAME_ROOMS"
 class_name = "GameRoom"

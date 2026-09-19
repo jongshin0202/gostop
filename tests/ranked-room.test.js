@@ -19,9 +19,18 @@ const now=()=> '2026-09-15T04:45:00.000Z';
 const flow=(id,revision,action)=>JSON.stringify({type:'action',protocolVersion:1,actionId:id,expectedRevision:revision,action});
 const account=(id,nickname,walletCoins=200)=>({id,nickname,walletCoins});
 
-async function onlineRoom(){const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});const a=await core.create('ABCDEFGHJK2345',account('a','Alpha')),b=await core.join(null,account('b','Beta'));const sa=new Socket(),sb=new Socket();await core.connect(a.credential,sa);await core.connect(b.credential,sb);return {core,a,b,sa,sb,accountStore};}
+async function onlineRoom(options={}){const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now,...options});const a=await core.create('ABCDEFGHJK2345',account('a','Alpha')),b=await core.join(null,account('b','Beta'));const sa=new Socket(),sb=new Socket();await core.connect(a.credential,sa);await core.connect(b.credential,sb);return {core,a,b,sa,sb,accountStore};}
 
 async function soloRoom(){const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});await core.createSolo('ABCDEFGHJK2346');const user=await core.join(null,account('solo-user','SoloPlayer'));const socket=new Socket();await core.connect(user.credential,socket);return {core,user,socket,accountStore};}
+
+test('online inactivity abandonment defaults to three minutes and accepts a server-configured timeout',async()=>{
+  const standard=await onlineRoom(),start=Date.parse(now());
+  assert.equal(standard.core.room.rankFlow.inactivity.abandonAt-start,180000);
+  assert.equal(standard.core.room.rankFlow.inactivity.warningAt-start,30000);
+  const configured=await onlineRoom({abandonmentTimeoutMs:240000});
+  assert.equal(configured.core.room.rankFlow.inactivity.abandonAt-start,240000);
+  assert.equal(configured.core.room.rankFlow.inactivity.warningAt-start,30000);
+});
 
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
