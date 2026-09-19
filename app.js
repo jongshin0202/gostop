@@ -2157,6 +2157,8 @@
   }
   async function launchLocalGame(training=false){
     if(globalThis.goStopOnlineSession){try{globalThis.goStopOnlineSession.close();}catch(_){}globalThis.goStopOnlineSession=null;}
+    const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
+    if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
     onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);
     await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
   }
@@ -2477,6 +2479,7 @@
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus}={})=>{
       setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
+      if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
       const generation=++onlineSessionGeneration,previous=globalThis.goStopOnlineSession;
       if(previous){try{previous.close();}catch(_){}}
       onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
