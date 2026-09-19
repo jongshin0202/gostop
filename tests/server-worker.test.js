@@ -8,7 +8,10 @@ test.before(async()=>({default:worker,isAllowedOrigin}=await import('../server/w
 const env={ALLOWED_ORIGINS:'https://gostop.example.vercel.app,https://gostop-preview.example.com'};
 const allowedOrigin={'Origin':'https://gostop.example.vercel.app','content-type':'application/json'};
 
-test('CORS permits configured exact Vercel origins and localhost but rejects unrelated origins',()=>{
+test('CORS permits production, exact GitHub Pages test origin, configured origins, and localhost but rejects unrelated origins',()=>{
+  assert.equal(isAllowedOrigin('https://gostoplive.com',env),true);
+  assert.equal(isAllowedOrigin('https://jongshin0202.github.io',env),true);
+  assert.equal(isAllowedOrigin('https://attacker.github.io',env),false);
   assert.equal(isAllowedOrigin('https://gostop.example.vercel.app',env),true);
   assert.equal(isAllowedOrigin('https://gostop-preview.example.com',env),true);
   assert.equal(isAllowedOrigin('http://localhost:3000',env),true);
@@ -20,6 +23,7 @@ test('JSON POST preflight exposes content-type and authorization only for an all
   const allowed=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://gostop.example.vercel.app','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}}),env);
   assert.equal(allowed.status,204);assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),'https://gostop.example.vercel.app');assert.equal(allowed.headers.get('Access-Control-Allow-Methods'),'GET,POST,OPTIONS');assert.equal(allowed.headers.get('Access-Control-Allow-Headers'),'content-type,authorization');assert.equal(allowed.headers.get('Vary'),'Origin');
   const badHeader=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://gostop.example.vercel.app','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,x-unsafe-header'}}),env);assert.equal(badHeader.status,403);
+  const githubPages=await worker.fetch(new Request('https://worker.example/api/auth/login',{method:'OPTIONS',headers:{Origin:'https://jongshin0202.github.io','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'}}),env);assert.equal(githubPages.status,204);assert.equal(githubPages.headers.get('Access-Control-Allow-Origin'),'https://jongshin0202.github.io');
   const rejected=await worker.fetch(new Request('https://worker.example/api/rooms',{method:'OPTIONS',headers:{Origin:'https://evil.example','Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'}}),env);assert.equal(rejected.status,403);assert.equal(rejected.headers.get('Access-Control-Allow-Origin'),null);
 });
 
