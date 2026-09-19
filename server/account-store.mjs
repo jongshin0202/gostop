@@ -57,7 +57,7 @@ function publicAccount(account){
 }
 function blankStats(){return {gamesPlayed:0,wins:0,totalCoinsWon:0,milestones:{}};}
 function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
-function leaderboardRow(account,stats){return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed:stats.gamesPlayed,provisional:stats.gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
+function leaderboardRow(account,stats){const gamesPlayed=Number(stats.gamesPlayed)||0,wins=Number(stats.wins)||0;return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed,wins,losses:Math.max(0,gamesPlayed-wins),provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
 function sortRows(rows){return rows.sort((a,b)=>b.score-a.score||b.gamesPlayed-a.gamesPlayed||b.totalCoins-a.totalCoins||a.nickname.localeCompare(b.nickname));}
 
 export class AccountStore{
@@ -174,6 +174,19 @@ export class AccountStore{
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
   }
 
+  async playerSearch(request){
+    const body=await request.json().catch(()=>({})),needle=String(body.query||'').trim().toLowerCase();
+    if(!needle)return json({ok:true,players:[]});
+    const accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
+    const ranked=sortRows(accounts.map(account=>({...leaderboardRow(account,account.stats?.global||blankStats()),accountId:account.id,walletCoins:Number(account.walletCoins)||0}))).map((row,index)=>({...row,rank:index+1}));
+    const players=ranked.filter(row=>String(row.nickname||'').toLowerCase().includes(needle)).sort((a,b)=>{
+      const an=String(a.nickname||'').toLowerCase(),bn=String(b.nickname||'').toLowerCase();
+      const ax=an===needle?0:an.startsWith(needle)?1:2,bx=bn===needle?0:bn.startsWith(needle)?1:2;
+      return ax-bx||a.rank-b.rank||an.localeCompare(bn);
+    }).slice(0,20);
+    return json({ok:true,players});
+  }
+
   async startGameSession(request){
     const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds.filter(Boolean):[],opponent:body.opponent||null,roomCode:body.roomCode||null,matchId:body.matchId||null,gameSequence:Number(body.gameSequence)||0,startedAt:body.startedAt||this.now(),endedAt:null,summary:null},key=`gameSession:${record.id}`;
     const prior=await this.storage.get(key);if(prior&&!prior.endedAt)return json({ok:true,duplicate:true,session:prior});
@@ -225,6 +238,7 @@ export class AccountStore{
       if(request.method==='POST'&&path==='/notices/ack')return await this.acknowledgeNotice(request);
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
+      if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
       if(request.method==='GET'&&path==='/internal/resolve')return await this.resolveSession(request);
       if(request.method==='POST'&&path==='/internal/session/start')return await this.startGameSession(request);
       if(request.method==='POST'&&path==='/internal/session/end')return await this.endGameSession(request);
