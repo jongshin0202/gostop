@@ -41,6 +41,21 @@ test('leaderboard counts only coins won while wallet includes wins and losses',a
 });
 
 
+test('Global leaderboard repairs stale zero global stats from accumulated monthly history',async()=>{
+  const store=makeStore('2026-09-19T17:30:00.000Z');
+  const registered=await (await store.fetch(post('/register',{email:'global-repair@example.com',nickname:'GlobalRepair',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const account=await store.accountById(registered.account.id);
+  account.stats={global:{gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,milestones:{}},monthly:{
+    '2026-08':{gamesPlayed:3,wins:2,losses:1,totalCoinsWon:24,milestones:{ppeok:1}},
+    '2026-09':{gamesPlayed:4,wins:1,losses:3,totalCoinsWon:28,milestones:{ppeok:2}}
+  }};
+  await store.storage.put(`account:${account.id}`,account);
+  const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json();
+  const global=board.global.find(row=>row.nickname==='GlobalRepair'),monthly=board.monthly.find(row=>row.nickname==='GlobalRepair');
+  assert.equal(global.gamesPlayed,7);assert.equal(global.wins,3);assert.equal(global.losses,4);assert.equal(global.totalCoins,52);assert.equal(global.score,52/7);
+  assert.equal(monthly.gamesPlayed,4);assert.equal(monthly.totalCoins,28);
+});
+
 test('player directory search returns wallet wins losses leaderboard score and rank for offline lookup',async()=>{
   const store=makeStore();
   const a=await (await store.fetch(post('/register',{email:'lookup-a@example.com',nickname:'LookupAlpha',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
