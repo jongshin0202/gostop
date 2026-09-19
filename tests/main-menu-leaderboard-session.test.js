@@ -73,6 +73,14 @@ test('main-menu attract mode starts ten seconds after the visible menu becomes i
   assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;authRestorePromise=refreshAccount\(\)/);assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false/);assert.doesNotMatch(source,/resumeActiveRankedRoom/);
   assert.match(docs,/After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats/);
 });
+test('inactivity warning dismissal is sticky for the current warning while server countdown continues',()=>{
+  assert.match(source,/let flowInterval=null,dismissedInactivityKey=''/);
+  assert.match(source,/function inactivityDialogKey\(snapshot,inactivity=/);
+  assert.match(source,/setDialog\(inactivityDialog,dismissedInactivityKey!==key\)/);
+  assert.match(source,/rankedInactivityOk'\)\.addEventListener\('click',\(\)=>\{const key=inactivityDialogKey\(currentSnapshot\);if\(key\)dismissedInactivityKey=key;inactivityDialog\.close\(\);\}\)/);
+  assert.doesNotMatch(source,/30-SECOND ABANDONMENT WARNING/);
+});
+
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
   assert.match(source,/totalCoins:'Total Coins Earned'/);
   const identity=source.slice(source.indexOf('function patchGameIdentity'),source.indexOf('playPractice.addEventListener'));
