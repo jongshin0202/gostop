@@ -2477,13 +2477,15 @@
       // enter awaitingFloorTarget and publish the authoritative chooseFloorTarget action.
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
-    const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus}={})=>{
+    const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
       setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
       if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
+      const adapter=roomAdapter||new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});
+      adapter.room=room;
       const generation=++onlineSessionGeneration,previous=globalThis.goStopOnlineSession;
-      if(previous){try{previous.close();}catch(_){}}
+      if(previous&&previous!==adapter){try{previous.close();}catch(_){}}
       onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
-      const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});adapter.room=room;globalThis.goStopOnlineSession=adapter;
+      globalThis.goStopOnlineSession=adapter;
       const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter;
       onlineMode=true;
       refreshModeLocalizedLabels();
@@ -2520,16 +2522,16 @@
       adapter.addEventListener('error',event=>{if(!isCurrent())return;activeOnlineStatus.textContent=event.detail.message||event.detail.code||'Online connection error.';});adapter.connect();
     };
     addEventListener('gostop-online-snapshot',event=>{const generation=event.detail.sessionGeneration;if(generation!==onlineSessionGeneration)return;const {snapshot}=event.detail,events=(event.detail.events||[]).filter(item=>{const key=Number.isInteger(item.revision)&&Number.isInteger(item.eventIndex)?`${snapshot.matchId}:${item.revision}:${item.eventIndex}`:null;if(!key)return true;if(onlinePresentedEvents.has(key))return false;onlinePresentedEvents.add(key);if(onlinePresentedEvents.size>256)onlinePresentedEvents.delete(onlinePresentedEvents.values().next().value);return true;});onlinePresentationQueue=onlinePresentationQueue.then(()=>{if(generation!==onlineSessionGeneration)return;return presentOnlineTransition(snapshot,events);}).catch(error=>{if(generation!==onlineSessionGeneration)return;activeOnlineStatus.textContent=error.message;presentation.locked=true;});});
-    createOnlineBtn?.addEventListener('click',async()=>{try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room);}catch(error){activeOnlineStatus.textContent=error.message;}});
-    joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();if(onlineJoinInFlight)return;onlineJoinInFlight=true;try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}const room=await adapter.join(code,existing?.credential);await beginOnline(room);els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:true,roomCode:room.roomCode}}));}catch(error){activeOnlineStatus.textContent=error.message;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:false}}));}finally{onlineJoinInFlight=false;}});
+    createOnlineBtn?.addEventListener('click',async()=>{try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room,{adapter});}catch(error){activeOnlineStatus.textContent=error.message;}});
+    joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();if(onlineJoinInFlight)return;onlineJoinInFlight=true;try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:true,roomCode:room.roomCode}}));}catch(error){activeOnlineStatus.textContent=error.message;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:false}}));}finally{onlineJoinInFlight=false;}});
     addEventListener('gostop-free-online-create',async()=>{
       if(!freeOnlineStatus)return;
-      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus});}
+      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
       catch(error){activeOnlineStatus.textContent=error.message;}
     });
     addEventListener('gostop-free-online-join',async event=>{
       if(!freeOnlineStatus||onlineJoinInFlight)return;const code=String(event.detail?.roomCode||'').toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))return;
-      onlineJoinInFlight=true;try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});const existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');const room=await adapter.join(code,existing?.credential);await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus});}
+      onlineJoinInFlight=true;try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});const existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');const room=await adapter.join(code,existing?.credential);await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
       catch(error){activeOnlineStatus.textContent=error.message;}finally{onlineJoinInFlight=false;}
     });
   }
