@@ -88,7 +88,7 @@ test('menu avatar follows restored account state without showing an empty logged
 
 test('saved account identity hydrates synchronously before background session verification',()=>{
   assert.match(source,/const ACCOUNT_CACHE_KEY='gostop-account-cache'/);
-  assert.match(source,/const cached=JSON\.parse\(localStorage\.getItem\(ACCOUNT_CACHE_KEY\)\|\|'null'\);if\(authToken&&cached&&typeof cached==='object'&&cached\.nickname\)account=cached/);
+  assert.match(source,/const cached=JSON\.parse\(localStorage\.getItem\(ACCOUNT_CACHE_KEY\)\|\|'null'\);if\(authToken&&cached&&typeof cached==='object'&&cached\.nickname\)\{account=cached;readAcknowledgedNoticeCache\(account\.id\);\}/);
   assert.match(source,/function persistAccountCache\(\)\{try\{if\(authToken&&account\)localStorage\.setItem\(ACCOUNT_CACHE_KEY,JSON\.stringify\(account\)\)/);
   assert.match(source,/if\(authToken&&!account\)\{accountBox\.hidden=true;return;\}/);
   assert.match(source,/localStorage\.removeItem\(TOKEN_KEY\);localStorage\.removeItem\(ACCOUNT_CACHE_KEY\)/);
