@@ -435,7 +435,7 @@
     const yes=$('requestAccept'),no=$('requestDecline');yes.disabled=true;no.disabled=true;
     try{
       if(!(await prepareToAcceptMultiplayerChallenge())){sendLobbyMessage({type:'challengeResponse',requestId:request.requestId,accept:false});pendingRequest=null;requestDialog.close();return;}
-      pendingRequest=null;requestDialog.close();sendLobbyMessage({type:'challengeResponse',requestId:request.requestId,accept:true});
+      pendingRequest=null;requestDialog.close();showMatchHandoff(rt('startingMatch'));sendLobbyMessage({type:'challengeResponse',requestId:request.requestId,accept:true});
     }catch(error){yes.disabled=false;no.disabled=false;$('requestPlayerStats').textContent=localizedError(error);}
   });
   $('requestDecline').addEventListener('click',()=>{if(pendingRequest)sendLobbyMessage({type:'challengeResponse',requestId:pendingRequest.requestId,accept:false});pendingRequest=null;requestDialog.close();});
