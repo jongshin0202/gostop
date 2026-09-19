@@ -490,15 +490,30 @@
   }
   pauseBtn.addEventListener('click',()=>submitRanked({type:'requestPause'}));$('rankedReconnectQuit').addEventListener('click',()=>submitRanked({type:'cancelDisconnectedGame'}));$('rankedInactivityOk').addEventListener('click',()=>inactivityDialog.close());$('rankedQuitAccept').addEventListener('click',()=>{const id=currentSnapshot?.sessionFlow?.quitRequest?.requestId;if(id)submitRanked({type:'respondQuit',requestId:id,accept:true});});$('rankedQuitDecline').addEventListener('click',()=>{const id=currentSnapshot?.sessionFlow?.quitRequest?.requestId;if(id)submitRanked({type:'respondQuit',requestId:id,accept:false});});$('rankedAbandonmentOk').addEventListener('click',async()=>{const key=abandonmentDialog.dataset.abandonmentKey,id=abandonmentDialog.dataset.rewardNoticeId;if(id){try{await acknowledgeAccountNotice(id);}catch(error){showToast(localizedError(error),6000);return;}}if(key)acknowledgedRoomAbandonments.add(key);abandonmentDialog.close();});[pauseDialog,rankedQuitDialog,reconnectDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
 
-  globalThis.addEventListener('gostop-online-snapshot',event=>{const snapshot=event.detail?.snapshot;if(!snapshot)return;if(!snapshot.ranked){currentSnapshot=null;patchGameIdentity();setTimeout(patchGameIdentity,0);return;}const terminalChanged=!!snapshot.terminalResult&&!currentSnapshot?.terminalResult;currentSnapshot=snapshot;updateFromSnapshot(snapshot);renderRankedFlow(snapshot);patchGameIdentity();setTimeout(patchGameIdentity,0);if(terminalChanged){refreshLeaderboardData(true).then(()=>patchGameIdentity());refreshAccount();}if(snapshot.sessionFlow?.ended)void refreshAccount();});
+  globalThis.addEventListener('gostop-online-snapshot',event=>{const snapshot=event.detail?.snapshot;if(!snapshot)return;if(snapshot.matchId)closeRequestDialog(matchHandoffDialog);if(!snapshot.ranked){currentSnapshot=null;patchGameIdentity();setTimeout(patchGameIdentity,0);return;}const terminalChanged=!!snapshot.terminalResult&&!currentSnapshot?.terminalResult;currentSnapshot=snapshot;updateFromSnapshot(snapshot);renderRankedFlow(snapshot);patchGameIdentity();setTimeout(patchGameIdentity,0);if(terminalChanged){refreshLeaderboardData(true).then(()=>patchGameIdentity());refreshAccount();}if(snapshot.sessionFlow?.ended)void refreshAccount();});
   globalThis.addEventListener('gostop-online-message',event=>{const message=event.detail||{};if(message.type==='opponentConnected')showToast(rt('opponentReconnected'),3000);if(message.type==='sessionTakenOver')showToast('This Coin game was opened on another device. Reload or reopen the same Coin mode here to take control back.',8000);});
 
   globalThis.addEventListener('gostop-player-activity',event=>{playerTwoPlayerActive=!!event.detail?.twoPlayer;playerPresenceMode=String(event.detail?.mode||'menu');syncLobbyAvailability();});
   function revealCurrentMainMenu(){playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
-  const roomParam=new URL(location.href).searchParams.get('room'),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
-  if(validRoomParam){const launch=()=>launchRankedRoom(roomParam.toUpperCase());if(account)setTimeout(launch,0);else setTimeout(()=>requireAccount(launch,()=>revealCurrentMainMenu()),0);}
+  const inviteUrl=new URL(location.href),roomParam=inviteUrl.searchParams.get('room'),inviteMode=inviteUrl.searchParams.get('mode')==='free'?'free':'competitive',validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
+  function withGameBridge(callback){
+    if(globalThis.GoStopGameBridge)return Promise.resolve().then(()=>callback(globalThis.GoStopGameBridge));
+    return new Promise((resolve,reject)=>globalThis.addEventListener('gostop-app-ready',()=>Promise.resolve(callback(globalThis.GoStopGameBridge)).then(resolve,reject),{once:true}));
+  }
+  async function launchInviteRoom(){
+    if(!validRoomParam)return;const code=roomParam.toUpperCase();stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=true;showMatchHandoff(inviteMode==='free'?'Joining Free Game…':rt('startingMatch'));
+    if(inviteMode==='free'){
+      try{await withGameBridge(bridge=>bridge.joinFreeRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}return;
+    }
+    requireAccount(async()=>{
+      try{
+        if(!(await withGameBridge(()=>prepareToAcceptMultiplayerChallenge()))){closeRequestDialog(matchHandoffDialog);showToast('Finish or leave your current 2-player game before joining this link.',6000);revealCurrentMainMenu();return;}
+        await withGameBridge(bridge=>bridge.joinCompetitiveRoom(code));
+      }catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}
+    },()=>{closeRequestDialog(matchHandoffDialog);revealCurrentMainMenu();});
+  }
 
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity});
   new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
-  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam)return;revealCurrentMainMenu();});
+  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}revealCurrentMainMenu();});
 })();
