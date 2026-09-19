@@ -952,33 +952,41 @@
     }
   }
 
-  async function presentNormalResolution(side,result){
+  async function presentNormalResolution(side,result,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const event=result.events[0];
     if(event.type==='cardLanded'){
       presentation.floorSlotReservations.delete(event.card.id);
       render();
       removeStage(event.card.id);
       await presentationPause('cardLandCleanup');
+      if(!isGameplayPresentationCurrent(epoch))return;
       return;
     }
     if(event.type==='cardsCaptured'){
       await animateCaptureBatch(event.cards,side);
+      if(!isGameplayPresentationCurrent(epoch))return;
       render();
       await presentationPause('postCapture');
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
-    await promptGukjinChoice(side,result.events);
+    await promptGukjinChoice(side,result.events,epoch);
   }
 
-  async function resolveNormalEngineTurn(side,play,draw){
+  async function resolveNormalEngineTurn(side,play,draw,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     let result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'played'}));
-    await presentNormalResolution(side,result);
+    await presentNormalResolution(side,result,epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(draw){
       result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
-      await presentNormalResolution(side,result);
+      await presentNormalResolution(side,result,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
     const completion=applyNormalAction(normalAction(side,{type:'completeTurn'}));
     await presentPiTransferEvents(side,completion.events);
-    await presentSemanticEvents(completion.events);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await presentSemanticEvents(completion.events,epoch);
   }
 
   async function presentPiTransferEvents(side,events){
@@ -989,26 +997,29 @@
     if(events.some(event=>event.type==='piTransferred'))render();
   }
 
-  async function resolveExtractedSpecialTurn(side,classification,play,draw){
+  async function resolveExtractedSpecialTurn(side,classification,play,draw,epoch=gameplayPresentationEpoch){
     const localGeneration=localGameGeneration;
+    if(!isGameplayPresentationCurrent(epoch))return;
     const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
     if(classification.kind==='ppeokSsaDaCandidate'){
       removeStage(play.card.id); if(draw)removeStage(draw.card.id);
-      playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[]);
-      if(!isLocalGamePresentationCurrent(localGeneration))return;
-      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side,localGeneration);
-      if(!isLocalGamePresentationCurrent(localGeneration))return;
+      playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[],'',epoch);
+      if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;
+      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side,localGeneration,epoch);
+      if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;
       if(result.events.some(event=>event.type==='threePpeokDeclared')){
-        await sleep(450);if(!isLocalGamePresentationCurrent(localGeneration))return;presentThreePpeok(result);
+        await sleep(450);if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;presentThreePpeok(result,epoch);
       }
     }else{
       for(const event of result.events){
         if(event.type==='cardsCaptured'){
           const captured=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
           await animateCaptureBatch(captured,side);
+          if(!isGameplayPresentationCurrent(epoch))return;
           // `await showSpecialTransient('KISS!'` remains centralized in presentKiss.
-          if(classification.kind==='jjokCandidate')await presentKiss(event.cardIds);
-          if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('FLUSH!',event.cardIds,'flush');}
+          if(classification.kind==='jjokCandidate')await presentKiss(event.cardIds,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
+          if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('FLUSH!',event.cardIds,'flush',epoch);}
         }else if(event.type==='cardLanded'){
           presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await presentationPause('cardLandCleanup');
         }else if(event.type==='piTransferred'){
@@ -1017,10 +1028,12 @@
         }
       }
       render(); await presentationPause('postCapture');
-      await promptGukjinChoice(side,result.events);
-      await presentSemanticEvents(result.events);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await promptGukjinChoice(side,result.events,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await presentSemanticEvents(result.events,epoch);
     }
-    if(!isLocalGamePresentationCurrent(localGeneration))return;
+    if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;
     if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
   }
 
