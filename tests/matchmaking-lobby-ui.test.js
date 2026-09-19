@@ -54,19 +54,24 @@ test('incoming player request is Yes No and accepting a Solo game is covered unt
   assert.match(app,/prepareForMultiplayerChallenge\(\)/);assert.match(app,/if\(isTwoPlayerOnline\)return false/);assert.match(app,/if\(onlineMode\)returnOnlineToMenu\(\)/);
 });
 
-test('requester sees Waiting for Opponent to Respond modal and can cancel before acceptance',()=>{
+test('requester sees Waiting for Opponent to Respond immediately and can cancel before acceptance',()=>{
   assert.match(client,/id="outgoingRequestTitle">Waiting for Opponent to Respond</);assert.match(client,/id="cancelOutgoingRequest"[^>]*>Cancel Request</);
   assert.match(client,/function showOutgoingRequest\(message\)/);
+  const render=client.slice(client.indexOf('function renderPlayers'),client.indexOf('function closeRequestDialog'));
+  assert.match(render,/showOutgoingRequest\(optimistic\)/);assert.match(render,/type:'challenge',accountId:button\.dataset\.challengeAccountId/);
   assert.match(client,/message\.type==='challengeSent'[^]*showOutgoingRequest\(message\)/);
+  const auto=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("\$('autoMatchCancelBtn').addEventListener"));
+  assert.match(auto,/showOutgoingRequest\(\{requestId:null,automatic:true,to:null\}\)/);
   const cancel=client.slice(client.indexOf("\$('cancelOutgoingRequest').addEventListener"),client.indexOf("\$('declinedDialogOk').addEventListener"));
-  assert.match(cancel,/type:'challengeCancel'/);assert.match(server,/message\.type==='challengeCancel'/);
+  assert.match(cancel,/type:'challengeCancel'/);assert.match(cancel,/type:'autoMatchCancel'/);assert.match(server,/message\.type==='challengeCancel'/);
 });
 
-test('decline sends requester a dedicated Request Declined dialog with OK',()=>{
+test('decline always sends requester a dedicated Request Declined dialog with OK and refreshes results',()=>{
   assert.match(client,/id="declinedDialogTitle">Request Declined</);assert.match(client,/id="declinedDialogOk"[^>]*>OK</);
   assert.match(server,/type:'challengeDeclined'/);
   const decline=client.slice(client.indexOf("if(message.type==='challengeDeclined')"),client.indexOf("if(message.type==='challengeCancelled'"));
-  assert.match(decline,/requestDeclinedText/);assert.match(decline,/declinedDialog\.showModal\(\)/);
+  assert.match(decline,/requestDeclinedText/);assert.match(decline,/declinedDialog\.showModal\(\)/);assert.match(decline,/refreshVisibleLobbyResults\(\)/);
+  assert.match(server,/lastRequestAt\.delete\(challenge\.from\)/);
 });
 
 test('accepted challenge uses explicit app bridge and stays active until second player joins same room',()=>{
@@ -110,4 +115,11 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
   assert.match(rankedRoom,/async leaveSoloForChallenge\(accountId\)/);assert.match(rankedRoom,/endRankedSession\('accepted-multiplayer-challenge'\)/);
   const handoff=rankedRoom.slice(rankedRoom.indexOf('async leaveSoloForChallenge'),rankedRoom.indexOf('async connect',rankedRoom.indexOf('async leaveSoloForChallenge')));
   assert.doesNotMatch(handoff,/force-quit|abandon\(/);
+});
+
+
+test('frontend cache versions advance after matchmaking handoff fixes',()=>{
+  const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.match(index,/ranked-client\.js\?v=20260919-17/);
+  assert.match(index,/app\.js\?v=20260919-14/);
 });
