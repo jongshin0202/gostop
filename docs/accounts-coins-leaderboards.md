@@ -22,9 +22,10 @@ Ranking order is Score descending, Games Played descending, Total Coins descendi
 ## Account rewards
 
 - Registration award: +100 Wallet Coins once.
-- First authenticated use each UTC day: +100 Wallet Coins once.
+- First authenticated use each player-local calendar day: +100 Wallet Coins once. The server determines the day from trusted edge timezone context.
 - Registration automatically creates a persistent authenticated session, therefore a brand-new account receives both awards on its first day (+200 total Wallet Coins).
 - Rewards never affect leaderboard Total Coins or Score.
+- Daily Coins are committed server-side before the notice is acknowledged. Every signed-in device displays the authoritative Wallet immediately; the notice explains the award but never hides or re-applies it.
 
 Passwords are salted and hashed on the server using PBKDF2-SHA-256. Authentication uses random bearer tokens; the password is not stored on the device. A valid saved browser session is restored automatically when GoStop Live opens; only an invalid or expired session requires login again. The current server data model includes `emailVerified`; outbound email verification will be enabled when an email delivery provider is connected.
 
@@ -50,7 +51,7 @@ The top-right account box shows Nickname and Wallet Coins when authenticated. Wh
 
 A session begins when ranked Solo/Online begins. Selecting New Game closes the current session and starts a new one. Quit Game closes the session after the agreed/allowed exit behavior.
 
-Each game stores at least: mode, players/opponent, winner/loser, points, wallet deltas, leaderboard Coins won, timestamps, force-quit/abandonment state, and milestone counts/events.
+Each game stores at least: Game ID, Session ID, mode, players/opponent (including Solo computer identity), winner/loser, final settlement points, score formula/reasons, wallet deltas, leaderboard Coins won, timestamps, force-quit/abandonment state, and milestone counts/events.
 
 Milestones include every special event currently supported and future additions, including Shake, Bomb, POOPED, FIRST POOP, KISS, FLUSH, CLEAN SWEEP, CONQUER, 5-BIRDIES, 3-STRIPES, and 5-BRIGHTS.
 
