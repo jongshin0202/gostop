@@ -9,7 +9,7 @@
   const LEADERBOARD_ROTATE_MS=5000;
   const ATTRACT_IDLE_MS=10000;
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
-  let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false;
+  let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
   let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null;
   const acknowledgedNoticeIds=new Set();
   const acknowledgedRoomAbandonments=new Set();
@@ -134,7 +134,7 @@
     for(const item of daily){const itemTime=Date.parse(item?.createdAt||''),latestTime=Date.parse(latestDaily?.createdAt||'');if(!latestDaily||(Number.isFinite(itemTime)&&(!Number.isFinite(latestTime)||itemTime>latestTime))||(!Number.isFinite(itemTime)&&!Number.isFinite(latestTime)&&String(item?.id||'')>String(latestDaily?.id||'')))latestDaily=item;}
     return list.filter(item=>{if(item?.type==='daily-login'&&item!==latestDaily)return false;return !acknowledgedNoticeIds.has(String(item?.id||''));});
   }
-  function captureAccountPayload(data){if(data?.account){const nextAccountId=data.account.id;if(nextAccountId&&nextAccountId!==account?.id)readAcknowledgedNoticeCache(nextAccountId);account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=normalizeAccountNotices(data.notices);syncRankedButtons();}
+  function captureAccountPayload(data){if(data?.account){const nextAccountId=data.account.id;if(nextAccountId&&nextAccountId!==account?.id)readAcknowledgedNoticeCache(nextAccountId);account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=normalizeAccountNotices(data.notices);syncRankedButtons();scheduleActiveRankedRecheck();}
   function pendingDailyNotice(){return pendingAccountNotices.find(item=>item.type==='daily-login')||null;}
   function displayedWalletCoins(){
     // Wallet is server-authoritative. A pending Daily Bonus notice must never make
@@ -142,9 +142,10 @@
     return account?account.walletCoins:null;
   }
   function saveSession(data){if(data?.session?.token){authToken=data.session.token;try{localStorage.setItem(TOKEN_KEY,authToken);}catch(_){}}captureAccountPayload(data);renderAccountBox();patchGameIdentity();refreshLeaderboardData(true);ensureLobbyPresence();}
-  function clearSession(){authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];acknowledgedNoticeIds.clear();try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}lobbyShouldConnect=false;closeLobby();syncRankedButtons();renderAccountBox();patchGameIdentity();}
+  function clearSession(){if(activeRankedRefreshTimer){clearTimeout(activeRankedRefreshTimer);activeRankedRefreshTimer=null;}authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];acknowledgedNoticeIds.clear();try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}lobbyShouldConnect=false;closeLobby();syncRankedButtons();renderAccountBox();patchGameIdentity();}
   let rankedEntryPending=null;
   function activeRankedMode(){const active=account?.activeRanked;return active?.roomCode&&(active.mode==='solo'||active.mode==='online')?active.mode:null;}
+  function scheduleActiveRankedRecheck(){if(activeRankedRefreshTimer){clearTimeout(activeRankedRefreshTimer);activeRankedRefreshTimer=null;}if(!activeRankedMode()||globalThis.goStopOnlineSession)return;activeRankedRefreshTimer=setTimeout(()=>{activeRankedRefreshTimer=null;void refreshAccount();},20000);}
   function syncRankedButtons(){
     const active=activeRankedMode(),busy=!!rankedEntryPending;
     rankedSolo.disabled=busy||!!active&&active!=='solo';
