@@ -2932,3 +2932,15 @@ test('mode lobby panels render above main menu overlay',()=>{
   assert.ok(lobbyZ>menuZ,`online lobby z-index ${lobbyZ} must be above menu z-index ${menuZ}`);
   assert.match(rankedSource,/freeFriendBtn\.addEventListener\('click',[\s\S]*?freePanel\.hidden=false/);
 });
+
+
+test('online launch reuses the adapter that created or joined the room',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const begin=source.slice(source.indexOf('const beginOnline=async'),source.indexOf("addEventListener('gostop-online-snapshot'"));
+  assert.match(begin,/adapter:roomAdapter=null/);
+  assert.match(begin,/const adapter=roomAdapter\|\|new globalThis\.GoStopOnline\.OnlineSessionAdapter/);
+  assert.match(begin,/if\(previous&&previous!==adapter\)/);
+  const launches=source.slice(source.indexOf("createOnlineBtn?.addEventListener"),source.indexOf("addEventListener('gostop-free-online-join'"));
+  assert.match(launches,/await beginOnline\(room,\{adapter\}\)/);
+  assert.match(launches,/await beginOnline\(room,\{anonymous:true,statusElement:freeOnlineStatus,adapter\}\)/);
+});
