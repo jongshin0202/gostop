@@ -36,10 +36,27 @@ test('leaderboard counts only coins won while wallet includes wins and losses',a
   await store.fetch(post('/internal/game/settle',{gameId:'g2',mode:'online',participants:[{accountId:a.account.id,won:false,walletDelta:-12,coinsWon:0},{accountId:b.account.id,won:true,walletDelta:12,coinsWon:12}]}));
   const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json();
   const alpha=board.global.find(row=>row.nickname==='Alpha'),beta=board.global.find(row=>row.nickname==='Beta');
-  assert.equal(alpha.totalCoins,17);assert.equal(alpha.gamesPlayed,2);assert.equal(alpha.score,8.5);assert.equal(beta.totalCoins,12);assert.equal(beta.score,6);
+  assert.equal(alpha.totalCoins,17);assert.equal(alpha.gamesPlayed,2);assert.equal(alpha.wins,1);assert.equal(alpha.losses,1);assert.equal(alpha.score,8.5);assert.equal(beta.totalCoins,12);assert.equal(beta.wins,1);assert.equal(beta.losses,1);assert.equal(beta.score,6);
   const storedA=await store.accountById(a.account.id);assert.equal(storedA.walletCoins,205);
 });
 
+
+test('player directory search returns wallet wins losses leaderboard score and rank for offline lookup',async()=>{
+  const store=makeStore();
+  const a=await (await store.fetch(post('/register',{email:'lookup-a@example.com',nickname:'LookupAlpha',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const b=await (await store.fetch(post('/register',{email:'lookup-b@example.com',nickname:'LookupBeta',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  await store.fetch(post('/internal/game/settle',{gameId:'lookup-1',mode:'online',winnerPlayerId:'a',participants:[{accountId:a.account.id,playerId:'a',won:true,walletDelta:9,coinsWon:9},{accountId:b.account.id,playerId:'b',won:false,walletDelta:-9,coinsWon:0}]}));
+  const result=await (await store.fetch(post('/internal/player-search',{query:'lookupalpha'}))).json();
+  assert.equal(result.players.length,1);const player=result.players[0];
+  assert.equal(player.nickname,'LookupAlpha');assert.equal(player.accountId,a.account.id);assert.equal(player.walletCoins,209);assert.equal(player.gamesPlayed,1);assert.equal(player.wins,1);assert.equal(player.losses,0);assert.equal(player.score,9);assert.equal(player.rank,1);
+});
+
+test('nagari-style settlement increments games but not wins or losses',async()=>{
+  const store=makeStore(),a=await (await store.fetch(post('/register',{email:'nagari-profile@example.com',nickname:'NagariProfile',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  await store.fetch(post('/internal/game/settle',{gameId:'nagari-profile-1',mode:'solo',winnerPlayerId:null,participants:[{accountId:a.account.id,playerId:'a',won:false,walletDelta:0,coinsWon:0}]}));
+  const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json(),row=board.global.find(item=>item.nickname==='NagariProfile');
+  assert.equal(row.gamesPlayed,1);assert.equal(row.wins,0);assert.equal(row.losses,0);
+});
 test('duplicate game settlement is idempotent',async()=>{
   const store=makeStore();
   const a=await (await store.fetch(post('/register',{email:'idempotent@example.com',nickname:'Idempotent',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
