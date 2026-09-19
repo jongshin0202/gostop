@@ -23,13 +23,15 @@ async function onlineRoom(options={}){const storage=new MemoryStorage(),accountS
 
 async function soloRoom(){const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});await core.createSolo('ABCDEFGHJK2346');const user=await core.join(null,account('solo-user','SoloPlayer'));const socket=new Socket();await core.connect(user.credential,socket);return {core,user,socket,accountStore};}
 
-test('online inactivity abandonment defaults to three minutes and accepts a server-configured timeout',async()=>{
-  const standard=await onlineRoom(),start=Date.parse(now());
-  assert.equal(standard.core.room.rankFlow.inactivity.abandonAt-start,180000);
-  assert.equal(standard.core.room.rankFlow.inactivity.warningAt-start,30000);
-  const configured=await onlineRoom({abandonmentTimeoutMs:240000});
-  assert.equal(configured.core.room.rankFlow.inactivity.abandonAt-start,240000);
-  assert.equal(configured.core.room.rankFlow.inactivity.warningAt-start,30000);
+test('online inactivity timing is three-minute nudge, one-minute nudge phase, then 30-second abandonment countdown',async()=>{
+  const standard=await onlineRoom(),start=Date.parse(now()),timing=standard.core.room.rankFlow.inactivity;
+  assert.equal(timing.nudgeAt-start,180000);
+  assert.equal(timing.warningAt-start,240000);
+  assert.equal(timing.abandonAt-start,270000);
+  const configured=await onlineRoom({inactivityNudgeMs:240000,nudgePhaseMs:90000,abandonmentCountdownMs:45000}),custom=configured.core.room.rankFlow.inactivity;
+  assert.equal(custom.nudgeAt-start,240000);
+  assert.equal(custom.warningAt-start,330000);
+  assert.equal(custom.abandonAt-start,375000);
 });
 
 test('orphaned ranked lock gets a short runtime recovery grace then ends without abandonment',async()=>{
