@@ -256,7 +256,9 @@ test('switching modes clears stale Free and Competitive lobby panels before game
 
 test('Free Play With Friend makes manual Join a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
   const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
-  assert.match(beginOnline,/if\(anonymous&&event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);if\(freeFriendPanel\)freeFriendPanel\.hidden=true;els\.soloStartOverlay\.hidden=true;\}/);
+  assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);\}/);
+  const handoff=appSource.slice(appSource.indexOf('function enterOnlineMatchView'),appSource.indexOf('const beginOnline=async'));
+  assert.match(handoff,/if\(anonymous\)\{if\(freeFriendPanel\)freeFriendPanel\.hidden=true;\}/);
   const freeJoin=appSource.slice(appSource.indexOf("addEventListener('gostop-free-online-join'"),appSource.lastIndexOf('  }\n})();'));
   assert.match(freeJoin,/sessionStorage\.removeItem\(`gostop-room-\$\{code\}`\)/);
   assert.match(freeJoin,/const room=await adapter\.join\(code\)/);
