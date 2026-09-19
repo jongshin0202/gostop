@@ -45,8 +45,8 @@ test('only the current online session adapter may update gameplay or opening pre
   assert.match(app,/const isCurrent=\(\)=>generation===onlineSessionGeneration&&globalThis\.goStopOnlineSession===adapter/);
   assert.match(app,/adapter\.addEventListener\('snapshot',event=>\{if\(!isCurrent\(\)\)return/);
   assert.match(app,/sessionGeneration:generation/);
-  assert.match(app,/if\(generation!==onlineSessionGeneration\)return;const \{snapshot\}=event\.detail/);
-  assert.match(app,/onlinePresentationQueue=onlinePresentationQueue\.then\(\(\)=>\{if\(generation!==onlineSessionGeneration\)return;/);
+  assert.match(app,/const generation=event\.detail\.sessionGeneration,epoch=event\.detail\.presentationEpoch\?\?onlinePresentationEpoch;if\(generation!==onlineSessionGeneration\|\|epoch!==onlinePresentationEpoch\)return;const \{snapshot\}=event\.detail/);
+  assert.match(app,/onlinePresentationQueue=onlinePresentationQueue\.then\(\(\)=>\{if\(generation!==onlineSessionGeneration\|\|epoch!==onlinePresentationEpoch\)return;/);
 });
 
 test('leaving an online game invalidates all stale session events',()=>{

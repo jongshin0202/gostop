@@ -46,3 +46,25 @@ test('local quit cancels stale First Poop and delayed AI presentation work',()=>
   assert.match(schedule,/if\(onlineMode\|\|!localGameActive\)return/);
   assert.match(schedule,/setTimeout\(\(\)=>\{if\(isLocalGamePresentationCurrent\(generation\)\)aiTurn\(\);\},820\)/);
 });
+
+
+test('Free Play With Friend quit bypasses presentation queue and ends both views immediately',()=>{
+  const onlineState=app.slice(app.indexOf('let activeOnlineStatus=onlineStatus'),app.indexOf('onlineSubmit=function'));
+  assert.match(onlineState,/onlinePresentationEpoch=0/);
+  const clear=app.slice(app.indexOf('function clearOnlineGameplayPresentation'),app.indexOf('function onlineFlowBlocks'));
+  assert.match(clear,/resetHandPresentationState\(\)/);
+  assert.match(clear,/els\.firstPpeokDialog/);
+  assert.match(clear,/milestoneOverlay\.classList\.remove\('show'\)/);
+  const snapshot=app.slice(app.indexOf("adapter.addEventListener('snapshot'"),app.indexOf("adapter.addEventListener('actionAccepted'"));
+  assert.match(snapshot,/snapshot\?\.sessionFlow\?\.ended/);
+  assert.match(snapshot,/onlinePresentationEpoch\+\+/);
+  assert.match(snapshot,/onlinePresentationQueue=Promise\.resolve\(\)/);
+  assert.match(snapshot,/clearOnlineGameplayPresentation\(\);reconcileOnlineFlow\(event\.detail\.snapshot\);return/);
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/flow\.ended/);
+  assert.match(reconcile,/flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\)/);
+  assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,true\)/);
+  const transition=app.slice(app.indexOf('async function presentOnlineTransition'),app.indexOf('async function submitOnlineCardPlay'));
+  assert.match(transition,/epoch=onlinePresentationEpoch/);
+  assert.match(transition,/isOnlinePresentationCurrent\(epoch\)/);
+});
