@@ -75,10 +75,11 @@ Session summaries include games played, opponent, total Coins won/lost/net, comp
 - On the second and later timed-out disconnects in the same month, if the opponent was ahead, the same Coin amount awarded to the opponent is deducted from the disconnected player's Wallet and the interrupted game counts against the disconnected player's ranked record.
 - After a protected first disconnect in which the opponent was ahead, the disconnected player receives a friendly informational notice the next time they enter Solo Play or Online Play. It is not shown as a main-menu interruption.
 - New accounts must acknowledge this disconnect-protection rule before registration completes.
-- If a player has not acted for 15 seconds while still connected, send a dialog/sound/vibration nudge.
-- If still inactive 15 seconds after the nudge, show an abandonment warning with the pending Coin penalty and remaining server countdown. Inactivity is distinct from the 60-second technical-disconnect recovery window.
 - Connected-player inactivity timing is server-configurable in three phases: after **3 minutes** of inactivity (`INACTIVITY_NUDGE_SECONDS=180`), show the first Your Turn / Waiting for Opponent dialog; keep that nudge phase active for **1 minute** (`INACTIVITY_NUDGE_PHASE_SECONDS=60`); then start a **30-second** abandonment warning countdown (`ABANDONMENT_COUNTDOWN_SECONDS=30`). If the countdown reaches zero without a valid play/reconnect/pause, apply the abandonment settlement. Dismissing either dialog keeps that dialog closed for its current phase while the authoritative server timing continues.
-- Each player gets two 1-minute pause requests per game. During a pause both players see a Pause dialog, a 60-second countdown, and the requesting player's remaining pauses.
+- Each player gets two pause requests per game. A pause lasts **3 minutes** by default and is server-configurable with `PAUSE_DURATION_SECONDS=180`.
+- During a pause, both players see the same countdown. The player who requested the pause sees **Cancel**, which resumes the game immediately and starts fresh inactivity timing for the player whose turn it is. The opponent sees **Quit Game**.
+- If the opponent selects Quit Game during a pause, a Yes/No confirmation is required. No returns to the Pause screen. Yes ends the session immediately with no abandonment record, no Coin penalty, and no Coin transfer for either player.
+- If the 3-minute pause reaches zero, the pause ends and the **30-second abandonment warning** begins immediately for the player whose turn it is.
 - Pause, nudge, disconnect, warning, reconnect, quit request, and quit disposition are communicated to the opponent in real time.
 
 ## Online quitting
