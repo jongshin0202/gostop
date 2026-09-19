@@ -23,6 +23,20 @@ async function onlineRoom(){const storage=new MemoryStorage(),accountStore=new A
 
 async function soloRoom(){const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});await core.createSolo('ABCDEFGHJK2346');const user=await core.join(null,account('solo-user','SoloPlayer'));const socket=new Socket();await core.connect(user.credential,socket);return {core,user,socket,accountStore};}
 
+test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
+  const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
+  assert.equal(core.room.sessionFlow.ended,false);
+  const result=await core.leaveSoloForChallenge('solo-user');
+  assert.equal(result.ok,true);
+  assert.equal(core.room.sessionFlow.ended,true);
+  assert.equal(core.room.sessionFlow.endedBy,user.playerId);
+  assert.equal(core.room.status,'ended');
+  assert.equal(core.room.rankFlow.abandonment,null);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,forceQuitsBefore);
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'&&call.body.summary?.reason==='accepted-multiplayer-challenge'));
+  assert.equal(socket.last('snapshot').snapshot.sessionFlow.ended,true);
+});
+
 test('online ranked pause is immediate, visible to both players, and decrements only requester budget',async()=>{
   const {core,a,sa,sb}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;
   const result=await core.handle(sa,flow('pause-1',revision,{type:'requestPause'}));assert.equal(result.type,'actionAccepted');assert.equal(core.room.rankFlow.pauseRemaining[a.playerId],1);
