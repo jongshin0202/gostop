@@ -168,11 +168,14 @@ export class AccountStore{
   }
 
   async startGameSession(request){
-    const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds.filter(Boolean):[],opponent:body.opponent||null,roomCode:body.roomCode||null,matchId:body.matchId||null,gameSequence:Number(body.gameSequence)||0,startedAt:body.startedAt||this.now(),endedAt:null,summary:null};
-    await this.storage.put(`gameSession:${record.id}`,record);
-    if((record.mode==='solo'||record.mode==='online')&&record.roomCode){
-      for(const accountId of record.accountIds){const account=await this.accountById(accountId);if(!account)continue;account.activeRanked={sessionId:record.id,mode:record.mode,roomCode:record.roomCode,startedAt:record.startedAt};account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}
+    const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds.filter(Boolean):[],opponent:body.opponent||null,roomCode:body.roomCode||null,matchId:body.matchId||null,gameSequence:Number(body.gameSequence)||0,startedAt:body.startedAt||this.now(),endedAt:null,summary:null},key=`gameSession:${record.id}`;
+    const prior=await this.storage.get(key);if(prior&&!prior.endedAt)return json({ok:true,duplicate:true,session:prior});
+    const ranked=(record.mode==='solo'||record.mode==='online')&&record.roomCode,loaded=[];
+    if(ranked){
+      for(const accountId of record.accountIds){const account=await this.accountById(accountId);if(!account)continue;if(account.activeRanked?.sessionId&&account.activeRanked.sessionId!==record.id)return json({ok:false,error:{code:'ACTIVE_RANKED_GAME',message:'This account already has an active Coin game.',activeRanked:account.activeRanked}},409);loaded.push(account);}
     }
+    await this.storage.put(key,record);
+    for(const account of loaded){account.activeRanked={sessionId:record.id,mode:record.mode,roomCode:record.roomCode,startedAt:record.startedAt};account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}
     return json({ok:true,session:record},201);
   }
   async endGameSession(request){
