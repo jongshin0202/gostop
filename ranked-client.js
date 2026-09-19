@@ -220,7 +220,7 @@
     const input=$('onlineRoomCode');if(!input||!joinForm)throw new Error(rt('launcherUnavailable'));
     input.value=String(roomCode||'').toUpperCase();onlinePanel.hidden=true;joinForm.requestSubmit();
   }
-  globalThis.addEventListener?.('gostop-online-launch-settled',()=>clearRankedEntryPending());
+  globalThis.addEventListener?.('gostop-online-launch-settled',event=>{clearRankedEntryPending();if(event.detail?.ok===false&&overlay.dataset.currentMenuReady!=='true'&&!globalThis.goStopOnlineSession)revealCurrentMainMenu();});
   rankedSolo.addEventListener('click',()=>beginRankedEntry('solo',async()=>{
     if(account?.activeRanked?.mode==='solo'&&account.activeRanked.roomCode){launchRankedRoom(account.activeRanked.roomCode);return;}
     const data=await api('/api/solo',{method:'POST',body:{}});captureAccountPayload(data);renderAccountBox();patchGameIdentity();launchRankedRoom(data.room.roomCode);
