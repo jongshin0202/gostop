@@ -130,6 +130,7 @@ test('legacy two-button shell is hidden until the current menu client has finish
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
   assert.match(boot,/if\(!resumeActiveRankedRoom\(\)\)revealCurrentMainMenu\(\)/);
+  assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
 });
 
 test('Coin mode buttons reflect the account-wide active ranked game and resume the same room',()=>{
