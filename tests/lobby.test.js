@@ -143,6 +143,24 @@ test('accepted request stays alive until recipient actually joins the exact auth
   assert.ok(target.socket.messages.some(message=>message.type==='challengeRoomHandoffComplete'&&message.roomCode==='ABCDEFGHJK2345'));
 });
 
+test('declining a request immediately makes the same player challengeable again',async()=>{
+  const rows=rowsFor([['Jong',10,20,200,1],['Sonogong',9,20,180,2]]);
+  const lobby=makeLobby(rows),me=client('me','Jong',200),other=client('other','Sonogong',180);
+  add(lobby,me,other);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'other'}));
+  const first=other.socket.messages.find(message=>message.type==='playRequest');
+  assert.ok(first?.requestId);
+  await lobby.handle(other,JSON.stringify({type:'challengeResponse',requestId:first.requestId,accept:false}));
+  assert.equal(lobby.activeChallengeFor('me'),null);
+  assert.equal(lobby.activeChallengeFor('other'),null);
+  assert.equal(lobby.lastRequestAt.has('me'),false);
+  assert.ok((await lobby.recommendations(me)).some(player=>player.accountId==='other'));
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'other'}));
+  const requests=other.socket.messages.filter(message=>message.type==='playRequest');
+  assert.equal(requests.length,2);
+  assert.equal(requests[1].from.nickname,'Jong');
+});
+
 test('Auto Match requests the closest available skill match and still requires that player to accept',async()=>{
   const rows=rowsFor([
     ['Jong',10,100,1000,1],['Closest',10.01,100,1002,2],['Near',10.2,102,1040,3],['Far',30,5,150,4]

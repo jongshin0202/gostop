@@ -57,7 +57,23 @@ function publicAccount(account){
 }
 function blankStats(){return {gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,milestones:{}};}
 function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
-function leaderboardRow(account,stats){const gamesPlayed=Number(stats.gamesPlayed)||0,wins=Number(stats.wins)||0,losses=Number.isFinite(Number(stats.losses))?Number(stats.losses):Math.max(0,gamesPlayed-wins);return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed,wins,losses,provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
+function leaderboardRow(account,stats){const gamesPlayed=Number(stats.gamesPlayed)||0,wins=Number(stats.wins)||0,losses=Number.isFinite(Number(stats.losses))?Number(stats.losses):Math.max(0,gamesPlayed-wins);return {nickname:account.nickname,score:scoreFor(stats),totalCoins:Number(stats.totalCoinsWon)||0,gamesPlayed,wins,losses,provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
+function aggregateMonthlyStats(monthly){
+  const total=blankStats();
+  for(const stats of Object.values(monthly||{})){
+    total.gamesPlayed+=Number(stats?.gamesPlayed)||0;total.wins+=Number(stats?.wins)||0;total.losses+=Number(stats?.losses)||0;total.totalCoinsWon+=Number(stats?.totalCoinsWon)||0;
+    for(const [name,count] of Object.entries(stats?.milestones||{}))total.milestones[name]=(total.milestones[name]||0)+(Number(count)||0);
+  }
+  return total;
+}
+function canonicalGlobalStats(account){
+  const stored=account?.stats?.global||blankStats(),monthly=aggregateMonthlyStats(account?.stats?.monthly);
+  const storedGames=Number(stored.gamesPlayed)||0,monthlyGames=Number(monthly.gamesPlayed)||0;
+  if(monthlyGames>storedGames)return monthly;
+  if(monthlyGames===storedGames&&monthlyGames>0&&(Number(monthly.totalCoinsWon)||0)>(Number(stored.totalCoinsWon)||0))return monthly;
+  if(monthlyGames===storedGames&&monthlyGames>0&&(Number(monthly.wins)||0)>(Number(stored.wins)||0))return monthly;
+  return stored;
+}
 function sortRows(rows){return rows.sort((a,b)=>b.score-a.score||b.gamesPlayed-a.gamesPlayed||b.totalCoins-a.totalCoins||a.nickname.localeCompare(b.nickname));}
 
 export class AccountStore{
@@ -169,7 +185,7 @@ export class AccountStore{
 
   async leaderboard(){
     const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()];
-    const global=sortRows(accounts.map(account=>leaderboardRow(account,account.stats?.global||blankStats()))).map((row,index)=>({...row,rank:index+1}));
+    const global=sortRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account)))).map((row,index)=>({...row,rank:index+1}));
     const monthly=sortRows(accounts.map(account=>leaderboardRow(account,account.stats?.monthly?.[month]||blankStats()))).map((row,index)=>({...row,rank:index+1}));
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
   }
@@ -178,7 +194,7 @@ export class AccountStore{
     const body=await request.json().catch(()=>({})),needle=String(body.query||'').trim().toLowerCase();
     if(!needle)return json({ok:true,players:[]});
     const accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
-    const ranked=sortRows(accounts.map(account=>({...leaderboardRow(account,account.stats?.global||blankStats()),accountId:account.id,walletCoins:Number(account.walletCoins)||0}))).map((row,index)=>({...row,rank:index+1}));
+    const ranked=sortRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0}))).map((row,index)=>({...row,rank:index+1}));
     const players=ranked.filter(row=>String(row.nickname||'').toLowerCase().includes(needle)).sort((a,b)=>{
       const an=String(a.nickname||'').toLowerCase(),bn=String(b.nickname||'').toLowerCase();
       const ax=an===needle?0:an.startsWith(needle)?1:2,bx=bn===needle?0:bn.startsWith(needle)?1:2;
