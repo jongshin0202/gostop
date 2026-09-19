@@ -208,12 +208,12 @@ export class AccountStore{
   async settleGame(request){
     const body=await request.json().catch(()=>({}));if(!body.gameId||!Array.isArray(body.participants)||!body.participants.length)return json({ok:false,error:{code:'INVALID_SETTLEMENT',message:'Game settlement is incomplete.'}},400);
     if(await this.storage.get(`game:${body.gameId}`))return json({ok:true,duplicate:true});
-    const recordedAt=body.recordedAt||this.now(),month=utcMonth(recordedAt),storedParticipants=[];
+    const recordedAt=body.recordedAt||this.now(),month=utcMonth(recordedAt),storedParticipants=[],hasWinner=!!body.winnerPlayerId||body.participants.some(item=>!!item?.won);
     for(const item of body.participants){
       const account=await this.accountById(item.accountId);if(!account)continue;
       const walletDelta=Number(item.walletDelta)||0,coinsWon=Math.max(0,Number(item.coinsWon)||0),won=!!item.won;
       account.walletCoins+=walletDelta;account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};account.stats.monthly[month]=account.stats.monthly[month]||blankStats();
-      for(const stats of [account.stats.global,account.stats.monthly[month]]){stats.gamesPlayed+=1;if(won){stats.wins+=1;stats.totalCoinsWon+=coinsWon;}else if(body.winnerPlayerId){stats.losses=(Number(stats.losses)||0)+1;}for(const [name,count] of Object.entries(item.milestones||{}))stats.milestones[name]=(stats.milestones[name]||0)+(Number(count)||0);}
+      for(const stats of [account.stats.global,account.stats.monthly[month]]){stats.gamesPlayed+=1;if(won){stats.wins+=1;stats.totalCoinsWon+=coinsWon;}else if(hasWinner){stats.losses=(Number(stats.losses)||0)+1;}for(const [name,count] of Object.entries(item.milestones||{}))stats.milestones[name]=(stats.milestones[name]||0)+(Number(count)||0);}
       if(Number(item.computerBankruptcies)>0)account.computerBankruptcies=(account.computerBankruptcies||0)+Number(item.computerBankruptcies);
       account.updatedAt=recordedAt;await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'game',amount:walletDelta,gameId:body.gameId,createdAt:recordedAt});storedParticipants.push({...item,walletAfter:account.walletCoins,adminConnection:account.lastConnection?{...account.lastConnection}:null,adminLocation:account.location?{...account.location}:null});
     }
