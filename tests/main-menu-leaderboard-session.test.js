@@ -207,6 +207,15 @@ test('switching modes clears stale Free and Competitive lobby panels before game
 });
 
 
+test('Free Play With Friend makes manual Join a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
+  const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
+  assert.match(beginOnline,/if\(anonymous&&event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);if\(freeFriendPanel\)freeFriendPanel\.hidden=true;els\.soloStartOverlay\.hidden=true;\}/);
+  const freeJoin=appSource.slice(appSource.indexOf("addEventListener('gostop-free-online-join'"),appSource.lastIndexOf('  }\n})();'));
+  assert.match(freeJoin,/sessionStorage\.removeItem\(`gostop-room-\$\{code\}`\)/);
+  assert.match(freeJoin,/const room=await adapter\.join\(code\)/);
+  assert.doesNotMatch(freeJoin,/adapter\.join\(code,existing\?\.credential\)/);
+});
+
 test('Free Play With Friend uses Cancel while leaderboard and competitive lobby keep Return',()=>{
   const locale=source.slice(source.indexOf('function applyRankedLocale'),source.indexOf('function renderAccountBox'));
   assert.match(locale,/\$\('freeFriendClose'\)\.textContent=rt\('cancel'\)/);
