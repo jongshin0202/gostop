@@ -76,8 +76,10 @@ test('signup explains disconnect protection and requires OK before registration 
 
 test('protected disconnect notice appears only on ranked entry',()=>{
   assert.match(ranked,/showRankedEntryNotice/);
-  assert.match(ranked,/rankedSolo\.addEventListener[\s\S]*showRankedEntryNotice/);
-  assert.match(ranked,/onlinePlay\.addEventListener[\s\S]*showRankedEntryNotice/);
+  const entry=ranked.slice(ranked.indexOf('function beginRankedEntry'),ranked.indexOf("$('onlineLobbyClose')"));
+  assert.match(entry,/showRankedEntryNotice/);
+  assert.match(ranked,/rankedSolo\.addEventListener\('click',\(\)=>beginRankedEntry\('solo'/);
+  assert.match(ranked,/onlinePlay\.addEventListener\('click',\(\)=>beginRankedEntry\('online'/);
   assert.match(ranked,/disconnectForgivenText/);
 });
 
