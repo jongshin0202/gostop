@@ -352,15 +352,27 @@
     const list=$('recommendedPlayers');if(!list)return;
     list.innerHTML=players.length?players.map(player=>{
       const challengeable=player.challengeable!==false&&player.online!==false,rank=player.rank?(player.provisional?rt('provisional',{rank:player.rank}):rt('rank',{rank:player.rank})):rt('unranked');
-      return `<div class="online-player-row" data-account-id="${escapeHtml(player.accountId)}"><strong>${flagEmoji(player.countryCode)} ${escapeHtml(player.nickname)}</strong><small class="player-status ${challengeable?'challengeable':''}">${escapeHtml(playerStatusText(player))}</small><small class="skill-match">${escapeHtml(rt('skillMatch',{percent:Math.max(0,Math.min(100,Number(player.similarity)||0))}))}</small><small>${escapeHtml(rt('walletShort'))}: 🪙 ${Number(player.walletCoins)||0}</small><small>${escapeHtml(rt('winsLosses'))}: ${Number(player.wins)||0} / ${Number(player.losses)||0}</small><small>${escapeHtml(rt('leaderboardScore'))}: ${fmtScore(player.score??player.coinsPerGame)}</small><small>${escapeHtml(rt('leaderboardRank'))}: ${escapeHtml(rank)}</small><button type="button" class="online-player-challenge" data-challenge-account-id="${escapeHtml(player.accountId)}" data-challengeable="${challengeable?'true':'false'}" ${challengeable&&!autoMatchSearching?'':'disabled'}>${escapeHtml(rt('playPlayer'))}</button></div>`;
+      return `<div class="online-player-row" data-account-id="${escapeHtml(player.accountId)}"><strong>${flagEmoji(player.countryCode)} ${escapeHtml(player.nickname)}</strong><small class="player-status ${challengeable?'challengeable':''}">${escapeHtml(playerStatusText(player))}</small><small class="skill-match">${escapeHtml(rt('skillMatch',{percent:Math.max(0,Math.min(100,Number(player.similarity)||0))}))}</small><small>${escapeHtml(rt('walletShort'))}: 🪙 ${Number(player.walletCoins)||0}</small><small>${escapeHtml(rt('winsLosses'))}: ${Number(player.wins)||0} / ${Number(player.losses)||0}</small><small>${escapeHtml(rt('leaderboardScore'))}: ${fmtScore(player.score??player.coinsPerGame)}</small><small>${escapeHtml(rt('leaderboardRank'))}: ${escapeHtml(rank)}</small><button type="button" class="online-player-challenge" data-challenge-account-id="${escapeHtml(player.accountId)}" data-challenge-nickname="${escapeHtml(player.nickname)}" data-challengeable="${challengeable?'true':'false'}" ${challengeable&&!autoMatchSearching?'':'disabled'}>${escapeHtml(rt('playPlayer'))}</button></div>`;
     }).join(''):`<p class="account-help">${escapeHtml(rt('noPlayers'))}</p>`;
-    for(const button of list.querySelectorAll('[data-challenge-account-id]'))button.addEventListener('click',()=>{if(button.disabled||autoMatchSearching)return;if(sendLobbyMessage({type:'challenge',accountId:button.dataset.challengeAccountId}))$('lobbyStatus').textContent=rt('requestSent');});
+    for(const button of list.querySelectorAll('[data-challenge-account-id]'))button.addEventListener('click',()=>{
+      if(button.disabled||autoMatchSearching)return;
+      const optimistic={requestId:null,automatic:false,to:{accountId:button.dataset.challengeAccountId,nickname:button.dataset.challengeNickname||rt('playerFallback')}};
+      showOutgoingRequest(optimistic);$('cancelOutgoingRequest').disabled=true;
+      if(sendLobbyMessage({type:'challenge',accountId:button.dataset.challengeAccountId}))$('lobbyStatus').textContent='';
+    });
   }
   function closeRequestDialog(dialog){if(dialog?.open)dialog.close();}
+  function refreshVisibleLobbyResults(){
+    const query=$('onlineNicknameSearch')?.value?.trim()||'';
+    if(lobbySearchActive&&query){sendLobbyMessage({type:'search',query});return;}
+    if(browsePlayersActive)requestRecommendations();
+  }
   function showOutgoingRequest(message){
-    pendingOutgoingRequest=message;const name=message.to?.nickname||rt('playerFallback');
-    $('outgoingRequestTitle').textContent=rt('waitingOpponentResponse');$('outgoingRequestText').textContent=rt('waitingResponse',{name});
-    $('cancelOutgoingRequest').disabled=false;if(!outgoingRequestDialog.open)outgoingRequestDialog.showModal();
+    pendingOutgoingRequest=message;const name=message.to?.nickname||'';
+    $('outgoingRequestTitle').textContent=rt('waitingOpponentResponse');
+    $('outgoingRequestText').textContent=name?rt('waitingResponse',{name}):rt('autoMatchWaiting');
+    $('cancelOutgoingRequest').disabled=!message.requestId&&!message.automatic;
+    if(!outgoingRequestDialog.open)outgoingRequestDialog.showModal();
   }
   function showMatchHandoff(message=''){onlinePanel.hidden=true;$('matchHandoffTitle').textContent=rt('startingMatch');$('matchHandoffText').textContent=message;if(!matchHandoffDialog.open)matchHandoffDialog.showModal();}
   async function createAcceptedChallengeRoom(message){
@@ -392,8 +404,8 @@
       return;
     }
     if(message.type==='searchResults'){lobbySearchActive=true;browsePlayersActive=false;autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;renderLobbyPresence(message.players||[],message.onlineCount);if(!autoMatchSearching)$('lobbyStatus').textContent='';return;}
-    if(message.type==='autoMatchWaiting'){autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent=rt('autoMatchWaiting');return;}
-    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';if(browsePlayersActive)requestRecommendations();return;}
+    if(message.type==='autoMatchWaiting'){autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';if(!pendingOutgoingRequest)showOutgoingRequest({requestId:null,automatic:true,to:null});return;}
+    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';if(pendingOutgoingRequest?.automatic&&!pendingOutgoingRequest?.requestId)pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);refreshVisibleLobbyResults();return;}
     if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;syncAutoMatchControls();showOutgoingRequest(message);return;}
     if(message.type==='playRequest'){
       pendingRequest=message;const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=from.rank?`${rt('rank',{rank:from.rank})} · `:'';
@@ -410,8 +422,9 @@
     if(message.type==='challengeRoomHandoffComplete'){pendingChallengeCreate=null;pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);return;}
     if(message.type==='challengeDeclined'){
       autoMatchSearching=false;syncAutoMatchControls();const name=message.by?.nickname||pendingOutgoingRequest?.to?.nickname||rt('playerFallback');
-      if(!message.requestId||pendingOutgoingRequest?.requestId===message.requestId){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);$('declinedDialogTitle').textContent=rt('requestDeclinedTitle');$('declinedDialogText').textContent=rt('requestDeclinedText',{name});if(!declinedDialog.open)declinedDialog.showModal();}
-      if(browsePlayersActive)requestRecommendations();return;
+      pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);$('lobbyStatus').textContent='';
+      $('declinedDialogTitle').textContent=rt('requestDeclinedTitle');$('declinedDialogText').textContent=rt('requestDeclinedText',{name});if(!declinedDialog.open)declinedDialog.showModal();
+      refreshVisibleLobbyResults();return;
     }
     if(message.type==='challengeCancelled'||message.type==='challengeError'){
       const incomingCancelled=!!pendingRequest&&(!message.requestId||pendingRequest.requestId===message.requestId),outgoingCancelled=!!pendingOutgoingRequest&&(!message.requestId||pendingOutgoingRequest.requestId===message.requestId);
@@ -439,14 +452,18 @@
     }catch(error){yes.disabled=false;no.disabled=false;$('requestPlayerStats').textContent=localizedError(error);}
   });
   $('requestDecline').addEventListener('click',()=>{if(pendingRequest)sendLobbyMessage({type:'challengeResponse',requestId:pendingRequest.requestId,accept:false});pendingRequest=null;requestDialog.close();});
-  $('cancelOutgoingRequest').addEventListener('click',()=>{if(!pendingOutgoingRequest)return;const button=$('cancelOutgoingRequest');button.disabled=true;sendLobbyMessage({type:'challengeCancel',requestId:pendingOutgoingRequest.requestId});});
+  $('cancelOutgoingRequest').addEventListener('click',()=>{
+    if(!pendingOutgoingRequest)return;const button=$('cancelOutgoingRequest');button.disabled=true;
+    if(pendingOutgoingRequest.requestId){sendLobbyMessage({type:'challengeCancel',requestId:pendingOutgoingRequest.requestId});return;}
+    if(pendingOutgoingRequest.automatic){sendLobbyMessage({type:'autoMatchCancel'});return;}
+  });
   $('declinedDialogOk').addEventListener('click',()=>declinedDialog.close());
   [outgoingRequestDialog,matchHandoffDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
   $('browsePlayersBtn').addEventListener('click',()=>{
     browsePlayersActive=true;lobbySearchActive=false;$('onlineNicknameSearch').value='';$('recommendedPlayers').hidden=false;$('lobbyStatus').textContent='';sendLobbyMessage({type:'recommendations'});
   });
   $('onlineNicknameSearchBtn').addEventListener('click',()=>{const query=$('onlineNicknameSearch').value.trim();browsePlayersActive=!query;lobbySearchActive=!!query;$('recommendedPlayers').hidden=false;$('lobbyStatus').textContent=query?rt('searchingOnline'):'';sendLobbyMessage(query?{type:'search',query}:{type:'recommendations'},'lobbyConnecting');});$('onlineNicknameSearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineNicknameSearchBtn').click();}});
-  $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent=rt('autoMatchWaiting');sendLobbyMessage({type:'autoMatchStart'});});
+  $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';showOutgoingRequest({requestId:null,automatic:true,to:null});sendLobbyMessage({type:'autoMatchStart'});});
   $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
   $('onlineInviteEmailBtn').addEventListener('click',()=>{const email=$('onlineInviteEmail').value.trim();$('lobbyStatus').textContent=email?rt('emailProvider'):rt('enterEmail');});
   function roomShareUrl(roomCode,mode){
