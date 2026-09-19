@@ -41,7 +41,7 @@ test('room join itself is single-flight and releases the menu launch lock only w
 test('only the current online session adapter may update gameplay or opening presentation',()=>{
   assert.match(app,/onlineSessionGeneration=0/);
   assert.match(app,/const generation=\+\+onlineSessionGeneration,previous=globalThis\.goStopOnlineSession/);
-  assert.match(app,/if\(previous\)\{try\{previous\.close\(\)/);
+  assert.match(app,/if\(previous&&previous!==adapter\)\{try\{previous\.close\(\)/);
   assert.match(app,/const isCurrent=\(\)=>generation===onlineSessionGeneration&&globalThis\.goStopOnlineSession===adapter/);
   assert.match(app,/adapter\.addEventListener\('snapshot',event=>\{if\(!isCurrent\(\)\)return/);
   assert.match(app,/sessionGeneration:generation/);
