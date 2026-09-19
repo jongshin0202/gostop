@@ -2495,7 +2495,7 @@
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(anonymous&&event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
@@ -2532,7 +2532,7 @@
     });
     addEventListener('gostop-free-online-join',async event=>{
       if(!freeOnlineStatus||onlineJoinInFlight)return;const code=String(event.detail?.roomCode||'').toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))return;
-      onlineJoinInFlight=true;try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});const existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');const room=await adapter.join(code,existing?.credential);await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
+      onlineJoinInFlight=true;try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
       catch(error){activeOnlineStatus.textContent=error.message;}finally{onlineJoinInFlight=false;}
     });
   }
