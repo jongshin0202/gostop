@@ -124,3 +124,20 @@ test('connected opponent can cancel during reconnect grace without force-quit se
   assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,beforeForceQuits);
 });
 
+
+
+test('clean seven-point Solo Stop settles and records exactly seven with no hidden doubling',async()=>{
+  const {core,user,accountStore}=await soloRoom(),record=core.authority.exportMatch(core.room.matchId),seatId=record.seatByPlayer[user.playerId];
+  record.state.terminalResult={type:'stop',winnerId:seatId,score:7,settlement:{baseTotal:7,total:7,goBonus:0,reasons:[],formulaSteps:['Base 7']}};
+  record.state.winner=seatId;record.completedAt=now();
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);
+  const snapshot=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId});
+  await core.settleTerminal(snapshot);
+  const call=accountStore.calls.findLast(item=>item.path==='/internal/game/settle');
+  assert.ok(call);assert.equal(call.body.finalPoints,7);
+  assert.equal(call.body.participants[0].walletDelta,7);
+  assert.equal(call.body.participants[0].points,7);
+  assert.deepEqual(call.body.settlementReasons,[]);
+  assert.deepEqual(call.body.formulaSteps,['Base 7','Final 7']);
+  assert.equal(call.body.sessionId,core.room.sessionId);
+});

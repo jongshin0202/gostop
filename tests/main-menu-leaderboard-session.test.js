@@ -106,11 +106,10 @@ test('room wallet mismatch refreshes the authoritative account without directly 
 });
 test('attract idle resets only on trusted user input and diagnostics contract is ten seconds',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
 
-test('pending daily bonus preserves pre-bonus Wallet on the menu then syncs authoritative Wallet before Solo launch',()=>{
+test('pending daily bonus never masks the authoritative Wallet on another device',()=>{
   const display=source.slice(source.indexOf('function pendingDailyNotice'),source.indexOf('function saveSession'));
-  assert.match(display,/holdForVisibleMenu=.*overlay&&!overlay\.hidden/);
-  assert.match(display,/notice\.walletBefore/);
-  assert.match(display,/Math\.max\(0,current-coins\)/);
+  assert.match(display,/function displayedWalletCoins\(\)[\s\S]*return account\?account\.walletCoins:null/);
+  assert.doesNotMatch(display,/walletBefore|holdForVisibleMenu|current-coins/);
   const daily=source.slice(source.indexOf("if(accountNoticeDialog.dataset.dailyLaunch==='1')"),source.indexOf("$('loginForm').addEventListener"));
   assert.match(daily,/await acknowledgeAccountNotice\(id\);accountNoticeDialog\.close\(\)/);
   assert.doesNotMatch(daily,/await refreshAccount\(\)/);

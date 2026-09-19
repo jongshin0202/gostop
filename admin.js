@@ -162,15 +162,31 @@
     setBusy(true);try{const data=await api(`/players?${params}`);$('playersTable').innerHTML=table(['Player','Wallet','Games','Wins','Abandons','Location','Latest IP','Status','Created'],playerRows(data.players));setExport('players',data.players);}finally{setBusy(false);}
   }
 
+  function gamePlayerNames(g){
+    const names=(g.participants||[]).map(p=>p.nickname||p.accountId).filter(Boolean);
+    if(!names.length)names.push(...[g.account?.nickname,g.opponent?.nickname].filter(Boolean));
+    if(g.mode==='solo'&&!names.some(name=>/^Computer(?:\s|#|$)/i.test(String(name)))){
+      const level=Number(g.computer?.level);names.push(Number.isFinite(level)&&level>0?`Computer #${level}`:'Computer');
+    }
+    return names.join(' vs ')||'—';
+  }
+  function historySettlement(g){
+    const terminal=g.history?.finalState?.terminalResult;
+    return terminal?.settlement||terminal?.result?.settlement||null;
+  }
+  function settlementAudit(g){
+    const historic=historySettlement(g),reasons=(g.settlementReasons?.length?g.settlementReasons:historic?.reasons)||[],steps=(g.formulaSteps?.length?g.formulaSteps:historic?.formulaSteps)||[];
+    const finalPoints=Number(g.finalPoints??g.fairPoints)||0,formula=[...steps];if(finalPoints&&formula.at(-1)!==`Final ${finalPoints}`)formula.push(`Final ${finalPoints}`);
+    return {settlementReasons:reasons,formulaSteps:formula,basePoints:historic?.baseTotal??null,goBonus:historic?.goBonus??null};
+  }
   function gameRows(games){return games.map(g=>{
-    const names=g.participants?.length?g.participants.map(p=>p.nickname||p.accountId).join(' vs '):[g.account?.nickname,g.opponent?.nickname|| (g.mode==='solo'?'Computer':null)].filter(Boolean).join(' vs ');
     const status=g.type==='abandoned'?pill('Abandoned','bad'):pill('Completed','good');
-    return `<tr><td><button class="clickable" data-game="${esc(g.gameId)}">${esc(g.gameId)}</button></td><td>${status}</td><td>${pill(g.mode||'unknown')}</td><td>${esc(names||'—')}</td><td class="number">${fmt(g.finalPoints)}</td><td class="number">${fmt(g.penaltyCoins)}</td><td>${esc(g.reason||g.settlementType||'—')}</td><td>${g.hasHistory?pill('Full','good'):pill('Legacy','warn')}</td><td class="nowrap">${date(g.recordedAt)}</td></tr>`;
+    return `<tr><td><button class="clickable" data-game="${esc(g.gameId)}">${esc(g.gameId)}</button></td><td>${mono(g.sessionId||'—')}</td><td>${status}</td><td>${pill(g.mode||'unknown')}</td><td>${esc(gamePlayerNames(g))}</td><td class="number">${fmt(g.finalPoints)}</td><td class="number">${fmt(g.penaltyCoins)}</td><td>${esc(g.reason||g.settlementType||'—')}</td><td>${g.hasHistory?pill('Full','good'):pill('Legacy','warn')}</td><td class="nowrap">${date(g.recordedAt)}</td></tr>`;
   });}
   async function loadGames(kind=''){
     const params=new URLSearchParams({limit:'500'});appendRange(params);if(kind)params.set('kind',kind);
     const search=kind==='abandoned'?$('abandonSearch').value:$('gameSearch').value,mode=kind==='abandoned'?$('abandonMode').value:$('gameMode').value;if(search.trim())params.set('player',search.trim());if(mode)params.set('mode',mode);
-    setBusy(true);try{const data=await api(`/games?${params}`),target=kind==='abandoned'?'abandonedTable':'gamesTable';$(target).innerHTML=table(['Game ID','Status','Mode','Players','Points','Coins Lost','Reason','History','Recorded'],gameRows(data.games));setExport(kind==='abandoned'?'abandoned-games':'games',data.games);}finally{setBusy(false);}
+    setBusy(true);try{const data=await api(`/games?${params}`),target=kind==='abandoned'?'abandonedTable':'gamesTable';$(target).innerHTML=table(['Game ID','Session ID','Status','Mode','Players','Points','Coins Lost','Reason','History','Recorded'],gameRows(data.games));setExport(kind==='abandoned'?'abandoned-games':'games',data.games);}finally{setBusy(false);}
   }
 
   async function loadRankings(){
@@ -247,7 +263,7 @@
         controls+
         `<h3 class="subheading">Connection / IP History</h3>${table(['Time','IP','City','State / Region','Country','Timezone','Event'],connections)}`+
         `<h3 class="subheading">Coin Ledger</h3>${table(['Time','Type','Amount','Game','Reason'],ledger)}`+
-        `<h3 class="subheading">Games</h3>${table(['Game ID','Status','Mode','Players','Points','Coins Lost','Reason','History','Recorded'],gameRows(data.games))}`+
+        `<h3 class="subheading">Games</h3>${table(['Game ID','Session ID','Status','Mode','Players','Points','Coins Lost','Reason','History','Recorded'],gameRows(data.games))}`+
         `<h3 class="subheading">Additional Player Information</h3><section class="friendly-section">${friendlyData(p)}</section>`;
       $('detailDialog').showModal();
     }catch(error){fail(error);}
@@ -255,8 +271,8 @@
   async function showGame(id){
     try{
       const data=await api(`/games/${encodeURIComponent(id)}`),g=data.game;$('detailTitle').textContent=`${id} — Game`;
-      const type=g.type==='abandonment'?'Abandoned':'Completed',names=g.participants?.length?g.participants.map(x=>x.nickname||x.accountId).join(' vs '):[g.account?.nickname,g.opponent?.nickname||(g.mode==='solo'?'Computer':null)].filter(Boolean).join(' vs ');
-      const settlement={scores:g.scores,settlementReasons:g.settlementReasons,formulaSteps:g.formulaSteps,participants:g.participants,account:g.account,opponent:g.opponent,adminChanges:g.adminOverride,correctionHistory:g.adminCorrections};
+      const type=g.type==='abandonment'?'Abandoned':'Completed',names=gamePlayerNames(g),audit=settlementAudit(g);
+      const settlement={scores:g.scores,settlementReasons:audit.settlementReasons,formulaSteps:audit.formulaSteps,basePoints:audit.basePoints,goBonus:audit.goBonus,participants:g.participants,computer:g.computer,account:g.account,opponent:g.opponent,adminChanges:g.adminOverride,correctionHistory:g.adminCorrections};
       const history=g.history||{message:'This older game does not include detailed play-by-play history.'};
       $('detailBody').innerHTML=
         detailBoxes([['Type',type==='Abandoned'?pill(type,'bad'):pill(type,'good')],['Mode',pill(g.mode||'unknown')],['Players',esc(names||'—')],['Final / Fair Points',fmt(g.finalPoints??g.fairPoints)],['Penalty Coins',fmt(g.penaltyCoins)],['Reward Coins',fmt(g.opponentRewardCoins)],['Recorded',date(g.recordedAt)],['Session',mono(g.sessionId)],['Settlement',esc(humanize(g.settlementType||'normal'))]])+
