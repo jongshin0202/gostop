@@ -94,7 +94,7 @@ test('pause dialog gives requester Cancel, opponent Quit Game, and confirmation 
   assert.match(source,/id=\"rankedPauseQuitConfirmTitle\"/);
   assert.match(source,/id=\"rankedPauseQuitYes\"/);
   assert.match(source,/id=\"rankedPauseQuitNo\"/);
-  assert.match(source,/pause\.requestedByYou\?'cancelPause':'quitPausedGame'/);
+  assert.match(source,/rt\(own\?'cancelPause':'quitPausedGame'\)/);
   assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
   assert.match(source,/submitRanked\(\{type:'quitPausedGame'\}\)/);
   assert.match(source,/pauseQuitConfirmDialog\.close\(\);if\(currentSnapshot\?\.sessionFlow\?\.pause\)renderRankedFlow\(currentSnapshot\)/);
