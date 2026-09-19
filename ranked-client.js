@@ -309,9 +309,9 @@
 
   function lobbyUrl(){const url=new URL(`${baseUrl}/api/lobby/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';return url;}
   function desiredLobbyAvailability(){return !!account&&!playerTwoPlayerActive&&account?.activeRanked?.mode!=='online';}
-  function syncLobbyAvailability(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',available:desiredLobbyAvailability(),twoPlayer:playerTwoPlayerActive||account?.activeRanked?.mode==='online'});}
+  function syncLobbyAvailability(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',available:desiredLobbyAvailability(),twoPlayer:playerTwoPlayerActive||account?.activeRanked?.mode==='online',mode:playerPresenceMode});}
   function ensureLobbyPresence(){lobbyShouldConnect=!!authToken&&!!account;if(!lobbyShouldConnect){closeLobby();return;}connectLobby();}
-  function syncAutoMatchControls(){const start=$('autoMatchBtn'),cancel=$('autoMatchCancelBtn');if(start)start.hidden=autoMatchSearching;if(cancel)cancel.hidden=!autoMatchSearching;for(const button of $('recommendedPlayers')?.querySelectorAll('[data-account-id]')||[])button.disabled=autoMatchSearching;}
+  function syncAutoMatchControls(){const start=$('autoMatchBtn'),cancel=$('autoMatchCancelBtn');if(start)start.hidden=autoMatchSearching;if(cancel)cancel.hidden=!autoMatchSearching;for(const button of $('recommendedPlayers')?.querySelectorAll('[data-challenge-account-id]')||[])button.disabled=autoMatchSearching||button.dataset.challengeable!=='true';}
   function renderLobbyPresence(players=lastLobbyPlayers,onlineCount=lastLobbyOnlineCount){lastLobbyPlayers=Array.isArray(players)?players:[];lastLobbyOnlineCount=Math.max(0,Number(onlineCount)||0);const count=$('onlinePlayerCount'),list=$('recommendedPlayers');if(count)count.textContent=rt('onlineCount',{count:lastLobbyOnlineCount});if(list)list.hidden=!(browsePlayersActive||lobbySearchActive);if(browsePlayersActive||lobbySearchActive)renderPlayers(lastLobbyPlayers);syncAutoMatchControls();}
   function connectLobby(){
     if(!authToken||!account||!baseUrl)return;
@@ -344,10 +344,17 @@
   function lobbySend(message){if(lobbySocket?.readyState!==WebSocket.OPEN)return false;lobbySocket.send(JSON.stringify(message));return true;}
   function sendLobbyMessage(message,statusKey='lobbyConnecting'){if(lobbySend(message))return true;pendingLobbyMessage=message;$('lobbyStatus').textContent=rt(statusKey);connectLobby();return false;}
   function requestRecommendations(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'recommendations'});}
+  function playerStatusText(player){
+    const key=player.status==='offline'?'statusOffline':player.status==='training'?'statusTraining':player.status==='free-solo'?'statusFreeSolo':player.status==='competitive-solo'?'statusCompetitiveSolo':player.status==='in-game'?'statusInGame':'statusAvailable';
+    return rt(key);
+  }
   function renderPlayers(players=[]){
     const list=$('recommendedPlayers');if(!list)return;
-    list.innerHTML=players.length?players.map(player=>`<button type="button" class="online-player-row" data-account-id="${escapeHtml(player.accountId)}" ${autoMatchSearching?'disabled':''}><strong>${flagEmoji(player.countryCode)} ${escapeHtml(player.nickname)}${player.rank?` · #${player.rank}`:''}</strong><small class="skill-match">${escapeHtml(rt('skillMatch',{percent:Math.max(0,Math.min(100,Number(player.similarity)||0))}))}</small><small>${escapeHtml(rt('coinsPerGame'))} ${fmtScore(player.coinsPerGame??player.score)}</small><small>${Number(player.gamesPlayed)||0} ${escapeHtml(rt('games'))}</small><small>${escapeHtml(rt('walletShort'))} 🪙 ${Number(player.walletCoins)||0}</small></button>`).join(''):`<p class="account-help">${escapeHtml(rt('noPlayers'))}</p>`;
-    for(const button of list.querySelectorAll('[data-account-id]'))button.addEventListener('click',()=>{if(autoMatchSearching)return;if(sendLobbyMessage({type:'challenge',accountId:button.dataset.accountId}))$('lobbyStatus').textContent=rt('requestSent');});
+    list.innerHTML=players.length?players.map(player=>{
+      const challengeable=player.challengeable!==false&&player.online!==false,rank=player.rank?(player.provisional?rt('provisional',{rank:player.rank}):rt('rank',{rank:player.rank})):rt('unranked');
+      return `<div class="online-player-row" data-account-id="${escapeHtml(player.accountId)}"><strong>${flagEmoji(player.countryCode)} ${escapeHtml(player.nickname)}</strong><small class="player-status ${challengeable?'challengeable':''}">${escapeHtml(playerStatusText(player))}</small><small class="skill-match">${escapeHtml(rt('skillMatch',{percent:Math.max(0,Math.min(100,Number(player.similarity)||0))}))}</small><small>${escapeHtml(rt('walletShort'))}: 🪙 ${Number(player.walletCoins)||0}</small><small>${escapeHtml(rt('winsLosses'))}: ${Number(player.wins)||0} / ${Number(player.losses)||0}</small><small>${escapeHtml(rt('leaderboardScore'))}: ${fmtScore(player.score??player.coinsPerGame)}</small><small>${escapeHtml(rt('leaderboardRank'))}: ${escapeHtml(rank)}</small><button type="button" class="online-player-challenge" data-challenge-account-id="${escapeHtml(player.accountId)}" data-challengeable="${challengeable?'true':'false'}" ${challengeable&&!autoMatchSearching?'':'disabled'}>${escapeHtml(rt('playPlayer'))}</button></div>`;
+    }).join(''):`<p class="account-help">${escapeHtml(rt('noPlayers'))}</p>`;
+    for(const button of list.querySelectorAll('[data-challenge-account-id]'))button.addEventListener('click',()=>{if(button.disabled||autoMatchSearching)return;if(sendLobbyMessage({type:'challenge',accountId:button.dataset.challengeAccountId}))$('lobbyStatus').textContent=rt('requestSent');});
   }
   function handleLobbyMessage(message){
     if(message.type==='connected'){if(message.account){account={...account,...message.account};persistAccountCache();renderAccountBox();patchGameIdentity();}syncLobbyAvailability();return;}
@@ -439,8 +446,8 @@
   globalThis.addEventListener('gostop-online-snapshot',event=>{const snapshot=event.detail?.snapshot;if(!snapshot)return;if(!snapshot.ranked){currentSnapshot=null;patchGameIdentity();setTimeout(patchGameIdentity,0);return;}const terminalChanged=!!snapshot.terminalResult&&!currentSnapshot?.terminalResult;currentSnapshot=snapshot;updateFromSnapshot(snapshot);renderRankedFlow(snapshot);patchGameIdentity();setTimeout(patchGameIdentity,0);if(terminalChanged){refreshLeaderboardData(true).then(()=>patchGameIdentity());refreshAccount();}if(snapshot.sessionFlow?.ended)void refreshAccount();});
   globalThis.addEventListener('gostop-online-message',event=>{const message=event.detail||{};if(message.type==='opponentConnected')showToast(rt('opponentReconnected'),3000);if(message.type==='sessionTakenOver')showToast('This Coin game was opened on another device. Reload or reopen the same Coin mode here to take control back.',8000);});
 
-  globalThis.addEventListener('gostop-player-activity',event=>{playerTwoPlayerActive=!!event.detail?.twoPlayer;syncLobbyAvailability();});
-  function revealCurrentMainMenu(){playerTwoPlayerActive=false;setSoloLaunchCover(false);overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
+  globalThis.addEventListener('gostop-player-activity',event=>{playerTwoPlayerActive=!!event.detail?.twoPlayer;playerPresenceMode=String(event.detail?.mode||'menu');syncLobbyAvailability();});
+  function revealCurrentMainMenu(){playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
   const roomParam=new URL(location.href).searchParams.get('room'),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   if(validRoomParam){const launch=()=>launchRankedRoom(roomParam.toUpperCase());if(account)setTimeout(launch,0);else setTimeout(()=>requireAccount(launch,()=>revealCurrentMainMenu()),0);}
 
