@@ -120,6 +120,6 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 
 test('frontend cache versions advance after matchmaking handoff fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.match(index,/ranked-client\.js\?v=20260919-20/);
+  assert.match(index,/ranked-client\.js\?v=20260919-21/);
   assert.match(index,/app\.js\?v=20260919-14/);
 });

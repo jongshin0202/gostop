@@ -5,7 +5,7 @@ import {PROTOCOL_VERSION,envelope,parseClientMessage} from './protocol.mjs';
 const DEFAULT_INACTIVITY_NUDGE_MS=180000;
 const DEFAULT_NUDGE_PHASE_MS=60000;
 const DEFAULT_ABANDONMENT_COUNTDOWN_MS=30000;
-const PAUSE_MS=60000;
+const DEFAULT_PAUSE_DURATION_MS=180000;
 const RECONNECT_GRACE_MS=60000;
 const RUNTIME_ORPHAN_GRACE_MS=15000;
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -35,7 +35,7 @@ export function estimateFairDisconnectSettlement(state,{quitterSeatId,opponentSe
 
 
 export class RankedRoomCore extends RoomCore{
-  constructor(options={}){super(options);this.durableState=options.durableState||null;const positive=(value,fallback)=>{const number=Number(value);return Number.isFinite(number)&&number>0?number:fallback;};this.inactivityNudgeMs=positive(options.inactivityNudgeMs,DEFAULT_INACTIVITY_NUDGE_MS);this.nudgePhaseMs=positive(options.nudgePhaseMs,DEFAULT_NUDGE_PHASE_MS);this.abandonmentCountdownMs=positive(options.abandonmentCountdownMs,DEFAULT_ABANDONMENT_COUNTDOWN_MS);}
+  constructor(options={}){super(options);this.durableState=options.durableState||null;const positive=(value,fallback)=>{const number=Number(value);return Number.isFinite(number)&&number>0?number:fallback;};this.inactivityNudgeMs=positive(options.inactivityNudgeMs,DEFAULT_INACTIVITY_NUDGE_MS);this.nudgePhaseMs=positive(options.nudgePhaseMs,DEFAULT_NUDGE_PHASE_MS);this.abandonmentCountdownMs=positive(options.abandonmentCountdownMs,DEFAULT_ABANDONMENT_COUNTDOWN_MS);this.pauseDurationMs=positive(options.pauseDurationMs,DEFAULT_PAUSE_DURATION_MS);}
   nowMs(){return Date.parse(this.now());}
   async load(){
     const room=await super.load();if(!room)return null;
@@ -163,6 +163,12 @@ export class RankedRoomCore extends RoomCore{
     this.room.sessionStats.forceQuits=(this.room.sessionStats.forceQuits||0)+1;this.room.rankFlow.abandonment={playerId,penaltyCoins,rewardCoins,fairPoints:settlement.fairPoints,settlementType:settlement.settlementType,quitterScore:settlement.quitterScore,opponentScore:settlement.opponentScore,firstOfMonth:!!response?.firstOfMonth,rewardNoticeId:response?.opponentNotice?.id||null,reason,at:this.now()};
     this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};await this.endRankedSession(reason);this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.status='ended';await this.persist();this.broadcastSnapshots();return response;
   }
+  async startAbandonmentWarningForCurrentTurn(){
+    if(!this.room||this.isSolo()||!this.isRanked()||this.room.sessionFlow.ended||this.room.terminalResult){this.room.rankFlow.inactivity=null;return;}
+    const state=this.engineState();if(!state){this.room.rankFlow.inactivity=null;return;}
+    const seat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn,participant=this.room.participants.find(item=>item.seatId===seat);if(!participant||participant.bot||!participant.connected){this.room.rankFlow.inactivity=null;return;}
+    const now=this.nowMs();this.room.rankFlow.inactivity={playerId:participant.playerId,phase:'warning',nudgeAt:now,warningAt:now,abandonAt:now+this.abandonmentCountdownMs,penaltyCoins:this.calculatePenalty(participant.playerId)};this.broadcastSnapshots();
+  }
   async refreshInactivity(){
     if(!this.room||this.isSolo()||!this.isRanked()||this.room.sessionFlow.ended||this.room.terminalResult||this.room.rankFlow.pause){this.room.rankFlow.inactivity=null;return;}
     const state=this.engineState();if(!state){this.room.rankFlow.inactivity=null;return;}
@@ -174,7 +180,7 @@ export class RankedRoomCore extends RoomCore{
   }
   async alarm(){
     await this.load();if(!this.room||this.room.sessionFlow.ended)return;const now=this.nowMs(),flow=this.room.rankFlow;
-    if(flow.pause&&now>=flow.pause.until){flow.pause=null;await this.refreshInactivity();this.broadcastSnapshots();}
+    if(flow.pause&&now>=flow.pause.until){flow.pause=null;await this.startAbandonmentWarningForCurrentTurn();}
     for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!this.sockets.has(playerId)&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId)){await this.endPreFirstTurnDisconnect(playerId);return;}await this.abandon(playerId,'disconnect-timeout');return;}}}
     for(const [playerId,deadline] of Object.entries({...flow.runtimeOrphanDeadlines})){if(now>=deadline){delete flow.runtimeOrphanDeadlines[playerId];if(!this.sockets.has(playerId)){await this.endRuntimeOrphan(playerId);return;}}}
     const inactivity=flow.inactivity;if(inactivity){if(now>=inactivity.abandonAt){await this.abandon(inactivity.playerId,'inactivity-timeout');return;}if(inactivity.phase!=='warning'&&now>=inactivity.warningAt){inactivity.phase='warning';inactivity.penaltyCoins=this.calculatePenalty(inactivity.playerId);this.broadcastSnapshots();}else if(inactivity.phase==='waiting'&&now>=inactivity.nudgeAt){inactivity.phase='nudge';this.broadcastSnapshots();}}
@@ -187,7 +193,15 @@ export class RankedRoomCore extends RoomCore{
     const flow=this.room.rankFlow,participant=this.room.participants.find(item=>item.playerId===socket.__playerId);if(!participant)return false;
     if(message.action.type==='requestPause'){
       if(this.isSolo())throw new RoomError('PAUSE_NOT_AVAILABLE','Pause requests are for Online Play.',409);if(this.room.terminalResult)throw new RoomError('HAND_COMPLETE','The current game is already complete.',409);if(flow.pause)throw new RoomError('PAUSE_ACTIVE','A pause is already active.',409);if((flow.pauseRemaining[participant.playerId]??2)<=0)throw new RoomError('NO_PAUSES_LEFT','No pauses remain for this game.',409);
-      await this.acceptFlowAction(socket,message,async()=>{flow.pauseRemaining[participant.playerId]=(flow.pauseRemaining[participant.playerId]??2)-1;flow.pause={playerId:participant.playerId,until:this.nowMs()+PAUSE_MS};flow.inactivity=null;});return true;
+      await this.acceptFlowAction(socket,message,async()=>{flow.pauseRemaining[participant.playerId]=(flow.pauseRemaining[participant.playerId]??2)-1;flow.pause={playerId:participant.playerId,until:this.nowMs()+this.pauseDurationMs};flow.inactivity=null;});return true;
+    }
+    if(message.action.type==='cancelPause'){
+      if(!flow.pause||flow.pause.playerId!==participant.playerId)throw new RoomError('PAUSE_NOT_OWNED','Only the player who requested this pause can cancel it.',409);
+      await this.acceptFlowAction(socket,message,async()=>{flow.pause=null;await this.refreshInactivity();});return true;
+    }
+    if(message.action.type==='quitPausedGame'){
+      if(!flow.pause||flow.pause.playerId===participant.playerId)throw new RoomError('PAUSE_QUIT_NOT_AVAILABLE','Only the opponent may quit during another player’s pause.',409);
+      await this.acceptFlowAction(socket,message,async()=>{flow.pause=null;flow.inactivity=null;flow.quitRequest=null;await this.endRankedSession('opponent-quit-during-pause');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=participant.playerId;this.room.status='ended';});return true;
     }
     if(message.action.type==='quitGame'){
       await this.acceptFlowAction(socket,message,async()=>{if(this.room.terminalResult){await this.endRankedSession('quit-after-game');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=participant.playerId;this.room.status='ended';return;}if(this.isSolo()){flow.scheduledQuitBy=participant.playerId;return;}if(!flow.quitRequest)flow.quitRequest={requestId:`quit-${++flow.quitGeneration}`,requesterPlayerId:participant.playerId,createdAt:this.now()};});return true;
@@ -203,7 +217,7 @@ export class RankedRoomCore extends RoomCore{
     return false;
   }
   async handle(socket,input){
-    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}if(message.type==='action'&&['requestPause','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
+    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
       try{await this.handleRankedFlow(socket,message);}catch(error){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:error.code||'ILLEGAL_ACTION',message:error.message}});this.send(socket,response);return response;}return envelope('actionAccepted',{actionId:message.actionId});
     }
     if(message.type==='action'&&this.room.rankFlow?.pause){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:'PAUSED',message:'The game is paused.'}});this.send(socket,response);return response;}
@@ -243,4 +257,4 @@ export class RankedRoomCore extends RoomCore{
   }
 }
 
-export {DEFAULT_INACTIVITY_NUDGE_MS,DEFAULT_NUDGE_PHASE_MS,DEFAULT_ABANDONMENT_COUNTDOWN_MS,PAUSE_MS,RECONNECT_GRACE_MS,RUNTIME_ORPHAN_GRACE_MS};
+export {DEFAULT_INACTIVITY_NUDGE_MS,DEFAULT_NUDGE_PHASE_MS,DEFAULT_ABANDONMENT_COUNTDOWN_MS,DEFAULT_PAUSE_DURATION_MS,RECONNECT_GRACE_MS,RUNTIME_ORPHAN_GRACE_MS};

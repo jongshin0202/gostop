@@ -88,6 +88,18 @@ test('nudge dialog never shows the abandonment countdown before warning phase',(
   assert.match(flow,/inactivity\.phase==='warning'[\s\S]*rankedInactivityCountdown'\)\.hidden=false/);
 });
 
+test('pause dialog gives requester Cancel, opponent Quit Game, and confirmation before penalty-free quit',()=>{
+  assert.match(source,/rankedPauseCountdown\" class=\"ranked-countdown\">3:00/);
+  assert.match(source,/id=\"rankedPauseAction\"/);
+  assert.match(source,/id=\"rankedPauseQuitConfirmTitle\"/);
+  assert.match(source,/id=\"rankedPauseQuitYes\"/);
+  assert.match(source,/id=\"rankedPauseQuitNo\"/);
+  assert.match(source,/rt\(own\?'cancelPause':'quitPausedGame'\)/);
+  assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
+  assert.match(source,/submitRanked\(\{type:'quitPausedGame'\}\)/);
+  assert.match(source,/pauseQuitConfirmDialog\.close\(\);if\(currentSnapshot\?\.sessionFlow\?\.pause\)renderRankedFlow\(currentSnapshot\)/);
+});
+
 test('stale ranked locks are server-reconciled and main menu rechecks them automatically',()=>{
   assert.match(worker,/async function reconcileActiveRanked\(env,account\)/);
   assert.match(worker,/\/reconcile-active/);

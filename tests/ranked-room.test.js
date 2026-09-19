@@ -34,6 +34,44 @@ test('online inactivity timing is three-minute nudge, one-minute nudge phase, th
   assert.equal(custom.abandonAt-start,375000);
 });
 
+test('online pause defaults to three minutes and accepts a server-configured duration',async()=>{
+  const standard=await onlineRoom(),start=Date.parse(now()),revision=standard.sa.last('snapshot').snapshot.revision;
+  await standard.core.handle(standard.sa,flow('pause-default',revision,{type:'requestPause'}));
+  assert.equal(standard.core.room.rankFlow.pause.until-start,180000);
+  const configured=await onlineRoom({pauseDurationMs:240000}),customRevision=configured.sa.last('snapshot').snapshot.revision;
+  await configured.core.handle(configured.sa,flow('pause-custom',customRevision,{type:'requestPause'}));
+  assert.equal(configured.core.room.rankFlow.pause.until-start,240000);
+});
+
+test('pause requester can cancel immediately and resume normal inactivity timing',async()=>{
+  const {core,a,sa}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision,start=Date.parse(now());
+  await core.handle(sa,flow('pause-cancel-start',revision,{type:'requestPause'}));
+  const result=await core.handle(sa,flow('pause-cancel',revision,{type:'cancelPause'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.room.rankFlow.pause,null);
+  assert.equal(core.room.rankFlow.inactivity.phase,'waiting');
+  assert.equal(core.room.rankFlow.inactivity.nudgeAt-start,180000);
+  assert.equal(core.room.rankFlow.pauseRemaining[a.playerId],1);
+});
+
+test('pause opponent can quit with no abandonment or Coin penalty',async()=>{
+  const {core,sa,sb,accountStore}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;
+  await core.handle(sa,flow('pause-quit-start',revision,{type:'requestPause'}));
+  const result=await core.handle(sb,flow('pause-quit-confirmed',revision,{type:'quitPausedGame'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.rankFlow.pause,null);assert.equal(core.room.rankFlow.abandonment,null);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'&&call.body.summary?.reason==='opponent-quit-during-pause'));
+});
+
+test('pause timeout starts the 30-second abandonment warning immediately',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
+  const {core,sa,accountStore}=await onlineRoom({now:clock}),revision=sa.last('snapshot').snapshot.revision;
+  await core.handle(sa,flow('pause-timeout-start',revision,{type:'requestPause'}));
+  instant='2026-09-15T04:48:00.001Z';await core.alarm();
+  assert.equal(core.room.rankFlow.pause,null);assert.equal(core.room.rankFlow.inactivity.phase,'warning');
+  assert.equal(core.room.rankFlow.inactivity.abandonAt-Date.parse(instant),30000);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
+});
+
 test('orphaned ranked lock gets a short runtime recovery grace then ends without abandonment',async()=>{
   let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
   const {core,a,accountStore}=await onlineRoom({now:clock});
