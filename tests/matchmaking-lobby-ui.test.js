@@ -18,7 +18,7 @@ test('Search is a player directory lookup and returns profile status even when p
   assert.match(server,/\/internal\/player-search/);
   const search=server.slice(server.indexOf('async search(client,query'),server.indexOf('async broadcastRecommendations'));
   assert.match(search,/await this\.directorySearch\(query\)/);assert.match(search,/this\.presenceForAccount\(player\.accountId\)/);
-  assert.match(server,/status:'offline'/);assert.match(server,/status:'in-game'/);assert.match(server,/status:'competitive-solo'/);
+  assert.match(server,/status:'offline'/);assert.match(server,/status:'in-game'/);assert.match(server,/mode==='competitive-solo'\?'competitive-solo'/);
   const render=client.slice(client.indexOf('function playerStatusText'),client.indexOf('function handleLobbyMessage'));
   assert.match(render,/statusOffline/);assert.match(render,/statusInGame/);assert.match(render,/data-challengeable/);
 });
