@@ -824,7 +824,8 @@
       const action=needsPrePlayDecision?{type:'attemptPlayCard',cardId}:{type:'playCard',cardId,targetId:null};
       if(!onlineSubmit(action)){onlineHandSourceRects.delete(cardId);onlinePendingCardId=null;clickedEl?.classList.remove('pending-card');}return;
     }
-    if(state.turn!==PLAYER_A || state.winner)return;
+    const epoch=gameplayPresentationEpoch;
+    if(!isGameplayPresentationCurrent(epoch)||state.turn!==PLAYER_A||state.winner)return;
 
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
@@ -843,25 +844,35 @@
     const committedBombTarget=committedBombCards.length===3?state.floor.find(item=>item.month===card.month):null;
     const committedBombSources=committedBombCards.map(item=>els.playerHand.querySelector(`[data-card-id="${item.id}"]`)?.getBoundingClientRect()||approximateHumanSource());
     const attempted=applyNormalAction(normalAction('human',{type:'attemptPlayCard',cardId:card.id}));
-    if(attempted.events.some(event=>event.type==='bombDeclared')){committedBombCards.forEach(item=>{const el=els.playerHand.querySelector(`[data-card-id="${item.id}"]`);if(el)el.style.visibility='hidden';});await presentExecutedBomb('human',attempted,committedBombCards,committedBombTarget,committedBombSources);return;}
+    if(attempted.events.some(event=>event.type==='bombDeclared')){
+      committedBombCards.forEach(item=>{const el=els.playerHand.querySelector(`[data-card-id="${item.id}"]`);if(el)el.style.visibility='hidden';});
+      await presentExecutedBomb('human',attempted,committedBombCards,committedBombTarget,committedBombSources,epoch);
+      return;
+    }
     if(attempted.pendingDecision?.type==='bombDecision'){
-      if(await executeBombTurn('human',card.month))return;
+      if(await executeBombTurn('human',card.month,epoch))return;
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
     if(attempted.pendingDecision?.type==='shakeDecision'){
-      const shake=await chooseShake(card.month);
+      const shake=await chooseShake(card.month,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
       if(shake){
         const declared=applyNormalAction(normalAction('human',{type:'declareShake'}));
-        await presentShakeDeclaration(declared.events);
+        await presentShakeDeclaration(declared.events,epoch);
+        if(!isGameplayPresentationCurrent(epoch))return;
         render();
         await sleep(180);
+        if(!isGameplayPresentationCurrent(epoch))return;
       }else{
         const kept=applyNormalAction(normalAction('human',{type:'keepShakeSecret'}));
         if(kept.pendingDecision?.type==='bombDecision'){
-          const useBomb=await chooseBomb(card.month);
+          const useBomb=await chooseBomb(card.month,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
           if(useBomb){
             presentation.pendingHumanCardId=null;
             presentation.queuedHumanCardSwitch=null;
-            if(await executeBombTurn('human',card.month))return;
+            if(await executeBombTurn('human',card.month,epoch))return;
+            if(!isGameplayPresentationCurrent(epoch))return;
           }else applyNormalAction(normalAction('human',{type:'declineBomb'}));
         }
       }
@@ -874,6 +885,7 @@
     if(matches.length===1) target=matches[0];
     else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which floor card to hit');
     else if(matches.length>2) target=chooseBestMatch(matches);
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     // A different hand card was clicked while the two floor targets were glowing.
     // Remove the old highlights and restart from the newly selected card without
@@ -886,6 +898,7 @@
       presentation.queuedHumanCardSwitch=null;
       if(next){
         await nextFrame();
+        if(!isGameplayPresentationCurrent(epoch))return;
         return humanPlay(next.cardId,next.clickedEl);
       }
       return;
@@ -898,28 +911,30 @@
     clickedEl.style.visibility='hidden';
     const playResult=applyNormalAction(normalAction('human',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
     const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
-    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true);
+    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true,epoch);
   }
 
   async function aiTurn(){
     if(onlineMode)return;
-    if(state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
+    const epoch=gameplayPresentationEpoch;
+    if(!isGameplayPresentationCurrent(epoch)||state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
     presentation.aiTurnInProgress=true;
     presentation.locked=true;
     try {
       render(); await sleep(520);
+      if(!isGameplayPresentationCurrent(epoch))return;
 
       const bombMonth=bestAiBombMonth();
       if(bombMonth!=null){
         const card=state.ai.hand.find(item=>item.month===bombMonth);
         applyNormalAction(normalAction('ai',{type:'requestBombDecision',cardId:card.id}));
-        await executeBombTurn('ai',bombMonth);
+        await executeBombTurn('ai',bombMonth,epoch);
         return;
       }
 
       const card=bestAiCard();
       if(!card){
-        await finishNagari();
+        await finishNagari(epoch);
         return;
       }
       // The computer also decides whether to Shake only when it is about to use
@@ -929,9 +944,11 @@
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
         if(!fourthOnFloor && Math.random()<.72){
           const declared=applyNormalAction(normalAction('ai',{type:'declareShake'}));
-          await presentShakeDeclaration(declared.events);
+          await presentShakeDeclaration(declared.events,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
           render();
           await sleep(220);
+          if(!isGameplayPresentationCurrent(epoch))return;
         }else applyNormalAction(normalAction('ai',{type:'keepShakeSecret'}));
       }
       const backs=[...els.aiHand.querySelectorAll('.mini-back')];
@@ -943,10 +960,10 @@
       if(matches.length===1)target=matches[0];
       else if(matches.length===2)target=chooseBestMatch(matches);
       else if(matches.length>2)target=chooseBestMatch(matches);
-      if(target && matches.length>1) await previewAiTarget(target);
+      if(target && matches.length>1){await previewAiTarget(target);if(!isGameplayPresentationCurrent(epoch))return;}
       const playResult=applyNormalAction(normalAction('ai',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
       const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
-      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true);
+      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true,epoch);
     } finally {
       presentation.aiTurnInProgress=false;
     }
@@ -1037,18 +1054,22 @@
     if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
   }
 
-  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
+  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount,legacy=true,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
+    if(!isGameplayPresentationCurrent(epoch))return;
     await presentationPause('handToDeck');
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
       applyNormalAction(normalAction(side,{type:'drawNextCard'}));
       const classification=classifyNormalTurn(side);
-      if(classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
-      else if(['selfPpeokCandidate','floorStackInteraction'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
+      if(classification.kind==='normal')await resolveNormalEngineTurn(side,play,null,epoch);
+      else if(['selfPpeokCandidate','floorStackInteraction'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null,epoch);
       else throw new Error(`Unhandled authoritative turn classification: ${classification.kind}`);
-      await concludeTurn(side);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await concludeTurn(side,epoch);
       return;
     }
 
@@ -1057,6 +1078,7 @@
     let turnClassification=classifyNormalTurn(side);
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     let drawTarget=null;
     let drawMatches=matchesFor(draw);
@@ -1070,9 +1092,10 @@
     }else if(drawMatches.length===2){
       if(side==='human') drawTarget=await chooseFloorTarget(drawMatches,'Deck card: choose which floor card to hit');
       else { drawTarget=chooseBestMatch(drawMatches); await previewAiTarget(drawTarget); }
+      if(!isGameplayPresentationCurrent(epoch))return;
     }else if(drawMatches.length>2){
       drawTarget=chooseBestMatch(drawMatches);
-      if(side==='ai')await previewAiTarget(drawTarget);
+      if(side==='ai'){await previewAiTarget(drawTarget);if(!isGameplayPresentationCurrent(epoch))return;}
     }
 
     if(drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
@@ -1081,13 +1104,15 @@
     }
 
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
+    if(!isGameplayPresentationCurrent(epoch))return;
     const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
     const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
     const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate','floorStackInteraction'];
-    if(turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
-    else if(extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
+    if(turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn,epoch);
+    else if(extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn,epoch);
     else throw new Error(`Unhandled authoritative turn classification: ${turnClassification.kind}`);
-    await concludeTurn(side);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await concludeTurn(side,epoch);
   }
 
   async function executeDeckOnlyTurn(side){
@@ -1292,11 +1317,13 @@
     await a.finished.catch(()=>{}); el.remove();
   }
 
-  async function concludeTurn(side){
-    if(state.winner)return;
-    await presentNewMilestones(playerIdForLegacySide(side));
+  async function concludeTurn(side,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch)||state.winner)return;
+    await presentNewMilestones(playerIdForLegacySide(side),epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
     render();
     if(state.pendingDecision?.type==='openingTripleDecision'){await processOpeningSpecials();return;}
+    if(!isGameplayPresentationCurrent(epoch))return;
     const actorId=playerIdForLegacySide(side);
     const actor=state[side];
     if(side==='ai'&&actor.captured.some(card=>card.id==='m9-1')){
@@ -1304,25 +1331,27 @@
       if(actor.gukjinMode!==mode)applyNormalAction({type:'setGukjinMode',actorId,mode});
     }
     let result=TEST_MODE?evaluateGoStop(state,{actorId}):submitSoloAction({type:'evaluateGoStop',actorId}); state=result.state;
-    if(result.autoStop){ presentStopResult(result); return; }
+    if(result.autoStop){ presentStopResult(result,epoch); return; }
     if(result.pendingDecision){
       const sc=scorePlayer(state[side]);
-      if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
+      if(side==='human'){ presentation.locked=true; await humanGoStop(sc,epoch); return; }
       const action={type:aiShouldGo(sc)?'declareGo':'declareStop',actorId};
       result=applyGoStopDecision(action);
       if(action.type==='declareGo'){
         if(result.events.some(event=>event.type==='goDeclared'))showGoCallout('ai');
         await sleep(980);
+        if(!isGameplayPresentationCurrent(epoch))return;
       }else{
-        presentStopResult(result); return;
+        presentStopResult(result,epoch); return;
       }
     }
 
     if(result.requiresNagari){
-      await finishNagari(); return;
+      await finishNagari(epoch); return;
     }
 
     await sleep(760);
+    if(!isGameplayPresentationCurrent(epoch))return;
     render();
     scheduleTurnStart();
   }
