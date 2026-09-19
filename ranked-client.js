@@ -405,7 +405,7 @@
     }
     if(message.type==='searchResults'){lobbySearchActive=true;browsePlayersActive=false;autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;renderLobbyPresence(message.players||[],message.onlineCount);if(!autoMatchSearching)$('lobbyStatus').textContent='';return;}
     if(message.type==='autoMatchWaiting'){autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';if(!pendingOutgoingRequest)showOutgoingRequest({requestId:null,automatic:true,to:null});return;}
-    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';if(pendingOutgoingRequest?.automatic&&!pendingOutgoingRequest?.requestId)pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);refreshVisibleLobbyResults();return;}
+    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';if(pendingOutgoingRequest?.automatic)pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);refreshVisibleLobbyResults();return;}
     if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;syncAutoMatchControls();showOutgoingRequest(message);return;}
     if(message.type==='playRequest'){
       pendingRequest=message;const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=from.rank?`${rt('rank',{rank:from.rank})} · `:'';
@@ -422,7 +422,8 @@
     if(message.type==='challengeRoomHandoffComplete'){pendingChallengeCreate=null;pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);return;}
     if(message.type==='challengeDeclined'){
       autoMatchSearching=false;syncAutoMatchControls();const name=message.by?.nickname||pendingOutgoingRequest?.to?.nickname||rt('playerFallback');
-      pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);$('lobbyStatus').textContent='';
+      const matchesCurrent=!pendingOutgoingRequest||!pendingOutgoingRequest.requestId||!message.requestId||pendingOutgoingRequest.requestId===message.requestId;
+      if(matchesCurrent){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);}$('lobbyStatus').textContent='';
       $('declinedDialogTitle').textContent=rt('requestDeclinedTitle');$('declinedDialogText').textContent=rt('requestDeclinedText',{name});if(!declinedDialog.open)declinedDialog.showModal();
       refreshVisibleLobbyResults();return;
     }
@@ -430,7 +431,7 @@
       const incomingCancelled=!!pendingRequest&&(!message.requestId||pendingRequest.requestId===message.requestId),outgoingCancelled=!!pendingOutgoingRequest&&(!message.requestId||pendingOutgoingRequest.requestId===message.requestId);
       if(incomingCancelled){pendingRequest=null;closeRequestDialog(requestDialog);}if(outgoingCancelled){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);}
       if(pendingChallengeCreate===message.requestId)pendingChallengeCreate=null;closeRequestDialog(matchHandoffDialog);autoMatchSearching=false;syncAutoMatchControls();
-      $('lobbyStatus').textContent=rankedLocale()==='en'&&message.message?message.message:rt('requestFailed');if(message.message)showToast(message.message,4500);if(browsePlayersActive)requestRecommendations();return;
+      $('lobbyStatus').textContent=rankedLocale()==='en'&&message.message?message.message:rt('requestFailed');if(message.message)showToast(message.message,4500);refreshVisibleLobbyResults();return;
     }
   }
   async function prepareToAcceptMultiplayerChallenge(){
