@@ -150,3 +150,15 @@ test('room creator adapter connects with the exact credential returned by create
     assert.equal(client.room,created);
   }finally{globalThis.fetch=oldFetch;}
 });
+
+
+test('default room transport falls back to live authority when static runtime config is blank',()=>{
+  const oldConfig=globalThis.GOSTOP_CONFIG;
+  globalThis.GOSTOP_CONFIG=Object.freeze({serverUrl:''});
+  try{
+    const client=new OnlineSessionAdapter({WebSocketImpl:class {}});
+    assert.equal(client.baseUrl,'https://gostop-authority.jwshin1.workers.dev');
+  }finally{
+    if(oldConfig===undefined)delete globalThis.GOSTOP_CONFIG;else globalThis.GOSTOP_CONFIG=oldConfig;
+  }
+});
