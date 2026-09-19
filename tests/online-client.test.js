@@ -84,3 +84,23 @@ test('fresh Solo replay turn unlocks from authoritative state even when derived 
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,pendingDecision:{type:'goStopDecision'}}}),false);
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,ai:{hand:[]}}}),false);
 });
+
+
+test('same-account takeover close code stops the displaced device from fighting to reconnect',()=>{
+  class FakeSocket{
+    static instances=[];
+    constructor(){this.readyState=1;FakeSocket.instances.push(this);}
+    send(){}
+    close(){}
+  }
+  const client=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:FakeSocket});
+  client.room={roomCode:'ABCDEFGHJK2345',credential:'room_'+('a'.repeat(64))};
+  let takeoverMessage=null;const oldDispatch=globalThis.dispatchEvent;
+  globalThis.dispatchEvent=event=>{if(event?.detail?.type==='sessionTakenOver')takeoverMessage=event.detail;return true;};
+  try{
+    client.connect();const socket=FakeSocket.instances.at(-1);
+    socket.onclose({code:4001,reason:'Reconnected elsewhere'});
+    assert.equal(client.explicitlyClosed,true);assert.equal(client.reconnectTimer,null);assert.equal(client.socket,null);
+    assert.equal(takeoverMessage.type,'sessionTakenOver');assert.equal(takeoverMessage.code,4001);
+  }finally{globalThis.dispatchEvent=oldDispatch;}
+});
