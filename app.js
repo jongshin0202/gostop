@@ -2346,7 +2346,8 @@
     els.trainingModeBtn?.addEventListener('click',()=>launchLocalGame(true));
     const onlineStatus=document.getElementById('onlineStatus'),freeOnlineStatus=document.getElementById('freeOnlineStatus'),freeFriendPanel=document.getElementById('freeFriendPanel'),createOnlineBtn=document.getElementById('createOnlineBtn'),joinOnlineForm=document.getElementById('joinOnlineForm');
     let activeOnlineStatus=onlineStatus,onlineAnonymousMode=false;
-    let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlineJoinInFlight=false;
+    let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
+    const isOnlinePresentationCurrent=epoch=>onlineMode&&epoch===onlinePresentationEpoch;
     onlineSubmit=function(action){
       if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);presentation.locked=true;return id;}catch(error){activeOnlineStatus.textContent=error.message;return null;}
@@ -2363,10 +2364,18 @@
       return false;
     };
     const setDialog=(dialog,open)=>{if(!dialog)return;if(open&&!dialog.open)dialog.showModal();else if(!open&&dialog.open)dialog.close();};
+    function clearOnlineGameplayPresentation(){
+      resetHandPresentationState();
+      [els.resultDialog,els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.quitConfirmDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog,els.opponentEndedDialog].filter(Boolean).forEach(dialog=>setDialog(dialog,false));
+      if(els.milestoneOverlay){els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');}
+      if(els.openingOverlay){els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');}
+      if(els.goCallout)els.goCallout.classList.remove('show');
+      hideActionCue();
+    }
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
-      if(flow.ended){presentation.locked=true;setDialog(els.replayWaitingDialog,false);setDialog(els.newGameWaitingDialog,false);setDialog(els.incomingNewGameDialog,false);setDialog(els.quitConfirmDialog,false);setDialog(els.resultDialog,false);if(flow.disconnectCancelled||flow.endedByYou)returnOnlineToMenu();else setDialog(els.opponentEndedDialog,true);return;}
+      if(flow.ended){presentation.locked=true;if(flow.disconnectCancelled||flow.endedByYou)returnOnlineToMenu();else setDialog(els.opponentEndedDialog,true);return;}
       const request=flow.newGameRequest;
       setDialog(els.newGameWaitingDialog,!!request?.requestedByYou);
       setDialog(els.incomingNewGameDialog,!!request&&!request.requestedByYou);
@@ -2377,8 +2386,7 @@
       if(!snapshot.terminalResult&&els.quitConfirmDialog.open&&onlineQuitFromResult)setDialog(els.quitConfirmDialog,false);
     }
     function returnOnlineToMenu(){
-      onlineSessionGeneration++;onlineMode=false;presentation.locked=true;resetHandPresentationState();setTrainingMode(false);
-      [els.resultDialog,els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.quitConfirmDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.gukjinDialog,els.opponentEndedDialog].forEach(dialog=>setDialog(dialog,false));
+      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);
       const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);if(!onlineAnonymousMode){try{localStorage.removeItem('gostop-active-ranked-room');}catch(_){}}
       document.getElementById('onlineRoomCode').value='';if(document.getElementById('freeRoomCode'))document.getElementById('freeRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;
       globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;onlineAnonymousMode=false;activeOnlineStatus=onlineStatus;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
@@ -2413,13 +2421,14 @@
       [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog].filter(Boolean).forEach(dialog=>{if(dialog.open)dialog.close();});
       onlinePresentedMatchId=matchId;
     }
-    async function presentOnlineTransition(snapshot,events){
+    async function presentOnlineTransition(snapshot,events,epoch=onlinePresentationEpoch){
+      if(!isOnlinePresentationCurrent(epoch))return;
       presentation.locked=true;
       if(snapshot.matchId!==onlinePresentedMatchId)resetOnlinePresentationForMatch(snapshot.matchId);
       const incomingMapped=onlineStateFromSnapshot(snapshot,events),presentationEvents=incomingMapped.events;
       reconcileOnlineFlow(snapshot);
       if(snapshot.sessionFlow?.ended)return;
-      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);}await driveOnline(snapshot,onlineLastEvents);return;}
+      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);if(!isOnlinePresentationCurrent(epoch))return;}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!presentationEvents.length){
         // Sync/flow snapshots carry no new physical action. Preserve any staged cards that
         // authority still owns in pendingTurn so the played card cannot disappear between
@@ -2430,7 +2439,7 @@
         onlineStageState=Object.fromEntries(Object.entries(onlineStageState).filter(([cardId])=>pendingStageIds.has(cardId)));
         state=incomingMapped.state;onlineLastEvents=[];render();
         staleStageIds.forEach(cleanupStagedCard);
-        await driveOnline(snapshot,[]);return;
+        if(!isOnlinePresentationCurrent(epoch))return;await driveOnline(snapshot,[]);return;
       }
       let bombEvent=null;
       const incoming=incomingMapped.state;
@@ -2452,6 +2461,7 @@
         }else if(step.kind==='capture'){await runPhysicalMotion(()=>animateCaptureBatch(step.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean),side));step.cardIds.forEach(cleanupStagedCard);}
         else if(step.kind==='landedCleanup'){ /* DOM cleanup is deferred until after the authoritative floor render below. */ }
         else if(event.type==='piTransferred')await presentPiTransferEvents(side,[event]);
+        if(!isOnlinePresentationCurrent(epoch))return;
       }
       state=incomingMapped.state;onlineLastEvents=presentationEvents;render();
       for(const cardId of [...presentation.stagedCards.keys()])if(!Object.hasOwn(onlineStageState,cardId))cleanupStagedCard(cardId);
@@ -2463,6 +2473,7 @@
         onlineStageState={};
         presentation.recordedTerminal=null;
         await presentDealSequence();
+        if(!isOnlinePresentationCurrent(epoch))return;
       }
       for(const event of presentationEvents){
         const side=legacySideForPlayerId(event.actorId||PLAYER_A),cardIds=event.cardIds||[];
@@ -2478,9 +2489,10 @@
         else if(event.type==='sweepTriggered')await presentSemanticEvents([event]);
         else if(event.type==='goDeclared')showGoCallout(side);
         else if(['chongtongDeclared','threePpeokDeclared','nagariDeclared'].includes(event.type)){ /* Terminal UI is presented after every turn animation. */ }
+        if(!isOnlinePresentationCurrent(epoch))return;
       }
-      const actor=presentationEvents.find(event=>event.actorId)?.actorId;if(actor)await promptGukjinChoice(legacySideForPlayerId(actor),presentationEvents);
-      const completedTurn=presentationEvents.find(event=>event.type==='turnCompleted');if(completedTurn)await presentNewMilestones(completedTurn.actorId);
+      const actor=presentationEvents.find(event=>event.actorId)?.actorId;if(actor){await promptGukjinChoice(legacySideForPlayerId(actor),presentationEvents);if(!isOnlinePresentationCurrent(epoch))return;}
+      const completedTurn=presentationEvents.find(event=>event.type==='turnCompleted');if(completedTurn){await presentNewMilestones(completedTurn.actorId);if(!isOnlinePresentationCurrent(epoch))return;}
       const chongtong=presentationEvents.find(event=>event.type==='chongtongDeclared'),threePpeok=presentationEvents.find(event=>event.type==='threePpeokDeclared'),nagari=presentationEvents.find(event=>event.type==='nagariDeclared');
       if(chongtong)presentChongtong(chongtong);
       else if(threePpeok)presentThreePpeok({events:[threePpeok]});
@@ -2497,7 +2509,7 @@
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
-      localGameActive=false;localGameGeneration++;setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
+      localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
       if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
       const adapter=roomAdapter||new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});
       adapter.room=room;
@@ -2513,7 +2525,7 @@
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(anonymous&&event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);return;}if(anonymous&&event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
@@ -2540,7 +2552,7 @@
       });
       adapter.addEventListener('error',event=>{if(!isCurrent())return;activeOnlineStatus.textContent=event.detail.message||event.detail.code||'Online connection error.';});adapter.connect();
     };
-    addEventListener('gostop-online-snapshot',event=>{const generation=event.detail.sessionGeneration;if(generation!==onlineSessionGeneration)return;const {snapshot}=event.detail,events=(event.detail.events||[]).filter(item=>{const key=Number.isInteger(item.revision)&&Number.isInteger(item.eventIndex)?`${snapshot.matchId}:${item.revision}:${item.eventIndex}`:null;if(!key)return true;if(onlinePresentedEvents.has(key))return false;onlinePresentedEvents.add(key);if(onlinePresentedEvents.size>256)onlinePresentedEvents.delete(onlinePresentedEvents.values().next().value);return true;});onlinePresentationQueue=onlinePresentationQueue.then(()=>{if(generation!==onlineSessionGeneration)return;return presentOnlineTransition(snapshot,events);}).catch(error=>{if(generation!==onlineSessionGeneration)return;activeOnlineStatus.textContent=error.message;presentation.locked=true;});});
+    addEventListener('gostop-online-snapshot',event=>{const generation=event.detail.sessionGeneration,epoch=event.detail.presentationEpoch??onlinePresentationEpoch;if(generation!==onlineSessionGeneration||epoch!==onlinePresentationEpoch)return;const {snapshot}=event.detail,events=(event.detail.events||[]).filter(item=>{const key=Number.isInteger(item.revision)&&Number.isInteger(item.eventIndex)?`${snapshot.matchId}:${item.revision}:${item.eventIndex}`:null;if(!key)return true;if(onlinePresentedEvents.has(key))return false;onlinePresentedEvents.add(key);if(onlinePresentedEvents.size>256)onlinePresentedEvents.delete(onlinePresentedEvents.values().next().value);return true;});onlinePresentationQueue=onlinePresentationQueue.then(()=>{if(generation!==onlineSessionGeneration||epoch!==onlinePresentationEpoch)return;return presentOnlineTransition(snapshot,events,epoch);}).catch(error=>{if(generation!==onlineSessionGeneration||epoch!==onlinePresentationEpoch)return;activeOnlineStatus.textContent=error.message;presentation.locked=true;});});
     createOnlineBtn?.addEventListener('click',async()=>{try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room,{adapter});}catch(error){activeOnlineStatus.textContent=error.message;}});
     joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();if(onlineJoinInFlight)return;onlineJoinInFlight=true;try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:true,roomCode:room.roomCode}}));}catch(error){activeOnlineStatus.textContent=error.message;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:false}}));}finally{onlineJoinInFlight=false;}});
     addEventListener('gostop-free-online-create',async()=>{
