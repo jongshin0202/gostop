@@ -88,7 +88,7 @@ test('menu avatar follows restored account state without showing an empty logged
 
 test('saved account identity hydrates synchronously before background session verification',()=>{
   assert.match(source,/const ACCOUNT_CACHE_KEY='gostop-account-cache'/);
-  assert.match(source,/const cached=JSON\.parse\(localStorage\.getItem\(ACCOUNT_CACHE_KEY\)\|\|'null'\);if\(authToken&&cached&&typeof cached==='object'&&cached\.nickname\)account=cached/);
+  assert.match(source,/const cached=JSON\.parse\(localStorage\.getItem\(ACCOUNT_CACHE_KEY\)\|\|'null'\);if\(authToken&&cached&&typeof cached==='object'&&cached\.nickname\)\{account=cached;readAcknowledgedNoticeCache\(account\.id\);\}/);
   assert.match(source,/function persistAccountCache\(\)\{try\{if\(authToken&&account\)localStorage\.setItem\(ACCOUNT_CACHE_KEY,JSON\.stringify\(account\)\)/);
   assert.match(source,/if\(authToken&&!account\)\{accountBox\.hidden=true;return;\}/);
   assert.match(source,/localStorage\.removeItem\(TOKEN_KEY\);localStorage\.removeItem\(ACCOUNT_CACHE_KEY\)/);
@@ -112,11 +112,15 @@ test('pending daily bonus never masks the authoritative Wallet or replays after 
   const display=source.slice(source.indexOf('function pendingDailyNotice'),source.indexOf('function saveSession'));
   assert.match(display,/function displayedWalletCoins\(\)[\s\S]*return account\?account\.walletCoins:null/);
   assert.doesNotMatch(display,/walletBefore|holdForVisibleMenu|current-coins/);
+  assert.match(source,/const ACK_NOTICE_CACHE_KEY='gostop-acknowledged-notice-cache'/);
   assert.match(source,/const acknowledgedNoticeIds=new Set\(\)/);
+  assert.match(source,/function readAcknowledgedNoticeCache\(accountId\)[\s\S]*localStorage\.getItem\(ACK_NOTICE_CACHE_KEY\)/);
+  assert.match(source,/function rememberAcknowledgedNotice\(accountId,noticeId\)[\s\S]*localStorage\.setItem\(ACK_NOTICE_CACHE_KEY/);
   const capture=source.slice(source.indexOf('function captureAccountPayload'),source.indexOf('function pendingDailyNotice'));
-  assert.match(capture,/data\.notices\.filter\(item=>!acknowledgedNoticeIds\.has\(item\?\.id\)\)/);
+  assert.match(capture,/readAcknowledgedNoticeCache\(nextAccountId\)/);
+  assert.match(capture,/data\.notices\.filter\(item=>!acknowledgedNoticeIds\.has\(String\(item\?\.id\|\|''\)\)\)/);
   const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
-  assert.match(ack,/acknowledgedNoticeIds\.add\(noticeId\)/);
+  assert.match(ack,/rememberAcknowledgedNotice\(account\?\.id,noticeId\)/);
   assert.match(ack,/pendingAccountNotices=pendingAccountNotices\.filter\(item=>item\?\.id!==noticeId\)/);
   const daily=source.slice(source.indexOf("if(accountNoticeDialog.dataset.dailyLaunch==='1')"),source.indexOf("$('loginForm').addEventListener"));
   assert.match(daily,/await acknowledgeAccountNotice\(id\)/);
