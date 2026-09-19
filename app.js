@@ -75,7 +75,9 @@
   const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
   let soloMatchId=null,soloRevision=0,soloActionSequence=0;
   let localGameGeneration=0,localGameActive=false;
+  let gameplayPresentationEpoch=0,gameplayPresentationActive=false;
   function isLocalGamePresentationCurrent(generation=localGameGeneration){return TEST_MODE||onlineMode||(localGameActive&&generation===localGameGeneration);}
+  function isGameplayPresentationCurrent(epoch=gameplayPresentationEpoch){return TEST_MODE||(gameplayPresentationActive&&epoch===gameplayPresentationEpoch);}
   const presentation = {
     roundNo:1,
     locked:false,
@@ -97,6 +99,31 @@
     trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,
     dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null,activePhysicalMotions:0,rendersDuringPhysicalMotion:0,goCalloutTimer:null
   };
+
+  function beginGameplayPresentation(){gameplayPresentationActive=true;return ++gameplayPresentationEpoch;}
+  function closeAllGameplayPresentationUi(){
+    if(TEST_MODE)return;
+    document.querySelectorAll('dialog[open]').forEach(dialog=>{try{dialog.close();}catch(_){ }});
+    document.querySelectorAll('.milestone-overlay.show,.opening-overlay.show,.go-callout.show').forEach(node=>{node.classList.remove('show');if(node.hasAttribute('aria-hidden'))node.setAttribute('aria-hidden','true');});
+    hideActionCue();
+  }
+  function invalidateGameplayPresentation(){
+    gameplayPresentationActive=false;gameplayPresentationEpoch++;
+    if(presentation.shakeResolver){const resolve=presentation.shakeResolver;presentation.shakeResolver=null;resolve(false);}
+    if(presentation.bombResolver){const resolve=presentation.bombResolver;presentation.bombResolver=null;resolve(false);}
+    resetHandPresentationState();
+    closeAllGameplayPresentationUi();
+  }
+  function showGameplayModal(dialog,epoch=gameplayPresentationEpoch){
+    if(!dialog||!isGameplayPresentationCurrent(epoch))return false;
+    if(!dialog.open)dialog.showModal();
+    return true;
+  }
+  function showGameplayDialog(dialog,epoch=gameplayPresentationEpoch){
+    if(!dialog||!isGameplayPresentationCurrent(epoch))return false;
+    if(!dialog.open)dialog.show();
+    return true;
+  }
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
