@@ -177,3 +177,25 @@ test('turn evaluation is server-owned and browsers do not submit handoff actions
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8');assert.doesNotMatch(source,/onlineSubmit\(\{type:'evaluateGoStop'/);assert.doesNotMatch(source,/onlineSubmit\(\{type:'resolveNagari'/);
   const rejected=source.slice(source.indexOf("adapter.addEventListener('actionRejected'"),source.indexOf("adapter.addEventListener('error'"));assert.match(rejected,/presentation\.locked=true/);assert.match(rejected,/adapter\.sync\(\)/);assert.doesNotMatch(rejected,/viewerCanStartTurn|presentation\.locked=false/);
 });
+
+
+test('same authenticated account can reclaim its full ranked room seat from a second device without creating another seat',async()=>{
+  const core=makeRoom(),accountA={id:'acct-a',nickname:'Alpha',walletCoins:250},accountB={id:'acct-b',nickname:'Beta',walletCoins:250};
+  const first=await core.create('ABCDEFGHJK2388',accountA),other=await core.join(null,accountB);
+  assert.equal(core.room.participants.length,2);assert.equal(other.seatId,'playerB');
+  const secondDevice=await core.join(null,{...accountA,walletCoins:275});
+  assert.equal(secondDevice.resumedByAccount,true);
+  assert.equal(secondDevice.playerId,first.playerId);assert.equal(secondDevice.seatId,first.seatId);
+  assert.notEqual(secondDevice.credential,first.credential);assert.equal(core.room.participants.length,2);
+  assert.equal((await core.authenticate(first.credential)).playerId,first.playerId);
+  assert.equal((await core.authenticate(secondDevice.credential)).playerId,first.playerId);
+  const pc=new Socket(),mobile=new Socket();await core.connect(first.credential,pc);await core.connect(secondDevice.credential,mobile);
+  assert.equal(pc.closed,true);assert.equal(mobile.__playerId,first.playerId);
+});
+
+test('session milestone telemetry records exactly the third Go declaration',()=>{
+  const core=makeRoom();
+  assert.equal(core.milestoneName({type:'goDeclared',goCount:2}),null);
+  assert.equal(core.milestoneName({type:'goDeclared',goCount:3}),'THREE_GO');
+  assert.equal(core.milestoneName({type:'goDeclared',goCount:4}),null);
+});
