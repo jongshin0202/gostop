@@ -2492,7 +2492,7 @@ test('tutorial month rows contain four canonical labeled cards without overflow 
 test('intentional Play Solo start screen owns the first audio-unlocking gesture',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),i18n=require('../i18n.js');
   assert.match(html,/id="soloStartOverlay"/);assert.match(html,/id="playSoloBtn"/);assert.match(html,/data-i18n="playSolo"/);
-  assert.match(source,/playSoloBtn\.addEventListener\('click',async\(\)=>\{await unlockAudio\(\);els\.soloStartOverlay\.hidden=true;startGame\(\);\}/);
+  assert.match(source,/playSoloBtn\.addEventListener\('click',\(\)=>launchLocalGame\(false\)\)/);const launch=source.slice(source.indexOf('async function launchLocalGame'),source.indexOf("document.addEventListener('pointerdown'",source.indexOf('async function launchLocalGame')));assert.match(launch,/await unlockAudio\(\)/);assert.match(launch,/els\.soloStartOverlay\.hidden=true/);assert.match(launch,/await startGame\(\)/);
   for(const locale of Object.keys(i18n.dictionaries))assert.ok(i18n.dictionaries[locale].playSolo.trim());
 });
 
@@ -2762,7 +2762,7 @@ test('dice audio is a bounded sequence of discrete clacks rather than procedural
   assert.match(dice,/playDiceClatter\(\)/);assert.doesNotMatch(dice,/playProceduralNoise/);
   const procedural=source.slice(source.indexOf('function playProceduralNoise'),source.indexOf('let activeDiceSources'));
   assert.doesNotMatch(procedural,/kind==='dice'/);
-  assert.match(source,/async function unlockAudio\(\)/);assert.match(source,/if\(context\?\.state==='suspended'\)await context\.resume\(\)/);assert.match(source,/if\(firstSessionHand&&!TEST_MODE\)await unlockAudio\(\)/);assert.match(source,/addEventListener\('click',async\(\)=>\{await unlockAudio\(\)/);
+  assert.match(source,/async function unlockAudio\(\)/);assert.match(source,/if\(context\?\.state==='suspended'\)await context\.resume\(\)/);assert.match(source,/if\(firstSessionHand&&!TEST_MODE\)await unlockAudio\(\)/);const launch=source.slice(source.indexOf('async function launchLocalGame'),source.indexOf("document.addEventListener('pointerdown'",source.indexOf('async function launchLocalGame')));assert.match(launch,/await unlockAudio\(\)/);
   api.setSoundEnabled(false);api.resetAudioTrace();api.playDiceSound();assert.deepEqual(Array.from(api.getPresentationSnapshot().audioTrace),[]);api.setSoundEnabled(true);
 });
 
@@ -2871,10 +2871,10 @@ test('intentional Online exits clean room UI and ignore only their resulting dis
   assert.match(cleanup,/onlineMode=false/);
   assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);assert.match(cleanup,/localStorage\.removeItem\('gostop-active-ranked-room'\)/);
   assert.match(cleanup,/getElementById\('onlineRoomCode'\)\.value=''/);
-  assert.match(cleanup,/onlineStatus\.textContent=''/);
+  assert.match(cleanup,/activeOnlineStatus\.textContent=''/);
   assert.match(cleanup,/goStopOnlineSession\?\.close\(\);globalThis\.goStopOnlineSession=null/);
   assert.match(cleanup,/soloStartOverlay\.hidden=false/);
-  assert.match(disconnect,/if\(!onlineMode\)return;onlineStatus\.textContent=t\('authorityDisconnected'\)/,'intentional close is ignored after cleanup sets onlineMode false');
+  assert.match(disconnect,/if\(!onlineMode\)return;activeOnlineStatus\.textContent=t\('authorityDisconnected'\)/,'intentional close is ignored after cleanup sets onlineMode false');
   assert.doesNotMatch(disconnect,/if\(onlineMode\).*return/,'active Online disconnects must not be suppressed');
 });
 
