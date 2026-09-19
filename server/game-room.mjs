@@ -7,7 +7,7 @@ export class GameRoom{
   constructor(state,env){
     this.state=state;this.env=env;
     const accountStore=env.ACCOUNT_STORE?.get(env.ACCOUNT_STORE.idFromName('global'))||null,toMs=value=>{const seconds=Number(value);return Number.isFinite(seconds)&&seconds>0?seconds*1000:undefined;};
-    this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state,inactivityNudgeMs:toMs(env.INACTIVITY_NUDGE_SECONDS),nudgePhaseMs:toMs(env.INACTIVITY_NUDGE_PHASE_SECONDS),abandonmentCountdownMs:toMs(env.ABANDONMENT_COUNTDOWN_SECONDS)});
+    this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state,inactivityNudgeMs:toMs(env.INACTIVITY_NUDGE_SECONDS),nudgePhaseMs:toMs(env.INACTIVITY_NUDGE_PHASE_SECONDS),abandonmentCountdownMs:toMs(env.ABANDONMENT_COUNTDOWN_SECONDS),pauseDurationMs:toMs(env.PAUSE_DURATION_SECONDS)});
   }
   async fetch(request){
     const url=new URL(request.url);
