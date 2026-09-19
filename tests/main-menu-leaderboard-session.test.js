@@ -163,7 +163,7 @@ test('main menu separates Training, Free Gaming, Competitive Gaming, and Leaderb
 });
 
 test('Free Play With Friend launches through a separate non-ranked room flow',()=>{
-  assert.match(source,/id="freeFriendPanel"/);
+  assert.match(source,/freePanel\.id='freeFriendPanel'/);
   assert.match(source,/gostop-free-online-create/);
   assert.match(source,/gostop-free-online-join/);
   assert.match(source,/freePanel\.hidden/);
