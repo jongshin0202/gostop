@@ -710,16 +710,18 @@
     if(data.firstPoopBonus){const bonus=document.createElement('p');bonus.textContent=`${t('firstPoopBonus')} +${data.firstPoopBonus} ${t('points')}`;els.scoreBreakdownContent.appendChild(bonus);}
     if(!els.scoreDialog.open)els.scoreDialog.showModal();
   }
-  async function promptGukjinChoice(side,events){
+  async function promptGukjinChoice(side,events,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const revealed=events.some(event=>(event.cards||event.cardIds||[]).some(card=>(typeof card==='string'?card:card.id)==='m9-1'));
-    if(side!=='human'||!revealed||!state.human.captured.some(card=>card.id==='m9-1'))return;
-    await openGukjinChoice(true);
+    if(side!=='human'||!revealed||!state?.human?.captured.some(card=>card.id==='m9-1'))return;
+    await openGukjinChoice(true,epoch);
   }
-  function openGukjinChoice(waitForChoice=false){
-    const gukjin=state.human.captured.find(card=>card.id==='m9-1');
+  function openGukjinChoice(waitForChoice=false,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return Promise.resolve();
+    const gukjin=state?.human?.captured.find(card=>card.id==='m9-1');
     if(!gukjin)return Promise.resolve();
     els.gukjinChoiceCard.innerHTML=''; els.gukjinChoiceCard.appendChild(createCardEl(gukjin,'card magnified-card'));
-    if(!els.gukjinDialog.open)els.gukjinDialog.showModal();
+    if(!showGameplayModal(els.gukjinDialog,epoch))return Promise.resolve();
     return waitForChoice?new Promise(resolve=>els.gukjinDialog.addEventListener('close',resolve,{once:true})):Promise.resolve();
   }
 
@@ -1352,17 +1354,17 @@
     return {left:x-w/2,top:r.top+r.height*.35-h/2,width:w,height:h};
   }
 
-  async function chooseBomb(month){
-    if(!els.bombDialog)return true;
+  async function chooseBomb(month,epoch=gameplayPresentationEpoch){
+    if(!els.bombDialog||!isGameplayPresentationCurrent(epoch))return false;
     els.bombText.textContent=`${localizedMonth(month)} — ${t('bomb')}`;
-    els.bombDialog.showModal();
+    if(!showGameplayModal(els.bombDialog,epoch))return false;
     return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
 
-  async function chooseShake(month){
-    if(!els.shakeDialog)return false;
+  async function chooseShake(month,epoch=gameplayPresentationEpoch){
+    if(!els.shakeDialog||!isGameplayPresentationCurrent(epoch))return false;
     showShakeChoice({type:'shakeDecision',month,cardIds:state.human.hand.filter(c=>c.month===month).map(card=>card.id)});
-    els.shakeDialog.showModal();
+    if(!showGameplayModal(els.shakeDialog,epoch))return false;
     return new Promise(resolve=>{ presentation.shakeResolver=resolve; });
   }
 
@@ -1373,9 +1375,10 @@
     els.shakeCards.replaceChildren(...cards.map(card=>createCardEl(card,'card magnified-card')));
   }
 
-  async function chooseOpeningTriple(decision){
+  async function chooseOpeningTriple(decision,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return false;
     showShakeChoice(decision);
-    els.shakeDialog.showModal();
+    if(!showGameplayModal(els.shakeDialog,epoch))return false;
     return new Promise(resolve=>{presentation.shakeResolver=resolve;});
   }
 
@@ -1418,7 +1421,7 @@
     recordTerminalResult(terminal);
     if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
     setGrandResult(t('conquer'),playerWon?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog); render();
   }
 
   async function presentShakeDeclaration(events){
@@ -1430,7 +1433,7 @@
       els.shakeRevealTitle.textContent=onlineMode?t('opponentShakes'):t('computerShakes');
       els.shakeRevealText.textContent=t(onlineMode?'opponentShakeAck':'shakeAck');
       els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
-      els.shakeRevealDialog.showModal();
+      if(!showGameplayModal(els.shakeRevealDialog))return;
       await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
       return;
     }
@@ -1443,7 +1446,7 @@
     player.revealedShakeSets.forEach((set,index)=>{
       const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t(onlineMode?'opponent':'computer')} — ${t('shake')} #${index+1} · ×${set.declarationMultiplier||(set.month>=11?4:2)}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
     });
-    els.shakeReviewDialog.showModal();
+    showGameplayModal(els.shakeReviewDialog);
   }
 
 
@@ -1871,7 +1874,7 @@
     els.decisionText.textContent=`You have ${decision.score} points.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=player.go===0?t('go'):`${player.go+1} ${t('go')}`;
-    if(!els.decisionDialog.open)els.decisionDialog.showModal();
+    showGameplayModal(els.decisionDialog);
   }
 
 
@@ -1977,7 +1980,7 @@
     els.decisionText.textContent=`${t('currentGo',{count:state.human.go})}. ${formatScoreFormula(preview)}.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
-    els.decisionDialog.show();
+    showGameplayDialog(els.decisionDialog);
   }
 
   function presentStopResult(result){
@@ -1988,7 +1991,7 @@
     presentation.locked=true; hideActionCue();
     setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
     if(side==='human')playChongtongFanfare();else playSadResultSound();
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog); render();
   }
 
   async function finishNagari(){
@@ -1998,7 +2001,7 @@
     recordTerminalResult(state.terminalResult);
     presentation.locked=true;
     setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog); render();
   }
 
   function presentThreePpeok(result){
@@ -2009,7 +2012,7 @@
     recordTerminalResult(terminal);
     presentation.locked=true;
     setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog); render();
   }
 
   function finishByScore(){ finishNagari(); }
@@ -2041,11 +2044,11 @@
     if(onlineMode){return !!onlineSubmit({type:'requestNewGame'});}
     if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
   }
-  function showFirstPoopNotice(side,generation=localGameGeneration){
-    if(!els.firstPpeokDialog||!isLocalGamePresentationCurrent(generation))return Promise.resolve();
+  function showFirstPoopNotice(side,generation=localGameGeneration,epoch=gameplayPresentationEpoch){
+    if(!els.firstPpeokDialog||!isLocalGamePresentationCurrent(generation)||!isGameplayPresentationCurrent(epoch))return Promise.resolve();
     els.firstPoopTitle.textContent=t('firstPoop');
     els.firstPoopText.textContent=`${side==='human'?t('you'):t(onlineMode?'opponent':'computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
-    els.firstPpeokDialog.showModal();
+    if(!showGameplayModal(els.firstPpeokDialog,epoch))return Promise.resolve();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
   }
   function setLocale(locale){
@@ -2410,8 +2413,8 @@
       reconcileOnlineFlow(snapshot);
       if(globalThis.goStopOnlineSession.pendingActionId||onlineFlowBlocks(snapshot)){presentation.locked=true;render();return;}
       const decision=state.pendingDecision;
-      if(decision?.type==='shakeDecision'||decision?.type==='openingTripleDecision'){showShakeChoice(decision);if(!els.shakeDialog.open)els.shakeDialog.showModal();return;}
-      if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));if(!els.bombDialog.open)els.bombDialog.showModal();return;}
+      if(decision?.type==='shakeDecision'||decision?.type==='openingTripleDecision'){showShakeChoice(decision);showGameplayModal(els.shakeDialog);return;}
+      if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));showGameplayModal(els.bombDialog);return;}
       if(decision?.type==='goStopDecision'){await presentOnlineGoStopDecision(decision);return;}
       if(decision?.type==='chooseFloorTarget'){
         const targets=decision.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');
@@ -2508,7 +2511,7 @@
       const chongtong=presentationEvents.find(event=>event.type==='chongtongDeclared'),threePpeok=presentationEvents.find(event=>event.type==='threePpeokDeclared'),nagari=presentationEvents.find(event=>event.type==='nagariDeclared');
       if(chongtong)presentChongtong(chongtong);
       else if(threePpeok)presentThreePpeok({events:[threePpeok]});
-      else if(nagari){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${nagari.nextHandMultiplier}`,t('noWinnerHelp'),'special');els.resultDialog.showModal();}
+      else if(nagari){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${nagari.nextHandMultiplier}`,t('noWinnerHelp'),'special');showGameplayModal(els.resultDialog,epoch);}
       else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       await driveOnline(snapshot,presentationEvents);
     }
