@@ -2512,6 +2512,25 @@
         if(onlineMode)returnOnlineToMenu();
         else if(localGameActive){cancelLocalGamePresentation();setTrainingMode(false);els.soloStartOverlay.hidden=false;publishPlayerActivity(false,'menu');}
         return true;
+      },
+      async createCompetitiveRoom(){
+        const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();
+        await beginOnline(room,{adapter});return room;
+      },
+      async joinCompetitiveRoom(roomCode){
+        const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
+        const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');
+        if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}
+        const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});return room;
+      },
+      async createFreeRoom(){
+        const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();
+        await beginOnline(room,{anonymous:true,statusElement:status,adapter});return room;
+      },
+      async joinFreeRoom(roomCode){
+        const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
+        const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);
+        const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:status,adapter});return room;
       }
     });
     els.opponentEndedOkBtn.addEventListener('click',returnOnlineToMenu);
@@ -2691,4 +2710,5 @@
       catch(error){activeOnlineStatus.textContent=error.message;}finally{onlineJoinInFlight=false;}
     });
   }
+  globalThis.dispatchEvent(new CustomEvent('gostop-app-ready'));
 })();
