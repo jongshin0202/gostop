@@ -2898,3 +2898,27 @@ test('Online starter messages are localized and viewer-relative for both seats',
   assert.equal(api.openingStarterMessage(api.playerIds.playerB),i18n.translate('ko','goesFirst',{player:i18n.translate('ko','computer')}));
   api.setLocale('en');
 });
+
+
+test('Training Mode warns about an opponent completing a three-ribbon set and recommends blocking it',()=>{
+  const warning=card('m3-2');
+  const state=useState(stateWith({
+    turn:'playerA',
+    floor:[warning,card('m5-3')],
+    human:api.makePlayer({hand:[card('m3-1'),card('m5-1')]}),
+    ai:api.makePlayer({captured:[card('m1-2'),card('m2-2')]})
+  }));
+  assert.equal(api.trainingThreatValue(warning,state.ai)>0,true);
+  assert.equal(api.trainingWarningCard().id,'m3-2');
+  assert.equal(api.recommendedHumanCard().id,'m3-1');
+});
+
+test('Training Mode state is independent from normal Free Solo state',()=>{
+  api.setTrainingMode(true);
+  assert.equal(api.getPresentationSnapshot().trainingMode,true);
+  api.setTrainingMode(false);
+  const snapshot=api.getPresentationSnapshot();
+  assert.equal(snapshot.trainingMode,false);
+  assert.equal(snapshot.hintCardId,null);
+  assert.equal(snapshot.trainingWarningFloorCardId,null);
+});
