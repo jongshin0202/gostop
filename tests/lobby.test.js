@@ -4,15 +4,19 @@ import {Lobby,distance,similarityPercent,MATCH_WEIGHTS,MAX_LOBBY_RESULTS} from '
 
 const socket=()=>({messages:[],send(data){this.messages.push(JSON.parse(data));}});
 const account=(id,nickname,walletCoins)=>({id,nickname,walletCoins,countryCode:'US'});
-const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false}={})=>({socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,autoMatching,searchQuery:''});
-const rowsFor=entries=>new Map(entries.map(([nickname,score,gamesPlayed,totalCoins,rank])=>[
+const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu'}={})=>({socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,autoMatching,searchQuery:''});
+const rowsFor=entries=>new Map(entries.map(([nickname,score,gamesPlayed,totalCoins,rank,wins=0,losses=Math.max(0,gamesPlayed-wins)])=>[
   nickname.toLowerCase(),
-  {nickname,score,gamesPlayed,totalCoins,rank,provisional:gamesPlayed<10,countryCode:'US'}
+  {nickname,score,gamesPlayed,totalCoins,rank,wins,losses,provisional:gamesPlayed<10,countryCode:'US'}
 ]));
-const makeLobby=rows=>{
+const makeLobby=(rows,directory=[])=>{
   const lobby=new Lobby({}, {ACCOUNT_STORE:null});
   lobby.crypto={getRandomValues(data){data.fill(1);return data;}};
   lobby.leaderboardRows=async()=>rows;
+  lobby.directorySearch=async query=>{
+    const needle=String(query||'').trim().toLowerCase();
+    return directory.filter(player=>String(player.nickname||'').toLowerCase().includes(needle));
+  };
   return lobby;
 };
 const add=(lobby,...clients)=>{for(const item of clients)lobby.clients.set(item.socket,item);};
@@ -38,8 +42,8 @@ test('matchmaking distance prefers closer skill and remains symmetric and finite
 });
 
 test('Browse Top 10 returns at most ten challengeable players ordered by skill similarity',async()=>{
-  const entries=[['Jong',10,100,1000,1]];
-  for(let i=1;i<=12;i++)entries.push([`Player${i}`,10+i*.2,100-i,1000-i*5,i+1]);
+  const entries=[['Jong',10,100,1000,1,55,45]];
+  for(let i=1;i<=12;i++)entries.push([`Player${i}`,10+i*.2,100-i,1000-i*5,i+1,50,49-i]);
   const rows=rowsFor(entries),lobby=makeLobby(rows),me=client('me','Jong',1000);
   const others=entries.slice(1).map(([nickname],index)=>client(`p${index+1}`,nickname,1000-index*5));
   add(lobby,me,...others);
@@ -49,27 +53,43 @@ test('Browse Top 10 returns at most ten challengeable players ordered by skill s
   for(let i=1;i<recommendations.length;i++)assert.ok(recommendations[i-1].similarity>=recommendations[i].similarity);
 });
 
-test('Solo and Training-style presence remains challengeable while any two-player presence blocks the account',async()=>{
+test('Solo and Training presence remains challengeable while any two-player presence blocks the whole account',async()=>{
   const rows=rowsFor([
-    ['Jong',10,100,1000,1],['SoloPlayer',10.1,98,990,2],['FreeTwoPlayer',10.2,97,980,3],['OtherTab',10.2,97,980,4]
+    ['Jong',10,100,1000,1],['SoloPlayer',10.1,98,990,2],['TrainingPlayer',10.15,97,985,3],['FreeTwoPlayer',10.2,97,980,4],['OtherTab',10.2,97,980,5]
   ]);
-  const lobby=makeLobby(rows),me=client('me','Jong',1000),solo=client('solo','SoloPlayer',990,{available:true,twoPlayer:false});
-  const freeTwo=client('busy','FreeTwoPlayer',980,{available:false,twoPlayer:true});
-  const sameBusyAccountOtherTab=client('busy','OtherTab',980,{available:true,twoPlayer:false});
-  add(lobby,me,solo,freeTwo,sameBusyAccountOtherTab);
+  const lobby=makeLobby(rows),me=client('me','Jong',1000),solo=client('solo','SoloPlayer',990,{mode:'competitive-solo'}),training=client('training','TrainingPlayer',985,{mode:'training'});
+  const freeTwo=client('busy','FreeTwoPlayer',980,{available:false,twoPlayer:true,mode:'free-friend'});
+  const sameBusyAccountOtherTab=client('busy','OtherTab',980,{available:true,twoPlayer:false,mode:'menu'});
+  add(lobby,me,solo,training,freeTwo,sameBusyAccountOtherTab);
   const names=(await lobby.recommendations(me)).map(player=>player.nickname);
-  assert.deepEqual(names,['SoloPlayer']);
+  assert.deepEqual(names,['SoloPlayer','TrainingPlayer']);
   assert.equal(lobby.accountTwoPlayerBusy('busy'),true);
+  assert.equal(lobby.presenceForAccount('solo').status,'competitive-solo');
+  assert.equal(lobby.presenceForAccount('training').status,'training');
+  assert.equal(lobby.presenceForAccount('busy').status,'in-game');
 });
 
-test('nickname search returns currently challengeable players and preserves exact-name priority',async()=>{
-  const rows=rowsFor([
-    ['Jong',8,40,320,1],['Sonogong',8.1,42,340,2],['Sonogong2',8.05,41,330,3],['SonogongBusy',8,40,320,4]
-  ]);
-  const lobby=makeLobby(rows),me=client('me','Jong',320),exact=client('exact','Sonogong',340),partial=client('partial','Sonogong2',330),busy=client('busy','SonogongBusy',320,{available:false,twoPlayer:true});
-  add(lobby,me,exact,partial,busy);
+test('player search looks up registered players even when offline or already in a two-player game and overlays profile status',async()=>{
+  const rows=rowsFor([['Jong',8,40,320,1,20,20]]);
+  const directory=[
+    {accountId:'offline',nickname:'Sonogong',walletCoins:340,score:8.1,gamesPlayed:42,wins:24,losses:18,totalCoins:340,rank:2,provisional:false,countryCode:'US'},
+    {accountId:'busy',nickname:'SonogongBusy',walletCoins:500,score:9.2,gamesPlayed:50,wins:30,losses:20,totalCoins:460,rank:1,provisional:false,countryCode:'US'}
+  ];
+  const lobby=makeLobby(rows,directory),me=client('me','Jong',320),busy=client('busy','SonogongBusy',500,{available:false,twoPlayer:true,mode:'competitive-online'});
+  add(lobby,me,busy);
   const result=await lobby.search(me,'sonogong');
-  assert.deepEqual(result.map(player=>player.nickname),['Sonogong','Sonogong2']);
+  assert.deepEqual(result.map(player=>player.nickname),['Sonogong','SonogongBusy']);
+  assert.equal(result[0].online,false);assert.equal(result[0].status,'offline');assert.equal(result[0].challengeable,false);
+  assert.equal(result[0].walletCoins,340);assert.equal(result[0].wins,24);assert.equal(result[0].losses,18);assert.equal(result[0].score,8.1);assert.equal(result[0].rank,2);
+  assert.equal(result[1].online,true);assert.equal(result[1].status,'in-game');assert.equal(result[1].challengeable,false);
+});
+
+test('player search preserves an explicit zero-loss count instead of treating every non-win as a loss',async()=>{
+  const rows=rowsFor([['Jong',8,40,320,1,20,20]]);
+  const directory=[{accountId:'nagari',nickname:'NagariPlayer',walletCoins:200,score:0,gamesPlayed:1,wins:0,losses:0,totalCoins:0,rank:2,provisional:true,countryCode:'US'}];
+  const lobby=makeLobby(rows,directory),me=client('me','Jong',320);add(lobby,me);
+  const [player]=await lobby.search(me,'nagari');
+  assert.equal(player.gamesPlayed,1);assert.equal(player.wins,0);assert.equal(player.losses,0);
 });
 
 test('manual player selection sends a Yes/No play request rather than starting a game immediately',async()=>{
@@ -77,12 +97,50 @@ test('manual player selection sends a Yes/No play request rather than starting a
   const lobby=makeLobby(rows),me=client('me','Jong',1000),target=client('target','Sonogong',1040);
   add(lobby,me,target);
   await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'target'}));
-  const sent=me.socket.messages.find(message=>message.type==='challengeSent');
-  const request=target.socket.messages.find(message=>message.type==='playRequest');
-  assert.ok(sent?.requestId);
-  assert.equal(request?.requestId,sent.requestId);
-  assert.equal(request?.from?.nickname,'Jong');
+  const sent=me.socket.messages.find(message=>message.type==='challengeSent'),request=target.socket.messages.find(message=>message.type==='playRequest');
+  assert.ok(sent?.requestId);assert.equal(request?.requestId,sent.requestId);assert.equal(request?.from?.nickname,'Jong');
   assert.equal(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
+});
+
+test('requester can cancel while waiting and target receives cancellation',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.2,102,1040,2]]);
+  const lobby=makeLobby(rows),me=client('me','Jong',1000),target=client('target','Sonogong',1040);add(lobby,me,target);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'target'}));
+  const request=me.socket.messages.find(message=>message.type==='challengeSent');assert.ok(request);
+  await lobby.handle(me,JSON.stringify({type:'challengeCancel',requestId:request.requestId}));
+  assert.equal(lobby.challenges.has(request.requestId),false);
+  assert.ok(target.socket.messages.some(message=>message.type==='challengeCancelled'&&message.requestId===request.requestId));
+  assert.ok(me.socket.messages.some(message=>message.type==='challengeCancelled'&&message.requestId===request.requestId));
+});
+
+test('declining a request informs the requester and leaves the recipient available',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.2,102,1040,2]]);
+  const lobby=makeLobby(rows),me=client('me','Jong',1000),target=client('target','Sonogong',1040);add(lobby,me,target);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'target'}));const request=target.socket.messages.find(message=>message.type==='playRequest');
+  await lobby.handle(target,JSON.stringify({type:'challengeResponse',requestId:request.requestId,accept:false}));
+  assert.equal(target.available,true);assert.equal(lobby.challenges.has(request.requestId),false);
+  assert.ok(me.socket.messages.some(message=>message.type==='challengeDeclined'&&message.by?.nickname==='Sonogong'));
+});
+
+test('accepted request stays alive until recipient actually joins the exact authoritative room',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.2,102,1040,2]]);
+  const lobby=makeLobby(rows),me=client('me','Jong',1000),target=client('target','Sonogong',1040);add(lobby,me,target);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'target'}));const request=target.socket.messages.find(message=>message.type==='playRequest');
+  await lobby.handle(target,JSON.stringify({type:'challengeResponse',requestId:request.requestId,accept:true}));
+  assert.equal(lobby.challenges.get(request.requestId)?.status,'accepted');
+  assert.ok(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'));
+  assert.ok(target.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'));
+
+  await lobby.handle(me,JSON.stringify({type:'challengeRoomReady',requestId:request.requestId,roomCode:'ABCDEFGHJK2345'}));
+  assert.equal(lobby.challenges.get(request.requestId)?.status,'room-ready');
+  assert.equal(lobby.challenges.get(request.requestId)?.roomCode,'ABCDEFGHJK2345');
+  assert.ok(target.socket.messages.some(message=>message.type==='challengeRoomReady'&&message.roomCode==='ABCDEFGHJK2345'));
+  assert.equal(me.socket.messages.some(message=>message.type==='challengeRoomHandoffComplete'),false);
+
+  await lobby.handle(target,JSON.stringify({type:'challengeJoined',requestId:request.requestId,roomCode:'ABCDEFGHJK2345'}));
+  assert.equal(lobby.challenges.has(request.requestId),false);
+  assert.ok(me.socket.messages.some(message=>message.type==='challengeRoomHandoffComplete'&&message.roomCode==='ABCDEFGHJK2345'));
+  assert.ok(target.socket.messages.some(message=>message.type==='challengeRoomHandoffComplete'&&message.roomCode==='ABCDEFGHJK2345'));
 });
 
 test('Auto Match requests the closest available skill match and still requires that player to accept',async()=>{
@@ -92,42 +150,26 @@ test('Auto Match requests the closest available skill match and still requires t
   const lobby=makeLobby(rows),me=client('me','Jong',1000,{autoMatching:true}),closest=client('closest','Closest',1002),near=client('near','Near',1020),far=client('far','Far',150);
   add(lobby,me,closest,near,far);
   assert.equal(await lobby.tryAutoMatch(me),true);
-  const sent=me.socket.messages.find(message=>message.type==='challengeSent');
-  const request=closest.socket.messages.find(message=>message.type==='playRequest');
-  assert.equal(sent?.automatic,true);
-  assert.equal(sent?.to?.nickname,'Closest');
-  assert.equal(request?.automatic,true);
-  assert.equal(me.available,true);
-  assert.equal(closest.available,true);
+  const sent=me.socket.messages.find(message=>message.type==='challengeSent'),request=closest.socket.messages.find(message=>message.type==='playRequest');
+  assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(request?.automatic,true);
+  assert.equal(me.available,true);assert.equal(closest.available,true);
   assert.equal(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
-
-  await lobby.handle(closest,JSON.stringify({type:'challengeResponse',requestId:sent.requestId,accept:true}));
-  assert.equal(me.available,false);
-  assert.equal(closest.available,false);
-  assert.equal(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),true);
-  assert.equal(closest.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),true);
 });
 
 test('Auto Match waiting wakes automatically when a challengeable player becomes available',async()=>{
   const rows=rowsFor([['Jong',10,10,100,1],['Sonogong',10.1,11,110,2]]);
   const lobby=makeLobby(rows),me=client('me','Jong',100,{autoMatching:true}),other=client('other','Sonogong',110,{available:false,twoPlayer:false});
   add(lobby,me,other);
-  assert.equal(await lobby.tryAutoMatch(me),false);
-  assert.ok(me.socket.messages.some(message=>message.type==='autoMatchWaiting'));
-
-  await lobby.handle(other,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false}));
-  assert.ok(other.socket.messages.some(message=>message.type==='playRequest'));
-  assert.ok(me.socket.messages.some(message=>message.type==='challengeSent'));
+  assert.equal(await lobby.tryAutoMatch(me),false);assert.ok(me.socket.messages.some(message=>message.type==='autoMatchWaiting'));
+  await lobby.handle(other,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu'}));
+  assert.ok(other.socket.messages.some(message=>message.type==='playRequest'));assert.ok(me.socket.messages.some(message=>message.type==='challengeSent'));
 });
 
 test('a pending request is cancelled if either player enters a two-player game before answering',async()=>{
   const rows=rowsFor([['Jong',10,10,100,1],['Sonogong',10,10,100,2]]);
-  const lobby=makeLobby(rows),me=client('me','Jong',100),other=client('other','Sonogong',100);
-  add(lobby,me,other);
-  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'other'}));
-  const request=other.socket.messages.find(message=>message.type==='playRequest');
-  assert.ok(request);
-  await lobby.handle(other,JSON.stringify({type:'setAvailability',available:false,twoPlayer:true}));
+  const lobby=makeLobby(rows),me=client('me','Jong',100),other=client('other','Sonogong',100);add(lobby,me,other);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'other'}));const request=other.socket.messages.find(message=>message.type==='playRequest');assert.ok(request);
+  await lobby.handle(other,JSON.stringify({type:'setAvailability',available:false,twoPlayer:true,mode:'free-friend'}));
   assert.equal(lobby.challenges.has(request.requestId),false);
   assert.ok(me.socket.messages.some(message=>message.type==='challengeCancelled'&&message.requestId===request.requestId));
 });
