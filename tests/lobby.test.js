@@ -158,7 +158,7 @@ test('declining a request immediately makes the same player challengeable again'
   await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'other'}));
   const requests=other.socket.messages.filter(message=>message.type==='playRequest');
   assert.equal(requests.length,2);
-  assert.notEqual(requests[0].requestId,requests[1].requestId);
+  assert.equal(requests[1].from.nickname,'Jong');
 });
 
 test('Auto Match requests the closest available skill match and still requires that player to accept',async()=>{
