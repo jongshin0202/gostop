@@ -100,6 +100,15 @@ test('pause dialog gives requester Cancel, opponent Quit Game, and confirmation 
   assert.match(source,/pauseQuitConfirmDialog\.close\(\);if\(currentSnapshot\?\.sessionFlow\?\.pause\)renderRankedFlow\(currentSnapshot\)/);
 });
 
+test('share-link room creator leaves Online Play overlay when the friend makes the room ready',()=>{
+  assert.match(appSource,/function enterOnlineMatchView\(anonymous\)/);
+  assert.match(appSource,/document\.getElementById\('onlineLobbyPanel'\)/);
+  assert.match(appSource,/adapter\.addEventListener\('roomReady'[\s\S]*enterOnlineMatchView\(anonymous\)/);
+  assert.match(appSource,/adapter\.addEventListener\('opponentConnected'[\s\S]*enterOnlineMatchView\(anonymous\)/);
+  assert.match(appSource,/event\.detail\?\.status==='ready'[\s\S]*enterOnlineMatchView\(anonymous\)/);
+  assert.match(appSource,/adapter\.addEventListener\('snapshot'[\s\S]*event\.detail\.snapshot\?\.matchId[\s\S]*enterOnlineMatchView\(anonymous\)/);
+});
+
 test('stale ranked locks are server-reconciled and main menu rechecks them automatically',()=>{
   assert.match(worker,/async function reconcileActiveRanked\(env,account\)/);
   assert.match(worker,/\/reconcile-active/);
