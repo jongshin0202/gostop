@@ -5,8 +5,11 @@ const fs=require('node:fs');
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
 
 test('ranked game launches synchronously cancel attract mode before async account or room work',()=>{
-  assert.match(ranked,/rankedSolo\.addEventListener\('click',\(\)=>\{stopAttractForGameLaunch\(\);requireAccount/);
-  assert.match(ranked,/onlinePlay\.addEventListener\('click',\(\)=>\{stopAttractForGameLaunch\(\);requireAccount/);
+  const entry=ranked.slice(ranked.indexOf('function beginRankedEntry'),ranked.indexOf("$('onlineLobbyClose')"));
+  assert.match(entry,/setRankedEntryPending\(kind\);stopAttractForGameLaunch\(\);/);
+  assert.match(entry,/requireAccount\(/);
+  assert.match(ranked,/rankedSolo\.addEventListener\('click',\(\)=>beginRankedEntry\('solo'/);
+  assert.match(ranked,/onlinePlay\.addEventListener\('click',\(\)=>beginRankedEntry\('online'/);
   assert.match(ranked,/function stopAttractForGameLaunch\(\)\{lastMenuActivityAt=Date\.now\(\);attractMode=false;leaderboardScreen\.hidden=true;[\s\S]*leaderboardTimer=null;\}/);
   assert.doesNotMatch(ranked,/function stopAttractForGameLaunch\(\)\{stopAttractTimer\(\)/);
 });
