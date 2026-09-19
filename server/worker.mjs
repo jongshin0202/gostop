@@ -66,6 +66,15 @@ export default {async fetch(request,env){
       }
       const response=await allocateRoom(env,{solo:true});if(!response.ok)return withCors(response,origin);const data=await response.json();return withCors(json({ok:true,account,room:{roomCode:data.room.roomCode,rankedMode:'solo'}}),origin);
     }
+    if(request.method==='POST'&&url.pathname==='/api/solo/leave-for-challenge'){
+      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
+      if(account.activeRanked?.mode==='online')return withCors(json({ok:false,error:{code:'ACTIVE_TWO_PLAYER_GAME',message:'Finish or leave the active Online Play game first.'}},409),origin);
+      if(account.activeRanked?.mode==='solo'&&account.activeRanked.roomCode){
+        const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(account.activeRanked.roomCode)),response=await stub.fetch(new Request('https://room/leave-solo-for-challenge',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id})}));
+        if(!response.ok)return withCors(response,origin);
+      }
+      const refreshed=await requireAccount(request,env);return withCors(json({ok:true,account:refreshed}),origin);
+    }
     if(request.method==='POST'&&url.pathname==='/api/rooms'){
       const account=await resolveAccount(request,env);
       if(account?.activeRanked?.roomCode)return withCors(json({ok:false,error:{code:'ACTIVE_RANKED_GAME',message:'Only one Coin game can be active at a time.',activeRanked:account.activeRanked}},409),origin);
