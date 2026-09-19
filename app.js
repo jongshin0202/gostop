@@ -2191,21 +2191,13 @@
     await processOpeningSpecials();
   }
   function cancelLocalGamePresentation(){
-    localGameActive=false;localGameGeneration++;presentation.locked=true;
-    resetHandPresentationState();
-    if(presentation.shakeResolver){const resolve=presentation.shakeResolver;presentation.shakeResolver=null;resolve(false);}
-    if(presentation.bombResolver){const resolve=presentation.bombResolver;presentation.bombResolver=null;resolve(false);}
-    [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog,els.newGameDialog].filter(Boolean).forEach(dialog=>{if(dialog.open)dialog.close();});
-    if(els.milestoneOverlay){els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');}
-    if(els.openingOverlay){els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');}
-    if(els.goCallout)els.goCallout.classList.remove('show');
-    hideActionCue();
+    localGameActive=false;localGameGeneration++;presentation.locked=true;invalidateGameplayPresentation();
   }
   async function launchLocalGame(training=false){
     if(globalThis.goStopOnlineSession){try{globalThis.goStopOnlineSession.close();}catch(_){}globalThis.goStopOnlineSession=null;}
     const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
     if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
-    onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;
+    onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;beginGameplayPresentation();
     await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
   }
 
@@ -2391,14 +2383,7 @@
       return false;
     };
     const setDialog=(dialog,open)=>{if(!dialog)return;if(open&&!dialog.open)dialog.showModal();else if(!open&&dialog.open)dialog.close();};
-    function clearOnlineGameplayPresentation(){
-      resetHandPresentationState();
-      [els.resultDialog,els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.quitConfirmDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog,els.opponentEndedDialog].filter(Boolean).forEach(dialog=>setDialog(dialog,false));
-      if(els.milestoneOverlay){els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');}
-      if(els.openingOverlay){els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');}
-      if(els.goCallout)els.goCallout.classList.remove('show');
-      hideActionCue();
-    }
+    function clearOnlineGameplayPresentation(){invalidateGameplayPresentation();}
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
@@ -2536,7 +2521,7 @@
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
-      localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
+      localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;beginGameplayPresentation();setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
       if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
       const adapter=roomAdapter||new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});
       adapter.room=room;
