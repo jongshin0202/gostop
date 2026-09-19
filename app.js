@@ -2117,7 +2117,8 @@
     if(!accepted){if(els.newGameDialog?.open)els.newGameDialog.close();return false;}
     if(els.newGameDialog?.open)els.newGameDialog.close();
     if(onlineMode){return !!onlineSubmit({type:'requestNewGame'});}
-    if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
+    invalidateGameplayPresentation();beginGameplayPresentation();
+    if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame(gameplayPresentationEpoch);return true;
   }
   function showFirstPoopNotice(side,generation=localGameGeneration,epoch=gameplayPresentationEpoch){
     if(!els.firstPpeokDialog||!isLocalGamePresentationCurrent(generation)||!isGameplayPresentationCurrent(epoch))return Promise.resolve();
@@ -2233,7 +2234,8 @@
     return isOnline?t(starter===PLAYER_A?'youGoFirst':'opponentGoesFirst'):t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});
   }
 
-  async function presentOpeningSequence(starter,roll){
+  async function presentOpeningSequence(starter,roll,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(!roll)throw new Error('Dice presentation is restricted to the first hand of a session.');
     presentation.dicePresentationCount++;
     if(TEST_MODE){presentation.diceSoundCount++;traceAudio('dice');return;}
@@ -2241,32 +2243,48 @@
     if(els.soloStartOverlay?.dataset.launching==='true'){delete els.soloStartOverlay.dataset.launching;delete els.soloStartOverlay.dataset.launchingText;els.soloStartOverlay.hidden=true;}
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
     const dieFaces=onlineMode?['Y','O']:['P','C'];
-    if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];}
-    els.openingMessage.textContent=openingStarterMessage(starter);await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
-    await presentDealSequence();
+    if(roll){
+      els.openingDie.classList.add('rolling');playDiceSound();let face=0;
+      const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);
+      await sleep(900);clearInterval(timer);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];
+    }
+    els.openingMessage.textContent=openingStarterMessage(starter);await sleep(650);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    els.openingDie.hidden=true;await sleep(250);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    await presentDealSequence(epoch);
   }
-  async function presentDealSequence(){
-    if(TEST_MODE)return;
+  async function presentDealSequence(epoch=gameplayPresentationEpoch){
+    if(TEST_MODE||!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=48;render();
-    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();await sleep(72);}
+    for(let count=47;count>=20;count--){
+      if(!isGameplayPresentationCurrent(epoch))return;
+      presentation.deckDisplayCount=count;render();await sleep(72);
+    }
+    if(!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=null;render();
   }
   function playDiceSound(){if(!presentation.soundEnabled)return;presentation.diceSoundCount++;traceAudio('dice');if(!TEST_MODE)playDiceClatter();}
-  async function startGame(){
+  async function startGame(epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     resetHandPresentationState();hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
-    [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
+    if(!TEST_MODE)document.querySelectorAll('dialog[open]').forEach(dialog=>{try{dialog.close();}catch(_){ }});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
     const firstSessionHand=consumeSessionStart();
-    if(firstSessionHand&&!TEST_MODE)await unlockAudio();
+    if(firstSessionHand&&!TEST_MODE){await unlockAudio();if(!isGameplayPresentationCurrent(epoch))return;}
     const starter=presentation.nextStarterId||(firstSessionHand?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
     state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
     presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
     els.roundNo.textContent=presentation.roundNo;render();
-    if(firstSessionHand)await presentOpeningSequence(starter,true);
-    else await presentDealSequence();
-    await processOpeningSpecials();
+    if(firstSessionHand)await presentOpeningSequence(starter,true,epoch);
+    else await presentDealSequence(epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await processOpeningSpecials(epoch);
   }
   function cancelLocalGamePresentation(){
     localGameActive=false;localGameGeneration++;presentation.locked=true;invalidateGameplayPresentation();
@@ -2300,7 +2318,7 @@
   document.addEventListener('keydown',event=>{if(event.key==='Escape'){els.optionsMenu.hidden=true;els.newGameBtn.setAttribute('aria-expanded','false');}});
   els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
   els.newGameNoBtn.addEventListener('click',()=>confirmNewGame(false));
-  els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;startGame();}});
+  els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;invalidateGameplayPresentation();beginGameplayPresentation();startGame(gameplayPresentationEpoch);}});
   els.resultQuitBtn.addEventListener('click',()=>{onlineQuitFromResult=true;if(els.resultDialog.open)els.resultDialog.close();els.quitConfirmTitle.textContent=t('resultQuitConfirm');els.quitConfirmMessage.textContent=t('resultQuit');els.quitConfirmDialog.showModal();});
   els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromResult&&!els.resultDialog.open)els.resultDialog.showModal();onlineQuitFromResult=false;});
   els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();onlineQuitFromResult=false;cancelLocalGamePresentation();setTrainingMode(false);els.soloStartOverlay.hidden=false;}});
