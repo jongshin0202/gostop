@@ -55,9 +55,9 @@ function publicAccount(account){
   const active=account.activeRanked&&typeof account.activeRanked==='object'?account.activeRanked:null;
   return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null,activeRanked:active?{sessionId:active.sessionId||null,mode:active.mode||null,roomCode:active.roomCode||null,startedAt:active.startedAt||null}:null};
 }
-function blankStats(){return {gamesPlayed:0,wins:0,totalCoinsWon:0,milestones:{}};}
+function blankStats(){return {gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,milestones:{}};}
 function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
-function leaderboardRow(account,stats){const gamesPlayed=Number(stats.gamesPlayed)||0,wins=Number(stats.wins)||0;return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed,wins,losses:Math.max(0,gamesPlayed-wins),provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
+function leaderboardRow(account,stats){const gamesPlayed=Number(stats.gamesPlayed)||0,wins=Number(stats.wins)||0,losses=Number.isFinite(Number(stats.losses))?Number(stats.losses):Math.max(0,gamesPlayed-wins);return {nickname:account.nickname,score:scoreFor(stats),totalCoins:stats.totalCoinsWon,gamesPlayed,wins,losses,provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};}
 function sortRows(rows){return rows.sort((a,b)=>b.score-a.score||b.gamesPlayed-a.gamesPlayed||b.totalCoins-a.totalCoins||a.nickname.localeCompare(b.nickname));}
 
 export class AccountStore{
@@ -213,7 +213,7 @@ export class AccountStore{
       const account=await this.accountById(item.accountId);if(!account)continue;
       const walletDelta=Number(item.walletDelta)||0,coinsWon=Math.max(0,Number(item.coinsWon)||0),won=!!item.won;
       account.walletCoins+=walletDelta;account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};account.stats.monthly[month]=account.stats.monthly[month]||blankStats();
-      for(const stats of [account.stats.global,account.stats.monthly[month]]){stats.gamesPlayed+=1;if(won){stats.wins+=1;stats.totalCoinsWon+=coinsWon;}for(const [name,count] of Object.entries(item.milestones||{}))stats.milestones[name]=(stats.milestones[name]||0)+(Number(count)||0);}
+      for(const stats of [account.stats.global,account.stats.monthly[month]]){stats.gamesPlayed+=1;if(won){stats.wins+=1;stats.totalCoinsWon+=coinsWon;}else if(body.winnerPlayerId){stats.losses=(Number(stats.losses)||0)+1;}for(const [name,count] of Object.entries(item.milestones||{}))stats.milestones[name]=(stats.milestones[name]||0)+(Number(count)||0);}
       if(Number(item.computerBankruptcies)>0)account.computerBankruptcies=(account.computerBankruptcies||0)+Number(item.computerBankruptcies);
       account.updatedAt=recordedAt;await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'game',amount:walletDelta,gameId:body.gameId,createdAt:recordedAt});storedParticipants.push({...item,walletAfter:account.walletCoins,adminConnection:account.lastConnection?{...account.lastConnection}:null,adminLocation:account.location?{...account.location}:null});
     }
@@ -223,7 +223,7 @@ export class AccountStore{
   async forceQuit(request){
     const body=await request.json().catch(()=>({})),account=await this.accountById(body.accountId);if(!account)return json({ok:false,error:{code:'ACCOUNT_NOT_FOUND',message:'Account not found.'}},404);
     const penalty=Math.max(0,Math.trunc(Number(body.penaltyCoins)||0)),gameId=body.gameId||randomId(this.crypto,'abandon');account.walletCoins-=penalty;account.forceQuits=(account.forceQuits||0)+1;
-    const month=utcMonth(this.now());account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};account.stats.monthly[month]=account.stats.monthly[month]||blankStats();account.stats.global.gamesPlayed+=1;account.stats.monthly[month].gamesPlayed+=1;account.updatedAt=this.now();
+    const month=utcMonth(this.now());account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};account.stats.monthly[month]=account.stats.monthly[month]||blankStats();account.stats.global.gamesPlayed+=1;account.stats.global.losses=(Number(account.stats.global.losses)||0)+1;account.stats.monthly[month].gamesPlayed+=1;account.stats.monthly[month].losses=(Number(account.stats.monthly[month].losses)||0)+1;account.updatedAt=this.now();
     await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'force-quit',amount:-penalty,gameId,createdAt:this.now()});await this.storage.put(`forceQuit:${gameId}`,{...body,gameId,penaltyCoins:penalty,recordedAt:this.now()});return json({ok:true,penaltyCoins:penalty,account:publicAccount(account)});
   }
 
