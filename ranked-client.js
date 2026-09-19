@@ -209,8 +209,9 @@
   function beginRankedEntry(kind,launch){
     if(rankedEntryPending)return;
     setRankedEntryPending(kind);stopAttractForGameLaunch();
-    requireAccount(()=>showRankedEntryNotice(()=>withDailyLoginNotice(async()=>{try{await launch();}catch(error){showToast(localizedError(error),6000);}finally{clearRankedEntryPending();}})),clearRankedEntryPending);
+    requireAccount(()=>showRankedEntryNotice(()=>withDailyLoginNotice(async()=>{try{await launch();if(kind!=='solo')clearRankedEntryPending();}catch(error){clearRankedEntryPending();showToast(localizedError(error),6000);}})),clearRankedEntryPending);
   }
+  globalThis.addEventListener?.('gostop-online-launch-settled',()=>clearRankedEntryPending());
   rankedSolo.addEventListener('click',()=>beginRankedEntry('solo',async()=>{const data=await api('/api/solo',{method:'POST',body:{}}),input=$('onlineRoomCode');captureAccountPayload(data);renderAccountBox();patchGameIdentity();if(!input||!joinForm)throw new Error(rt('launcherUnavailable'));input.value=data.room.roomCode;onlinePanel.hidden=true;joinForm.requestSubmit();}));
   onlinePlay.addEventListener('click',()=>beginRankedEntry('online',async()=>{onlinePanel.hidden=false;connectLobby();requestRecommendations();}));
   $('onlineLobbyClose').addEventListener('click',()=>{onlinePanel.hidden=true;resetAttractTimer();});
