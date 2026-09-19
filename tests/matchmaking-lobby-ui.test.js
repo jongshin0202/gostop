@@ -32,8 +32,9 @@ test('lobby presence is available only while browsing Competitive Online Play or
   assert.match(launch,/setAvailability',available:false/);
   const entry=client.slice(client.indexOf("onlinePlay.addEventListener"),client.indexOf("freeFriendBtn.addEventListener"));
   assert.match(entry,/setAvailability',available:true/);
-  assert.match(entry,/onlineLobbyClose[^]*autoMatchCancel/);
-  assert.match(entry,/onlineLobbyClose[^]*setAvailability',available:false/);
+  assert.match(entry,/onlineLobbyClose[^]*closeLobby\(\)/);
+  assert.match(entry,/createRoom\?\.addEventListener\('click'[^]*setAvailability',available:false/);
+  assert.match(entry,/joinForm\?\.addEventListener\('submit'[^]*setAvailability',available:false/);
 });
 
 test('server pushes live recommendations when presence changes',()=>{
@@ -41,6 +42,8 @@ test('server pushes live recommendations when presence changes',()=>{
   assert.match(server,/type:'recommendations'/);
   assert.match(server,/message\.type==='setAvailability'[^]*await this\.broadcastRecommendations\(\)/);
   assert.match(server,/async disconnect\(socket\)[^]*await this\.broadcastRecommendations\(\)/);
+  assert.match(server,/const query=String\(client\.searchQuery\|\|''\)\.trim\(\)/);
+  assert.match(server,/type:query\?'searchResults':'recommendations'/);
 });
 
 test('Auto Match is an explicit opt-in queue and uses the existing authoritative room handoff',()=>{
