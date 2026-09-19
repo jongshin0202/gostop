@@ -125,7 +125,7 @@ test('online browser mode has a fail-closed authority boundary and no AI turn pa
   const source=readFileSync(join(__dirname,'..','app.js'),'utf8');
   assert.match(source,/if\(onlineMode\)throw new Error\('Online authoritative actions must use the WebSocket authority\.'\);/);
   assert.match(source,/async function aiTurn\(\)\{\s*if\(onlineMode\)return;/);
-  assert.match(source,/function scheduleTurnStart\(\)\{[\s\S]*?if\(onlineMode\)return;/);
+  assert.match(source,/function scheduleTurnStart\(\)\{[\s\S]*?if\(onlineMode\|\|!localGameActive\)return;/);
   for(const type of ['playCard','useBombBlank','declareShake','declareBomb','declineBomb','declareGo','declareStop','setGukjinMode','playAgainReady','requestNewGame','quitGame'])assert.match(source,new RegExp(`onlineSubmit\\(\\{type:'${type}'`));
   assert.match(source,/'keepShakeSecret'/);assert.match(source,/presentSemanticEvents\(\[event\]\)/);assert.match(source,/state:\{\.\.\.projected/);assert.match(source,/t\('authorityDisconnected'\)/);
 });

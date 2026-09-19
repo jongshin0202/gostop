@@ -20,10 +20,29 @@ test('finished-game Quit Game requires confirmation and No returns to Play Again
   assert.match(flow,/quitConfirmDialog\.showModal\(\)/);
   assert.match(flow,/quitNoBtn\.addEventListener[^]*if\(onlineQuitFromResult&&!els\.resultDialog\.open\)els\.resultDialog\.showModal\(\)/);
   assert.match(flow,/quitYesBtn\.addEventListener[^]*onlineSubmit\(\{type:'quitGame'\}\)/);
-  assert.match(flow,/else\{els\.quitConfirmDialog\.close\(\);onlineQuitFromResult=false;setTrainingMode\(false\);els\.soloStartOverlay\.hidden=false;\}/);
+  assert.match(flow,/else\{els\.quitConfirmDialog\.close\(\);onlineQuitFromResult=false;cancelLocalGamePresentation\(\);setTrainingMode\(false\);els\.soloStartOverlay\.hidden=false;\}/);
 });
 
 test('normal in-game Quit Game continues to use quitGame session flow rather than abandonment',()=>{
   assert.match(app,/optionsQuitBtn\.addEventListener/);
   assert.match(app,/quitYesBtn\.addEventListener[^]*onlineSubmit\(\{type:'quitGame'\}\)/);
+});
+
+
+test('local quit cancels stale First Poop and delayed AI presentation work',()=>{
+  assert.match(app,/let localGameGeneration=0,localGameActive=false/);
+  const cancel=app.slice(app.indexOf('function cancelLocalGamePresentation'),app.indexOf('async function launchLocalGame'));
+  assert.match(cancel,/localGameActive=false;localGameGeneration\+\+/);
+  assert.match(cancel,/els\.firstPpeokDialog/);
+  assert.match(cancel,/milestoneOverlay\.classList\.remove\('show'\)/);
+  const poop=app.slice(app.indexOf('async function resolveExtractedSpecialTurn'),app.indexOf('async function playFullTurn'));
+  assert.match(poop,/const localGeneration=localGameGeneration/);
+  assert.match(poop,/await showSpecialTransient\('POOPED!'/);
+  assert.match(poop,/if\(!isLocalGamePresentationCurrent\(localGeneration\)\)return;/);
+  assert.match(poop,/showFirstPoopNotice\(side,localGeneration\)/);
+  const notice=app.slice(app.indexOf('function showFirstPoopNotice'),app.indexOf('function setLocale'));
+  assert.match(notice,/!isLocalGamePresentationCurrent\(generation\)/);
+  const schedule=app.slice(app.indexOf('function scheduleTurnStart'),app.indexOf('function bestAiBombMonth'));
+  assert.match(schedule,/if\(onlineMode\|\|!localGameActive\)return/);
+  assert.match(schedule,/setTimeout\(\(\)=>\{if\(isLocalGamePresentationCurrent\(generation\)\)aiTurn\(\);\},820\)/);
 });

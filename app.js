@@ -74,6 +74,8 @@
   let onlineMode=false,onlinePendingCardId=null,onlineLastEvents=[],onlineSubmit=()=>null,onlinePlayAgain=()=>false,onlineQuitFromResult=false,latestOnlineSnapshot=null;
   const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
   let soloMatchId=null,soloRevision=0,soloActionSequence=0;
+  let localGameGeneration=0,localGameActive=false;
+  function isLocalGamePresentationCurrent(generation=localGameGeneration){return TEST_MODE||onlineMode||(localGameActive&&generation===localGameGeneration);}
   const presentation = {
     roundNo:1,
     locked:false,
@@ -959,13 +961,16 @@
   }
 
   async function resolveExtractedSpecialTurn(side,classification,play,draw){
+    const localGeneration=localGameGeneration;
     const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
     if(classification.kind==='ppeokSsaDaCandidate'){
       removeStage(play.card.id); if(draw)removeStage(draw.card.id);
       playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[]);
-      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side);
+      if(!isLocalGamePresentationCurrent(localGeneration))return;
+      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side,localGeneration);
+      if(!isLocalGamePresentationCurrent(localGeneration))return;
       if(result.events.some(event=>event.type==='threePpeokDeclared')){
-        await sleep(450); presentThreePpeok(result);
+        await sleep(450);if(!isLocalGamePresentationCurrent(localGeneration))return;presentThreePpeok(result);
       }
     }else{
       for(const event of result.events){
@@ -986,6 +991,7 @@
       await promptGukjinChoice(side,result.events);
       await presentSemanticEvents(result.events);
     }
+    if(!isLocalGamePresentationCurrent(localGeneration))return;
     if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
   }
 
@@ -1281,18 +1287,19 @@
 
   function scheduleTurnStart(){
     if(TEST_MODE)return;
-    if(onlineMode)return;
+    if(onlineMode||!localGameActive)return;
+    const generation=localGameGeneration;
     clearTrainingCoach();
-    if(state.winner)return;
+    if(!state||state.winner)return;
     const side=legacySideForPlayerId(state.turn), actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
       presentation.locked=true;
-      setTimeout(()=>executeDeckOnlyTurn(side),760);
+      setTimeout(()=>{if(isLocalGamePresentationCurrent(generation))executeDeckOnlyTurn(side);},760);
       return;
     }
     if(side==='ai'){
       presentation.locked=true;
-      setTimeout(aiTurn,820);
+      setTimeout(()=>{if(isLocalGamePresentationCurrent(generation))aiTurn();},820);
     }else{
       // Human Bomb credits are visible blank cards; the player explicitly clicks one.
       presentation.locked=false;
@@ -2007,8 +2014,8 @@
     if(onlineMode){return !!onlineSubmit({type:'requestNewGame'});}
     if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
   }
-  function showFirstPoopNotice(side){
-    if(!els.firstPpeokDialog)return Promise.resolve();
+  function showFirstPoopNotice(side,generation=localGameGeneration){
+    if(!els.firstPpeokDialog||!isLocalGamePresentationCurrent(generation))return Promise.resolve();
     els.firstPoopTitle.textContent=t('firstPoop');
     els.firstPoopText.textContent=`${side==='human'?t('you'):t(onlineMode?'opponent':'computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
     els.firstPpeokDialog.showModal();
@@ -2156,11 +2163,22 @@
     else await presentDealSequence();
     await processOpeningSpecials();
   }
+  function cancelLocalGamePresentation(){
+    localGameActive=false;localGameGeneration++;presentation.locked=true;
+    resetHandPresentationState();
+    if(presentation.shakeResolver){const resolve=presentation.shakeResolver;presentation.shakeResolver=null;resolve(false);}
+    if(presentation.bombResolver){const resolve=presentation.bombResolver;presentation.bombResolver=null;resolve(false);}
+    [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog,els.newGameDialog].filter(Boolean).forEach(dialog=>{if(dialog.open)dialog.close();});
+    if(els.milestoneOverlay){els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');}
+    if(els.openingOverlay){els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');}
+    if(els.goCallout)els.goCallout.classList.remove('show');
+    hideActionCue();
+  }
   async function launchLocalGame(training=false){
     if(globalThis.goStopOnlineSession){try{globalThis.goStopOnlineSession.close();}catch(_){}globalThis.goStopOnlineSession=null;}
     const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
     if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
-    onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);
+    onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;
     await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
   }
 
@@ -2188,7 +2206,7 @@
   els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;startGame();}});
   els.resultQuitBtn.addEventListener('click',()=>{onlineQuitFromResult=true;if(els.resultDialog.open)els.resultDialog.close();els.quitConfirmTitle.textContent=t('resultQuitConfirm');els.quitConfirmMessage.textContent=t('resultQuit');els.quitConfirmDialog.showModal();});
   els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromResult&&!els.resultDialog.open)els.resultDialog.showModal();onlineQuitFromResult=false;});
-  els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();onlineQuitFromResult=false;setTrainingMode(false);els.soloStartOverlay.hidden=false;}});
+  els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();onlineQuitFromResult=false;cancelLocalGamePresentation();setTrainingMode(false);els.soloStartOverlay.hidden=false;}});
   els.cancelNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'cancelNewGame',requestId});});
   els.acceptNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'respondNewGame',requestId,accept:true});});
   els.rejectNewGameBtn.addEventListener('click',()=>{const requestId=latestOnlineSnapshot?.sessionFlow?.newGameRequest?.requestId;if(requestId)onlineSubmit({type:'respondNewGame',requestId,accept:false});});
@@ -2479,7 +2497,7 @@
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
-      setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
+      localGameActive=false;localGameGeneration++;setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
       if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
       const adapter=roomAdapter||new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});
       adapter.room=room;
