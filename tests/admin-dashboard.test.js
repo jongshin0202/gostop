@@ -158,7 +158,7 @@ test('every generated admin table header has hover and keyboard explanation help
 
 test('sessions, system, player, game, and audit details use readable cards instead of raw developer payloads',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
-  assert.match(adminJs,/friendlyData\(s\.summary\|\|\{\}\)/);
+  assert.match(adminJs,/async function showSession\(id,playerKey=''\)/);
   assert.match(adminHtml,/id="systemDetails"/);
   assert.match(adminJs,/\$\('systemDetails'\)\.innerHTML/);
   assert.match(adminJs,/Additional Player Information/);
@@ -182,7 +182,7 @@ test('admin login still cannot fail silently and keeps simple request progress p
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.match(adminHtml,/Admin build 2026-09-19\.13/);
+  assert.match(adminHtml,/Admin build 2026-09-19\.14/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
     const headers=bySource.get(source);assert.ok(headers,source);
@@ -224,4 +224,36 @@ test('game admin keeps session identity, Solo computer identity, and Full-histor
   assert.match(adminJs,/function historySettlement\(g\)/);
   assert.match(adminJs,/history\?\.finalState\?\.terminalResult/);
   assert.match(adminJs,/historic\?\.formulaSteps/);
+});
+
+test('session admin summarizes players, wins, Coins and milestones with player and game drilldowns',async()=>{
+  const store=storeAt('2026-09-19T06:45:00.000Z'),user=await register(store,'session-summary@example.com','Jong');
+  const sessionId='solo-SESSIONROOM12-1-analytics';
+  await store.fetch(request('/internal/session/start',{method:'POST',body:{sessionId,mode:'solo',accountIds:[user.account.id],opponent:{type:'computer',level:2},roomCode:'SESSIONROOM12AB',matchId:'match-session',gameSequence:1,startedAt:'2026-09-19T06:00:00.000Z'}}));
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{
+    gameId:'session-game-1',sessionId,mode:'solo',winnerPlayerId:'human-player',finalPoints:7,
+    participants:[{accountId:user.account.id,playerId:'human-player',nickname:'Jong',won:true,walletDelta:7,coinsWon:7,points:7,rawScore:7,milestones:{'5_BRIGHTS':1,SHAKE:1,FLUSH:1}}],
+    computer:{playerId:'computer-player',nickname:'Computer #2',level:2,won:false,walletDelta:-7,coinsWon:0,points:2,rawScore:2,milestones:{CLEAN_SWEEP:1}},
+    recordedAt:'2026-09-19T06:10:00.000Z'
+  }}));
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{
+    gameId:'session-game-2',sessionId,mode:'solo',winnerPlayerId:'computer-player',finalPoints:9,
+    participants:[{accountId:user.account.id,playerId:'human-player',nickname:'Jong',won:false,walletDelta:-9,coinsWon:0,points:4,rawScore:4,milestones:{'5_BIRDIES':1,'3_STRIPES':1,THREE_GO:1}}],
+    computer:{playerId:'computer-player',nickname:'Computer #2',level:2,won:true,walletDelta:9,coinsWon:9,points:9,rawScore:9,milestones:{BOMB:1}},
+    recordedAt:'2026-09-19T06:20:00.000Z'
+  }}));
+  await store.fetch(request('/internal/session/end',{method:'POST',body:{sessionId,endedAt:'2026-09-19T06:30:00.000Z',summary:{gamesPlayed:2,reason:'quit'}}}));
+  const list=await (await store.fetch(admin('/admin/sessions?limit=20'))).json(),session=list.sessions.find(item=>item.id===sessionId);
+  assert.ok(session);assert.equal(session.gamesPlayed,2);assert.equal(session.status,'ended');
+  const human=session.players.find(player=>player.nickname==='Jong'),computer=session.players.find(player=>player.nickname==='Computer #2');
+  assert.equal(human.wins,1);assert.equal(human.coinsWon,7);assert.equal(human.coinsLost,9);assert.equal(human.milestones['5_BRIGHTS'],1);assert.equal(human.milestones['5_BIRDIES'],1);assert.equal(human.milestones['3_STRIPES'],1);assert.equal(human.milestones.SHAKE,1);assert.equal(human.milestones.THREE_GO,1);assert.equal(human.milestones.FLUSH,1);
+  assert.equal(computer.wins,1);assert.equal(computer.coinsWon,9);assert.equal(computer.milestones.CLEAN_SWEEP,1);assert.equal(computer.milestones.BOMB,1);
+  const detail=await (await store.fetch(admin('/admin/sessions/'+encodeURIComponent(sessionId)))).json();
+  assert.equal(detail.session.games.length,2);assert.equal(detail.session.games[0].players.length,2);assert.equal(detail.session.games[1].players.find(player=>player.nickname==='Computer #2').won,true);
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminJs,/\['Session','Mode','Players','Games','Wins by Player','Coins Won by Player','Status','Started','Ended'\]/);
+  assert.match(adminJs,/Players & Session Totals/);assert.match(adminJs,/All Games — Both Players/);
+  assert.match(adminJs,/5 Brights/);assert.match(adminJs,/5 Birdies/);assert.match(adminJs,/3 Stripes/);assert.match(adminJs,/Shakes/);assert.match(adminJs,/3-Go/);assert.match(adminJs,/Ttadak/);assert.match(adminJs,/Sweep/);
+  assert.match(adminJs,/Click any Game ID for the full authoritative settlement, events, cards, and stored game history/);
+  assert.match(adminJs,/data-session-player/);assert.match(adminJs,/data-game/);
 });
