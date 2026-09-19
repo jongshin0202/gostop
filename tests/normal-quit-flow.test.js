@@ -20,7 +20,7 @@ test('finished-game Quit Game requires confirmation and No returns to Play Again
   assert.match(flow,/quitConfirmDialog\.showModal\(\)/);
   assert.match(flow,/quitNoBtn\.addEventListener[^]*if\(onlineQuitFromResult&&!els\.resultDialog\.open\)els\.resultDialog\.showModal\(\)/);
   assert.match(flow,/quitYesBtn\.addEventListener[^]*onlineSubmit\(\{type:'quitGame'\}\)/);
-  assert.match(flow,/else\{els\.quitConfirmDialog\.close\(\);onlineQuitFromResult=false;els\.soloStartOverlay\.hidden=false;\}/);
+  assert.match(flow,/else\{els\.quitConfirmDialog\.close\(\);onlineQuitFromResult=false;setTrainingMode\(false\);els\.soloStartOverlay\.hidden=false;\}/);
 });
 
 test('normal in-game Quit Game continues to use quitGame session flow rather than abandonment',()=>{
