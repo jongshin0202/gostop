@@ -5,7 +5,7 @@ const fs=require('node:fs');
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
 
 test('ranked game launches synchronously cancel attract mode before async account or room work',()=>{
-  const entry=ranked.slice(ranked.indexOf('function beginRankedEntry'),ranked.indexOf("$('onlineLobbyClose')"));
+  const entry=ranked.slice(ranked.indexOf('function beginRankedEntry'),ranked.indexOf('function renderLeaderboard'));
   assert.match(entry,/setRankedEntryPending\(kind\);stopAttractForGameLaunch\(\);/);
   assert.match(entry,/requireAccount\(/);
   assert.match(ranked,/rankedSolo\.addEventListener\('click',\(\)=>beginRankedEntry\('solo'/);
