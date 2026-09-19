@@ -204,3 +204,24 @@ test('admin hidden attribute always wins over shell display styles',()=>{
   assert.match(adminCss,/\.login-shell\{[^}]*display:grid/);
   assert.match(adminCss,/\.app-shell\{[^}]*display:grid/);
 });
+
+
+test('game admin keeps session identity, Solo computer identity, and Full-history settlement fallback',async()=>{
+  const store=storeAt(),user=await register(store,'session-player@example.com','SessionPlayer');
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{
+    gameId:'solo-session-game-1',sessionId:'solo-room-1-session-1',mode:'solo',winnerPlayerId:'playerA',finalPoints:7,
+    computer:{level:3,walletAfter:293,points:0,rawScore:0},
+    participants:[{accountId:user.account.id,playerId:'human-1',nickname:'SessionPlayer',won:true,walletDelta:7,coinsWon:7,points:7,rawScore:7}],
+    history:{finalState:{terminalResult:{type:'stop',score:7,settlement:{baseTotal:7,total:7,reasons:[],formulaSteps:['Base 7']}}}},
+    recordedAt:'2026-09-19T06:11:40.000Z'
+  }}));
+  const listed=await (await store.fetch(admin('/admin/games?limit=20'))).json(),game=listed.games.find(item=>item.gameId==='solo-session-game-1');
+  assert.ok(game);assert.equal(game.sessionId,'solo-room-1-session-1');assert.equal(game.computer.level,3);assert.equal(game.finalPoints,7);
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.match(adminJs,/\['Game ID','Session ID','Status','Mode','Players','Points','Coins Lost','Reason','History','Recorded'\]/);
+  assert.match(adminJs,/function gamePlayerNames\(g\)/);
+  assert.match(adminJs,/Computer #\$\{level\}/);
+  assert.match(adminJs,/function historySettlement\(g\)/);
+  assert.match(adminJs,/history\?\.finalState\?\.terminalResult/);
+  assert.match(adminJs,/historic\?\.formulaSteps/);
+});
