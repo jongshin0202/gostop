@@ -15,8 +15,8 @@
   }
   function viewerCanInteract(snapshot,{connected,pendingActionId=null,blocked=false}={}){return !!connected&&!pendingActionId&&!blocked&&viewerCanStartTurn(snapshot);}
   class OnlineSessionAdapter extends EventTarget{
-    constructor({baseUrl=globalThis.GOSTOP_CONFIG?.serverUrl||'',WebSocketImpl=WebSocket,authToken=null}={}){super();this.baseUrl=baseUrl.replace(/\/$/,'');this.WebSocketImpl=WebSocketImpl;this.authToken=authToken;this.room=null;this.revision=0;this.pendingActionId=null;this.socket=null;this.explicitlyClosed=false;this.reconnectTimer=null;this.reconnectAttempts=0;}
-    currentAuthToken(){return this.authToken||globalThis.GoStopRanked?.getAuthToken?.()||null;}
+    constructor({baseUrl=globalThis.GOSTOP_CONFIG?.serverUrl||'',WebSocketImpl=WebSocket,authToken=null,anonymous=false}={}){super();this.baseUrl=baseUrl.replace(/\/$/,'');this.WebSocketImpl=WebSocketImpl;this.authToken=authToken;this.anonymous=!!anonymous;this.room=null;this.revision=0;this.pendingActionId=null;this.socket=null;this.explicitlyClosed=false;this.reconnectTimer=null;this.reconnectAttempts=0;}
+    currentAuthToken(){return this.anonymous?null:(this.authToken||globalThis.GoStopRanked?.getAuthToken?.()||null);}
     setAuthToken(token){this.authToken=token||null;return this;}
     async request(path,body){const headers={'content-type':'application/json'},token=this.currentAuthToken();if(token)headers.authorization=`Bearer ${token}`;const response=await fetch(`${this.baseUrl}${path}`,{method:'POST',headers,body:JSON.stringify(body||{})});const data=await response.json();if(!response.ok)throw Object.assign(new Error(data.error?.message||'Room request failed.'),data.error);return data.room;}
     assertConfigured(){if(!this.baseUrl)throw Object.assign(new Error('Online play is unavailable because the server URL is not configured.'),{code:'ONLINE_NOT_CONFIGURED'});}
