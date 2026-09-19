@@ -2922,3 +2922,13 @@ test('Training Mode state is independent from normal Free Solo state',()=>{
   assert.equal(snapshot.hintCardId,null);
   assert.equal(snapshot.trainingWarningFloorCardId,null);
 });
+
+
+test('mode lobby panels render above main menu overlay',()=>{
+  const rankedSource=fs.readFileSync(path.join(__dirname,'..','ranked-client.js'),'utf8');
+  const styleSource=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  const lobbyZ=Number(rankedSource.match(/\.online-lobby-panel\{position:fixed;inset:0;z-index:(\d+)/)?.[1]||0);
+  const menuZ=Number(styleSource.match(/\.solo-start-overlay\{position:fixed;inset:0;z-index:(\d+)/)?.[1]||0);
+  assert.ok(lobbyZ>menuZ,`online lobby z-index ${lobbyZ} must be above menu z-index ${menuZ}`);
+  assert.match(rankedSource,/freeFriendBtn\.addEventListener\('click',[\s\S]*?freePanel\.hidden=false/);
+});
