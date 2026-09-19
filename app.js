@@ -2126,6 +2126,7 @@
     presentation.dicePresentationCount++;
     if(TEST_MODE){presentation.diceSoundCount++;traceAudio('dice');return;}
     els.openingOverlay.classList.add('show');els.openingOverlay.setAttribute('aria-hidden','false');
+    if(els.soloStartOverlay?.dataset.launching==='true'){delete els.soloStartOverlay.dataset.launching;delete els.soloStartOverlay.dataset.launchingText;els.soloStartOverlay.hidden=true;}
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
     const dieFaces=onlineMode?['Y','O']:['P','C'];
     if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];}
@@ -2167,8 +2168,8 @@
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
   if(!TEST_MODE){addEventListener('resize',updateStageScale);updateStageScale();}
   setupLanguageMenu();
-  document.querySelector('.human-chip .score-pill')?.addEventListener('click',()=>openScoreBreakdown(PLAYER_A));
-  document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',()=>openScoreBreakdown(PLAYER_B));
+  document.querySelector('.human-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_A);});
+  document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_B);});
   if(els.scoreDialog)els.scoreDialog.addEventListener('click',event=>{if(event.target===els.scoreDialog)els.scoreDialog.close();});
   els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
   els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});
@@ -2494,7 +2495,7 @@
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');if(freeFriendPanel)freeFriendPanel.hidden=true;els.soloStartOverlay.hidden=true;});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.ranked)els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
