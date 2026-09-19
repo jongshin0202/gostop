@@ -127,6 +127,8 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 /* V1.6 — card-only choreography; no hands/arms */
 .hand-actor{display:none!important}
 .hand-card.pending-card{outline:2px solid #9b2f24;outline-offset:2px;box-shadow:0 13px 22px rgba(0,0,0,.34),0 0 0 3px rgba(143,34,24,.2)}
+.hand-card.matchable{outline:3px solid #f1c75a;outline-offset:3px;box-shadow:0 0 0 6px rgba(241,199,90,.16),0 0 22px rgba(241,199,90,.62),0 13px 22px rgba(0,0,0,.34);transform:translateY(-10px);z-index:12}
+.floor .floor-card.training-warning{z-index:18;outline:4px solid #e43b32;outline-offset:4px;box-shadow:0 0 0 7px rgba(228,59,50,.16),0 0 24px rgba(228,59,50,.55),0 10px 20px rgba(0,0,0,.42)}
 .floor .floor-card.target-option{cursor:pointer;z-index:20;outline:3px solid rgba(255,213,117,.98);outline-offset:4px;box-shadow:0 0 0 7px rgba(255,188,70,.14),0 10px 20px rgba(0,0,0,.42);animation:targetPulse .78s ease-in-out infinite alternate}
 .floor .floor-card.ai-target-preview{z-index:19;outline:3px solid rgba(159,198,255,.96);outline-offset:4px;box-shadow:0 0 0 7px rgba(128,180,255,.12),0 10px 20px rgba(0,0,0,.42)}
 @keyframes targetPulse{from{transform:rotate(var(--tilt)) translateY(0)}to{transform:rotate(var(--tilt)) translateY(-5px)}}
@@ -147,6 +149,8 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
 .table-thump{animation:cardOnlyThump .13s ease-out!important}
 @keyframes cardOnlyThump{0%{transform:perspective(1200px) rotateX(3.5deg) translateY(0)}45%{transform:perspective(1200px) rotateX(3.5deg) translateY(1px)}100%{transform:perspective(1200px) rotateX(3.5deg) translateY(0)}}
 @media(max-width:700px){
+  .hand-card.matchable{outline-width:2px;outline-offset:2px}
+  .floor .floor-card.training-warning{outline-width:3px;outline-offset:2px;box-shadow:0 0 0 4px rgba(228,59,50,.15),0 0 18px rgba(228,59,50,.5),0 7px 14px rgba(0,0,0,.4)}
   .floor .floor-card.target-option{outline-width:2px;outline-offset:2px;box-shadow:0 0 0 4px rgba(255,188,70,.13),0 7px 14px rgba(0,0,0,.4)}
 }
 
