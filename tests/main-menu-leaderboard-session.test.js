@@ -148,7 +148,8 @@ test('legacy two-button shell is hidden until the current menu client has finish
   assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
-  assert.match(boot,/if\(!resumeActiveRankedRoom\(\)\)revealCurrentMainMenu\(\)/);
+  assert.match(boot,/if\(validRoomParam\)return;revealCurrentMainMenu\(\)/);
+  assert.doesNotMatch(boot,/resumeActiveRankedRoom\(/);
   assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
 });
 
@@ -211,4 +212,16 @@ test('Free Play With Friend uses Cancel while leaderboard and competitive lobby 
   assert.match(locale,/\$\('freeFriendClose'\)\.textContent=rt\('cancel'\)/);
   assert.match(locale,/\$\('onlineLobbyClose'\)\.textContent=rt\('return'\)/);
   assert.match(locale,/leaderboardScreen\.querySelector\('\.leaderboard-return'\)\.textContent=rt\('return'\)/);
+});
+
+
+test('root URL never auto-resumes an active Competitive game before user chooses the mode',()=>{
+  const boot=source.slice(source.indexOf("const roomParam=new URL(location.href)"),source.lastIndexOf('})();'));
+  assert.match(boot,/if\(validRoomParam\)return;revealCurrentMainMenu\(\)/);
+  assert.doesNotMatch(source,/function resumeActiveRankedRoom\(/);
+  assert.doesNotMatch(source,/activeRoomResumeAttempted/);
+  const launches=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("function renderLeaderboard"));
+  assert.match(launches,/account\?\.activeRanked\?\.mode==='solo'&&account\.activeRanked\.roomCode/);
+  assert.match(launches,/account\?\.activeRanked\?\.mode==='online'&&account\.activeRanked\.roomCode/);
+  assert.match(launches,/launchRankedRoom\(account\.activeRanked\.roomCode\)/);
 });
