@@ -15,6 +15,7 @@ test('ranked Solo and Online entry are single-flight and cannot overlap while a 
   assert.match(ranked,/if\(rankedEntryPending\)return/);
   assert.match(ranked,/rankedSolo\.addEventListener\('click',\(\)=>beginRankedEntry\('solo'/);
   assert.match(ranked,/onlinePlay\.addEventListener\('click',\(\)=>beginRankedEntry\('online'/);
+  assert.match(ranked,/gostop-online-launch-settled/);
 });
 
 test('Daily Bonus OK uses acknowledgement payload and never blocks on a second account refresh',()=>{
@@ -26,6 +27,15 @@ test('Daily Bonus OK uses acknowledgement payload and never blocks on a second a
   assert.match(block,/accountNoticeDialog\.close\(\)/);
   assert.match(block,/if\(next\)next\(\)/);
   assert.match(ranked,/accountNoticeDialog\.addEventListener\('cancel'[^]*event\.preventDefault\(\)/);
+});
+
+
+test('room join itself is single-flight and releases the menu launch lock only when settled',()=>{
+  assert.match(app,/onlineJoinInFlight=false/);
+  assert.match(app,/if\(onlineJoinInFlight\)return;onlineJoinInFlight=true/);
+  assert.match(app,/gostop-online-launch-settled[^]*ok:true/);
+  assert.match(app,/gostop-online-launch-settled[^]*ok:false/);
+  assert.match(app,/finally\{onlineJoinInFlight=false;\}/);
 });
 
 test('only the current online session adapter may update gameplay or opening presentation',()=>{
