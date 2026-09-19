@@ -75,7 +75,9 @@
   const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
   let soloMatchId=null,soloRevision=0,soloActionSequence=0;
   let localGameGeneration=0,localGameActive=false;
+  let gameplayPresentationEpoch=0,gameplayPresentationActive=false;
   function isLocalGamePresentationCurrent(generation=localGameGeneration){return TEST_MODE||onlineMode||(localGameActive&&generation===localGameGeneration);}
+  function isGameplayPresentationCurrent(epoch=gameplayPresentationEpoch){return TEST_MODE||(gameplayPresentationActive&&epoch===gameplayPresentationEpoch);}
   const presentation = {
     roundNo:1,
     locked:false,
@@ -97,6 +99,31 @@
     trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,
     dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null,activePhysicalMotions:0,rendersDuringPhysicalMotion:0,goCalloutTimer:null
   };
+
+  function beginGameplayPresentation(){gameplayPresentationActive=true;return ++gameplayPresentationEpoch;}
+  function closeAllGameplayPresentationUi(){
+    if(TEST_MODE)return;
+    document.querySelectorAll('dialog[open]').forEach(dialog=>{try{dialog.close();}catch(_){ }});
+    document.querySelectorAll('.milestone-overlay.show,.opening-overlay.show,.go-callout.show').forEach(node=>{node.classList.remove('show');if(node.hasAttribute('aria-hidden'))node.setAttribute('aria-hidden','true');});
+    hideActionCue();
+  }
+  function invalidateGameplayPresentation(){
+    gameplayPresentationActive=false;gameplayPresentationEpoch++;
+    if(presentation.shakeResolver){const resolve=presentation.shakeResolver;presentation.shakeResolver=null;resolve(false);}
+    if(presentation.bombResolver){const resolve=presentation.bombResolver;presentation.bombResolver=null;resolve(false);}
+    resetHandPresentationState();
+    closeAllGameplayPresentationUi();
+  }
+  function showGameplayModal(dialog,epoch=gameplayPresentationEpoch){
+    if(!dialog||!isGameplayPresentationCurrent(epoch))return false;
+    if(!dialog.open)dialog.showModal();
+    return true;
+  }
+  function showGameplayDialog(dialog,epoch=gameplayPresentationEpoch){
+    if(!dialog||!isGameplayPresentationCurrent(epoch))return false;
+    if(!dialog.open)dialog.show();
+    return true;
+  }
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
@@ -683,16 +710,18 @@
     if(data.firstPoopBonus){const bonus=document.createElement('p');bonus.textContent=`${t('firstPoopBonus')} +${data.firstPoopBonus} ${t('points')}`;els.scoreBreakdownContent.appendChild(bonus);}
     if(!els.scoreDialog.open)els.scoreDialog.showModal();
   }
-  async function promptGukjinChoice(side,events){
+  async function promptGukjinChoice(side,events,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const revealed=events.some(event=>(event.cards||event.cardIds||[]).some(card=>(typeof card==='string'?card:card.id)==='m9-1'));
-    if(side!=='human'||!revealed||!state.human.captured.some(card=>card.id==='m9-1'))return;
-    await openGukjinChoice(true);
+    if(side!=='human'||!revealed||!state?.human?.captured.some(card=>card.id==='m9-1'))return;
+    await openGukjinChoice(true,epoch);
   }
-  function openGukjinChoice(waitForChoice=false){
-    const gukjin=state.human.captured.find(card=>card.id==='m9-1');
+  function openGukjinChoice(waitForChoice=false,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return Promise.resolve();
+    const gukjin=state?.human?.captured.find(card=>card.id==='m9-1');
     if(!gukjin)return Promise.resolve();
     els.gukjinChoiceCard.innerHTML=''; els.gukjinChoiceCard.appendChild(createCardEl(gukjin,'card magnified-card'));
-    if(!els.gukjinDialog.open)els.gukjinDialog.showModal();
+    if(!showGameplayModal(els.gukjinDialog,epoch))return Promise.resolve();
     return waitForChoice?new Promise(resolve=>els.gukjinDialog.addEventListener('close',resolve,{once:true})):Promise.resolve();
   }
 
@@ -795,7 +824,8 @@
       const action=needsPrePlayDecision?{type:'attemptPlayCard',cardId}:{type:'playCard',cardId,targetId:null};
       if(!onlineSubmit(action)){onlineHandSourceRects.delete(cardId);onlinePendingCardId=null;clickedEl?.classList.remove('pending-card');}return;
     }
-    if(state.turn!==PLAYER_A || state.winner)return;
+    const epoch=gameplayPresentationEpoch;
+    if(!isGameplayPresentationCurrent(epoch)||state.turn!==PLAYER_A||state.winner)return;
 
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
@@ -814,25 +844,35 @@
     const committedBombTarget=committedBombCards.length===3?state.floor.find(item=>item.month===card.month):null;
     const committedBombSources=committedBombCards.map(item=>els.playerHand.querySelector(`[data-card-id="${item.id}"]`)?.getBoundingClientRect()||approximateHumanSource());
     const attempted=applyNormalAction(normalAction('human',{type:'attemptPlayCard',cardId:card.id}));
-    if(attempted.events.some(event=>event.type==='bombDeclared')){committedBombCards.forEach(item=>{const el=els.playerHand.querySelector(`[data-card-id="${item.id}"]`);if(el)el.style.visibility='hidden';});await presentExecutedBomb('human',attempted,committedBombCards,committedBombTarget,committedBombSources);return;}
+    if(attempted.events.some(event=>event.type==='bombDeclared')){
+      committedBombCards.forEach(item=>{const el=els.playerHand.querySelector(`[data-card-id="${item.id}"]`);if(el)el.style.visibility='hidden';});
+      await presentExecutedBomb('human',attempted,committedBombCards,committedBombTarget,committedBombSources,epoch);
+      return;
+    }
     if(attempted.pendingDecision?.type==='bombDecision'){
-      if(await executeBombTurn('human',card.month))return;
+      if(await executeBombTurn('human',card.month,epoch))return;
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
     if(attempted.pendingDecision?.type==='shakeDecision'){
-      const shake=await chooseShake(card.month);
+      const shake=await chooseShake(card.month,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
       if(shake){
         const declared=applyNormalAction(normalAction('human',{type:'declareShake'}));
-        await presentShakeDeclaration(declared.events);
+        await presentShakeDeclaration(declared.events,epoch);
+        if(!isGameplayPresentationCurrent(epoch))return;
         render();
         await sleep(180);
+        if(!isGameplayPresentationCurrent(epoch))return;
       }else{
         const kept=applyNormalAction(normalAction('human',{type:'keepShakeSecret'}));
         if(kept.pendingDecision?.type==='bombDecision'){
-          const useBomb=await chooseBomb(card.month);
+          const useBomb=await chooseBomb(card.month,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
           if(useBomb){
             presentation.pendingHumanCardId=null;
             presentation.queuedHumanCardSwitch=null;
-            if(await executeBombTurn('human',card.month))return;
+            if(await executeBombTurn('human',card.month,epoch))return;
+            if(!isGameplayPresentationCurrent(epoch))return;
           }else applyNormalAction(normalAction('human',{type:'declineBomb'}));
         }
       }
@@ -845,6 +885,7 @@
     if(matches.length===1) target=matches[0];
     else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which floor card to hit');
     else if(matches.length>2) target=chooseBestMatch(matches);
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     // A different hand card was clicked while the two floor targets were glowing.
     // Remove the old highlights and restart from the newly selected card without
@@ -857,6 +898,7 @@
       presentation.queuedHumanCardSwitch=null;
       if(next){
         await nextFrame();
+        if(!isGameplayPresentationCurrent(epoch))return;
         return humanPlay(next.cardId,next.clickedEl);
       }
       return;
@@ -869,28 +911,30 @@
     clickedEl.style.visibility='hidden';
     const playResult=applyNormalAction(normalAction('human',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
     const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
-    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true);
+    await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true,epoch);
   }
 
   async function aiTurn(){
     if(onlineMode)return;
-    if(state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
+    const epoch=gameplayPresentationEpoch;
+    if(!isGameplayPresentationCurrent(epoch)||state.turn!==PLAYER_B||state.winner||presentation.aiTurnInProgress)return;
     presentation.aiTurnInProgress=true;
     presentation.locked=true;
     try {
       render(); await sleep(520);
+      if(!isGameplayPresentationCurrent(epoch))return;
 
       const bombMonth=bestAiBombMonth();
       if(bombMonth!=null){
         const card=state.ai.hand.find(item=>item.month===bombMonth);
         applyNormalAction(normalAction('ai',{type:'requestBombDecision',cardId:card.id}));
-        await executeBombTurn('ai',bombMonth);
+        await executeBombTurn('ai',bombMonth,epoch);
         return;
       }
 
       const card=bestAiCard();
       if(!card){
-        await finishNagari();
+        await finishNagari(epoch);
         return;
       }
       // The computer also decides whether to Shake only when it is about to use
@@ -900,9 +944,11 @@
         const fourthOnFloor=state.floor.some(c=>c.month===card.month);
         if(!fourthOnFloor && Math.random()<.72){
           const declared=applyNormalAction(normalAction('ai',{type:'declareShake'}));
-          await presentShakeDeclaration(declared.events);
+          await presentShakeDeclaration(declared.events,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
           render();
           await sleep(220);
+          if(!isGameplayPresentationCurrent(epoch))return;
         }else applyNormalAction(normalAction('ai',{type:'keepShakeSecret'}));
       }
       const backs=[...els.aiHand.querySelectorAll('.mini-back')];
@@ -914,42 +960,50 @@
       if(matches.length===1)target=matches[0];
       else if(matches.length===2)target=chooseBestMatch(matches);
       else if(matches.length>2)target=chooseBestMatch(matches);
-      if(target && matches.length>1) await previewAiTarget(target);
+      if(target && matches.length>1){await previewAiTarget(target);if(!isGameplayPresentationCurrent(epoch))return;}
       const playResult=applyNormalAction(normalAction('ai',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
       const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
-      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true);
+      await playFullTurn('ai',playedEvent.card,sourceRect,target,matches.length,true,epoch);
     } finally {
       presentation.aiTurnInProgress=false;
     }
   }
 
-  async function presentNormalResolution(side,result){
+  async function presentNormalResolution(side,result,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const event=result.events[0];
     if(event.type==='cardLanded'){
       presentation.floorSlotReservations.delete(event.card.id);
       render();
       removeStage(event.card.id);
       await presentationPause('cardLandCleanup');
+      if(!isGameplayPresentationCurrent(epoch))return;
       return;
     }
     if(event.type==='cardsCaptured'){
       await animateCaptureBatch(event.cards,side);
+      if(!isGameplayPresentationCurrent(epoch))return;
       render();
       await presentationPause('postCapture');
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
-    await promptGukjinChoice(side,result.events);
+    await promptGukjinChoice(side,result.events,epoch);
   }
 
-  async function resolveNormalEngineTurn(side,play,draw){
+  async function resolveNormalEngineTurn(side,play,draw,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     let result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'played'}));
-    await presentNormalResolution(side,result);
+    await presentNormalResolution(side,result,epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(draw){
       result=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
-      await presentNormalResolution(side,result);
+      await presentNormalResolution(side,result,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
     const completion=applyNormalAction(normalAction(side,{type:'completeTurn'}));
     await presentPiTransferEvents(side,completion.events);
-    await presentSemanticEvents(completion.events);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await presentSemanticEvents(completion.events,epoch);
   }
 
   async function presentPiTransferEvents(side,events){
@@ -960,26 +1014,29 @@
     if(events.some(event=>event.type==='piTransferred'))render();
   }
 
-  async function resolveExtractedSpecialTurn(side,classification,play,draw){
+  async function resolveExtractedSpecialTurn(side,classification,play,draw,epoch=gameplayPresentationEpoch){
     const localGeneration=localGameGeneration;
+    if(!isGameplayPresentationCurrent(epoch))return;
     const result=applySpecialAction(normalAction(side,{type:'resolveSpecialTurn'}));
     if(classification.kind==='ppeokSsaDaCandidate'){
       removeStage(play.card.id); if(draw)removeStage(draw.card.id);
-      playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[]);
-      if(!isLocalGamePresentationCurrent(localGeneration))return;
-      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side,localGeneration);
-      if(!isLocalGamePresentationCurrent(localGeneration))return;
+      playPpeokSound(); render(); await showSpecialTransient('POOPED!',result.events.find(event=>event.type==='ppeokFormed')?.cardIds||[],'',epoch);
+      if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;
+      if(result.events.some(event=>event.type==='firstPpeokAwarded'))await showFirstPoopNotice(side,localGeneration,epoch);
+      if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;
       if(result.events.some(event=>event.type==='threePpeokDeclared')){
-        await sleep(450);if(!isLocalGamePresentationCurrent(localGeneration))return;presentThreePpeok(result);
+        await sleep(450);if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;presentThreePpeok(result,epoch);
       }
     }else{
       for(const event of result.events){
         if(event.type==='cardsCaptured'){
           const captured=event.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id));
           await animateCaptureBatch(captured,side);
+          if(!isGameplayPresentationCurrent(epoch))return;
           // `await showSpecialTransient('KISS!'` remains centralized in presentKiss.
-          if(classification.kind==='jjokCandidate')await presentKiss(event.cardIds);
-          if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('FLUSH!',event.cardIds,'flush');}
+          if(classification.kind==='jjokCandidate')await presentKiss(event.cardIds,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
+          if(classification.kind==='ttadakCandidate'){playTapTapSound();await showSpecialTransient('FLUSH!',event.cardIds,'flush',epoch);}
         }else if(event.type==='cardLanded'){
           presentation.floorSlotReservations.delete(event.cardId); removeStage(event.cardId); await presentationPause('cardLandCleanup');
         }else if(event.type==='piTransferred'){
@@ -988,25 +1045,31 @@
         }
       }
       render(); await presentationPause('postCapture');
-      await promptGukjinChoice(side,result.events);
-      await presentSemanticEvents(result.events);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await promptGukjinChoice(side,result.events,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await presentSemanticEvents(result.events,epoch);
     }
-    if(!isLocalGamePresentationCurrent(localGeneration))return;
+    if(!isLocalGamePresentationCurrent(localGeneration)||!isGameplayPresentationCurrent(epoch))return;
     if(state.pendingTurn?.phase==='awaitingTurnCompletion')applyNormalAction(normalAction(side,{type:'completeTurn'}));
   }
 
-  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount){
+  async function playFullTurn(side, playedCard, sourceRect, target, playMatchCount,legacy=true,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const playedStage=await animateHandCardSlap(side,playedCard,sourceRect,target);
+    if(!isGameplayPresentationCurrent(epoch))return;
     await presentationPause('handToDeck');
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     if(!state.deck.length){
       const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
       applyNormalAction(normalAction(side,{type:'drawNextCard'}));
       const classification=classifyNormalTurn(side);
-      if(classification.kind==='normal')await resolveNormalEngineTurn(side,play,null);
-      else if(['selfPpeokCandidate','floorStackInteraction'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null);
+      if(classification.kind==='normal')await resolveNormalEngineTurn(side,play,null,epoch);
+      else if(['selfPpeokCandidate','floorStackInteraction'].includes(classification.kind))await resolveExtractedSpecialTurn(side,classification,play,null,epoch);
       else throw new Error(`Unhandled authoritative turn classification: ${classification.kind}`);
-      await concludeTurn(side);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await concludeTurn(side,epoch);
       return;
     }
 
@@ -1015,6 +1078,7 @@
     let turnClassification=classifyNormalTurn(side);
     render();
     const deckStage=await animateDeckLiftFlip(side,draw);
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     let drawTarget=null;
     let drawMatches=matchesFor(draw);
@@ -1028,9 +1092,10 @@
     }else if(drawMatches.length===2){
       if(side==='human') drawTarget=await chooseFloorTarget(drawMatches,'Deck card: choose which floor card to hit');
       else { drawTarget=chooseBestMatch(drawMatches); await previewAiTarget(drawTarget); }
+      if(!isGameplayPresentationCurrent(epoch))return;
     }else if(drawMatches.length>2){
       drawTarget=chooseBestMatch(drawMatches);
-      if(side==='ai')await previewAiTarget(drawTarget);
+      if(side==='ai'){await previewAiTarget(drawTarget);if(!isGameplayPresentationCurrent(epoch))return;}
     }
 
     if(drawTarget&&state.pendingTurn?.drawn?.matchIds.includes(drawTarget.id)&&state.pendingTurn.drawn.targetId!==drawTarget.id){
@@ -1039,60 +1104,72 @@
     }
 
     await animateStagedSlap(deckStage,draw,drawTarget,'flip');
+    if(!isGameplayPresentationCurrent(epoch))return;
     const play={card:playedCard,stage:playedStage,target,matchCount:playMatchCount};
     const drawn={card:draw,stage:deckStage,target:drawTarget,matchCount:drawMatchCount};
     const extractedSpecial=['ppeokSsaDaCandidate','selfPpeokCandidate','jjokCandidate','ttadakCandidate','floorStackInteraction'];
-    if(turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn);
-    else if(extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn);
+    if(turnClassification.kind==='normal')await resolveNormalEngineTurn(side,play,drawn,epoch);
+    else if(extractedSpecial.includes(turnClassification.kind))await resolveExtractedSpecialTurn(side,turnClassification,play,drawn,epoch);
     else throw new Error(`Unhandled authoritative turn classification: ${turnClassification.kind}`);
-    await concludeTurn(side);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await concludeTurn(side,epoch);
   }
 
-  async function executeDeckOnlyTurn(side){
-    if(state.winner)return;
+  async function executeDeckOnlyTurn(side,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch)||state.winner)return;
     presentation.locked=true;
     applyNormalAction(normalAction(side,{type:'useBombBlank'}));
-    await executePendingDrawTurn(side);
+    await executePendingDrawTurn(side,epoch);
   }
 
-  async function executePendingDrawTurn(side){
+  async function executePendingDrawTurn(side,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(!state.deck.length){
       applyNormalAction(normalAction(side,{type:'drawNextCard'}));
       const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
       await presentPiTransferEvents(side,completed.events);
-      await presentSemanticEvents(completed.events);
-      await finishNagari(); return;
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await presentSemanticEvents(completed.events,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await finishNagari(epoch); return;
     }
     const drawResult=applyNormalAction(normalAction(side,{type:'drawNextCard'}));
     const draw=drawResult.events.find(event=>event.type==='deckCardRevealed').card;
     render();
     const stage=await animateDeckLiftFlip(side,draw);
+    if(!isGameplayPresentationCurrent(epoch))return;
     const matches=matchesFor(draw);
     let target=null;
     if(matches.length===1)target=matches[0];
     else if(matches.length===2){
       if(side==='human')target=await chooseFloorTarget(matches,'Choose which floor card to hit');
       else{target=chooseBestMatch(matches);await previewAiTarget(target);}
+      if(!isGameplayPresentationCurrent(epoch))return;
     }else if(matches.length>2)target=chooseBestMatch(matches);
     if(target&&state.pendingTurn?.drawn?.matchIds.includes(target.id)&&state.pendingTurn.drawn.targetId!==target.id){
       applyNormalAction(normalAction(side,{type:'chooseFloorTarget',source:'drawn',targetId:target.id}));
     }
     await animateStagedSlap(stage,draw,target,'flip');
+    if(!isGameplayPresentationCurrent(epoch))return;
     const classification=classifyNormalTurn(side);
     if(classification.kind==='normal'){
       const resolved=applyNormalAction(normalAction(side,{type:'resolveNormalCard',source:'drawn'}));
-      await presentNormalResolution(side,resolved);
+      await presentNormalResolution(side,resolved,epoch);
+      if(!isGameplayPresentationCurrent(epoch))return;
       const completed=applyNormalAction(normalAction(side,{type:'completeTurn'}));
       await presentPiTransferEvents(side,completed.events);
-      await presentSemanticEvents(completed.events);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      await presentSemanticEvents(completed.events,epoch);
     }else{
-      if(classification.kind==='floorStackInteraction')await resolveExtractedSpecialTurn(side,classification,null,{card:draw,stage,target,matchCount:matches.length});
+      if(classification.kind==='floorStackInteraction')await resolveExtractedSpecialTurn(side,classification,null,{card:draw,stage,target,matchCount:matches.length},epoch);
       else throw new Error(`Unhandled authoritative deck-only classification: ${classification.kind}`);
     }
-    await concludeTurn(side);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await concludeTurn(side,epoch);
   }
 
-  async function executeBombTurn(side,month){
+  async function executeBombTurn(side,month,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return false;
     // Presentation wrapper: declareBomb performs every authoritative Bomb mutation.
     const decision=state.pendingDecision;
     const bombCards=decision?.cardIds.map(id=>state[side].hand.find(card=>card.id===id)).filter(Boolean)||[];
@@ -1113,21 +1190,27 @@
       bombCards.forEach(card=>{const el=els.playerHand.querySelector(`[data-card-id="${card.id}"]`);if(el)el.style.visibility='hidden';});
     }else [...els.aiHand.querySelectorAll('.mini-back')].slice(0,3).forEach(el=>el.style.visibility='hidden');
     const result=applyNormalAction(normalAction(side,{type:'declareBomb'}));
-    if(!result.events.some(event=>event.type==='bombDeclared'))return;
+    if(!result.events.some(event=>event.type==='bombDeclared'))return false;
 
-    await presentExecutedBomb(side,result,bombCards,floorTarget,bombSourceRects);
-    return true;
+    await presentExecutedBomb(side,result,bombCards,floorTarget,bombSourceRects,epoch);
+    return isGameplayPresentationCurrent(epoch);
   }
 
-  async function presentExecutedBomb(side,result,bombCards,floorTarget,bombSourceRects){
+  async function presentExecutedBomb(side,result,bombCards,floorTarget,bombSourceRects,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     await animateBombSlap(side,bombCards,floorTarget,bombSourceRects);
+    if(!isGameplayPresentationCurrent(epoch))return;
     await sleep(180);
+    if(!isGameplayPresentationCurrent(epoch))return;
 
     await animateCaptureBatch([...bombCards,floorTarget],side);
+    if(!isGameplayPresentationCurrent(epoch))return;
     await presentPiTransferEvents(side,result.events);
+    if(!isGameplayPresentationCurrent(epoch))return;
     render();
     await sleep(260);
-    await executePendingDrawTurn(side);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await executePendingDrawTurn(side,epoch);
   }
 
   async function resolveCombinedTurn(side,play,draw){
@@ -1250,11 +1333,13 @@
     await a.finished.catch(()=>{}); el.remove();
   }
 
-  async function concludeTurn(side){
-    if(state.winner)return;
-    await presentNewMilestones(playerIdForLegacySide(side));
+  async function concludeTurn(side,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch)||state.winner)return;
+    await presentNewMilestones(playerIdForLegacySide(side),epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
     render();
     if(state.pendingDecision?.type==='openingTripleDecision'){await processOpeningSpecials();return;}
+    if(!isGameplayPresentationCurrent(epoch))return;
     const actorId=playerIdForLegacySide(side);
     const actor=state[side];
     if(side==='ai'&&actor.captured.some(card=>card.id==='m9-1')){
@@ -1262,25 +1347,27 @@
       if(actor.gukjinMode!==mode)applyNormalAction({type:'setGukjinMode',actorId,mode});
     }
     let result=TEST_MODE?evaluateGoStop(state,{actorId}):submitSoloAction({type:'evaluateGoStop',actorId}); state=result.state;
-    if(result.autoStop){ presentStopResult(result); return; }
+    if(result.autoStop){ presentStopResult(result,epoch); return; }
     if(result.pendingDecision){
       const sc=scorePlayer(state[side]);
-      if(side==='human'){ presentation.locked=true; await humanGoStop(sc); return; }
+      if(side==='human'){ presentation.locked=true; await humanGoStop(sc,epoch); return; }
       const action={type:aiShouldGo(sc)?'declareGo':'declareStop',actorId};
       result=applyGoStopDecision(action);
       if(action.type==='declareGo'){
         if(result.events.some(event=>event.type==='goDeclared'))showGoCallout('ai');
         await sleep(980);
+        if(!isGameplayPresentationCurrent(epoch))return;
       }else{
-        presentStopResult(result); return;
+        presentStopResult(result,epoch); return;
       }
     }
 
     if(result.requiresNagari){
-      await finishNagari(); return;
+      await finishNagari(epoch); return;
     }
 
     await sleep(760);
+    if(!isGameplayPresentationCurrent(epoch))return;
     render();
     scheduleTurnStart();
   }
@@ -1325,17 +1412,17 @@
     return {left:x-w/2,top:r.top+r.height*.35-h/2,width:w,height:h};
   }
 
-  async function chooseBomb(month){
-    if(!els.bombDialog)return true;
+  async function chooseBomb(month,epoch=gameplayPresentationEpoch){
+    if(!els.bombDialog||!isGameplayPresentationCurrent(epoch))return false;
     els.bombText.textContent=`${localizedMonth(month)} — ${t('bomb')}`;
-    els.bombDialog.showModal();
+    if(!showGameplayModal(els.bombDialog,epoch))return false;
     return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
 
-  async function chooseShake(month){
-    if(!els.shakeDialog)return false;
+  async function chooseShake(month,epoch=gameplayPresentationEpoch){
+    if(!els.shakeDialog||!isGameplayPresentationCurrent(epoch))return false;
     showShakeChoice({type:'shakeDecision',month,cardIds:state.human.hand.filter(c=>c.month===month).map(card=>card.id)});
-    els.shakeDialog.showModal();
+    if(!showGameplayModal(els.shakeDialog,epoch))return false;
     return new Promise(resolve=>{ presentation.shakeResolver=resolve; });
   }
 
@@ -1346,26 +1433,30 @@
     els.shakeCards.replaceChildren(...cards.map(card=>createCardEl(card,'card magnified-card')));
   }
 
-  async function chooseOpeningTriple(decision){
+  async function chooseOpeningTriple(decision,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return false;
     showShakeChoice(decision);
-    els.shakeDialog.showModal();
+    if(!showGameplayModal(els.shakeDialog,epoch))return false;
     return new Promise(resolve=>{presentation.shakeResolver=resolve;});
   }
 
-  async function processOpeningSpecials(){
-    if(state.winner)return;
+  async function processOpeningSpecials(epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch)||state.winner)return;
     if(state.pendingDecision?.type!=='openingTripleDecision'){
       const opening=TEST_MODE?resolveOpeningState(state):submitSoloAction({type:'resolveOpening',actorId:state.turn}); state=opening.state;
       const chongtong=opening.events.find(event=>event.type==='chongtongDeclared');
-      if(chongtong){ presentChongtong(chongtong); return; }
+      if(chongtong){ presentChongtong(chongtong,epoch); return; }
     }
     while(state.pendingDecision?.type==='openingTripleDecision'){
+      if(!isGameplayPresentationCurrent(epoch))return;
       const decision=state.pendingDecision;
       if(decision.playerId===PLAYER_A){
-        const shake=await chooseOpeningTriple(decision);
+        const shake=await chooseOpeningTriple(decision,epoch);
+        if(!isGameplayPresentationCurrent(epoch))return;
         if(shake){
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_A});
-          await presentShakeDeclaration(result.events);
+          await presentShakeDeclaration(result.events,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
         }else if(decision.floorCardId){
           applyNormalAction({type:'declareBomb',actorId:PLAYER_A});
         }else applyNormalAction({type:'armOpeningBomb',actorId:PLAYER_A});
@@ -1373,15 +1464,18 @@
         const shake=!decision.floorCardId&&Math.random()<.72;
         if(shake){
           const result=applyNormalAction({type:'declareShake',actorId:PLAYER_B});
-          await presentShakeDeclaration(result.events);
+          await presentShakeDeclaration(result.events,epoch);
+          if(!isGameplayPresentationCurrent(epoch))return;
         }else if(decision.floorCardId){applyNormalAction({type:'declareBomb',actorId:PLAYER_B});}
         else applyNormalAction({type:'armOpeningBomb',actorId:PLAYER_B});
       }
     }
+    if(!isGameplayPresentationCurrent(epoch))return;
     presentation.locked=false; render(); scheduleTurnStart();
   }
 
-  function presentChongtong(event){
+  function presentChongtong(event,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     // Preserve the established Solo presentation: only the local-player branch
     // played the Chongtong fanfare before authority extraction.
     if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
@@ -1391,10 +1485,11 @@
     recordTerminalResult(terminal);
     if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
     setGrandResult(t('conquer'),playerWon?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
-  async function presentShakeDeclaration(events){
+  async function presentShakeDeclaration(events,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const event=events.find(item=>item.type==='shakeDeclared');
     if(!event)return;
     playShakeSound(); render();
@@ -1403,11 +1498,11 @@
       els.shakeRevealTitle.textContent=onlineMode?t('opponentShakes'):t('computerShakes');
       els.shakeRevealText.textContent=t(onlineMode?'opponentShakeAck':'shakeAck');
       els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
-      els.shakeRevealDialog.showModal();
+      if(!showGameplayModal(els.shakeRevealDialog,epoch))return;
       await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
       return;
     }
-    await showSpecialTransient(t('shake'),event.cardIds);
+    await showSpecialTransient(t('shake'),event.cardIds,'',epoch);
   }
 
   function openShakeReview(playerId){
@@ -1416,7 +1511,7 @@
     player.revealedShakeSets.forEach((set,index)=>{
       const group=document.createElement('section'),label=document.createElement('strong'),cards=document.createElement('div');label.textContent=`${playerId===PLAYER_A?t('player'):t(onlineMode?'opponent':'computer')} — ${t('shake')} #${index+1} · ×${set.declarationMultiplier||(set.month>=11?4:2)}`;cards.className='shake-cards';set.cardIds.forEach(id=>{const card=MASTER_DECK.find(item=>item.id===id);if(card)cards.appendChild(createCardEl(card,'card magnified-card'));});group.append(label,cards);els.shakeReviewCards.appendChild(group);
     });
-    els.shakeReviewDialog.showModal();
+    showGameplayModal(els.shakeReviewDialog);
   }
 
 
@@ -1795,20 +1890,22 @@
     try{await animation.finished;}catch(_){ }finally{broom.remove();}
   }
 
-  async function showSpecialTransient(title,cardIds=[],effect=''){
-    if(!els.milestoneOverlay)return;
+  async function showSpecialTransient(title,cardIds=[],effect='',epoch=gameplayPresentationEpoch){
+    if(!els.milestoneOverlay||!isGameplayPresentationCurrent(epoch))return;
     const titleKeys={'POOPED!':'pooped','KISS!':'kiss','FLUSH!':'tapTap','CLEAN SWEEP!':'cleanSweep','5-BIRDIES!':'birdies','3-STRIPES!':'threeStripes','5-BRIGHTS!':'fiveBrights'};
     title=t(titleKeys[title]||title);
     els.milestoneTitle.textContent=title;els.milestoneCards.innerHTML='';els.milestoneBirds.innerHTML='';els.milestoneOverlay.dataset.effect=effect;
     cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
     els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');const effectDone=effect==='sweep'?animateSweepBroom():Promise.resolve();await Promise.all([sleep(2000),effectDone]);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
+    if(!isGameplayPresentationCurrent(epoch))return;
   }
-  async function presentSemanticEvents(events){
+  async function presentSemanticEvents(events,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     for(const event of events){
-      if(event.type==='sweepTriggered'){playSweepSound();await showSpecialTransient('CLEAN SWEEP!',event.cardIds||[],'sweep');}
+      if(event.type==='sweepTriggered'){playSweepSound();await showSpecialTransient('CLEAN SWEEP!',event.cardIds||[],'sweep',epoch);if(!isGameplayPresentationCurrent(epoch))return;}
     }
   }
-  async function presentKiss(cardIds){playKissSound();await showSpecialTransient('KISS!',cardIds,'kiss');}
+  async function presentKiss(cardIds,epoch=gameplayPresentationEpoch){if(!isGameplayPresentationCurrent(epoch))return;playKissSound();await showSpecialTransient('KISS!',cardIds,'kiss',epoch);}
 
   function detectNewMilestones(playerId){
     const player=playerStateById(state,playerId),history=presentation.milestoneHistory[playerId],found=[];
@@ -1824,7 +1921,8 @@
     if(brights.length>=5)add('five-brights','fiveBrights',brights.slice(0,5));
     return found;
   }
-  async function presentNewMilestones(playerId){
+  async function presentNewMilestones(playerId,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     for(const milestone of detectNewMilestones(playerId)){
       els.milestoneTitle.textContent=t(milestone.titleKey); els.milestoneCards.innerHTML=''; els.milestoneBirds.innerHTML=''; els.milestoneOverlay.dataset.effect='';
       milestone.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
@@ -1834,17 +1932,20 @@
       await sleep(2000);
       els.milestoneOverlay.classList.remove('show'); els.milestoneOverlay.setAttribute('aria-hidden','true');
       await sleep(120);
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
   }
 
-  async function presentOnlineGoStopDecision(decision){
+  async function presentOnlineGoStopDecision(decision,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     presentation.locked=true;render();
-    await presentNewMilestones(decision.playerId);
+    await presentNewMilestones(decision.playerId,epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
     const side=legacySideForPlayerId(decision.playerId),player=state[side],preview=calculateFinalScore(side);
     els.decisionText.textContent=`You have ${decision.score} points.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=player.go===0?t('go'):`${player.go+1} ${t('go')}`;
-    if(!els.decisionDialog.open)els.decisionDialog.showModal();
+    showGameplayModal(els.decisionDialog,epoch);
   }
 
 
@@ -1945,15 +2046,17 @@
     return parts.join('  →  ');
   }
 
-  async function humanGoStop(sc){
+  async function humanGoStop(sc,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const preview=calculateFinalScore('human');
     els.decisionText.textContent=`${t('currentGo',{count:state.human.go})}. ${formatScoreFormula(preview)}.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
-    els.decisionDialog.show();
+    showGameplayDialog(els.decisionDialog,epoch);
   }
 
-  function presentStopResult(result){
+  function presentStopResult(result,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const ended=result.events.find(event=>event.type==='handEnded');
     if(!ended)return;
     const side=legacySideForPlayerId(ended.winnerId);
@@ -1961,20 +2064,22 @@
     presentation.locked=true; hideActionCue();
     setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
     if(side==='human')playChongtongFanfare();else playSadResultSound();
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
-  async function finishNagari(){
+  async function finishNagari(epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(state.winner)return;
     const result=TEST_MODE?resolveNagari(state,{actorId:state.turn}):submitSoloAction({type:'resolveNagari',actorId:state.turn}); state=result.state;
     const event=result.events.find(item=>item.type==='nagariDeclared');
     recordTerminalResult(state.terminalResult);
     presentation.locked=true;
     setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
-  function presentThreePpeok(result){
+  function presentThreePpeok(result,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const event=result.events.find(item=>item.type==='threePpeokDeclared');
     if(!event)return;
     const terminal=state.terminalResult;
@@ -1982,7 +2087,7 @@
     recordTerminalResult(terminal);
     presentation.locked=true;
     setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
-    els.resultDialog.showModal(); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
   function finishByScore(){ finishNagari(); }
@@ -2012,13 +2117,14 @@
     if(!accepted){if(els.newGameDialog?.open)els.newGameDialog.close();return false;}
     if(els.newGameDialog?.open)els.newGameDialog.close();
     if(onlineMode){return !!onlineSubmit({type:'requestNewGame'});}
-    if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame();return true;
+    invalidateGameplayPresentation();beginGameplayPresentation();
+    if(els.soloStartOverlay)els.soloStartOverlay.hidden=true;unlockAudio();resetSession();startGame(gameplayPresentationEpoch);return true;
   }
-  function showFirstPoopNotice(side,generation=localGameGeneration){
-    if(!els.firstPpeokDialog||!isLocalGamePresentationCurrent(generation))return Promise.resolve();
+  function showFirstPoopNotice(side,generation=localGameGeneration,epoch=gameplayPresentationEpoch){
+    if(!els.firstPpeokDialog||!isLocalGamePresentationCurrent(generation)||!isGameplayPresentationCurrent(epoch))return Promise.resolve();
     els.firstPoopTitle.textContent=t('firstPoop');
     els.firstPoopText.textContent=`${side==='human'?t('you'):t(onlineMode?'opponent':'computer')}: ${t('firstPoopBonus')} +7 ${t('points')}`;
-    els.firstPpeokDialog.showModal();
+    if(!showGameplayModal(els.firstPpeokDialog,epoch))return Promise.resolve();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
   }
   function setLocale(locale){
@@ -2128,7 +2234,8 @@
     return isOnline?t(starter===PLAYER_A?'youGoFirst':'opponentGoesFirst'):t('goesFirst',{player:starter===PLAYER_A?t('player'):t('computer')});
   }
 
-  async function presentOpeningSequence(starter,roll){
+  async function presentOpeningSequence(starter,roll,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(!roll)throw new Error('Dice presentation is restricted to the first hand of a session.');
     presentation.dicePresentationCount++;
     if(TEST_MODE){presentation.diceSoundCount++;traceAudio('dice');return;}
@@ -2136,49 +2243,57 @@
     if(els.soloStartOverlay?.dataset.launching==='true'){delete els.soloStartOverlay.dataset.launching;delete els.soloStartOverlay.dataset.launchingText;els.soloStartOverlay.hidden=true;}
     els.openingMessage.textContent='';els.openingDie.hidden=!roll;
     const dieFaces=onlineMode?['Y','O']:['P','C'];
-    if(roll){els.openingDie.classList.add('rolling');playDiceSound();let face=0;const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);await sleep(900);clearInterval(timer);els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];}
-    els.openingMessage.textContent=openingStarterMessage(starter);await sleep(650);els.openingDie.hidden=true;await sleep(250);els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
-    await presentDealSequence();
+    if(roll){
+      els.openingDie.classList.add('rolling');playDiceSound();let face=0;
+      const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);
+      await sleep(900);clearInterval(timer);
+      if(!isGameplayPresentationCurrent(epoch))return;
+      els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];
+    }
+    els.openingMessage.textContent=openingStarterMessage(starter);await sleep(650);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    els.openingDie.hidden=true;await sleep(250);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');
+    await presentDealSequence(epoch);
   }
-  async function presentDealSequence(){
-    if(TEST_MODE)return;
+  async function presentDealSequence(epoch=gameplayPresentationEpoch){
+    if(TEST_MODE||!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=48;render();
-    for(let count=47;count>=20;count--){presentation.deckDisplayCount=count;render();await sleep(72);}
+    for(let count=47;count>=20;count--){
+      if(!isGameplayPresentationCurrent(epoch))return;
+      presentation.deckDisplayCount=count;render();await sleep(72);
+    }
+    if(!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=null;render();
   }
   function playDiceSound(){if(!presentation.soundEnabled)return;presentation.diceSoundCount++;traceAudio('dice');if(!TEST_MODE)playDiceClatter();}
-  async function startGame(){
+  async function startGame(epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     resetHandPresentationState();hideActionCue();
     if(presentation.shakeResolver){presentation.shakeResolver(false);presentation.shakeResolver=null;}
     if(presentation.bombResolver){presentation.bombResolver(false);presentation.bombResolver=null;}
-    [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog].filter(Boolean).forEach(d=>{if(d.open)d.close();});
+    if(!TEST_MODE)document.querySelectorAll('dialog[open]').forEach(dialog=>{try{dialog.close();}catch(_){ }});
     const nagariCarryPower=state?.matchContext?.nagariCarryPower||0;
     const firstSessionHand=consumeSessionStart();
-    if(firstSessionHand&&!TEST_MODE)await unlockAudio();
+    if(firstSessionHand&&!TEST_MODE){await unlockAudio();if(!isGameplayPresentationCurrent(epoch))return;}
     const starter=presentation.nextStarterId||(firstSessionHand?(secureRandomInt(2)===0?PLAYER_A:PLAYER_B):(state?.startingPlayerId||PLAYER_A));
     state=freshState(nagariCarryPower,starter);presentation.locked=true;presentation.aiTurnInProgress=false;presentation.hintCardId=null;presentation.recordedTerminal=null;
     presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
     els.roundNo.textContent=presentation.roundNo;render();
-    if(firstSessionHand)await presentOpeningSequence(starter,true);
-    else await presentDealSequence();
-    await processOpeningSpecials();
+    if(firstSessionHand)await presentOpeningSequence(starter,true,epoch);
+    else await presentDealSequence(epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    await processOpeningSpecials(epoch);
   }
   function cancelLocalGamePresentation(){
-    localGameActive=false;localGameGeneration++;presentation.locked=true;
-    resetHandPresentationState();
-    if(presentation.shakeResolver){const resolve=presentation.shakeResolver;presentation.shakeResolver=null;resolve(false);}
-    if(presentation.bombResolver){const resolve=presentation.bombResolver;presentation.bombResolver=null;resolve(false);}
-    [els.resultDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog,els.newGameDialog].filter(Boolean).forEach(dialog=>{if(dialog.open)dialog.close();});
-    if(els.milestoneOverlay){els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');}
-    if(els.openingOverlay){els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');}
-    if(els.goCallout)els.goCallout.classList.remove('show');
-    hideActionCue();
+    localGameActive=false;localGameGeneration++;presentation.locked=true;invalidateGameplayPresentation();
   }
   async function launchLocalGame(training=false){
     if(globalThis.goStopOnlineSession){try{globalThis.goStopOnlineSession.close();}catch(_){}globalThis.goStopOnlineSession=null;}
     const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
     if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
-    onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;
+    onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;beginGameplayPresentation();
     await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
   }
 
@@ -2203,7 +2318,7 @@
   document.addEventListener('keydown',event=>{if(event.key==='Escape'){els.optionsMenu.hidden=true;els.newGameBtn.setAttribute('aria-expanded','false');}});
   els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
   els.newGameNoBtn.addEventListener('click',()=>confirmNewGame(false));
-  els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;startGame();}});
+  els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;invalidateGameplayPresentation();beginGameplayPresentation();startGame(gameplayPresentationEpoch);}});
   els.resultQuitBtn.addEventListener('click',()=>{onlineQuitFromResult=true;if(els.resultDialog.open)els.resultDialog.close();els.quitConfirmTitle.textContent=t('resultQuitConfirm');els.quitConfirmMessage.textContent=t('resultQuit');els.quitConfirmDialog.showModal();});
   els.quitNoBtn.addEventListener('click',()=>{els.quitConfirmDialog.close();if(onlineQuitFromResult&&!els.resultDialog.open)els.resultDialog.showModal();onlineQuitFromResult=false;});
   els.quitYesBtn.addEventListener('click',()=>{if(onlineMode){if(onlineSubmit({type:'quitGame'}))els.quitConfirmDialog.close();}else{els.quitConfirmDialog.close();onlineQuitFromResult=false;cancelLocalGamePresentation();setTrainingMode(false);els.soloStartOverlay.hidden=false;}});
@@ -2364,14 +2479,7 @@
       return false;
     };
     const setDialog=(dialog,open)=>{if(!dialog)return;if(open&&!dialog.open)dialog.showModal();else if(!open&&dialog.open)dialog.close();};
-    function clearOnlineGameplayPresentation(){
-      resetHandPresentationState();
-      [els.resultDialog,els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.quitConfirmDialog,els.decisionDialog,els.shakeDialog,els.bombDialog,els.firstPpeokDialog,els.gukjinDialog,els.captureDialog,els.shakeReviewDialog,els.shakeRevealDialog,els.opponentEndedDialog].filter(Boolean).forEach(dialog=>setDialog(dialog,false));
-      if(els.milestoneOverlay){els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');}
-      if(els.openingOverlay){els.openingOverlay.classList.remove('show');els.openingOverlay.setAttribute('aria-hidden','true');}
-      if(els.goCallout)els.goCallout.classList.remove('show');
-      hideActionCue();
-    }
+    function clearOnlineGameplayPresentation(){invalidateGameplayPresentation();}
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
@@ -2398,8 +2506,8 @@
       reconcileOnlineFlow(snapshot);
       if(globalThis.goStopOnlineSession.pendingActionId||onlineFlowBlocks(snapshot)){presentation.locked=true;render();return;}
       const decision=state.pendingDecision;
-      if(decision?.type==='shakeDecision'||decision?.type==='openingTripleDecision'){showShakeChoice(decision);if(!els.shakeDialog.open)els.shakeDialog.showModal();return;}
-      if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));if(!els.bombDialog.open)els.bombDialog.showModal();return;}
+      if(decision?.type==='shakeDecision'||decision?.type==='openingTripleDecision'){showShakeChoice(decision);showGameplayModal(els.shakeDialog);return;}
+      if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));showGameplayModal(els.bombDialog);return;}
       if(decision?.type==='goStopDecision'){await presentOnlineGoStopDecision(decision);return;}
       if(decision?.type==='chooseFloorTarget'){
         const targets=decision.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');
@@ -2496,7 +2604,7 @@
       const chongtong=presentationEvents.find(event=>event.type==='chongtongDeclared'),threePpeok=presentationEvents.find(event=>event.type==='threePpeokDeclared'),nagari=presentationEvents.find(event=>event.type==='nagariDeclared');
       if(chongtong)presentChongtong(chongtong);
       else if(threePpeok)presentThreePpeok({events:[threePpeok]});
-      else if(nagari){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${nagari.nextHandMultiplier}`,t('noWinnerHelp'),'special');els.resultDialog.showModal();}
+      else if(nagari){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${nagari.nextHandMultiplier}`,t('noWinnerHelp'),'special');showGameplayModal(els.resultDialog,epoch);}
       else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       await driveOnline(snapshot,presentationEvents);
     }
@@ -2509,7 +2617,7 @@
       onlineSubmit({type:'playCard',cardId,targetId:null});
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
-      localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
+      localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;beginGameplayPresentation();setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
       if(!anonymous&&freeFriendPanel)freeFriendPanel.hidden=true;
       const adapter=roomAdapter||new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous});
       adapter.room=room;
