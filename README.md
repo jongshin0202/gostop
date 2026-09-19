@@ -71,6 +71,7 @@ Decision and result screens show the actual settlement formula rather than only 
 
 - Complete rule verification against Korean expert rule sources
 - Stronger AI / simulation-based AI
+- AI Player Intelligence: decision-level play telemetry, Playing Style Summary, personalized Advice Mode, and “Play with Yourself” Mirror AI modeled on the player's own learned play patterns
 - 3-player GoStop Online
 - 4–6 player rooms with 3 active players and Gwang selling
 - Online multiplayer
