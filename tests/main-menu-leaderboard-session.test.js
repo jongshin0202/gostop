@@ -20,7 +20,9 @@ test('saved authenticated sessions restore automatically and transient refresh f
   assert.doesNotMatch(refresh,/catch\(_\)\{clearSession\(\)/);
   const requireBlock=source.slice(source.indexOf('async function requireAccount'),source.indexOf('rankedSolo.addEventListener'));
   assert.match(requireBlock,/if\(account\)\{next\(\);return;\}/);
-  assert.match(requireBlock,/else onCancel\(\)/);
+  assert.match(requireBlock,/accountContinuation=\{next,onCancel\};openAuth\('login'\)/);
+  assert.match(source,/function continueAfterAccount\(\)/);
+  assert.match(source,/registrationOk'\)\.addEventListener[^]*continueAfterAccount\(\)/);
   assert.match(source,/authRestorePromise=refreshAccount\(\)/);
 });
 
@@ -148,7 +150,7 @@ test('legacy two-button shell is hidden until the current menu client has finish
   assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
-  assert.match(boot,/if\(validRoomParam\)return;revealCurrentMainMenu\(\)/);
+  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}revealCurrentMainMenu\(\)/);
   assert.doesNotMatch(boot,/resumeActiveRankedRoom\(/);
   assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
 });
@@ -224,9 +226,11 @@ test('Free Play With Friend uses Cancel while leaderboard and competitive lobby 
 });
 
 
-test('root URL never auto-resumes an active Competitive game before user chooses the mode',()=>{
-  const boot=source.slice(source.indexOf("const roomParam=new URL(location.href)"),source.lastIndexOf('})();'));
-  assert.match(boot,/if\(validRoomParam\)return;revealCurrentMainMenu\(\)/);
+test('root URL never auto-resumes an active Competitive game before user chooses the mode, while explicit invite links do',()=>{
+  const boot=source.slice(source.indexOf("const inviteUrl=new URL(location.href)"),source.lastIndexOf('})();'));
+  assert.match(boot,/validRoomParam=!!roomParam/);
+  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}revealCurrentMainMenu\(\)/);
+  assert.match(boot,/inviteMode=inviteUrl\.searchParams\.get\('mode'\)==='free'\?'free':'competitive'/);
   assert.doesNotMatch(source,/function resumeActiveRankedRoom\(/);
   assert.doesNotMatch(source,/activeRoomResumeAttempted/);
   const launches=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("function renderLeaderboard"));
