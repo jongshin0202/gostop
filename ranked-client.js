@@ -366,6 +366,7 @@
   async function createAcceptedChallengeRoom(message){
     pendingChallengeCreate=message.requestId;pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);showMatchHandoff(rt('acceptedCreating'));
     try{
+      if(!(await prepareToAcceptMultiplayerChallenge()))throw new Error('A two-player game is already active.');
       const bridge=globalThis.GoStopGameBridge;if(!bridge?.createCompetitiveRoom)throw new Error(rt('launcherUnavailable'));
       const room=await bridge.createCompetitiveRoom();if(!room?.roomCode)throw new Error(rt('requestFailed'));
       sendLobbyMessage({type:'challengeRoomReady',requestId:message.requestId,roomCode:room.roomCode});
@@ -501,11 +502,12 @@
     return new Promise((resolve,reject)=>globalThis.addEventListener('gostop-app-ready',()=>Promise.resolve(callback(globalThis.GoStopGameBridge)).then(resolve,reject),{once:true}));
   }
   async function launchInviteRoom(){
-    if(!validRoomParam)return;const code=roomParam.toUpperCase();stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=true;showMatchHandoff(inviteMode==='free'?'Joining Free Game…':rt('startingMatch'));
+    if(!validRoomParam)return;const code=roomParam.toUpperCase();stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=true;
     if(inviteMode==='free'){
-      try{await withGameBridge(bridge=>bridge.joinFreeRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}return;
+      showMatchHandoff('Joining Free Game…');try{await withGameBridge(bridge=>bridge.joinFreeRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}return;
     }
     requireAccount(async()=>{
+      showMatchHandoff(rt('startingMatch'));
       try{
         if(!(await withGameBridge(()=>prepareToAcceptMultiplayerChallenge()))){closeRequestDialog(matchHandoffDialog);showToast('Finish or leave your current 2-player game before joining this link.',6000);revealCurrentMainMenu();return;}
         await withGameBridge(bridge=>bridge.joinCompetitiveRoom(code));
