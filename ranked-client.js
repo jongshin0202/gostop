@@ -438,6 +438,9 @@
     }catch(error){yes.disabled=false;no.disabled=false;$('requestPlayerStats').textContent=localizedError(error);}
   });
   $('requestDecline').addEventListener('click',()=>{if(pendingRequest)sendLobbyMessage({type:'challengeResponse',requestId:pendingRequest.requestId,accept:false});pendingRequest=null;requestDialog.close();});
+  $('cancelOutgoingRequest').addEventListener('click',()=>{if(!pendingOutgoingRequest)return;const button=$('cancelOutgoingRequest');button.disabled=true;sendLobbyMessage({type:'challengeCancel',requestId:pendingOutgoingRequest.requestId});});
+  $('declinedDialogOk').addEventListener('click',()=>declinedDialog.close());
+  [outgoingRequestDialog,matchHandoffDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
   $('browsePlayersBtn').addEventListener('click',()=>{
     browsePlayersActive=true;lobbySearchActive=false;$('onlineNicknameSearch').value='';$('recommendedPlayers').hidden=false;$('lobbyStatus').textContent='';sendLobbyMessage({type:'recommendations'});
   });
@@ -445,7 +448,18 @@
   $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent=rt('autoMatchWaiting');sendLobbyMessage({type:'autoMatchStart'});});
   $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
   $('onlineInviteEmailBtn').addEventListener('click',()=>{const email=$('onlineInviteEmail').value.trim();$('lobbyStatus').textContent=email?rt('emailProvider'):rt('enterEmail');});
-  globalThis.addEventListener('gostop-online-room-created',event=>{if(!pendingChallengeCreate)return;const roomCode=event.detail?.room?.roomCode;if(roomCode&&sendLobbyMessage({type:'challengeRoomReady',requestId:pendingChallengeCreate,roomCode}))$('lobbyStatus').textContent=rt('roomCreated');});
+  function roomShareUrl(roomCode,mode){
+    const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('room',String(roomCode||'').toUpperCase());url.searchParams.set('mode',mode==='free'?'free':'competitive');return url.toString();
+  }
+  function showRoomShareLink(roomCode,mode){
+    const free=mode==='free',box=$(free?'freeShareLinkBox':'competitiveShareLinkBox'),link=$(free?'freeShareLink':'competitiveShareLink');if(!box||!link)return;
+    const url=roomShareUrl(roomCode,mode);link.href=url;link.textContent=url;box.hidden=false;
+  }
+  async function copyShareLink(mode){
+    const link=$(mode==='free'?'freeShareLink':'competitiveShareLink');if(!link?.href)return;try{await navigator.clipboard.writeText(link.href);showToast(rt('copied'),1800);}catch(_){showToast(link.href,5000);}
+  }
+  $('freeCopyLinkBtn').addEventListener('click',()=>copyShareLink('free'));$('competitiveCopyLinkBtn').addEventListener('click',()=>copyShareLink('competitive'));
+  globalThis.addEventListener('gostop-online-room-created',event=>{const roomCode=event.detail?.room?.roomCode;if(!roomCode||pendingChallengeCreate)return;showRoomShareLink(roomCode,event.detail?.adapter?.anonymous?'free':'competitive');});
 
   function gameRow(nickname){return rowFor(nickname,'global');}
   function ensureWalletLine(root,id){let line=root?.querySelector(`.${id}`);if(!line&&root){line=document.createElement('span');line.className=`ranked-wallet-line ${id}`;root.appendChild(line);}return line;}
