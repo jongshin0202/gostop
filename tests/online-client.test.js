@@ -104,3 +104,25 @@ test('same-account takeover close code stops the displaced device from fighting 
     assert.equal(takeoverMessage.type,'sessionTakenOver');assert.equal(takeoverMessage.code,4001);
   }finally{globalThis.dispatchEvent=oldDispatch;}
 });
+
+
+test('anonymous Free Gaming rooms never send a ranked account token',async()=>{
+  const oldFetch=globalThis.fetch,oldRanked=globalThis.GoStopRanked;
+  const seen=[];
+  globalThis.GoStopRanked={getAuthToken:()=> 'ranked-account-token'};
+  globalThis.fetch=async(url,options={})=>{
+    seen.push({url:String(url),authorization:options.headers?.authorization||null});
+    return {ok:true,json:async()=>({room:{roomCode:'ABCDEFGHJK2345',credential:'room_'+('a'.repeat(64))}})};
+  };
+  try{
+    const free=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true});
+    await free.create();
+    assert.equal(seen.at(-1).authorization,null);
+    const competitive=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {}});
+    await competitive.create();
+    assert.equal(seen.at(-1).authorization,'Bearer ranked-account-token');
+  }finally{
+    globalThis.fetch=oldFetch;
+    if(oldRanked===undefined)delete globalThis.GoStopRanked;else globalThis.GoStopRanked=oldRanked;
+  }
+});
