@@ -121,10 +121,9 @@
   function captureAccountPayload(data){if(data?.account){account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=data.notices;}
   function pendingDailyNotice(){return pendingAccountNotices.find(item=>item.type==='daily-login')||null;}
   function displayedWalletCoins(){
-    if(!account)return null;
-    const notice=pendingDailyNotice(),holdForVisibleMenu=!!notice&&!!overlay&&!overlay.hidden;if(!holdForVisibleMenu)return account.walletCoins;
-    const before=Number(notice.walletBefore);if(Number.isFinite(before))return before;
-    const current=Number(account.walletCoins),coins=Math.max(0,Number(notice.coins)||100);return Number.isFinite(current)?Math.max(0,current-coins):account.walletCoins;
+    // Wallet is server-authoritative. A pending Daily Bonus notice must never make
+    // another device look as if the already-awarded Coins have not been granted.
+    return account?account.walletCoins:null;
   }
   function saveSession(data){if(data?.session?.token){authToken=data.session.token;try{localStorage.setItem(TOKEN_KEY,authToken);}catch(_){}}captureAccountPayload(data);renderAccountBox();patchGameIdentity();refreshLeaderboardData(true);}
   function clearSession(){authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}closeLobby();renderAccountBox();patchGameIdentity();}
