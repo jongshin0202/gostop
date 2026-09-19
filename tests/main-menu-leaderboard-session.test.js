@@ -116,9 +116,12 @@ test('pending daily bonus never masks the authoritative Wallet or replays after 
   assert.match(source,/const acknowledgedNoticeIds=new Set\(\)/);
   assert.match(source,/function readAcknowledgedNoticeCache\(accountId\)[\s\S]*localStorage\.getItem\(ACK_NOTICE_CACHE_KEY\)/);
   assert.match(source,/function rememberAcknowledgedNotice\(accountId,noticeId\)[\s\S]*localStorage\.setItem\(ACK_NOTICE_CACHE_KEY/);
-  const capture=source.slice(source.indexOf('function captureAccountPayload'),source.indexOf('function pendingDailyNotice'));
+  const capture=source.slice(source.indexOf('function normalizeAccountNotices'),source.indexOf('function pendingDailyNotice'));
+  assert.match(capture,/function normalizeAccountNotices\(notices\)/);
+  assert.match(capture,/daily=list\.filter\(item=>item\?\.type==='daily-login'\)/);
+  assert.match(capture,/item\?\.type==='daily-login'&&item!==latestDaily/);
   assert.match(capture,/readAcknowledgedNoticeCache\(nextAccountId\)/);
-  assert.match(capture,/data\.notices\.filter\(item=>!acknowledgedNoticeIds\.has\(String\(item\?\.id\|\|''\)\)\)/);
+  assert.match(capture,/pendingAccountNotices=normalizeAccountNotices\(data\.notices\)/);
   const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
   assert.match(ack,/rememberAcknowledgedNotice\(account\?\.id,noticeId\)/);
   assert.match(ack,/pendingAccountNotices=pendingAccountNotices\.filter\(item=>item\?\.id!==noticeId\)/);
@@ -127,8 +130,9 @@ test('pending daily bonus never masks the authoritative Wallet or replays after 
   assert.ok(daily.indexOf("delete accountNoticeDialog.dataset.dailyLaunch")<daily.indexOf('accountNoticeDialog.close()'),'successful Daily Bonus acknowledgement clears launch metadata before closing the dialog');
   assert.doesNotMatch(daily,/await refreshAccount\(\)/);
   assert.match(daily,/renderAccountBox\(\);patchGameIdentity\(\);if\(next\)next\(\)/);
-  assert.match(accountStoreSource,/noticeList\(account\)\{const acknowledged=new Set\(Array\.isArray\(account\.acknowledgedNoticeIds\)/);
-  assert.match(accountStoreSource,/async prepareNotices\(account\)[\s\S]*!acknowledged\.has\(item\?\.id\)[\s\S]*this\.storage\.put/);
+  assert.match(accountStoreSource,/normalizedNotices\(account\)[\s\S]*daily=unacknowledged\.filter\(item=>item\?\.type==='daily-login'\)/);
+  assert.match(accountStoreSource,/noticeList\(account\)\{return this\.normalizedNotices\(account\);\}/);
+  assert.match(accountStoreSource,/async prepareNotices\(account\)[\s\S]*filtered=this\.normalizedNotices\(account\)[\s\S]*this\.storage\.put/);
   const launch=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("onlinePlay.addEventListener"));
   assert.match(launch,/captureAccountPayload\(data\);renderAccountBox\(\);patchGameIdentity\(\)/);
   assert.match(worker,/json\(\{ok:true,account,room:\{roomCode:data\.room\.roomCode,rankedMode:'solo'\}\}\)/);
@@ -199,4 +203,12 @@ test('switching modes clears stale Free and Competitive lobby panels before game
   assert.match(localLaunch,/if\(freePanel\)freePanel\.hidden=true;if\(competitivePanel\)competitivePanel\.hidden=true/);
   const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
   assert.match(beginOnline,/if\(!anonymous&&freeFriendPanel\)freeFriendPanel\.hidden=true/);
+});
+
+
+test('Free Play With Friend uses Cancel while leaderboard and competitive lobby keep Return',()=>{
+  const locale=source.slice(source.indexOf('function applyRankedLocale'),source.indexOf('function renderAccountBox'));
+  assert.match(locale,/\$\('freeFriendClose'\)\.textContent=rt\('cancel'\)/);
+  assert.match(locale,/\$\('onlineLobbyClose'\)\.textContent=rt\('return'\)/);
+  assert.match(locale,/leaderboardScreen\.querySelector\('\.leaderboard-return'\)\.textContent=rt\('return'\)/);
 });
