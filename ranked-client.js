@@ -10,6 +10,7 @@
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false;
   let pendingChallengeCreate=null,pendingRequest=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='';
+  const acknowledgedNoticeIds=new Set();
   const acknowledgedRoomAbandonments=new Set();
   const $=id=>document.getElementById(id);
   const RANKED_TEXT=Object.freeze({
@@ -118,7 +119,7 @@
   function rowFor(nickname,page='global'){return (leaderboardData?.[page]||[]).find(row=>String(row.nickname).toLowerCase()===String(nickname||'').toLowerCase())||null;}
   function rankLabel(nickname){const row=rowFor(nickname);if(!row)return rt('unranked');return row.provisional?rt('provisional',{rank:row.rank}):rt('rank',{rank:row.rank});}
   async function refreshLeaderboardData(render=false){try{leaderboardData=await api('/api/leaderboards',{auth:false});if(render)renderAccountBox();return leaderboardData;}catch(_){return leaderboardData;}}
-  function captureAccountPayload(data){if(data?.account){account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=data.notices;syncRankedButtons();}
+  function captureAccountPayload(data){if(data?.account){account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=data.notices.filter(item=>!acknowledgedNoticeIds.has(item?.id));syncRankedButtons();}
   function pendingDailyNotice(){return pendingAccountNotices.find(item=>item.type==='daily-login')||null;}
   function displayedWalletCoins(){
     // Wallet is server-authoritative. A pending Daily Bonus notice must never make
@@ -126,7 +127,7 @@
     return account?account.walletCoins:null;
   }
   function saveSession(data){if(data?.session?.token){authToken=data.session.token;try{localStorage.setItem(TOKEN_KEY,authToken);}catch(_){}}captureAccountPayload(data);renderAccountBox();patchGameIdentity();refreshLeaderboardData(true);}
-  function clearSession(){authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}closeLobby();syncRankedButtons();renderAccountBox();patchGameIdentity();}
+  function clearSession(){authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];acknowledgedNoticeIds.clear();try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}closeLobby();syncRankedButtons();renderAccountBox();patchGameIdentity();}
   let rankedEntryPending=null;
   function activeRankedMode(){const active=account?.activeRanked;return active?.roomCode&&(active.mode==='solo'||active.mode==='online')?active.mode:null;}
   function syncRankedButtons(){
@@ -143,7 +144,7 @@
   function setRankedEntryPending(kind=null){rankedEntryPending=kind;syncRankedButtons();}
   function clearRankedEntryPending(){setRankedEntryPending(null);}
   async function refreshAccount(){if(!authToken){renderAccountBox();patchGameIdentity();return null;}try{const data=await api('/api/me');captureAccountPayload(data);renderAccountBox();patchGameIdentity();await refreshLeaderboardData(true);return account;}catch(error){if(error?.status===401||error?.code==='AUTH_REQUIRED')clearSession();else renderAccountBox();return null;}}
-  async function acknowledgeAccountNotice(noticeId){const data=await api('/api/account/notices/ack',{method:'POST',body:{noticeId}});captureAccountPayload(data);renderAccountBox();return data;}
+  async function acknowledgeAccountNotice(noticeId){const data=await api('/api/account/notices/ack',{method:'POST',body:{noticeId}});if(noticeId)acknowledgedNoticeIds.add(noticeId);captureAccountPayload(data);pendingAccountNotices=pendingAccountNotices.filter(item=>item?.id!==noticeId);renderAccountBox();return data;}
   function showRankedEntryNotice(next){const notice=pendingAccountNotices.find(item=>item.type==='disconnect-loss')||pendingAccountNotices.find(item=>item.type==='disconnect-forgiven');if(!notice){next();return;}if(accountNoticeDialog.open)return;const lost=notice.type==='disconnect-loss';$('accountNoticeTitle').textContent=lost?rt('gameEnded'):rt('disconnectForgivenTitle');$('accountNoticeText').textContent=lost?rt('disconnectLossText',{points:Number(notice.coinsLost??notice.fairPoints)||0}):rt('disconnectForgivenText',{points:Number(notice.fairPoints)||0});accountNoticeDialog.dataset.noticeId=notice.id;accountNoticeDialog.dataset.rankedEntry='1';accountNoticeDialog.__rankedNext=next;accountNoticeDialog.showModal();}
   function withDailyLoginNotice(next){const notice=pendingDailyNotice();if(!notice){next();return;}if(accountNoticeDialog.open)return;const before=Number.isFinite(Number(notice.walletBefore))?Number(notice.walletBefore):Math.max(0,(Number(account?.walletCoins)||0)-(Number(notice.coins)||100)),after=Number.isFinite(Number(notice.walletAfter))?Number(notice.walletAfter):Number(account?.walletCoins)||before+(Number(notice.coins)||100);$('accountNoticeTitle').textContent=rt('dailyBonusTitle');$('accountNoticeText').textContent=`${rt('dailyBonusText')}\n\n🪙 ${coinText(before)} → ${coinText(after)}`;accountNoticeDialog.dataset.noticeId=notice.id;accountNoticeDialog.dataset.dailyLaunch='1';accountNoticeDialog.__dailyNext=next;accountNoticeDialog.showModal();}
   function updateFromSnapshot(snapshot){if(!snapshot?.youProfile||!account)return;const roomWallet=Number(snapshot.youProfile.walletCoins),accountWallet=Number(account.walletCoins);if(Number.isFinite(roomWallet)&&Number.isFinite(accountWallet)&&roomWallet!==accountWallet){const key=`${account.id||''}:${roomWallet}:${accountWallet}`;if(walletRefreshMismatchKey!==key){walletRefreshMismatchKey=key;void refreshAccount();}}else walletRefreshMismatchKey='';renderAccountBox();}
@@ -211,7 +212,7 @@
   function openAuth(tab='login'){setAuthTab(tab);$('accountError').textContent='';if(!authDialog.open)authDialog.showModal();}
   function setAuthTab(tab){const login=tab!=='register';$('loginForm').hidden=!login;$('registerForm').hidden=login;$('loginTab').classList.toggle('strong',login);$('registerTab').classList.toggle('strong',!login);authDialog.querySelector('h2').textContent=rt(login?'login':'createId');}
   async function logout(){try{await api('/api/auth/logout',{method:'POST',body:{}});}catch(_){}clearSession();}
-  $('accountDialogClose').addEventListener('click',()=>authDialog.close());$('loginTab').addEventListener('click',()=>setAuthTab('login'));$('registerTab').addEventListener('click',()=>setAuthTab('register'));$('registrationOk').addEventListener('click',()=>successDialog.close());$('accountNoticeOk').addEventListener('click',async()=>{const okBtn=$('accountNoticeOk');if(okBtn.disabled)return;okBtn.disabled=true;try{if(accountNoticeDialog.dataset.rankedEntry==='1'){const next=accountNoticeDialog.__rankedNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);accountNoticeDialog.close();delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;accountNoticeDialog.__rankedNext=null;if(next)next();return;}if(accountNoticeDialog.dataset.dailyLaunch==='1'){const next=accountNoticeDialog.__dailyNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);accountNoticeDialog.close();delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__dailyNext=null;renderAccountBox();patchGameIdentity();if(next)next();return;}await acknowledgeVisibleAccountNotice();}catch(error){showToast(localizedError(error),6000);}finally{okBtn.disabled=false;}});
+  $('accountDialogClose').addEventListener('click',()=>authDialog.close());$('loginTab').addEventListener('click',()=>setAuthTab('login'));$('registerTab').addEventListener('click',()=>setAuthTab('register'));$('registrationOk').addEventListener('click',()=>successDialog.close());$('accountNoticeOk').addEventListener('click',async()=>{const okBtn=$('accountNoticeOk');if(okBtn.disabled)return;okBtn.disabled=true;try{if(accountNoticeDialog.dataset.rankedEntry==='1'){const next=accountNoticeDialog.__rankedNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.close();if(next)next();return;}if(accountNoticeDialog.dataset.dailyLaunch==='1'){const next=accountNoticeDialog.__dailyNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__dailyNext=null;accountNoticeDialog.close();renderAccountBox();patchGameIdentity();if(next)next();return;}await acknowledgeVisibleAccountNotice();}catch(error){showToast(localizedError(error),6000);}finally{okBtn.disabled=false;}});
   accountNoticeDialog.addEventListener('cancel',event=>{if(accountNoticeDialog.dataset.rankedEntry==='1'||accountNoticeDialog.dataset.dailyLaunch==='1')event.preventDefault();});
   accountNoticeDialog.addEventListener('close',()=>{if(accountNoticeDialog.dataset.rankedEntry==='1'||accountNoticeDialog.dataset.dailyLaunch==='1'){delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.__dailyNext=null;clearRankedEntryPending();}});
   $('loginForm').addEventListener('submit',async event=>{event.preventDefault();const form=new FormData(event.currentTarget);try{$('accountError').textContent='';const data=await api('/api/auth/login',{method:'POST',body:{email:form.get('email'),password:form.get('password')},auth:false});saveSession(data);authDialog.close();}catch(error){$('accountError').textContent=localizedError(error);}});
@@ -220,12 +221,14 @@
   async function requireAccount(next,onCancel=()=>{}){if(!account&&authToken){if(authRestorePromise)await authRestorePromise;else await refreshAccount();}if(account){next();return;}openAuth('login');const handler=()=>{authDialog.removeEventListener('close',handler);if(account)next();else onCancel();};authDialog.addEventListener('close',handler);}
   function beginRankedEntry(kind,launch){
     if(rankedEntryPending)return;
+    freePanel.hidden=true;onlinePanel.hidden=true;$('freeOnlineStatus').textContent='';
     setRankedEntryPending(kind);stopAttractForGameLaunch();
     requireAccount(()=>showRankedEntryNotice(()=>withDailyLoginNotice(async()=>{try{await launch();if(kind!=='solo')clearRankedEntryPending();}catch(error){clearRankedEntryPending();showToast(localizedError(error),6000);}})),clearRankedEntryPending);
   }
   function launchRankedRoom(roomCode){
     const input=$('onlineRoomCode');if(!input||!joinForm)throw new Error(rt('launcherUnavailable'));
-    input.value=String(roomCode||'').toUpperCase();onlinePanel.hidden=true;joinForm.requestSubmit();
+    freePanel.hidden=true;onlinePanel.hidden=true;$('freeOnlineStatus').textContent='';
+    input.value=String(roomCode||'').toUpperCase();joinForm.requestSubmit();
   }
   globalThis.addEventListener?.('gostop-online-launch-settled',event=>{clearRankedEntryPending();if(event.detail?.ok===false&&overlay.dataset.currentMenuReady!=='true'&&!globalThis.goStopOnlineSession)revealCurrentMainMenu();});
   rankedSolo.addEventListener('click',()=>beginRankedEntry('solo',async()=>{
@@ -237,7 +240,7 @@
     onlinePanel.hidden=false;connectLobby();requestRecommendations();
   }));
   $('onlineLobbyClose').addEventListener('click',()=>{onlinePanel.hidden=true;clearRankedEntryPending();resetAttractTimer();});
-  freeFriendBtn.addEventListener('click',()=>{stopAttractForGameLaunch();freePanel.hidden=false;});
+  freeFriendBtn.addEventListener('click',()=>{stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=false;});
   $('freeFriendClose').addEventListener('click',()=>{freePanel.hidden=true;$('freeOnlineStatus').textContent='';resetAttractTimer();});
   $('freeCreateRoomBtn').addEventListener('click',()=>{stopAttractForGameLaunch();$('freeOnlineStatus').textContent='…';globalThis.dispatchEvent(new CustomEvent('gostop-free-online-create'));});
   $('freeJoinForm').addEventListener('submit',event=>{event.preventDefault();const code=$('freeRoomCode').value.trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))return;$('freeOnlineStatus').textContent='…';stopAttractForGameLaunch();globalThis.dispatchEvent(new CustomEvent('gostop-free-online-join',{detail:{roomCode:code}}));});
