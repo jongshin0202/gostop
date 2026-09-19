@@ -83,8 +83,15 @@ export class AccountStore{
     account.lastConnection={...connection,kind:event.kind,recordedAt};account.updatedAt=recordedAt;
     await this.storage.put(`connection:${account.id}:${recordedAt}:${event.id}`,event);await this.storage.put(`account:${account.id}`,account);return event;
   }
-  noticeList(account){const acknowledged=new Set(Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[]);return (Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>!item?.acknowledgedAt&&!acknowledged.has(item?.id));}
-  async prepareNotices(account){const notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],acknowledged=new Set(Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[]),filtered=notices.filter(item=>!item?.acknowledgedAt&&!acknowledged.has(item?.id));if(filtered.length!==notices.length){account.pendingNotices=filtered;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}return account;}
+  normalizedNotices(account){
+    const notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],acknowledged=new Set(Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[]);
+    const unacknowledged=notices.filter(item=>!item?.acknowledgedAt&&!acknowledged.has(item?.id)),daily=unacknowledged.filter(item=>item?.type==='daily-login');
+    let latestDaily=null;
+    for(const item of daily){const itemTime=Date.parse(item?.createdAt||''),latestTime=Date.parse(latestDaily?.createdAt||'');if(!latestDaily||(Number.isFinite(itemTime)&&(!Number.isFinite(latestTime)||itemTime>latestTime))||(!Number.isFinite(itemTime)&&!Number.isFinite(latestTime)&&String(item?.id||'')>String(latestDaily?.id||'')))latestDaily=item;}
+    return unacknowledged.filter(item=>item?.type!=='daily-login'||item===latestDaily);
+  }
+  noticeList(account){return this.normalizedNotices(account);}
+  async prepareNotices(account){const notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],filtered=this.normalizedNotices(account);if(filtered.length!==notices.length){account.pendingNotices=filtered;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}return account;}
   async latestDailyAwardAt(account){
     if(account.lastDailyAwardAt&&Number.isFinite(Date.parse(account.lastDailyAwardAt)))return account.lastDailyAwardAt;
     let latest=null;
@@ -106,7 +113,7 @@ export class AccountStore{
       return false;
     }
     const walletBefore=Number(account.walletCoins)||0,walletAfter=walletBefore+100,notice={id:`daily:${today}`,type:'daily-login',coins:100,walletBefore,walletAfter,createdAt,displayAt:'first-game',timeZone};
-    account.lastDailyAwardDate=today;account.lastDailyAwardAt=createdAt;account.dailyAwardTimeZone=timeZone;account.walletCoins=walletAfter;account.pendingNotices=(Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>item.id!==notice.id);account.pendingNotices.push(notice);await this.storage.put(`account:${account.id}`,account);
+    account.lastDailyAwardDate=today;account.lastDailyAwardAt=createdAt;account.dailyAwardTimeZone=timeZone;account.walletCoins=walletAfter;account.pendingNotices=(Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>item?.type!=='daily-login');account.pendingNotices.push(notice);await this.storage.put(`account:${account.id}`,account);
     await this.appendLedger(account.id,{type:'daily-login',amount:100,createdAt,day:today,timeZone});
     return true;
   }
