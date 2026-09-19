@@ -48,7 +48,7 @@ export class RoomCore{
   }
   currentGameId(){return `${this.room.roomCode}-${this.room.gameSequence||1}`;}
   milestoneName(event){
-    if(event.type==='shakeDeclared')return 'SHAKE';if(event.type==='bombDeclared')return 'BOMB';if(event.type==='ppeokFormed')return 'POOPED';if(event.type==='firstPpeokAwarded')return 'FIRST_POOP';if(event.type==='sweepTriggered')return 'CLEAN_SWEEP';if(event.type==='chongtongDeclared')return 'CONQUER';if(event.type==='threePpeokDeclared')return 'THREE_PPEOK';if(event.type==='cardsCaptured'&&event.rule==='jjok')return 'KISS';if(event.type==='cardsCaptured'&&event.rule==='ttadak')return 'FLUSH';return null;
+    if(event.type==='shakeDeclared')return 'SHAKE';if(event.type==='bombDeclared')return 'BOMB';if(event.type==='ppeokFormed')return 'POOPED';if(event.type==='firstPpeokAwarded')return 'FIRST_POOP';if(event.type==='sweepTriggered')return 'CLEAN_SWEEP';if(event.type==='chongtongDeclared')return 'CONQUER';if(event.type==='threePpeokDeclared')return 'THREE_PPEOK';if(event.type==='goDeclared'&&Number(event.goCount)===3)return 'THREE_GO';if(event.type==='cardsCaptured'&&event.rule==='jjok')return 'KISS';if(event.type==='cardsCaptured'&&event.rule==='ttadak')return 'FLUSH';return null;
   }
   milestonesForCurrentGame(){
     if(!this.room.matchId)return {};
