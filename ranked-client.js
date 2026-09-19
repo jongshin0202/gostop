@@ -4,6 +4,7 @@
   const TOKEN_KEY='gostop-auth-token';
   const ACTIVE_RANKED_ROOM_KEY='gostop-active-ranked-room';
   const ACCOUNT_CACHE_KEY='gostop-account-cache';
+  const ACK_NOTICE_CACHE_KEY='gostop-acknowledged-notice-cache';
   const DEFAULT_SERVER_URL='https://gostop-authority.jwshin1.workers.dev';
   const LEADERBOARD_ROTATE_MS=5000;
   const ATTRACT_IDLE_MS=10000;
@@ -101,8 +102,16 @@
   const rt=(key,vars={})=>{const locale=rankedLocale(),base=globalThis.GoStopI18n?.dictionaries?.[locale]?.[key],template=DISCONNECT_NOTICE_TEXT[locale]?.[key]??RANKED_MORE_TEXT[locale]?.[key]??RANKED_TEXT[locale]?.[key]??base??DISCONNECT_NOTICE_TEXT.en[key]??RANKED_MORE_TEXT.en[key]??RANKED_TEXT.en[key]??key;return String(template).replace(/\{(\w+)\}/g,(_,name)=>vars[name]??'');};
   const localizedError=error=>{const locale=rankedLocale(),key=`error_${error?.code||''}`,mapped=RANKED_MORE_TEXT[locale]?.[key]??RANKED_MORE_TEXT.en[key];return mapped||(locale==='en'?(error?.message||rt('requestFailed')):rt('requestFailed'));};
   const coinText=value=>`${Number(value)||0} ${rt('coins')}`;
+  function readAcknowledgedNoticeCache(accountId){
+    acknowledgedNoticeIds.clear();if(!accountId)return;
+    try{const cache=JSON.parse(localStorage.getItem(ACK_NOTICE_CACHE_KEY)||'{}'),ids=Array.isArray(cache?.[accountId])?cache[accountId]:[];for(const id of ids)acknowledgedNoticeIds.add(String(id));}catch(_){}
+  }
+  function rememberAcknowledgedNotice(accountId,noticeId){
+    if(!accountId||!noticeId)return;acknowledgedNoticeIds.add(String(noticeId));
+    try{const cache=JSON.parse(localStorage.getItem(ACK_NOTICE_CACHE_KEY)||'{}'),prior=Array.isArray(cache?.[accountId])?cache[accountId]:[];cache[accountId]=[...new Set([...prior,String(noticeId)])].slice(-100);localStorage.setItem(ACK_NOTICE_CACHE_KEY,JSON.stringify(cache));}catch(_){}
+  }
   function persistAccountCache(){try{if(authToken&&account)localStorage.setItem(ACCOUNT_CACHE_KEY,JSON.stringify(account));else localStorage.removeItem(ACCOUNT_CACHE_KEY);}catch(_){}}
-  try{authToken=localStorage.getItem(TOKEN_KEY)||null;const cached=JSON.parse(localStorage.getItem(ACCOUNT_CACHE_KEY)||'null');if(authToken&&cached&&typeof cached==='object'&&cached.nickname)account=cached;}catch(_){ }
+  try{authToken=localStorage.getItem(TOKEN_KEY)||null;const cached=JSON.parse(localStorage.getItem(ACCOUNT_CACHE_KEY)||'null');if(authToken&&cached&&typeof cached==='object'&&cached.nickname){account=cached;readAcknowledgedNoticeCache(account.id);}}catch(_){ }
   const apiUrl=path=>`${baseUrl}${path}`;
   const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[char]));
   const fmtScore=value=>Number(value||0).toFixed(2).replace(/\.00$/,'');
@@ -119,7 +128,7 @@
   function rowFor(nickname,page='global'){return (leaderboardData?.[page]||[]).find(row=>String(row.nickname).toLowerCase()===String(nickname||'').toLowerCase())||null;}
   function rankLabel(nickname){const row=rowFor(nickname);if(!row)return rt('unranked');return row.provisional?rt('provisional',{rank:row.rank}):rt('rank',{rank:row.rank});}
   async function refreshLeaderboardData(render=false){try{leaderboardData=await api('/api/leaderboards',{auth:false});if(render)renderAccountBox();return leaderboardData;}catch(_){return leaderboardData;}}
-  function captureAccountPayload(data){if(data?.account){account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=data.notices.filter(item=>!acknowledgedNoticeIds.has(item?.id));syncRankedButtons();}
+  function captureAccountPayload(data){if(data?.account){const nextAccountId=data.account.id;if(nextAccountId&&nextAccountId!==account?.id)readAcknowledgedNoticeCache(nextAccountId);account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=data.notices.filter(item=>!acknowledgedNoticeIds.has(String(item?.id||'')));syncRankedButtons();}
   function pendingDailyNotice(){return pendingAccountNotices.find(item=>item.type==='daily-login')||null;}
   function displayedWalletCoins(){
     // Wallet is server-authoritative. A pending Daily Bonus notice must never make
@@ -144,7 +153,7 @@
   function setRankedEntryPending(kind=null){rankedEntryPending=kind;syncRankedButtons();}
   function clearRankedEntryPending(){setRankedEntryPending(null);}
   async function refreshAccount(){if(!authToken){renderAccountBox();patchGameIdentity();return null;}try{const data=await api('/api/me');captureAccountPayload(data);renderAccountBox();patchGameIdentity();await refreshLeaderboardData(true);return account;}catch(error){if(error?.status===401||error?.code==='AUTH_REQUIRED')clearSession();else renderAccountBox();return null;}}
-  async function acknowledgeAccountNotice(noticeId){const data=await api('/api/account/notices/ack',{method:'POST',body:{noticeId}});if(noticeId)acknowledgedNoticeIds.add(noticeId);captureAccountPayload(data);pendingAccountNotices=pendingAccountNotices.filter(item=>item?.id!==noticeId);renderAccountBox();return data;}
+  async function acknowledgeAccountNotice(noticeId){const data=await api('/api/account/notices/ack',{method:'POST',body:{noticeId}});rememberAcknowledgedNotice(account?.id,noticeId);captureAccountPayload(data);pendingAccountNotices=pendingAccountNotices.filter(item=>item?.id!==noticeId);renderAccountBox();return data;}
   function showRankedEntryNotice(next){const notice=pendingAccountNotices.find(item=>item.type==='disconnect-loss')||pendingAccountNotices.find(item=>item.type==='disconnect-forgiven');if(!notice){next();return;}if(accountNoticeDialog.open)return;const lost=notice.type==='disconnect-loss';$('accountNoticeTitle').textContent=lost?rt('gameEnded'):rt('disconnectForgivenTitle');$('accountNoticeText').textContent=lost?rt('disconnectLossText',{points:Number(notice.coinsLost??notice.fairPoints)||0}):rt('disconnectForgivenText',{points:Number(notice.fairPoints)||0});accountNoticeDialog.dataset.noticeId=notice.id;accountNoticeDialog.dataset.rankedEntry='1';accountNoticeDialog.__rankedNext=next;accountNoticeDialog.showModal();}
   function withDailyLoginNotice(next){const notice=pendingDailyNotice();if(!notice){next();return;}if(accountNoticeDialog.open)return;const before=Number.isFinite(Number(notice.walletBefore))?Number(notice.walletBefore):Math.max(0,(Number(account?.walletCoins)||0)-(Number(notice.coins)||100)),after=Number.isFinite(Number(notice.walletAfter))?Number(notice.walletAfter):Number(account?.walletCoins)||before+(Number(notice.coins)||100);$('accountNoticeTitle').textContent=rt('dailyBonusTitle');$('accountNoticeText').textContent=`${rt('dailyBonusText')}\n\n🪙 ${coinText(before)} → ${coinText(after)}`;accountNoticeDialog.dataset.noticeId=notice.id;accountNoticeDialog.dataset.dailyLaunch='1';accountNoticeDialog.__dailyNext=next;accountNoticeDialog.showModal();}
   function updateFromSnapshot(snapshot){if(!snapshot?.youProfile||!account)return;const roomWallet=Number(snapshot.youProfile.walletCoins),accountWallet=Number(account.walletCoins);if(Number.isFinite(roomWallet)&&Number.isFinite(accountWallet)&&roomWallet!==accountWallet){const key=`${account.id||''}:${roomWallet}:${accountWallet}`;if(walletRefreshMismatchKey!==key){walletRefreshMismatchKey=key;void refreshAccount();}}else walletRefreshMismatchKey='';renderAccountBox();}
