@@ -48,7 +48,7 @@ test('leaderboards are public, render immediately, and page controls work even i
 
 test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
   const block=source.slice(source.indexOf('function restartLeaderboardTimer'),source.indexOf('function lobbyUrl'));
-  assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;overlay\.hidden=false;\}/);
+  assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;freePanel\.hidden=true;overlay\.hidden=false;\}/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
   assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return/);
@@ -147,4 +147,26 @@ test('Coin mode buttons reflect the account-wide active ranked game and resume t
   assert.match(source,/\.menu-ranked:disabled\{/);
   assert.match(worker,/code:'ACTIVE_RANKED_GAME'/);
   assert.match(worker,/Only one Coin game can be active at a time/);
+});
+
+
+test('main menu separates Training, Free Gaming, Competitive Gaming, and Leaderboards',()=>{
+  assert.match(source,/trainingBtn\.textContent='Training Mode'/);
+  assert.match(source,/freeGroup\.dataset\.label='FREE GAMING'/);
+  assert.match(source,/freeFriendBtn\.textContent='Play With Friend'/);
+  assert.match(source,/rankedGroup\.className='menu-mode-group ranked-menu-group'/);
+  assert.match(source,/leaderboardBtn\.textContent='Leaderboards'/);
+  assert.match(source,/trainingBtn\.textContent=rt\('training'\)/);
+  assert.match(source,/freeGroup\.dataset\.label=rt\('freeGaming'\)/);
+  assert.match(source,/rankedGroup\.dataset\.label=rt\('competitiveGaming'\)/);
+  assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
+});
+
+test('Free Play With Friend launches through a separate non-ranked room flow',()=>{
+  assert.match(source,/id="freeFriendPanel"/);
+  assert.match(source,/gostop-free-online-create/);
+  assert.match(source,/gostop-free-online-join/);
+  assert.match(source,/freePanel\.hidden/);
+  const snapshot=source.slice(source.indexOf("globalThis.addEventListener('gostop-online-snapshot'"),source.indexOf("globalThis.addEventListener('gostop-online-message'"));
+  assert.match(snapshot,/if\(!snapshot\.ranked\)\{currentSnapshot=null/);
 });
