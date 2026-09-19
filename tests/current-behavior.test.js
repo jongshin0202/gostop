@@ -2944,3 +2944,23 @@ test('online launch reuses the adapter that created or joined the room',()=>{
   assert.match(launches,/await beginOnline\(room,\{adapter\}\)/);
   assert.match(launches,/await beginOnline\(room,\{anonymous:true,statusElement:freeOnlineStatus,adapter\}\)/);
 });
+
+
+test('ranked Solo launch stays covered until the opening presentation is visible',()=>{
+  const rankedSource=fs.readFileSync(path.join(__dirname,'..','ranked-client.js'),'utf8');
+  const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const entry=rankedSource.slice(rankedSource.indexOf('function setSoloLaunchCover'),rankedSource.indexOf('function launchRankedRoom'));
+  assert.match(entry,/overlay\.dataset\.launching='true'/);
+  assert.match(entry,/if\(kind==='solo'\)setSoloLaunchCover\(true\)/);
+  assert.match(rankedSource,/\.solo-start-overlay\[data-launching="true"\]/);
+  const snapshot=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
+  assert.match(snapshot,/snapshot\?\.ranked&&els\.soloStartOverlay\?\.dataset\.launching!=='true'/);
+  const opening=appSource.slice(appSource.indexOf('async function presentOpeningSequence'),appSource.indexOf('async function presentDealSequence'));
+  assert.ok(opening.indexOf("els.openingOverlay.classList.add('show')")<opening.indexOf("els.soloStartOverlay.hidden=true"),'opening overlay must be visible before launch cover is removed');
+});
+
+test('score-pill click opens score breakdown without bubbling into Player Info',()=>{
+  const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.match(appSource,/\.human-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_A\);\}\)/);
+  assert.match(appSource,/\.cpu-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_B\);\}\)/);
+});
