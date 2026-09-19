@@ -2710,5 +2710,5 @@
       catch(error){activeOnlineStatus.textContent=error.message;}finally{onlineJoinInFlight=false;}
     });
   }
-  globalThis.dispatchEvent(new CustomEvent('gostop-app-ready'));
+  if(typeof globalThis.CustomEvent==='function')globalThis.dispatchEvent?.(new CustomEvent('gostop-app-ready'));
 })();
