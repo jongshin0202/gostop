@@ -87,6 +87,18 @@ export class RankedRoomCore extends RoomCore{
     if(this.room.rankFlow?.scheduledQuitBy&&!this.room.sessionFlow.ended){await this.endRankedSession('scheduled-quit');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=this.room.rankFlow.scheduledQuitBy;this.room.status='ended';}
     return response;
   }
+  async leaveSoloForChallenge(accountId){
+    await this.load();
+    if(!this.room||!this.isSolo())throw new RoomError('NOT_SOLO_SESSION','Only Competitive Solo can be left for a multiplayer challenge.',409);
+    const participant=this.room.participants.find(item=>!item.bot&&item.accountId===accountId);
+    if(!participant)throw new RoomError('NOT_AUTHENTICATED','This account is not part of the Solo session.',401);
+    if(this.room.sessionFlow?.ended)return {ok:true,alreadyEnded:true,roomCode:this.room.roomCode};
+    this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.quitRequest=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};
+    await this.endRankedSession('accepted-multiplayer-challenge');
+    this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=participant.playerId;this.room.status='ended';
+    await this.persist();if(this.room.matchId)this.broadcastSnapshots();await this.scheduleAlarm();
+    return {ok:true,roomCode:this.room.roomCode};
+  }
   async connect(credential,socket){
     const participant=await super.connect(credential,socket);await this.load();
     if(this.room.rankFlow.disconnectDeadlines[participant.playerId])delete this.room.rankFlow.disconnectDeadlines[participant.playerId];
