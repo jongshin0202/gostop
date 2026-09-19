@@ -52,7 +52,8 @@ function locationFromRequest(request){
   return connection?.countryCode?{countryCode:connection.countryCode,regionCode:connection.regionCode,region:connection.region,city:connection.city,postalCode:connection.postalCode,timeZone:connection.timeZone}:null;
 }
 function publicAccount(account){
-  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};
+  const active=account.activeRanked&&typeof account.activeRanked==='object'?account.activeRanked:null;
+  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null,activeRanked:active?{sessionId:active.sessionId||null,mode:active.mode||null,roomCode:active.roomCode||null,startedAt:active.startedAt||null}:null};
 }
 function blankStats(){return {gamesPlayed:0,wins:0,totalCoinsWon:0,milestones:{}};}
 function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
@@ -166,8 +167,20 @@ export class AccountStore{
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
   }
 
-  async startGameSession(request){const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds:[],opponent:body.opponent||null,roomCode:body.roomCode||null,matchId:body.matchId||null,gameSequence:Number(body.gameSequence)||0,startedAt:body.startedAt||this.now(),endedAt:null,summary:null};await this.storage.put(`gameSession:${record.id}`,record);return json({ok:true,session:record},201);}
-  async endGameSession(request){const body=await request.json().catch(()=>({})),key=`gameSession:${body.sessionId}`,record=await this.storage.get(key);if(!record)return json({ok:false,error:{code:'SESSION_NOT_FOUND',message:'Session not found.'}},404);record.endedAt=body.endedAt||this.now();record.summary=body.summary||{};await this.storage.put(key,record);return json({ok:true,session:record});}
+  async startGameSession(request){
+    const body=await request.json().catch(()=>({})),record={id:body.sessionId||randomId(this.crypto,'session'),mode:body.mode||'unknown',accountIds:Array.isArray(body.accountIds)?body.accountIds.filter(Boolean):[],opponent:body.opponent||null,roomCode:body.roomCode||null,matchId:body.matchId||null,gameSequence:Number(body.gameSequence)||0,startedAt:body.startedAt||this.now(),endedAt:null,summary:null};
+    await this.storage.put(`gameSession:${record.id}`,record);
+    if((record.mode==='solo'||record.mode==='online')&&record.roomCode){
+      for(const accountId of record.accountIds){const account=await this.accountById(accountId);if(!account)continue;account.activeRanked={sessionId:record.id,mode:record.mode,roomCode:record.roomCode,startedAt:record.startedAt};account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}
+    }
+    return json({ok:true,session:record},201);
+  }
+  async endGameSession(request){
+    const body=await request.json().catch(()=>({})),key=`gameSession:${body.sessionId}`,record=await this.storage.get(key);if(!record)return json({ok:false,error:{code:'SESSION_NOT_FOUND',message:'Session not found.'}},404);
+    record.endedAt=body.endedAt||this.now();record.summary=body.summary||{};await this.storage.put(key,record);
+    for(const accountId of record.accountIds||[]){const account=await this.accountById(accountId);if(!account)continue;if(account.activeRanked?.sessionId===record.id){account.activeRanked=null;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}}
+    return json({ok:true,session:record});
+  }
 
   async settleGame(request){
     const body=await request.json().catch(()=>({}));if(!body.gameId||!Array.isArray(body.participants)||!body.participants.length)return json({ok:false,error:{code:'INVALID_SETTLEMENT',message:'Game settlement is incomplete.'}},400);
