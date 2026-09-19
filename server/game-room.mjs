@@ -6,8 +6,8 @@ const errorResponse=error=>json({ok:false,error:{code:error.code||'INTERNAL_ERRO
 export class GameRoom{
   constructor(state,env){
     this.state=state;this.env=env;
-    const accountStore=env.ACCOUNT_STORE?.get(env.ACCOUNT_STORE.idFromName('global'))||null,configuredSeconds=Number(env.ABANDONMENT_TIMEOUT_SECONDS),abandonmentTimeoutMs=Number.isFinite(configuredSeconds)&&configuredSeconds>0?configuredSeconds*1000:undefined;
-    this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state,abandonmentTimeoutMs});
+    const accountStore=env.ACCOUNT_STORE?.get(env.ACCOUNT_STORE.idFromName('global'))||null,toMs=value=>{const seconds=Number(value);return Number.isFinite(seconds)&&seconds>0?seconds*1000:undefined;};
+    this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state,inactivityNudgeMs:toMs(env.INACTIVITY_NUDGE_SECONDS),nudgePhaseMs:toMs(env.INACTIVITY_NUDGE_PHASE_SECONDS),abandonmentCountdownMs:toMs(env.ABANDONMENT_COUNTDOWN_SECONDS)});
   }
   async fetch(request){
     const url=new URL(request.url);

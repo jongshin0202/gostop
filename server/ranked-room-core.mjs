@@ -2,10 +2,9 @@ import '../game-engine.js';
 import {RoomCore,RoomError} from './room-core.mjs';
 import {PROTOCOL_VERSION,envelope,parseClientMessage} from './protocol.mjs';
 
-const NUDGE_MS=15000;
-const WARNING_AFTER_NUDGE_MS=15000;
-const DEFAULT_ABANDONMENT_TIMEOUT_MS=180000;
-const ABANDON_WARNING_MS=DEFAULT_ABANDONMENT_TIMEOUT_MS-NUDGE_MS-WARNING_AFTER_NUDGE_MS;
+const DEFAULT_INACTIVITY_NUDGE_MS=180000;
+const DEFAULT_NUDGE_PHASE_MS=60000;
+const DEFAULT_ABANDONMENT_COUNTDOWN_MS=30000;
 const PAUSE_MS=60000;
 const RECONNECT_GRACE_MS=60000;
 const RUNTIME_ORPHAN_GRACE_MS=15000;
@@ -36,7 +35,7 @@ export function estimateFairDisconnectSettlement(state,{quitterSeatId,opponentSe
 
 
 export class RankedRoomCore extends RoomCore{
-  constructor(options={}){super(options);this.durableState=options.durableState||null;const configured=Number(options.abandonmentTimeoutMs);const minimum=NUDGE_MS+WARNING_AFTER_NUDGE_MS+1000;this.abandonmentTimeoutMs=Number.isFinite(configured)&&configured>=minimum?configured:DEFAULT_ABANDONMENT_TIMEOUT_MS;}
+  constructor(options={}){super(options);this.durableState=options.durableState||null;const positive=(value,fallback)=>{const number=Number(value);return Number.isFinite(number)&&number>0?number:fallback;};this.inactivityNudgeMs=positive(options.inactivityNudgeMs,DEFAULT_INACTIVITY_NUDGE_MS);this.nudgePhaseMs=positive(options.nudgePhaseMs,DEFAULT_NUDGE_PHASE_MS);this.abandonmentCountdownMs=positive(options.abandonmentCountdownMs,DEFAULT_ABANDONMENT_COUNTDOWN_MS);}
   nowMs(){return Date.parse(this.now());}
   async load(){
     const room=await super.load();if(!room)return null;
@@ -168,7 +167,7 @@ export class RankedRoomCore extends RoomCore{
     if(!this.room||this.isSolo()||!this.isRanked()||this.room.sessionFlow.ended||this.room.terminalResult||this.room.rankFlow.pause){this.room.rankFlow.inactivity=null;return;}
     const state=this.engineState();if(!state){this.room.rankFlow.inactivity=null;return;}
     const seat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn,participant=this.room.participants.find(item=>item.seatId===seat);if(!participant||participant.bot||!participant.connected){this.room.rankFlow.inactivity=null;return;}
-    const now=this.nowMs();this.room.rankFlow.inactivity={playerId:participant.playerId,phase:'waiting',nudgeAt:now+NUDGE_MS,warningAt:now+NUDGE_MS+WARNING_AFTER_NUDGE_MS,abandonAt:now+this.abandonmentTimeoutMs,penaltyCoins:null};
+    const now=this.nowMs(),nudgeAt=now+this.inactivityNudgeMs,warningAt=nudgeAt+this.nudgePhaseMs;this.room.rankFlow.inactivity={playerId:participant.playerId,phase:'waiting',nudgeAt,warningAt,abandonAt:warningAt+this.abandonmentCountdownMs,penaltyCoins:null};
   }
   async scheduleAlarm(){
     if(!this.storage?.setAlarm||!this.room)return;const flow=this.room.rankFlow||freshRankFlow(),times=[];if(flow.pause?.until)times.push(flow.pause.until);for(const value of Object.values(flow.disconnectDeadlines||{}))if(value)times.push(value);for(const value of Object.values(flow.runtimeOrphanDeadlines||{}))if(value)times.push(value);if(flow.inactivity){if(flow.inactivity.phase==='waiting')times.push(flow.inactivity.nudgeAt);else if(flow.inactivity.phase==='nudge')times.push(flow.inactivity.warningAt);else if(flow.inactivity.phase==='warning')times.push(flow.inactivity.abandonAt);}if(times.length)await this.storage.setAlarm(Math.min(...times));else if(this.storage.deleteAlarm)await this.storage.deleteAlarm();
@@ -244,4 +243,4 @@ export class RankedRoomCore extends RoomCore{
   }
 }
 
-export {NUDGE_MS,WARNING_AFTER_NUDGE_MS,DEFAULT_ABANDONMENT_TIMEOUT_MS,ABANDON_WARNING_MS,PAUSE_MS,RECONNECT_GRACE_MS,RUNTIME_ORPHAN_GRACE_MS};
+export {DEFAULT_INACTIVITY_NUDGE_MS,DEFAULT_NUDGE_PHASE_MS,DEFAULT_ABANDONMENT_COUNTDOWN_MS,PAUSE_MS,RECONNECT_GRACE_MS,RUNTIME_ORPHAN_GRACE_MS};
