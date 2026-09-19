@@ -76,7 +76,8 @@ Session summaries include games played, opponent, total Coins won/lost/net, comp
 - After a protected first disconnect in which the opponent was ahead, the disconnected player receives a friendly informational notice the next time they enter Solo Play or Online Play. It is not shown as a main-menu interruption.
 - New accounts must acknowledge this disconnect-protection rule before registration completes.
 - If a player has not acted for 15 seconds while still connected, send a dialog/sound/vibration nudge.
-- If still inactive 15 seconds after the nudge, show the existing 30-second inactivity warning. Inactivity is distinct from the 60-second technical-disconnect recovery window.
+- If still inactive 15 seconds after the nudge, show an abandonment warning with the pending Coin penalty and remaining server countdown. Inactivity is distinct from the 60-second technical-disconnect recovery window.
+- The default connected-player abandonment timeout is **3 minutes of total inactivity**, controlled server-side by `ABANDONMENT_TIMEOUT_SECONDS` (default `180`). Dismissing the warning keeps it closed for that warning while the authoritative server countdown continues in the background.
 - Each player gets two 1-minute pause requests per game. During a pause both players see a Pause dialog, a 60-second countdown, and the requesting player's remaining pauses.
 - Pause, nudge, disconnect, warning, reconnect, quit request, and quit disposition are communicated to the opponent in real time.
 
