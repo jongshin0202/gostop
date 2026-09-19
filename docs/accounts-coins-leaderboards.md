@@ -77,7 +77,7 @@ Session summaries include games played, opponent, total Coins won/lost/net, comp
 - New accounts must acknowledge this disconnect-protection rule before registration completes.
 - If a player has not acted for 15 seconds while still connected, send a dialog/sound/vibration nudge.
 - If still inactive 15 seconds after the nudge, show an abandonment warning with the pending Coin penalty and remaining server countdown. Inactivity is distinct from the 60-second technical-disconnect recovery window.
-- The default connected-player abandonment timeout is **3 minutes of total inactivity**, controlled server-side by `ABANDONMENT_TIMEOUT_SECONDS` (default `180`). Dismissing the warning keeps it closed for that warning while the authoritative server countdown continues in the background.
+- Connected-player inactivity timing is server-configurable in three phases: after **3 minutes** of inactivity (`INACTIVITY_NUDGE_SECONDS=180`), show the first Your Turn / Waiting for Opponent dialog; keep that nudge phase active for **1 minute** (`INACTIVITY_NUDGE_PHASE_SECONDS=60`); then start a **30-second** abandonment warning countdown (`ABANDONMENT_COUNTDOWN_SECONDS=30`). If the countdown reaches zero without a valid play/reconnect/pause, apply the abandonment settlement. Dismissing either dialog keeps that dialog closed for its current phase while the authoritative server timing continues.
 - Each player gets two 1-minute pause requests per game. During a pause both players see a Pause dialog, a 60-second countdown, and the requesting player's remaining pauses.
 - Pause, nudge, disconnect, warning, reconnect, quit request, and quit disposition are communicated to the opponent in real time.
 
