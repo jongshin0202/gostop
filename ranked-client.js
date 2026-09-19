@@ -345,22 +345,57 @@
     for(const button of list.querySelectorAll('[data-account-id]'))button.addEventListener('click',()=>{if(autoMatchSearching)return;if(sendLobbyMessage({type:'challenge',accountId:button.dataset.accountId}))$('lobbyStatus').textContent=rt('requestSent');});
   }
   function handleLobbyMessage(message){
-    if(message.type==='connected'){if(message.account){account={...account,...message.account};persistAccountCache();renderAccountBox();patchGameIdentity();}return;}
-    if(message.type==='recommendations'||message.type==='searchResults'){autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;renderLobbyPresence(message.players||[],message.onlineCount);if(message.type==='searchResults'&&!autoMatchSearching)$('lobbyStatus').textContent='';return;}
+    if(message.type==='connected'){if(message.account){account={...account,...message.account};persistAccountCache();renderAccountBox();patchGameIdentity();}syncLobbyAvailability();return;}
+    if(message.type==='recommendations'){
+      autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;
+      lastLobbyPlayers=Array.isArray(message.players)?message.players:[];lastLobbyOnlineCount=Math.max(0,Number(message.onlineCount)||0);
+      if(browsePlayersActive)renderLobbyPresence(lastLobbyPlayers,lastLobbyOnlineCount);else{const count=$('onlinePlayerCount');if(count)count.textContent=rt('onlineCount',{count:lastLobbyOnlineCount});}
+      return;
+    }
+    if(message.type==='searchResults'){lobbySearchActive=true;browsePlayersActive=false;autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;renderLobbyPresence(message.players||[],message.onlineCount);if(!autoMatchSearching)$('lobbyStatus').textContent='';return;}
     if(message.type==='autoMatchWaiting'){autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent=rt('autoMatchWaiting');return;}
-    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';requestRecommendations();return;}
-    if(message.type==='autoMatchFound'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent=rt('autoMatchFound',{name:message.opponent?.nickname||rt('playerFallback')});return;}
-    if(message.type==='challengeSent'){$('lobbyStatus').textContent=rt('waitingResponse',{name:message.to?.nickname||rt('playerFallback')});return;}
-    if(message.type==='playRequest'){pendingRequest=message;const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=from.rank?`${rt('rank',{rank:from.rank})} · `:'';$('requestPlayerName').textContent=`${flagEmoji(from.countryCode)} ${rt('wantsPlay',{name})}`;$('requestPlayerStats').textContent=rt('statsLine',{rank,score:fmtScore(from.coinsPerGame??from.score),games:from.gamesPlayed||0,coins:coinText(from.walletCoins)});if(!requestDialog.open)requestDialog.showModal();return;}
+    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';if(browsePlayersActive)requestRecommendations();return;}
+    if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;syncAutoMatchControls();$('lobbyStatus').textContent=rt('waitingResponse',{name:message.to?.nickname||rt('playerFallback')});return;}
+    if(message.type==='playRequest'){
+      pendingRequest=message;const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=from.rank?`${rt('rank',{rank:from.rank})} · `:'';
+      $('requestPlayerName').textContent=`${flagEmoji(from.countryCode)} ${rt('wantsPlay',{name})}`;
+      $('requestPlayerStats').textContent=rt('statsLine',{rank,score:fmtScore(from.coinsPerGame??from.score),games:from.gamesPlayed||0,coins:coinText(from.walletCoins)});
+      $('requestAccept').disabled=false;$('requestDecline').disabled=false;
+      if(!requestDialog.open)requestDialog.showModal();return;
+    }
+    if(message.type==='challengeResolved'){if(pendingRequest?.requestId===message.requestId)pendingRequest=null;if(requestDialog.open)requestDialog.close();return;}
     if(message.type==='challengeAcceptedCreateRoom'){autoMatchSearching=false;syncAutoMatchControls();pendingChallengeCreate=message.requestId;$('lobbyStatus').textContent=rt('acceptedCreating');onlinePanel.hidden=true;createRoom?.click();return;}
-    if(message.type==='challengeAcceptedWaiting'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent=rt('acceptedWaiting');return;}
+    if(message.type==='challengeAcceptedWaiting'){autoMatchSearching=false;syncAutoMatchControls();if(pendingRequest?.requestId===message.requestId)pendingRequest=null;if(requestDialog.open)requestDialog.close();$('lobbyStatus').textContent=rt('acceptedWaiting');return;}
     if(message.type==='challengeRoomReady'){const input=$('onlineRoomCode');if(!input||!joinForm)return;input.value=message.roomCode;onlinePanel.hidden=true;joinForm.requestSubmit();return;}
     if(message.type==='challengeRoomHandoffComplete'){pendingChallengeCreate=null;onlinePanel.hidden=true;return;}
-    if(message.type==='challengeDeclined'){$('lobbyStatus').textContent=rt('declined',{name:message.by?.nickname||rt('playerFallback')});requestRecommendations();return;}
-    if(message.type==='challengeCancelled'||message.type==='challengeError'){pendingChallengeCreate=null;autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent=rankedLocale()==='en'&&message.message?message.message:rt('requestFailed');requestRecommendations();return;}
+    if(message.type==='challengeDeclined'){autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent=rt('declined',{name:message.by?.nickname||rt('playerFallback')});if(browsePlayersActive)requestRecommendations();return;}
+    if(message.type==='challengeCancelled'||message.type==='challengeError'){
+      if(pendingRequest?.requestId===message.requestId)pendingRequest=null;if(requestDialog.open&&(!message.requestId||requestDialog.open))requestDialog.close();
+      pendingChallengeCreate=null;autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent=rankedLocale()==='en'&&message.message?message.message:rt('requestFailed');if(browsePlayersActive)requestRecommendations();return;
+    }
   }
-  $('requestAccept').addEventListener('click',()=>{if(pendingRequest)sendLobbyMessage({type:'challengeResponse',requestId:pendingRequest.requestId,accept:true});pendingRequest=null;requestDialog.close();});$('requestDecline').addEventListener('click',()=>{if(pendingRequest)sendLobbyMessage({type:'challengeResponse',requestId:pendingRequest.requestId,accept:false});pendingRequest=null;requestDialog.close();});
-  $('onlineNicknameSearchBtn').addEventListener('click',()=>{const query=$('onlineNicknameSearch').value.trim();$('lobbyStatus').textContent=rt('searchingOnline');sendLobbyMessage(query?{type:'search',query}:{type:'recommendations'},'lobbyConnecting');});$('onlineNicknameSearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineNicknameSearchBtn').click();}});
+  async function prepareToAcceptMultiplayerChallenge(){
+    if(account?.activeRanked?.mode==='online')return false;
+    if(account?.activeRanked?.mode==='solo'){
+      const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
+      captureAccountPayload(data);renderAccountBox();patchGameIdentity();
+    }
+    const prepared=globalThis.GoStopGameBridge?.prepareForMultiplayerChallenge?.();
+    return prepared!==false;
+  }
+  $('requestAccept').addEventListener('click',async()=>{
+    const request=pendingRequest;if(!request)return;
+    const yes=$('requestAccept'),no=$('requestDecline');yes.disabled=true;no.disabled=true;
+    try{
+      if(!(await prepareToAcceptMultiplayerChallenge())){sendLobbyMessage({type:'challengeResponse',requestId:request.requestId,accept:false});pendingRequest=null;requestDialog.close();return;}
+      pendingRequest=null;requestDialog.close();sendLobbyMessage({type:'challengeResponse',requestId:request.requestId,accept:true});
+    }catch(error){yes.disabled=false;no.disabled=false;$('requestPlayerStats').textContent=localizedError(error);}
+  });
+  $('requestDecline').addEventListener('click',()=>{if(pendingRequest)sendLobbyMessage({type:'challengeResponse',requestId:pendingRequest.requestId,accept:false});pendingRequest=null;requestDialog.close();});
+  $('browsePlayersBtn').addEventListener('click',()=>{
+    browsePlayersActive=true;lobbySearchActive=false;$('onlineNicknameSearch').value='';$('recommendedPlayers').hidden=false;$('lobbyStatus').textContent='';sendLobbyMessage({type:'recommendations'});
+  });
+  $('onlineNicknameSearchBtn').addEventListener('click',()=>{const query=$('onlineNicknameSearch').value.trim();browsePlayersActive=!query;lobbySearchActive=!!query;$('recommendedPlayers').hidden=false;$('lobbyStatus').textContent=query?rt('searchingOnline'):'';sendLobbyMessage(query?{type:'search',query}:{type:'recommendations'},'lobbyConnecting');});$('onlineNicknameSearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineNicknameSearchBtn').click();}});
   $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent=rt('autoMatchWaiting');sendLobbyMessage({type:'autoMatchStart'});});
   $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
   $('onlineInviteEmailBtn').addEventListener('click',()=>{const email=$('onlineInviteEmail').value.trim();$('lobbyStatus').textContent=email?rt('emailProvider'):rt('enterEmail');});
@@ -399,7 +434,7 @@
   globalThis.addEventListener('gostop-online-message',event=>{const message=event.detail||{};if(message.type==='opponentConnected')showToast(rt('opponentReconnected'),3000);if(message.type==='sessionTakenOver')showToast('This Coin game was opened on another device. Reload or reopen the same Coin mode here to take control back.',8000);});
 
   globalThis.addEventListener('gostop-player-activity',event=>{playerTwoPlayerActive=!!event.detail?.twoPlayer;syncLobbyAvailability();});
-  function revealCurrentMainMenu(){playerActivityActive=false;setSoloLaunchCover(false);overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
+  function revealCurrentMainMenu(){playerTwoPlayerActive=false;setSoloLaunchCover(false);overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
   const roomParam=new URL(location.href).searchParams.get('room'),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   if(validRoomParam){const launch=()=>launchRankedRoom(roomParam.toUpperCase());if(account)setTimeout(launch,0);else setTimeout(()=>requireAccount(launch,()=>revealCurrentMainMenu()),0);}
 
