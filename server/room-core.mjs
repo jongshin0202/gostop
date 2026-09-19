@@ -91,8 +91,18 @@ export class RoomCore{
         return {...this.publicRoom(),playerId:returning.playerId,seatId:returning.seatId,credential:presentedCredential,profile:this.participantProfile(returning)};
       }
     }
+    if(account?.id){
+      const returningByAccount=this.room.participants.find(item=>item.accountId===account.id);
+      if(returningByAccount){
+        const credential=token(this.crypto),hash=await tokenHash(this.crypto,credential);
+        returningByAccount.credentialHashes=[...(returningByAccount.credentialHashes||[]),hash].slice(-8);
+        returningByAccount.nickname=account.nickname||returningByAccount.nickname;
+        if(Number.isFinite(account.walletCoins))returningByAccount.walletCoins=account.walletCoins;
+        await this.persist();
+        return {...this.publicRoom(),playerId:returningByAccount.playerId,seatId:returningByAccount.seatId,credential,profile:this.participantProfile(returningByAccount),resumedByAccount:true};
+      }
+    }
     if(this.room.participants.length>=this.room.maxPlayers)throw new RoomError('ROOM_FULL','Room is full.',409);
-    if(account?.id&&this.room.participants.some(item=>item.accountId===account.id))throw new RoomError('SAME_ACCOUNT','The same account cannot occupy both seats.',409);
     const credential=token(this.crypto),participant={playerId:randomId(this.crypto,'player'),seatId:'playerB',credentialHash:await tokenHash(this.crypto,credential),accountId:account?.id||null,nickname:account?.nickname||null,walletCoins:Number.isFinite(account?.walletCoins)?account.walletCoins:null,connected:false};this.room.participants.push(participant);
     this.room.matchId=randomId(this.crypto,'match');this.room.gameSequence=1;this.room.currentGameStartRevision=0;this.authority.createMatch({matchId:this.room.matchId,playerIds:this.room.participants.map(item=>item.playerId),gameMode:'online-2player'});this.room.status='ready';this.room.updatedAt=this.now();if(this.isRanked())await this.startRankedSession();await this.persist();
     for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('roomReady',{...this.publicRoom()}));this.broadcastSnapshots();
@@ -100,7 +110,7 @@ export class RoomCore{
   }
   async authenticate(credential){
     if(typeof credential!=='string'||credential.length<40)return null;await this.load();if(!this.room)return null;
-    const hash=await tokenHash(this.crypto,credential);return this.room.participants.find(participant=>safeEqual(participant.credentialHash,hash))||null;
+    const hash=await tokenHash(this.crypto,credential);return this.room.participants.find(participant=>[participant.credentialHash,...(participant.credentialHashes||[])].filter(Boolean).some(saved=>safeEqual(saved,hash)))||null;
   }
   async connect(credential,socket){
     const participant=await this.authenticate(credential);if(!participant)throw new RoomError('INVALID_CREDENTIAL','Room credential is invalid.',401);
