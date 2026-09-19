@@ -91,7 +91,10 @@ export class RankedRoomCore extends RoomCore{
     const participant=await super.connect(credential,socket);await this.load();
     if(this.room.rankFlow.disconnectDeadlines[participant.playerId])delete this.room.rankFlow.disconnectDeadlines[participant.playerId];
     if(this.room.rankFlow.disconnectSettlements?.[participant.playerId])delete this.room.rankFlow.disconnectSettlements[participant.playerId];
-    this.room.rankFlow.disconnectCancelled=false;if(this.isSolo())await this.advanceBot();else await this.refreshInactivity();await this.scheduleAlarm();await this.persist();this.broadcastSnapshots();return participant;
+    this.room.rankFlow.disconnectCancelled=false;
+    if(!this.room.matchId){await this.persist();return participant;}
+    if(this.isSolo())await this.advanceBot();else await this.refreshInactivity();
+    await this.scheduleAlarm();await this.persist();this.broadcastSnapshots();return participant;
   }
   async disconnect(socket){
     const playerId=socket.__playerId;await super.disconnect(socket);if(!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return;

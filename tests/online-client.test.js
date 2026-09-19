@@ -126,3 +126,27 @@ test('anonymous Free Gaming rooms never send a ranked account token',async()=>{
     if(oldRanked===undefined)delete globalThis.GoStopRanked;else globalThis.GoStopRanked=oldRanked;
   }
 });
+
+
+test('room creator adapter connects with the exact credential returned by create',async()=>{
+  const oldFetch=globalThis.fetch;
+  class FakeSocket{
+    static OPEN=1;
+    static instances=[];
+    constructor(url,protocol){this.url=String(url);this.protocol=protocol;this.readyState=1;FakeSocket.instances.push(this);}
+    send(){}
+    close(){}
+  }
+  const room={roomCode:'ABCDEFGHJK2345',credential:'room_'+('c'.repeat(64))};
+  globalThis.fetch=async()=>({ok:true,json:async()=>({room})});
+  try{
+    const client=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:FakeSocket,anonymous:true});
+    const created=await client.create();
+    assert.equal(created.credential,room.credential);
+    client.connect();
+    const socket=FakeSocket.instances.at(-1);
+    assert.equal(socket.url,'wss://example.test/api/rooms/ABCDEFGHJK2345/ws');
+    assert.equal(socket.protocol,`gostop-token.${room.credential}`);
+    assert.equal(client.room,created);
+  }finally{globalThis.fetch=oldFetch;}
+});

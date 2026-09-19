@@ -141,3 +141,19 @@ test('clean seven-point Solo Stop settles and records exactly seven with no hidd
   assert.deepEqual(call.body.formulaSteps,['Base 7','Final 7']);
   assert.equal(call.body.sessionId,core.room.sessionId);
 });
+
+
+test('anonymous Free Gaming host stays connected while waiting for the second player',async()=>{
+  const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});
+  const host=await core.create('FREEGAMEABC2345',null),socket=new Socket();
+  assert.equal(core.isRanked(),false);
+  assert.equal(host.ranked,false);
+  assert.equal(core.room.status,'waiting');
+  await core.connect(host.credential,socket);
+  const connected=socket.last('connected');
+  assert.ok(connected);
+  assert.equal(connected.roomCode,'FREEGAMEABC2345');
+  assert.equal(connected.playerId,host.playerId);
+  assert.equal(core.room.participants[0].connected,true);
+  assert.equal(socket.last('snapshot'),undefined);
+});
