@@ -421,7 +421,7 @@
     }
   }
   async function prepareToAcceptMultiplayerChallenge(){
-    const liveRankedMode=currentSnapshot?.sessionFlow?.rankedMode||globalThis.goStopOnlineSession?.room?.rankedMode||account?.activeRanked?.mode||null;
+    const liveRankedMode=globalThis.goStopOnlineSession?.room?.rankedMode||account?.activeRanked?.mode||null;
     if(liveRankedMode==='online')return false;
     if(liveRankedMode==='solo'||account?.activeRanked?.mode==='solo'){
       const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
