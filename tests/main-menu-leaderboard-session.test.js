@@ -17,7 +17,8 @@ test('saved authenticated sessions restore automatically and transient refresh f
   assert.match(refresh,/if\(error\?\.status===401\|\|error\?\.code==='AUTH_REQUIRED'\)clearSession\(\)/);
   assert.doesNotMatch(refresh,/catch\(_\)\{clearSession\(\)/);
   const requireBlock=source.slice(source.indexOf('async function requireAccount'),source.indexOf('rankedSolo.addEventListener'));
-  assert.match(requireBlock,/if\(account\|\|authToken\)\{next\(\);return;\}/);
+  assert.match(requireBlock,/if\(account\)\{next\(\);return;\}/);
+  assert.match(requireBlock,/else onCancel\(\)/);
   assert.match(source,/authRestorePromise=refreshAccount\(\)/);
 });
 
@@ -111,7 +112,8 @@ test('pending daily bonus preserves pre-bonus Wallet on the menu then syncs auth
   assert.match(display,/notice\.walletBefore/);
   assert.match(display,/Math\.max\(0,current-coins\)/);
   const daily=source.slice(source.indexOf("if(accountNoticeDialog.dataset.dailyLaunch==='1')"),source.indexOf("$('loginForm').addEventListener"));
-  assert.match(daily,/await acknowledgeAccountNotice\(id\);await refreshAccount\(\)/);
+  assert.match(daily,/await acknowledgeAccountNotice\(id\);accountNoticeDialog\.close\(\)/);
+  assert.doesNotMatch(daily,/await refreshAccount\(\)/);
   assert.match(daily,/renderAccountBox\(\);patchGameIdentity\(\);if\(next\)next\(\)/);
   const launch=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("onlinePlay.addEventListener"));
   assert.match(launch,/captureAccountPayload\(data\);renderAccountBox\(\);patchGameIdentity\(\)/);
