@@ -39,7 +39,7 @@ export class Lobby{
     return {online:true,challengeable:!!available&&!this.pendingChallengeFor(accountId),status:mode==='training'?'training':mode==='free-solo'?'free-solo':mode==='competitive-solo'?'competitive-solo':'available',mode};
   }
   profile(client,rows){const row=rows.get(String(client.account.nickname||'').toLowerCase())||{},gamesPlayed=finite(row.gamesPlayed),wins=finite(row.wins),totalCoinsEarned=finite(row.totalCoins),rate=Number.isFinite(Number(row.score))?Number(row.score):(gamesPlayed?totalCoinsEarned/gamesPlayed:0),presence=this.presenceForAccount(client.account.id);return {accountId:client.account.id,nickname:client.account.nickname,score:rate,coinsPerGame:rate,totalCoinsEarned,gamesPlayed,wins,losses:Number.isFinite(Number(row.losses))?Math.max(0,Number(row.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(client.account.walletCoins),rank:Number(row.rank)||null,provisional:!!row.provisional,countryCode:client.account.countryCode||row.countryCode||null,regionCode:client.account.regionCode||row.regionCode||null,...presence};}
-  candidateClients(client){const unique=new Map();for(const candidate of this.clients.values()){const id=candidate.account.id;if(candidate===client||id===client.account.id||candidate.available===false||candidate.twoPlayer||this.accountTwoPlayerBusy(id)||this.pendingChallengeFor(id))continue;if(!unique.has(id))unique.set(id,candidate);}return [...unique.values()];}
+  candidateClients(client){const unique=new Map();for(const candidate of this.clients.values()){const id=candidate.account.id;if(candidate===client||id===client.account.id||candidate.available===false||candidate.twoPlayer||this.accountTwoPlayerBusy(id)||this.activeChallengeFor(id))continue;if(!unique.has(id))unique.set(id,candidate);}return [...unique.values()];}
   rankedProfiles(client,rows,candidates=this.candidateClients(client)){const me=this.profile(client,rows);return candidates.map(candidate=>{const profile=this.profile(candidate,rows);return {...profile,similarity:similarityPercent(me,profile)};}).sort((a,b)=>distance(me,a)-distance(me,b)||b.gamesPlayed-a.gamesPlayed||a.nickname.localeCompare(b.nickname));}
   async recommendations(client,rows=null){rows=rows||await this.leaderboardRows();return this.rankedProfiles(client,rows).slice(0,MAX_LOBBY_RESULTS);}
   async search(client,query,rows=null){
@@ -52,7 +52,7 @@ export class Lobby{
   async broadcastRecommendations(){const rows=await this.leaderboardRows();for(const client of this.clients.values()){if(client.available===false||client.twoPlayer)continue;const query=String(client.searchQuery||'').trim();this.send(client.socket,{type:query?'searchResults':'recommendations',query,players:query?await this.search(client,query,rows):await this.recommendations(client,rows),onlineCount:this.candidateClients(client).length,autoMatching:!!client.autoMatching});}}
   challengeParticipantsAvailable(challenge){return this.accountAvailable(challenge.from)&&this.accountAvailable(challenge.to);}
   startChallenge(creator,target,rows,{automatic=false}={}){
-    if(!creator||!target||creator.account.id===target.account.id||!this.accountAvailable(creator.account.id)||!this.accountAvailable(target.account.id)||this.pendingChallengeFor(creator.account.id)||this.pendingChallengeFor(target.account.id))return null;
+    if(!creator||!target||creator.account.id===target.account.id||!this.accountAvailable(creator.account.id)||!this.accountAvailable(target.account.id)||this.activeChallengeFor(creator.account.id)||this.activeChallengeFor(target.account.id))return null;
     const now=Date.now(),id=randomId(this.crypto,'challenge'),challenge={id,from:creator.account.id,to:target.account.id,status:'pending',automatic,createdAt:now,expiresAt:now+CHALLENGE_TTL_MS};this.challenges.set(id,challenge);creator.autoMatching=!!automatic;
     const fromProfile=this.profile(creator,rows),toProfile=this.profile(target,rows);
     this.sendToAccount(target.account.id,{type:'playRequest',requestId:id,automatic,expiresInSeconds:60,from:fromProfile});
@@ -61,7 +61,7 @@ export class Lobby{
   }
   releaseChallenge(challenge){if(!challenge)return;for(const client of this.clientsForAccount(challenge.from))client.autoMatching=false;for(const client of this.clientsForAccount(challenge.to))client.autoMatching=false;}
   async tryAutoMatch(client){
-    if(client.available===false||client.twoPlayer||this.pendingChallengeFor(client.account.id))return false;
+    if(client.available===false||client.twoPlayer||this.activeChallengeFor(client.account.id))return false;
     const rows=await this.leaderboardRows(),candidates=this.candidateClients(client);
     if(!candidates.length){client.autoMatching=true;this.send(client.socket,{type:'autoMatchWaiting'});return false;}
     const me=this.profile(client,rows),partner=candidates.map(candidate=>({candidate,profile:this.profile(candidate,rows)})).sort((a,b)=>distance(me,a.profile)-distance(me,b.profile)||b.profile.gamesPlayed-a.gamesPlayed||a.profile.nickname.localeCompare(b.profile.nickname))[0].candidate;
@@ -72,7 +72,7 @@ export class Lobby{
     const seen=new Set();
     for(const client of this.clients.values()){
       if(seen.has(client.account.id))continue;seen.add(client.account.id);
-      if(!client.autoMatching||client.available===false||client.twoPlayer||this.pendingChallengeFor(client.account.id))continue;
+      if(!client.autoMatching||client.available===false||client.twoPlayer||this.activeChallengeFor(client.account.id))continue;
       if(await this.tryAutoMatch(client))break;
     }
   }
