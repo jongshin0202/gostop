@@ -1411,7 +1411,8 @@
     presentation.locked=false; render(); scheduleTurnStart();
   }
 
-  function presentChongtong(event){
+  function presentChongtong(event,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     // Preserve the established Solo presentation: only the local-player branch
     // played the Chongtong fanfare before authority extraction.
     if(event.actorId===PLAYER_A)playChongtongFanfare(); presentation.locked=true;
@@ -1421,10 +1422,11 @@
     recordTerminalResult(terminal);
     if(els.resultCards&&typeof els.resultCards.replaceChildren==='function'){els.resultCards.replaceChildren();event.cardIds?.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.resultCards.appendChild(createCardEl(card,'card')));}
     setGrandResult(t('conquer'),playerWon?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${reason}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
-    showGameplayModal(els.resultDialog); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
-  async function presentShakeDeclaration(events){
+  async function presentShakeDeclaration(events,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const event=events.find(item=>item.type==='shakeDeclared');
     if(!event)return;
     playShakeSound(); render();
@@ -1433,11 +1435,11 @@
       els.shakeRevealTitle.textContent=onlineMode?t('opponentShakes'):t('computerShakes');
       els.shakeRevealText.textContent=t(onlineMode?'opponentShakeAck':'shakeAck');
       els.shakeRevealCards.innerHTML=''; cards.forEach(card=>els.shakeRevealCards.appendChild(createCardEl(card,'card magnified-card')));
-      if(!showGameplayModal(els.shakeRevealDialog))return;
+      if(!showGameplayModal(els.shakeRevealDialog,epoch))return;
       await new Promise(resolve=>els.shakeRevealDialog.addEventListener('close',resolve,{once:true}));
       return;
     }
-    await showSpecialTransient(t('shake'),event.cardIds);
+    await showSpecialTransient(t('shake'),event.cardIds,'',epoch);
   }
 
   function openShakeReview(playerId){
@@ -1825,20 +1827,22 @@
     try{await animation.finished;}catch(_){ }finally{broom.remove();}
   }
 
-  async function showSpecialTransient(title,cardIds=[],effect=''){
-    if(!els.milestoneOverlay)return;
+  async function showSpecialTransient(title,cardIds=[],effect='',epoch=gameplayPresentationEpoch){
+    if(!els.milestoneOverlay||!isGameplayPresentationCurrent(epoch))return;
     const titleKeys={'POOPED!':'pooped','KISS!':'kiss','FLUSH!':'tapTap','CLEAN SWEEP!':'cleanSweep','5-BIRDIES!':'birdies','3-STRIPES!':'threeStripes','5-BRIGHTS!':'fiveBrights'};
     title=t(titleKeys[title]||title);
     els.milestoneTitle.textContent=title;els.milestoneCards.innerHTML='';els.milestoneBirds.innerHTML='';els.milestoneOverlay.dataset.effect=effect;
     cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
     els.milestoneOverlay.classList.add('show');els.milestoneOverlay.setAttribute('aria-hidden','false');const effectDone=effect==='sweep'?animateSweepBroom():Promise.resolve();await Promise.all([sleep(2000),effectDone]);els.milestoneOverlay.classList.remove('show');els.milestoneOverlay.setAttribute('aria-hidden','true');
+    if(!isGameplayPresentationCurrent(epoch))return;
   }
-  async function presentSemanticEvents(events){
+  async function presentSemanticEvents(events,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     for(const event of events){
-      if(event.type==='sweepTriggered'){playSweepSound();await showSpecialTransient('CLEAN SWEEP!',event.cardIds||[],'sweep');}
+      if(event.type==='sweepTriggered'){playSweepSound();await showSpecialTransient('CLEAN SWEEP!',event.cardIds||[],'sweep',epoch);if(!isGameplayPresentationCurrent(epoch))return;}
     }
   }
-  async function presentKiss(cardIds){playKissSound();await showSpecialTransient('KISS!',cardIds,'kiss');}
+  async function presentKiss(cardIds,epoch=gameplayPresentationEpoch){if(!isGameplayPresentationCurrent(epoch))return;playKissSound();await showSpecialTransient('KISS!',cardIds,'kiss',epoch);}
 
   function detectNewMilestones(playerId){
     const player=playerStateById(state,playerId),history=presentation.milestoneHistory[playerId],found=[];
@@ -1854,7 +1858,8 @@
     if(brights.length>=5)add('five-brights','fiveBrights',brights.slice(0,5));
     return found;
   }
-  async function presentNewMilestones(playerId){
+  async function presentNewMilestones(playerId,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     for(const milestone of detectNewMilestones(playerId)){
       els.milestoneTitle.textContent=t(milestone.titleKey); els.milestoneCards.innerHTML=''; els.milestoneBirds.innerHTML=''; els.milestoneOverlay.dataset.effect='';
       milestone.cardIds.map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>els.milestoneCards.appendChild(createCardEl(card,'card')));
@@ -1864,17 +1869,20 @@
       await sleep(2000);
       els.milestoneOverlay.classList.remove('show'); els.milestoneOverlay.setAttribute('aria-hidden','true');
       await sleep(120);
+      if(!isGameplayPresentationCurrent(epoch))return;
     }
   }
 
-  async function presentOnlineGoStopDecision(decision){
+  async function presentOnlineGoStopDecision(decision,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     presentation.locked=true;render();
-    await presentNewMilestones(decision.playerId);
+    await presentNewMilestones(decision.playerId,epoch);
+    if(!isGameplayPresentationCurrent(epoch))return;
     const side=legacySideForPlayerId(decision.playerId),player=state[side],preview=calculateFinalScore(side);
     els.decisionText.textContent=`You have ${decision.score} points.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=player.go===0?t('go'):`${player.go+1} ${t('go')}`;
-    showGameplayModal(els.decisionDialog);
+    showGameplayModal(els.decisionDialog,epoch);
   }
 
 
@@ -1975,15 +1983,17 @@
     return parts.join('  →  ');
   }
 
-  async function humanGoStop(sc){
+  async function humanGoStop(sc,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const preview=calculateFinalScore('human');
     els.decisionText.textContent=`${t('currentGo',{count:state.human.go})}. ${formatScoreFormula(preview)}.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
-    showGameplayDialog(els.decisionDialog);
+    showGameplayDialog(els.decisionDialog,epoch);
   }
 
-  function presentStopResult(result){
+  function presentStopResult(result,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const ended=result.events.find(event=>event.type==='handEnded');
     if(!ended)return;
     const side=legacySideForPlayerId(ended.winnerId);
@@ -1991,20 +2001,22 @@
     presentation.locked=true; hideActionCue();
     setGrandResult(`${t('stop')}!`,side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${ended.settlement.total} ${t('points')}`,formatScoreFormula(ended.settlement),'stop');
     if(side==='human')playChongtongFanfare();else playSadResultSound();
-    showGameplayModal(els.resultDialog); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
-  async function finishNagari(){
+  async function finishNagari(epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     if(state.winner)return;
     const result=TEST_MODE?resolveNagari(state,{actorId:state.turn}):submitSoloAction({type:'resolveNagari',actorId:state.turn}); state=result.state;
     const event=result.events.find(item=>item.type==='nagariDeclared');
     recordTerminalResult(state.terminalResult);
     presentation.locked=true;
     setGrandResult(t('noWinner'),'',`${t('points')} ×${event.nextHandMultiplier}`,t('noWinnerHelp'),'special');
-    showGameplayModal(els.resultDialog); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
-  function presentThreePpeok(result){
+  function presentThreePpeok(result,epoch=gameplayPresentationEpoch){
+    if(!isGameplayPresentationCurrent(epoch))return;
     const event=result.events.find(item=>item.type==='threePpeokDeclared');
     if(!event)return;
     const terminal=state.terminalResult;
@@ -2012,7 +2024,7 @@
     recordTerminalResult(terminal);
     presentation.locked=true;
     setGrandResult(t('triplePoop'),side==='human'?t('playerWins'):(onlineMode?t('opponentWins'):t('computerWins')),`${terminal.finalPoints} ${t('points')}`,`${t('triplePoop')}${terminal.nagariCarryPower?` · ${t('noWinnerCarry')} ×${terminal.multiplier}`:''}`,'special');
-    showGameplayModal(els.resultDialog); render();
+    showGameplayModal(els.resultDialog,epoch); render();
   }
 
   function finishByScore(){ finishNagari(); }
