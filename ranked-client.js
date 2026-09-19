@@ -264,10 +264,10 @@
     if(lobbySocket?.readyState===WebSocket.OPEN){lobbySend({type:'setAvailability',available:true});requestRecommendations();}
   }));
   $('onlineLobbyClose').addEventListener('click',()=>{
-    pendingLobbyMessage=null;autoMatchSearching=false;syncAutoMatchControls();
-    if(lobbySocket?.readyState===WebSocket.OPEN){lobbySend({type:'autoMatchCancel'});lobbySend({type:'setAvailability',available:false});}
-    onlinePanel.hidden=true;$('lobbyStatus').textContent='';clearRankedEntryPending();resetAttractTimer();
+    closeLobby();onlinePanel.hidden=true;$('lobbyStatus').textContent='';clearRankedEntryPending();resetAttractTimer();
   });
+  createRoom?.addEventListener('click',()=>{if(!onlinePanel.hidden&&lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',available:false});},{capture:true});
+  joinForm?.addEventListener('submit',()=>{if(!onlinePanel.hidden&&lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',available:false});},{capture:true});
   freeFriendBtn.addEventListener('click',()=>{stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=false;});
   $('freeFriendClose').addEventListener('click',()=>{freePanel.hidden=true;$('freeOnlineStatus').textContent='';resetAttractTimer();});
   $('freeCreateRoomBtn').addEventListener('click',()=>{stopAttractForGameLaunch();$('freeOnlineStatus').textContent='…';globalThis.dispatchEvent(new CustomEvent('gostop-free-online-create'));});
