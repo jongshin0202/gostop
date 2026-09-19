@@ -65,6 +65,67 @@ function filteredGames(all,url){
 }
 function gameSummary(game){return {gameId:game.gameId,type:gameKind(game),mode:game.mode||'unknown',recordedAt:game.recordedAt||null,sessionId:game.sessionId||null,winnerPlayerId:game.winnerPlayerId||null,finalPoints:Number(game.finalPoints??game.fairPoints)||0,settlementType:game.settlementType||null,settlementReasons:clone(game.settlementReasons||[]),formulaSteps:clone(game.formulaSteps||[]),reason:game.reason||null,penaltyCoins:Number(game.penaltyCoins)||0,opponentRewardCoins:Number(game.opponentRewardCoins)||0,firstOfMonth:!!game.firstOfMonth,participants:clone(game.participants||[]),computer:clone(game.computer||null),account:clone(game.account||null),opponent:clone(game.opponent||null),accountIds:gameAccountIds(game),hasHistory:!!game.history,adminCorrections:clone(game.adminCorrections||[]),adminConnections:clone(game.adminConnections||null),adminLocations:clone(game.adminLocations||null)};}
 
+const SESSION_MILESTONES=['5_BRIGHTS','5_BIRDIES','3_STRIPES','SHAKE','THREE_GO','FLUSH','CLEAN_SWEEP','KISS','POOPED','FIRST_POOP','BOMB','CONQUER','THREE_PPEOK'];
+function milestoneFromHistoryEvent(event){
+  if(event?.type==='shakeDeclared')return 'SHAKE';
+  if(event?.type==='bombDeclared')return 'BOMB';
+  if(event?.type==='ppeokFormed')return 'POOPED';
+  if(event?.type==='firstPpeokAwarded')return 'FIRST_POOP';
+  if(event?.type==='sweepTriggered')return 'CLEAN_SWEEP';
+  if(event?.type==='chongtongDeclared')return 'CONQUER';
+  if(event?.type==='threePpeokDeclared')return 'THREE_PPEOK';
+  if(event?.type==='goDeclared'&&Number(event.goCount)===3)return 'THREE_GO';
+  if(event?.type==='cardsCaptured'&&event.rule==='jjok')return 'KISS';
+  if(event?.type==='cardsCaptured'&&event.rule==='ttadak')return 'FLUSH';
+  return null;
+}
+function historyMilestones(game,playerId){
+  const history=game?.history;if(!history||!playerId)return {};
+  const seat=history.seatByPlayer?.[playerId]||playerId,bucket={};
+  for(const event of history.events||[]){if(event?.actorId!==seat&&event?.playerId!==seat&&event?.actorId!==playerId)continue;const name=milestoneFromHistoryEvent(event);if(name)bucket[name]=(bucket[name]||0)+1;}
+  const side=seat==='playerA'?'human':seat==='playerB'?'ai':null,captured=side?history.finalState?.[side]?.captured||[]:[];
+  if(captured.length){
+    if([2,4,8].every(month=>captured.some(card=>card.month===month&&card.flags?.includes('godori'))))bucket['5_BIRDIES']=Math.max(1,bucket['5_BIRDIES']||0);
+    let stripeSets=0;for(const [set,months] of Object.entries({red:[1,2,3],blue:[6,9,10],grass:[4,5,7]}))if(months.every(month=>captured.some(card=>card.month===month&&card.ribbonSet===set)))stripeSets++;
+    if(stripeSets)bucket['3_STRIPES']=Math.max(stripeSets,bucket['3_STRIPES']||0);
+    if(captured.filter(card=>card.type==='bright').length>=5)bucket['5_BRIGHTS']=Math.max(1,bucket['5_BRIGHTS']||0);
+  }
+  return bucket;
+}
+function mergedMilestones(primary={},fallback={}){
+  const result={...clone(fallback||{}),...clone(primary||{})};for(const key of SESSION_MILESTONES)if(!Number.isFinite(Number(result[key])))result[key]=0;return result;
+}
+function normalizedGamePlayers(game,session=null){
+  const result=[],historyIds=Object.keys(game?.history?.seatByPlayer||{});
+  if(gameKind(game)==='completed'){
+    for(const item of game.participants||[]){
+      result.push({key:item.accountId||item.playerId,accountId:item.accountId||null,playerId:item.playerId||null,nickname:item.nickname||item.accountId||'Player',won:!!item.won,points:Number(item.points)||0,rawScore:Number(item.rawScore)||0,walletDelta:Number(item.walletDelta)||0,coinsWon:Math.max(0,Number(item.coinsWon)||0),milestones:mergedMilestones(item.milestones,historyMilestones(game,item.playerId))});
+    }
+    if(game.mode==='solo'){
+      const human=result[0]||null,computer=game.computer||{},computerPlayerId=computer.playerId||historyIds.find(id=>id!==human?.playerId)||null,won=typeof computer.won==='boolean'?computer.won:!!game.winnerPlayerId&&game.winnerPlayerId===computerPlayerId||!!human&&!human.won&&!!game.winnerPlayerId;
+      const finalPoints=Number(game.finalPoints)||0,level=Number(computer.level||session?.opponent?.level)||1;
+      result.push({key:'computer',accountId:null,playerId:computerPlayerId,nickname:computer.nickname||('Computer #'+level),won,points:Number(computer.points)||0,rawScore:Number(computer.rawScore)||0,walletDelta:Number.isFinite(Number(computer.walletDelta))?Number(computer.walletDelta):(won?finalPoints:human?.won?-finalPoints:0),coinsWon:Number.isFinite(Number(computer.coinsWon))?Math.max(0,Number(computer.coinsWon)):(won?finalPoints:0),milestones:mergedMilestones(computer.milestones,historyMilestones(game,computerPlayerId))});
+    }
+    return result;
+  }
+  const quitterId=game.accountId||game.account?.id||null,opponentId=game.opponentAccountId||game.opponent?.id||null,historyQuitterId=historyIds.find(id=>id===game.account?.playerId)||historyIds[0]||null,historyOpponentId=historyIds.find(id=>id!==historyQuitterId)||null,nagari=game.settlementType==='nagari';
+  result.push({key:quitterId||historyQuitterId||'quitter',accountId:quitterId,playerId:historyQuitterId,nickname:game.account?.nickname||'Player',won:false,points:Number(game.quitterScore)||0,rawScore:Number(game.quitterScore)||0,walletDelta:-Math.max(0,Number(game.penaltyCoins)||0),coinsWon:0,milestones:mergedMilestones(game.quitterMilestones,historyMilestones(game,historyQuitterId))});
+  const solo=game.mode==='solo',level=Number(session?.opponent?.level)||1;
+  result.push({key:solo?'computer':opponentId||historyOpponentId||'opponent',accountId:solo?null:opponentId,playerId:historyOpponentId,nickname:solo?'Computer #'+level:(game.opponent?.nickname||'Opponent'),won:!nagari,points:Number(game.opponentScore)||0,rawScore:Number(game.opponentScore)||0,walletDelta:nagari?0:Math.max(0,Number(game.opponentRewardCoins)||0),coinsWon:nagari?0:Math.max(0,Number(game.opponentRewardCoins)||0),milestones:mergedMilestones(game.opponentMilestones,historyMilestones(game,historyOpponentId))});
+  return result;
+}
+function blankSessionPlayer(key,{accountId=null,nickname='Player'}={}){return {key,accountId,nickname,gamesPlayed:0,wins:0,losses:0,points:0,coinsWon:0,coinsLost:0,netCoins:0,milestones:Object.fromEntries(SESSION_MILESTONES.map(name=>[name,0]))};}
+function sessionGameDetail(game,session){return {...gameSummary(game),players:normalizedGamePlayers(game,session)};}
+function enrichSession(session,sessionGames,accountMap){
+  const players=new Map();
+  for(const accountId of session.accountIds||[]){const account=accountMap.get(accountId);players.set(accountId,blankSessionPlayer(accountId,{accountId,nickname:account?.nickname||accountId}));}
+  if(session.mode==='solo'){const level=Number(session.opponent?.level)||1;players.set('computer',blankSessionPlayer('computer',{nickname:'Computer #'+level}));}
+  const detailedGames=sessionGames.map(game=>sessionGameDetail(game,session));
+  for(const game of detailedGames)for(const item of game.players||[]){const key=item.key||item.accountId||item.playerId||item.nickname;if(!players.has(key))players.set(key,blankSessionPlayer(key,{accountId:item.accountId||null,nickname:item.nickname||key}));const row=players.get(key);row.nickname=item.nickname||row.nickname;row.gamesPlayed++;if(item.won)row.wins++;else row.losses++;row.points+=Number(item.points)||0;row.coinsWon+=Math.max(0,Number(item.coinsWon)||0);const delta=Number(item.walletDelta)||0;if(delta<0)row.coinsLost+=Math.abs(delta);row.netCoins+=delta;for(const [name,count] of Object.entries(item.milestones||{}))row.milestones[name]=(row.milestones[name]||0)+(Number(count)||0);}
+  return {id:session.id,mode:session.mode||'unknown',roomCode:session.roomCode||null,matchId:session.matchId||null,status:session.endedAt?'ended':'active',startedAt:session.startedAt||null,endedAt:session.endedAt||null,durationMs:session.endedAt&&session.startedAt?Math.max(0,Date.parse(session.endedAt)-Date.parse(session.startedAt)):null,gamesPlayed:detailedGames.length,players:[...players.values()],storedSummary:clone(session.summary||null),games:detailedGames};
+}
+
+
 async function overview(store,url){
   const allAccounts=await accounts(store),allGames=filteredGames(await games(store),url),sessions=await values(store,'gameSession:'),ledgers=await values(store,'ledger:');
   const {from,to}=queryRange(url),newAccounts=allAccounts.filter(item=>inRange({recordedAt:item.createdAt},from,to)),rangeLedger=ledgers.filter(item=>inRange(item,from,to));
@@ -143,10 +204,17 @@ async function abuseSignals(store,url){
 }
 
 async function listSessions(store,url){
-  const {from,to}=queryRange(url),status=lower(url.searchParams.get('status'));
+  const {from,to}=queryRange(url),status=lower(url.searchParams.get('status')),allGames=await games(store),allAccounts=await accounts(store),accountMap=new Map(allAccounts.map(account=>[account.id,account]));
   let rows=(await values(store,'gameSession:')).filter(item=>inRange(item,from,to));
   if(status==='active')rows=rows.filter(item=>!item.endedAt);if(status==='ended')rows=rows.filter(item=>!!item.endedAt);
-  rows.sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt));return {sessions:rows.slice(0,clampLimit(url.searchParams.get('limit')))};
+  rows.sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt));
+  const sessions=rows.slice(0,clampLimit(url.searchParams.get('limit'))).map(session=>{const enriched=enrichSession(session,allGames.filter(game=>game.sessionId===session.id),accountMap);delete enriched.games;return enriched;});
+  return {sessions};
+}
+async function sessionDetail(store,id){
+  const session=await store.storage.get(`gameSession:${id}`);if(!session)return null;
+  const [allGames,allAccounts]=await Promise.all([games(store),accounts(store)]),accountMap=new Map(allAccounts.map(account=>[account.id,account]));
+  return enrichSession(session,allGames.filter(game=>game.sessionId===id).sort((a,b)=>Date.parse(whenOf(a))-Date.parse(whenOf(b))),accountMap);
 }
 
 async function walletAdjust(store,request,id,body){
@@ -217,6 +285,7 @@ export async function handleAdminRequest(store,request){
     if(request.method==='GET'&&path==='/admin/leaderboards')return json({ok:true,...await leaderboards(store,url)});
     if(request.method==='GET'&&path==='/admin/audit')return json({ok:true,...await listAudit(store,url)});
     if(request.method==='GET'&&path==='/admin/sessions')return json({ok:true,...await listSessions(store,url)});
+    if(request.method==='GET'&&(match=path.match(/^\/admin\/sessions\/([^/]+)$/))){const data=await sessionDetail(store,decodeURIComponent(match[1]));return data?json({ok:true,session:data}):json({ok:false,error:{code:'SESSION_NOT_FOUND',message:'Session not found.'}},404);}
     if(request.method==='GET'&&path==='/admin/geography')return json({ok:true,...await geography(store,url)});
     if(request.method==='GET'&&path==='/admin/abuse')return json({ok:true,...await abuseSignals(store,url)});
     if(request.method==='GET'&&path==='/admin/system')return json({ok:true,...await systemStatus(store)});
