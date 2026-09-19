@@ -83,8 +83,8 @@ export class AccountStore{
     account.lastConnection={...connection,kind:event.kind,recordedAt};account.updatedAt=recordedAt;
     await this.storage.put(`connection:${account.id}:${recordedAt}:${event.id}`,event);await this.storage.put(`account:${account.id}`,account);return event;
   }
-  noticeList(account){return (Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>!item.acknowledgedAt);}
-  async prepareNotices(account){return account;}
+  noticeList(account){const acknowledged=new Set(Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[]);return (Array.isArray(account.pendingNotices)?account.pendingNotices:[]).filter(item=>!item?.acknowledgedAt&&!acknowledged.has(item?.id));}
+  async prepareNotices(account){const notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],acknowledged=new Set(Array.isArray(account.acknowledgedNoticeIds)?account.acknowledgedNoticeIds:[]),filtered=notices.filter(item=>!item?.acknowledgedAt&&!acknowledged.has(item?.id));if(filtered.length!==notices.length){account.pendingNotices=filtered;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}return account;}
   async latestDailyAwardAt(account){
     if(account.lastDailyAwardAt&&Number.isFinite(Date.parse(account.lastDailyAwardAt)))return account.lastDailyAwardAt;
     let latest=null;

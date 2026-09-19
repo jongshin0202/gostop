@@ -7,6 +7,8 @@ const path=require('node:path');
 
 const root=path.join(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'ranked-client.js'),'utf8');
+const appSource=fs.readFileSync(path.join(root,'app.js'),'utf8');
+const accountStoreSource=fs.readFileSync(path.join(root,'server','account-store.mjs'),'utf8');
 const worker=fs.readFileSync(path.join(root,'server','worker.mjs'),'utf8');
 const docs=fs.readFileSync(path.join(root,'docs','accounts-coins-leaderboards.md'),'utf8');
 
@@ -106,14 +108,23 @@ test('room wallet mismatch refreshes the authoritative account without directly 
 });
 test('attract idle resets only on trusted user input and diagnostics contract is ten seconds',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
 
-test('pending daily bonus never masks the authoritative Wallet on another device',()=>{
+test('pending daily bonus never masks the authoritative Wallet or replays after acknowledgement',()=>{
   const display=source.slice(source.indexOf('function pendingDailyNotice'),source.indexOf('function saveSession'));
   assert.match(display,/function displayedWalletCoins\(\)[\s\S]*return account\?account\.walletCoins:null/);
   assert.doesNotMatch(display,/walletBefore|holdForVisibleMenu|current-coins/);
+  assert.match(source,/const acknowledgedNoticeIds=new Set\(\)/);
+  const capture=source.slice(source.indexOf('function captureAccountPayload'),source.indexOf('function pendingDailyNotice'));
+  assert.match(capture,/data\.notices\.filter\(item=>!acknowledgedNoticeIds\.has\(item\?\.id\)\)/);
+  const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
+  assert.match(ack,/acknowledgedNoticeIds\.add\(noticeId\)/);
+  assert.match(ack,/pendingAccountNotices=pendingAccountNotices\.filter\(item=>item\?\.id!==noticeId\)/);
   const daily=source.slice(source.indexOf("if(accountNoticeDialog.dataset.dailyLaunch==='1')"),source.indexOf("$('loginForm').addEventListener"));
-  assert.match(daily,/await acknowledgeAccountNotice\(id\);accountNoticeDialog\.close\(\)/);
+  assert.match(daily,/await acknowledgeAccountNotice\(id\)/);
+  assert.ok(daily.indexOf("delete accountNoticeDialog.dataset.dailyLaunch")<daily.indexOf('accountNoticeDialog.close()'),'successful Daily Bonus acknowledgement clears launch metadata before closing the dialog');
   assert.doesNotMatch(daily,/await refreshAccount\(\)/);
   assert.match(daily,/renderAccountBox\(\);patchGameIdentity\(\);if\(next\)next\(\)/);
+  assert.match(accountStoreSource,/noticeList\(account\)\{const acknowledged=new Set\(Array\.isArray\(account\.acknowledgedNoticeIds\)/);
+  assert.match(accountStoreSource,/async prepareNotices\(account\)[\s\S]*!acknowledged\.has\(item\?\.id\)[\s\S]*this\.storage\.put/);
   const launch=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("onlinePlay.addEventListener"));
   assert.match(launch,/captureAccountPayload\(data\);renderAccountBox\(\);patchGameIdentity\(\)/);
   assert.match(worker,/json\(\{ok:true,account,room:\{roomCode:data\.room\.roomCode,rankedMode:'solo'\}\}\)/);
@@ -169,4 +180,19 @@ test('Free Play With Friend launches through a separate non-ranked room flow',()
   assert.match(source,/freePanel\.hidden/);
   const snapshot=source.slice(source.indexOf("globalThis.addEventListener('gostop-online-snapshot'"),source.indexOf("globalThis.addEventListener('gostop-online-message'"));
   assert.match(snapshot,/if\(!snapshot\.ranked\)\{currentSnapshot=null/);
+});
+
+
+test('switching modes clears stale Free and Competitive lobby panels before game launch',()=>{
+  const rankedEntry=source.slice(source.indexOf('function beginRankedEntry'),source.indexOf('function launchRankedRoom'));
+  assert.match(rankedEntry,/freePanel\.hidden=true;onlinePanel\.hidden=true;\$\('freeOnlineStatus'\)\.textContent=''/);
+  const rankedRoom=source.slice(source.indexOf('function launchRankedRoom'),source.indexOf("globalThis.addEventListener?.('gostop-online-launch-settled'"));
+  assert.match(rankedRoom,/freePanel\.hidden=true;onlinePanel\.hidden=true/);
+  assert.match(source,/freeFriendBtn\.addEventListener\('click',\(\)=>\{stopAttractForGameLaunch\(\);onlinePanel\.hidden=true;freePanel\.hidden=false;\}\)/);
+  const localLaunch=appSource.slice(appSource.indexOf('async function launchLocalGame'),appSource.indexOf("document.addEventListener('pointerdown',unlockAudio"));
+  assert.match(localLaunch,/getElementById\('freeFriendPanel'\)/);
+  assert.match(localLaunch,/getElementById\('onlineLobbyPanel'\)/);
+  assert.match(localLaunch,/if\(freePanel\)freePanel\.hidden=true;if\(competitivePanel\)competitivePanel\.hidden=true/);
+  const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
+  assert.match(beginOnline,/if\(!anonymous&&freeFriendPanel\)freeFriendPanel\.hidden=true/);
 });
