@@ -52,3 +52,14 @@ test('daily reward follows player local calendar day and migrates legacy UTC awa
   assert.equal(nextLocalDay.awards.dailyCoins,100);
   assert.equal(nextLocalDay.account.walletCoins,400);
 });
+
+
+test('account exposes one authoritative active ranked session and clears it only when that session ends',async()=>{
+  const store=new AccountStore({storage:new MemoryStorage()},{},{cryptoApi:webcrypto,now:()=> '2026-09-19T06:30:00.000Z'}),user=await registered(store,'active@example.com','ActivePlayer');
+  await store.fetch(post('/internal/session/start',{sessionId:'solo-ROOMCODE12345-1-test',mode:'solo',accountIds:[user.account.id],opponent:{type:'computer',level:1},roomCode:'ROOMCODE12345A',matchId:'match-1',gameSequence:1,startedAt:'2026-09-19T06:30:00.000Z'}));
+  let me=await (await store.fetch(new Request('https://accounts/me',{headers:{Authorization:`Bearer ${user.session.token}`}}))).json();
+  assert.deepEqual(me.account.activeRanked,{sessionId:'solo-ROOMCODE12345-1-test',mode:'solo',roomCode:'ROOMCODE12345A',startedAt:'2026-09-19T06:30:00.000Z'});
+  await store.fetch(post('/internal/session/end',{sessionId:'solo-ROOMCODE12345-1-test',endedAt:'2026-09-19T06:40:00.000Z',summary:{gamesPlayed:1,reason:'quit'}}));
+  me=await (await store.fetch(new Request('https://accounts/me',{headers:{Authorization:`Bearer ${user.session.token}`}}))).json();
+  assert.equal(me.account.activeRanked,null);
+});
