@@ -68,3 +68,39 @@ test('Free Play With Friend quit bypasses presentation queue and ends both views
   assert.match(transition,/epoch=onlinePresentationEpoch/);
   assert.match(transition,/isOnlinePresentationCurrent\(epoch\)/);
 });
+
+
+test('game exit invalidates every gameplay presentation and closes all open dialogs generically',()=>{
+  assert.match(app,/let gameplayPresentationEpoch=0,gameplayPresentationActive=false/);
+  const close=app.slice(app.indexOf('function closeAllGameplayPresentationUi'),app.indexOf('function invalidateGameplayPresentation'));
+  assert.match(close,/document\.querySelectorAll\('dialog\[open\]'\)/);
+  const invalidate=app.slice(app.indexOf('function invalidateGameplayPresentation'),app.indexOf('function showGameplayModal'));
+  assert.match(invalidate,/gameplayPresentationActive=false;gameplayPresentationEpoch\+\+/);
+  assert.match(invalidate,/closeAllGameplayPresentationUi\(\)/);
+  const localCancel=app.slice(app.indexOf('function cancelLocalGamePresentation'),app.indexOf('async function launchLocalGame'));
+  assert.match(localCancel,/invalidateGameplayPresentation\(\)/);
+  const onlineClear=app.slice(app.indexOf('function clearOnlineGameplayPresentation'),app.indexOf('function onlineFlowBlocks'));
+  assert.match(onlineClear,/invalidateGameplayPresentation\(\)/);
+});
+
+test('all delayed gameplay dialogs use the central presentation gate',()=>{
+  const presenters=[
+    ['Gukjin','function openGukjinChoice','function showActionCue'],
+    ['Bomb/Shake','async function chooseBomb','function showShakeChoice'],
+    ['Shake reveal','async function presentShakeDeclaration','function openShakeReview'],
+    ['Go Stop','async function presentOnlineGoStopDecision','function bestAiCard'],
+    ['Results','async function humanGoStop','function finishByScore'],
+    ['First Poop','function showFirstPoopNotice','function setLocale']
+  ];
+  for(const [name,start,end] of presenters){
+    const block=app.slice(app.indexOf(start),app.indexOf(end,app.indexOf(start)));
+    assert.match(block,/showGameplay(?:Modal|Dialog)\(/,name);
+    assert.doesNotMatch(block,/\.showModal\(\)|\.show\(\)/,name);
+  }
+  const normal=app.slice(app.indexOf('async function presentNormalResolution'),app.indexOf('async function presentPiTransferEvents'));
+  assert.match(normal,/isGameplayPresentationCurrent\(epoch\)/);
+  assert.match(normal,/promptGukjinChoice\(side,result\.events,epoch\)/);
+  const turn=app.slice(app.indexOf('async function playFullTurn'),app.indexOf('async function executeDeckOnlyTurn'));
+  assert.match(turn,/epoch=gameplayPresentationEpoch/);
+  assert.match(turn,/isGameplayPresentationCurrent\(epoch\)/);
+});
