@@ -348,20 +348,11 @@
   globalThis.addEventListener('gostop-online-snapshot',event=>{const snapshot=event.detail?.snapshot;if(!snapshot)return;if(!snapshot.ranked){currentSnapshot=null;patchGameIdentity();setTimeout(patchGameIdentity,0);return;}const terminalChanged=!!snapshot.terminalResult&&!currentSnapshot?.terminalResult;currentSnapshot=snapshot;updateFromSnapshot(snapshot);renderRankedFlow(snapshot);patchGameIdentity();setTimeout(patchGameIdentity,0);if(terminalChanged){refreshLeaderboardData(true).then(()=>patchGameIdentity());refreshAccount();}if(snapshot.sessionFlow?.ended)void refreshAccount();});
   globalThis.addEventListener('gostop-online-message',event=>{const message=event.detail||{};if(message.type==='opponentConnected')showToast(rt('opponentReconnected'),3000);if(message.type==='sessionTakenOver')showToast('This Coin game was opened on another device. Reload or reopen the same Coin mode here to take control back.',8000);});
 
-  let activeRoomResumeAttempted=false;
-  function resumeActiveRankedRoom(){
-    if(activeRoomResumeAttempted||!account||!authToken||globalThis.goStopOnlineSession)return false;
-    let saved=null;try{saved=JSON.parse(localStorage.getItem(ACTIVE_RANKED_ROOM_KEY)||'null');}catch(_){}
-    if(!saved?.roomCode||!saved?.credential)return false;
-    if(account.activeRanked?.roomCode&&String(account.activeRanked.roomCode).toUpperCase()!==String(saved.roomCode).toUpperCase()){try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}return false;}
-    activeRoomResumeAttempted=true;try{sessionStorage.setItem('gostop-room-'+saved.roomCode,JSON.stringify(saved));}catch(_){}
-    stopAttractForGameLaunch();launchRankedRoom(saved.roomCode);return true;
-  }
   function revealCurrentMainMenu(){setSoloLaunchCover(false);overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();resetAttractTimer();}
   const roomParam=new URL(location.href).searchParams.get('room'),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   if(validRoomParam){const launch=()=>launchRankedRoom(roomParam.toUpperCase());if(account)setTimeout(launch,0);else setTimeout(()=>requireAccount(launch,()=>revealCurrentMainMenu()),0);}
 
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity});
   new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
-  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam)return;if(!resumeActiveRankedRoom())revealCurrentMainMenu();});
+  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam)return;revealCurrentMainMenu();});
 })();

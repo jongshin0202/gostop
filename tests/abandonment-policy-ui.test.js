@@ -108,16 +108,19 @@ test('normal play and hand input are frozen while opponent reconnect window is a
   assert.match(hand,/flow\?\.opponentReconnectUntil/);
 });
 
-test('active ranked room credential persists on device and auto-resumes after page return',()=>{
+test('active ranked room credential persists on device but resumes only after explicit mode selection',()=>{
   assert.match(app,/localStorage\.setItem\('gostop-active-ranked-room'/);
   assert.match(app,/localStorage\.getItem\('gostop-active-ranked-room'/);
   assert.match(ranked,/ACTIVE_RANKED_ROOM_KEY='gostop-active-ranked-room'/);
-  assert.match(ranked,/resumeActiveRankedRoom/);
+  assert.doesNotMatch(ranked,/resumeActiveRankedRoom/);
+  assert.match(ranked,/account\?\.activeRanked\?\.mode==='solo'/);
+  assert.match(ranked,/account\?\.activeRanked\?\.mode==='online'/);
+  assert.match(ranked,/launchRankedRoom\(account\.activeRanked\.roomCode\)/);
   assert.match(ranked,/joinForm\.requestSubmit\(\)/);
 });
 
 test('reconnect modal is the disconnect UI and old 45-second toast is not emitted',()=>{
-  const listener=ranked.slice(ranked.indexOf("globalThis.addEventListener('gostop-online-message'"),ranked.indexOf('let activeRoomResumeAttempted'));
+  const listener=ranked.slice(ranked.indexOf("globalThis.addEventListener('gostop-online-message'"),ranked.indexOf('function revealCurrentMainMenu'));
   assert.doesNotMatch(listener,/message\.type==='opponentDisconnected'/);
   assert.match(listener,/message\.type==='opponentConnected'/);
 });
