@@ -81,6 +81,13 @@ test('inactivity warning dismissal is sticky for the current warning while serve
   assert.doesNotMatch(source,/30-SECOND ABANDONMENT WARNING/);
 });
 
+test('nudge dialog never shows the abandonment countdown before warning phase',()=>{
+  assert.match(source,/\.ranked-countdown\[hidden\]\{display:none!important\}/);
+  const flow=source.slice(source.indexOf('function renderRankedFlow'),source.indexOf("$('rankedInactivityOk').addEventListener"));
+  assert.match(flow,/inactivity\.phase==='nudge'[\s\S]*rankedInactivityCountdown'\)\.hidden=true/);
+  assert.match(flow,/inactivity\.phase==='warning'[\s\S]*rankedInactivityCountdown'\)\.hidden=false/);
+});
+
 test('stale ranked locks are server-reconciled and main menu rechecks them automatically',()=>{
   assert.match(worker,/async function reconcileActiveRanked\(env,account\)/);
   assert.match(worker,/\/reconcile-active/);
