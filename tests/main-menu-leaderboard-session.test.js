@@ -123,8 +123,9 @@ test('pending daily bonus never masks the authoritative Wallet on another device
 
 
 test('legacy two-button shell is hidden until the current menu client has finished booting',()=>{
-  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  const html=fs.readFileSync(path.join(root,'index.html'),'utf8'),css=fs.readFileSync(path.join(root,'styles.css'),'utf8');
   assert.match(html,/id="soloStartOverlay" class="solo-start-overlay" hidden data-current-menu-ready="false"/);
+  assert.match(css,/\.solo-start-overlay\[hidden\]\{display:none!important\}/);
   assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
