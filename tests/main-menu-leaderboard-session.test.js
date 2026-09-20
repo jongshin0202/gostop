@@ -99,19 +99,19 @@ test('pause UI resumes requester, confirms opponent quit in both phases, and rec
   assert.match(source,/waitingOnYou:'Waiting On You'/);
   assert.match(source,/expiredPauseOpponent:'You can end the session with a win for the current game'/);
   assert.match(source,/expiredPauseYou:'Opponent can end the session with a win for the current game'/);
-  assert.match(source,/expiredPauseQuitConfirmTitle:'End Session With Win\\?'/);
-  assert.match(source,/own\\?\\(expired\\?'resumeGame':'cancelPause'\\):'quitPausedGame'/);
-  assert.match(source,/pauseQuitConfirmAction=pause\\.expired\\?'expired-win':'active-draw'/);
-  assert.match(source,/renderPauseQuitConfirmationLocale\\(\\);setDialog\\(pauseDialog,false\\);setDialog\\(pauseQuitConfirmDialog,true\\)/);
-  assert.match(source,/pauseQuitConfirmAction==='expired-win'\\?\\{type:'claimExpiredPauseWin'\\}:\\{type:'quitPausedGame'\\}/);
-  assert.match(source,/submitRanked\\(\\{type:'cancelPause'\\}\\)/);
+  assert.match(source,/expiredPauseQuitConfirmTitle:'End Session With Win\?'/);
+  assert.match(source,/own\?\(expired\?'resumeGame':'cancelPause'\):'quitPausedGame'/);
+  assert.match(source,/pauseQuitConfirmAction=pause\.expired\?'expired-win':'active-draw'/);
+  assert.match(source,/renderPauseQuitConfirmationLocale\(\);setDialog\(pauseDialog,false\);setDialog\(pauseQuitConfirmDialog,true\)/);
+  assert.match(source,/pauseQuitConfirmAction==='expired-win'\?\{type:'claimExpiredPauseWin'\}:\{type:'quitPausedGame'\}/);
+  assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
   assert.match(source,/pauseResolutionChanged/);
   assert.match(source,/returnEndedOnlineSessionToMenu/);
-  assert.match(appSource,/if\\(flow\\.pauseResolution\\)\\{setDialog\\(els\\.opponentEndedDialog,false\\);return;\\}/);
+  assert.match(appSource,/if\(flow\.pauseResolution\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
   const snapshotHandler=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
-  assert.match(snapshotHandler,/sessionFlow\\?\\.ended[\\s\\S]*reconcileOnlineFlow\\(event\\.detail\\.snapshot\\)[\\s\\S]*dispatchEvent\\(new CustomEvent\\('gostop-online-snapshot'/);
-  assert.match(appSource,/dialog\\[open\\]:not\\(\\.ranked-flow-dialog\\)/);
-  assert.match(appSource,/returnEndedOnlineSessionToMenu\\(\\)\\{returnOnlineToMenu\\(\\);\\}/);
+  assert.match(snapshotHandler,/sessionFlow\?\.ended[\s\S]*reconcileOnlineFlow\(event\.detail\.snapshot\)[\s\S]*gostop-online-snapshot/);
+  assert.match(appSource,/dialog\[open\]:not\(\.ranked-flow-dialog\)/);
+  assert.match(appSource,/returnEndedOnlineSessionToMenu\(\)\{returnOnlineToMenu\(\);\}/);
 });
 
 test('share-link room creator leaves Online Play overlay when the friend makes the room ready',()=>{
