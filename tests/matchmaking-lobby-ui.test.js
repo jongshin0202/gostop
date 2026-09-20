@@ -63,11 +63,11 @@ test('presence requires foreground activity within five minutes and publishes no
   assert.match(app,/const twoPlayer=!!anonymous\|\|room\?\.rankedMode!=='solo'/);
 });
 
-test('play request notifications are opt-in and Away Play requires a fresh notification-capable tab',()=>{
+test('play notifications remain opt-in while Online - Away itself stays playable',()=>{
   assert.match(client,/enablePlayNotificationsBtn/);assert.match(client,/Notification\.requestPermission\(\)/);assert.match(client,/serviceWorker\.register\('\.\/gostop-notifications-sw\.js\?v=20260920-1'\)/);
   assert.match(client,/showPlayRequestNotification\(message\)/);assert.match(client,/showNotification\('GoStop Live! Play Request'/);
   assert.match(server,/notifyable=away&&client\.notificationsEnabled===true&&heartbeatFresh/);
-  assert.match(server,/clientCanReceiveChallenge\(client\)/);
+  assert.match(server,/state\.active\|\|state\.away/);assert.match(server,/status:'away'/);assert.match(server,/challengeable:!this\.pendingChallengeFor\(accountId\)/);
 });
 
 test('incoming player request is Yes No and accepting a Solo game is covered until multiplayer begins',()=>{
@@ -76,6 +76,14 @@ test('incoming player request is Yes No and accepting a Solo game is covered unt
   const accept=client.slice(client.indexOf("\$('requestAccept').addEventListener"),client.indexOf("\$('requestDecline').addEventListener"));
   assert.match(accept,/showMatchHandoff\(rt\('startingMatch'\)\)/);assert.match(accept,/challengeResponse',requestId:request\.requestId,accept:true/);
   assert.match(app,/prepareForMultiplayerChallenge\(\)/);assert.match(app,/if\(isTwoPlayerOnline\)return false/);assert.match(app,/if\(onlineMode\)returnOnlineToMenu\(\)/);
+});
+
+test('missed play requests are stored, show local date/time, and support arrows, OK, and Clear All',()=>{
+  assert.match(client,/const MISSED_REQUESTS_KEY='gostop-missed-play-requests'/);
+  assert.match(client,/id="missedRequestTitle">Missed Play Request/);assert.match(client,/id="missedRequestPrev"/);assert.match(client,/id="missedRequestNext"/);assert.match(client,/id="missedRequestOk"/);assert.match(client,/id="missedRequestClearAll"/);
+  assert.match(client,/function enqueueMissedRequest\(message\)/);assert.match(client,/when\.toLocaleString\(\)/);assert.match(client,/items\.splice/);assert.match(client,/writeMissedRequests\(\[\]\)/);
+  assert.match(client,/message\.type==='challengeMissed'/);assert.match(client,/message\.type==='challengeNoAnswer'/);assert.match(client,/noResponseText/);
+  assert.match(server,/const CHALLENGE_TTL_MS=30000/);assert.match(server,/type:'challengeNoAnswer'/);assert.match(server,/type:'challengeMissed'/);assert.match(server,/await this\.tryAutoMatch\(creator\)/);
 });
 
 test('requester sees Waiting for Opponent to Respond immediately and can cancel before acceptance',()=>{
@@ -145,7 +153,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-4/);
+  assert.match(index,/ranked-client\.js\?v=20260920-5/);
   assert.match(index,/app\.js\?v=20260920-2/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
