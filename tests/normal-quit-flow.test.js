@@ -62,7 +62,7 @@ test('Free Play With Friend quit bypasses presentation queue and ends both views
   assert.match(snapshot,/snapshot\?\.sessionFlow\?\.ended/);
   assert.match(snapshot,/onlinePresentationEpoch\+\+/);
   assert.match(snapshot,/onlinePresentationQueue=Promise\.resolve\(\)/);
-  assert.match(snapshot,/clearOnlineGameplayPresentation\(\);reconcileOnlineFlow\(event\.detail\.snapshot\);return/);
+  assert.match(snapshot,/clearOnlineGameplayPresentation\(\);reconcileOnlineFlow\(event\.detail\.snapshot\);globalThis\.dispatchEvent\(new CustomEvent\('gostop-online-snapshot'/);
   const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
   assert.match(reconcile,/flow\.ended/);
   assert.match(reconcile,/flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\)/);
@@ -73,10 +73,10 @@ test('Free Play With Friend quit bypasses presentation queue and ends both views
 });
 
 
-test('game exit invalidates every gameplay presentation and closes all open dialogs generically',()=>{
+test('game exit invalidates gameplay presentation without closing ranked flow dialogs owned by ranked-client',()=>{
   assert.match(app,/let gameplayPresentationEpoch=0,gameplayPresentationActive=false/);
   const close=app.slice(app.indexOf('function closeAllGameplayPresentationUi'),app.indexOf('function invalidateGameplayPresentation'));
-  assert.match(close,/document\.querySelectorAll\('dialog\[open\]'\)/);
+  assert.match(close,/dialog\[open\]:not\(\.ranked-flow-dialog\):not\(\.gostop-account-dialog\):not\(\.gostop-request-dialog\)/);
   const invalidate=app.slice(app.indexOf('function invalidateGameplayPresentation'),app.indexOf('function showGameplayModal'));
   assert.match(invalidate,/gameplayPresentationActive=false;gameplayPresentationEpoch\+\+/);
   assert.match(invalidate,/closeAllGameplayPresentationUi\(\)/);
