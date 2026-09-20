@@ -329,6 +329,8 @@ export class AccountStore{
 
   async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account?.suspended)return json({ok:true,account:null});if(account){if(this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,request.headers.get('x-gostop-event')||'game-resolve');}return json({ok:true,account:account?publicAccount(account):null});}
 
+  async registerRoom(request){const body=await request.json().catch(()=>({})),roomCode=String(body.roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(roomCode))return json({ok:false,error:{code:'INVALID_ROOM_CODE',message:'Room code is invalid.'}},400);const record={roomCode,mode:body.mode==='solo'?'solo':body.mode==='free'?'free':'online',createdAt:body.createdAt||this.now()};await this.storage.put(`roomRegistry:${roomCode}`,record);return json({ok:true,room:record});}
+
   async fetch(request){
     const path=new URL(request.url).pathname;
     try{
@@ -341,6 +343,7 @@ export class AccountStore{
       if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
       if(request.method==='POST'&&path==='/internal/player-profiles')return await this.playerProfiles(request);
       if(request.method==='POST'&&path==='/internal/active-ranked/clear')return await this.clearActiveRanked(request);
+      if(request.method==='POST'&&path==='/internal/room/register')return await this.registerRoom(request);
       if(request.method==='GET'&&path==='/internal/resolve')return await this.resolveSession(request);
       if(request.method==='POST'&&path==='/internal/session/start')return await this.startGameSession(request);
       if(request.method==='POST'&&path==='/internal/session/end')return await this.endGameSession(request);
