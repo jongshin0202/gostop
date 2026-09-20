@@ -116,17 +116,18 @@ test('player search preserves an explicit zero-loss count instead of treating ev
   assert.equal(player.gamesPlayed,1);assert.equal(player.wins,0);assert.equal(player.losses,0);
 });
 
-test('accepted challenge is bound to the exact requesting and accepting browser tabs',async()=>{
+test('play request reaches every target tab and accepted handoff binds to the tab that answers',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.2,102,1040,2]]),lobby=makeLobby(rows);
   const jongPrimary=client('jong','Jong',1000),jongOther=client('jong','Jong',1000,{foreground:false}),sonoPrimary=client('sono','Sonogong',1040),sonoOther=client('sono','Sonogong',1040,{foreground:false});
   add(lobby,jongPrimary,jongOther,sonoPrimary,sonoOther);
   await lobby.handle(jongPrimary,JSON.stringify({type:'challenge',accountId:'sono'}));
-  const request=sonoPrimary.socket.messages.find(message=>message.type==='playRequest');assert.ok(request?.requestId);assert.equal(sonoOther.socket.messages.some(message=>message.type==='playRequest'),false);
-  await lobby.handle(sonoPrimary,JSON.stringify({type:'challengeResponse',requestId:request.requestId,accept:true}));
+  const request=sonoPrimary.socket.messages.find(message=>message.type==='playRequest');assert.ok(request?.requestId);assert.ok(sonoOther.socket.messages.some(message=>message.type==='playRequest'&&message.requestId===request.requestId));
+  await lobby.handle(sonoOther,JSON.stringify({type:'challengeResponse',requestId:request.requestId,accept:true}));
   assert.equal(jongPrimary.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),true);assert.equal(jongOther.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
-  assert.equal(sonoPrimary.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),true);assert.equal(sonoOther.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),false);
+  assert.equal(sonoOther.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),true);assert.equal(sonoPrimary.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),false);
+  assert.ok(sonoPrimary.socket.messages.some(message=>message.type==='challengeResolved'&&message.requestId===request.requestId));
   await lobby.handle(jongPrimary,JSON.stringify({type:'challengeRoomReady',requestId:request.requestId,roomCode:'ABCDEFGHJK2345'}));
-  assert.equal(sonoPrimary.socket.messages.some(message=>message.type==='challengeRoomReady'&&message.roomCode==='ABCDEFGHJK2345'),true);assert.equal(sonoOther.socket.messages.some(message=>message.type==='challengeRoomReady'),false);
+  assert.equal(sonoOther.socket.messages.some(message=>message.type==='challengeRoomReady'&&message.roomCode==='ABCDEFGHJK2345'),true);assert.equal(sonoPrimary.socket.messages.some(message=>message.type==='challengeRoomReady'),false);
 });
 
 test('manual player selection sends a Yes/No play request rather than starting a game immediately',async()=>{
@@ -198,17 +199,28 @@ test('declining a request immediately makes the same player challengeable again'
   assert.equal(requests[1].from.nickname,'Jong');
 });
 
-test('Auto Match requests the closest available skill match and still requires that player to accept',async()=>{
+test('Auto Match requests the closest available skill match, includes rich opponent history, and still requires acceptance',async()=>{
   const rows=rowsFor([
     ['Jong',10,100,1000,1],['Closest',10.01,100,1002,2],['Near',10.2,102,1040,3],['Far',30,5,150,4]
   ]);
   const lobby=makeLobby(rows),me=client('me','Jong',1000,{autoMatching:true}),closest=client('closest','Closest',1002),near=client('near','Near',1020),far=client('far','Far',150);
+  lobby.directoryProfiles=async ids=>ids.includes('closest')?[{accountId:'closest',nickname:'Closest',walletCoins:1002,score:10.01,gamesPlayed:100,wins:55,losses:45,totalCoins:1002,globalRank:2,rank:2,headToHead:{wins:3,losses:2,draws:0,coinsWon:22,coinsLost:15,lastPlayedAt:'2026-09-19T10:00:00.000Z'}}]:[];
   add(lobby,me,closest,near,far);
   assert.equal(await lobby.tryAutoMatch(me),true);
   const sent=me.socket.messages.find(message=>message.type==='challengeSent'),request=closest.socket.messages.find(message=>message.type==='playRequest');
-  assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(request?.automatic,true);
+  assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(sent?.to?.globalRank,2);assert.equal(sent?.to?.wins,55);assert.equal(sent?.to?.headToHead?.wins,3);assert.equal(sent?.to?.headToHead?.coinsLost,15);assert.equal(request?.automatic,true);
   assert.equal(me.available,true);assert.equal(closest.available,true);
   assert.equal(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
+});
+
+test('searching a player before Auto Match does not suppress the request and every target tab receives it',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),directory=[{accountId:'sono',nickname:'Sonogong',walletCoins:1000,score:10.05,gamesPlayed:100,wins:50,losses:50,totalCoins:1000,rank:2,globalRank:2,countryCode:'US'}],lobby=makeLobby(rows,directory);
+  const me=client('me','Jong',1000),sonoFront=client('sono','Sonogong',1000),sonoAway=client('sono','Sonogong',1000,{foreground:false});add(lobby,me,sonoFront,sonoAway);
+  await lobby.handle(me,JSON.stringify({type:'search',query:'Sonogong'}));assert.ok(me.socket.messages.some(message=>message.type==='searchResults'));
+  await lobby.handle(me,JSON.stringify({type:'autoMatchStart'}));
+  const frontRequest=sonoFront.socket.messages.find(message=>message.type==='playRequest'&&message.automatic),awayRequest=sonoAway.socket.messages.find(message=>message.type==='playRequest'&&message.automatic);
+  assert.ok(frontRequest?.requestId);assert.equal(awayRequest?.requestId,frontRequest.requestId);
+  assert.ok(me.socket.messages.some(message=>message.type==='challengeSent'&&message.requestId===frontRequest.requestId));
 });
 
 test('manual Play can target an Online - Away player and expires after 30 seconds with no-answer and missed-request notices',async()=>{

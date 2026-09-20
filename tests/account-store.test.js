@@ -73,7 +73,17 @@ test('player directory search returns wallet wins losses leaderboard score and r
   await store.fetch(post('/internal/game/settle',{gameId:'lookup-1',mode:'online',winnerPlayerId:'a',participants:[{accountId:a.account.id,playerId:'a',won:true,walletDelta:9,coinsWon:9},{accountId:b.account.id,playerId:'b',won:false,walletDelta:-9,coinsWon:0}]}));
   const result=await (await store.fetch(post('/internal/player-search',{query:'lookupalpha'}))).json();
   assert.equal(result.players.length,1);const player=result.players[0];
-  assert.equal(player.nickname,'LookupAlpha');assert.equal(player.accountId,a.account.id);assert.equal(player.walletCoins,209);assert.equal(player.gamesPlayed,1);assert.equal(player.wins,1);assert.equal(player.losses,0);assert.equal(player.score,9);assert.equal(player.rank,1);
+  assert.equal(player.nickname,'LookupAlpha');assert.equal(player.accountId,a.account.id);assert.equal(player.walletCoins,209);assert.equal(player.gamesPlayed,1);assert.equal(player.wins,1);assert.equal(player.losses,0);assert.equal(player.score,9);assert.equal(player.rank,0);assert.equal(player.globalRank,0);assert.equal(player.monthlyRank,0);
+});
+
+test('rank stays zero through nine lifetime games and becomes a positive stored rank after game ten',async()=>{
+  const store=makeStore(),a=await (await store.fetch(post('/register',{email:'rank-ten@example.com',nickname:'RankTen',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  for(let i=1;i<=9;i++)await store.fetch(post('/internal/game/settle',{gameId:`rank-ten-${i}`,mode:'solo',winnerPlayerId:'a',participants:[{accountId:a.account.id,playerId:'a',nickname:'RankTen',won:true,walletDelta:1,coinsWon:1}]}));
+  let board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json(),row=board.global.find(item=>item.nickname==='RankTen'),monthRow=board.monthly.find(item=>item.nickname==='RankTen');
+  assert.equal(row.gamesPlayed,9);assert.equal(row.rank,0);assert.equal(monthRow.rank,0);
+  await store.fetch(post('/internal/game/settle',{gameId:'rank-ten-10',mode:'solo',winnerPlayerId:'a',participants:[{accountId:a.account.id,playerId:'a',nickname:'RankTen',won:true,walletDelta:1,coinsWon:1}]}));
+  board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json();row=board.global.find(item=>item.nickname==='RankTen');monthRow=board.monthly.find(item=>item.nickname==='RankTen');
+  assert.equal(row.gamesPlayed,10);assert.equal(row.rank,1);assert.equal(row.provisional,false);assert.equal(monthRow.rank,1);
 });
 
 test('player directory returns Global and Monthly ranks plus head-to-head history against the viewer',async()=>{

@@ -2316,11 +2316,7 @@
   if(els.railNewGame)els.railNewGame.addEventListener('click',()=>els.newGameDialog.showModal());
   els.playerHand.addEventListener('pointerleave',()=>setActiveHoveredHandCard(null));
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
-  els.newGameBtn.addEventListener('click',()=>{els.optionsMenu.hidden=!els.optionsMenu.hidden;els.newGameBtn.setAttribute('aria-expanded',String(!els.optionsMenu.hidden));});
-  els.optionsNewGameBtn.addEventListener('click',()=>{els.optionsMenu.hidden=true;els.newGameDialog.showModal();});
-  els.optionsQuitBtn.addEventListener('click',()=>{els.optionsMenu.hidden=true;onlineQuitFromResult=false;els.quitConfirmTitle.textContent=t('quitConfirmTitle');els.quitConfirmMessage.textContent=t('quitConfirmMessage');els.quitConfirmDialog.showModal();});
-  document.addEventListener('pointerdown',event=>{if(!els.optionsMenu.hidden&&!els.optionsMenu.contains(event.target)&&event.target!==els.newGameBtn){els.optionsMenu.hidden=true;els.newGameBtn.setAttribute('aria-expanded','false');}});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'){els.optionsMenu.hidden=true;els.newGameBtn.setAttribute('aria-expanded','false');}});
+  els.newGameBtn.addEventListener('click',()=>{onlineQuitFromResult=false;els.quitConfirmTitle.textContent=t('quitConfirmTitle');els.quitConfirmMessage.textContent=t('quitConfirmMessage');els.quitConfirmDialog.showModal();});
   els.newGameYesBtn.addEventListener('click',()=>confirmNewGame(true));
   els.newGameNoBtn.addEventListener('click',()=>confirmNewGame(false));
   els.playAgainBtn.addEventListener('click',()=>{if(onlineMode){onlinePlayAgain();}else{presentation.roundNo++;invalidateGameplayPresentation();beginGameplayPresentation();startGame(gameplayPresentationEpoch);}});

@@ -10,14 +10,31 @@ test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and 
   const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
   assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.match(panel,/data-online-section="share"/);
   assert.equal((panel.match(/data-online-section=/g)||[]).length,3);
-  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.match(panel,/id="enablePlayNotificationsBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
+  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.doesNotMatch(panel,/id="enablePlayNotificationsBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
+  assert.match(client,/notificationsBtn\.id='enablePlayNotificationsBtn'/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
   assert.match(panel,/id="onlineNicknameSearchBtn"/);assert.match(panel,/id="browsePlayerResults"/);assert.match(panel,/id="searchPlayerResults"/);
   assert.doesNotMatch(panel,/onlineInviteEmail|Invite by Email|Send Invite/);
   assert.match(panel,/id="competitiveShareLink"/);assert.match(panel,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
   assert.match(client,/if\(createRoom\)\{createRoom\.textContent='Create Room';controls\.appendChild\(createRoom\);\}/);
-  assert.match(client,/if\(joinForm\)joinForm\.hidden=true/);
+  assert.match(client,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
   assert.doesNotMatch(client,/controls\.appendChild\(onlineStatus\)/);
   assert.match(client,/onlineNicknameSearch'\)\.value='';\$\('lobbyStatus'\)\.textContent=''/);
+});
+
+test('Language and notification controls live under the main-menu account box instead of the game or Online Play panel',()=>{
+  const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(index,/id="languageBtn"/);assert.doesNotMatch(index,/id="languageMenu"/);
+  assert.match(client,/languageBtn\.id='languageBtn'/);assert.match(client,/languageMenu\.id='languageMenu'/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
+  const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
+  assert.doesNotMatch(panel,/enablePlayNotificationsBtn/);
+});
+
+test('rank zero displays Not Yet Ranked with a transient hover or focus explanation and leaderboard has no provisional P prefix',()=>{
+  assert.match(client,/notYetRanked:'Not Yet Ranked'/);assert.match(client,/rankAfterTen:'User will be ranked after first 10 games played'/);
+  assert.match(client,/function notYetRankedHtml\(\)/);assert.match(client,/class="not-yet-ranked" tabindex="0"/);assert.match(client,/class="rank-tooltip" role="tooltip"/);
+  assert.match(client,/\.not-yet-ranked:hover \.rank-tooltip/);assert.match(client,/\.not-yet-ranked:focus \.rank-tooltip/);
+  const board=client.slice(client.indexOf('function renderLeaderboard'),client.indexOf('function nextLeaderboard'));
+  assert.match(board,/rankNumberHtml\(row\.rank\)/);assert.doesNotMatch(board,/\?['"]P /);
 });
 
 test('Browse and Search player cards show ranks, Coins, record, matchup history, and Available Away Busy Offline states',()=>{
@@ -114,9 +131,11 @@ test('accepted challenge uses explicit app bridge and stays active until second 
   assert.match(server,/fromClientId/);assert.match(server,/toClientId/);assert.match(server,/challenge\.status='room-ready'/);assert.match(server,/message\.type==='challengeJoined'/);assert.match(server,/type:'challengeRoomHandoffComplete'/);
 });
 
-test('Auto Match chooses a target but still routes through same request acceptance flow',()=>{
-  assert.match(client,/type:'autoMatchStart'/);assert.match(server,/startChallenge\(client,partner,rows,\{automatic:true\}\)/);
-  assert.match(server,/type:'playRequest'/);assert.match(server,/message\.type==='challengeResponse'/);assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
+test('Auto Match chooses a target, shows rich matched-player information, and still routes through request acceptance',()=>{
+  assert.match(client,/type:'autoMatchStart'/);assert.match(server,/directoryProfiles\(\[partner\.account\.id\],client\.account\.id\)/);assert.match(server,/startChallenge\(client,partner,rows,\{automatic:true,toProfileOverride:toProfile\}\)/);
+  assert.match(client,/id="outgoingOpponentProfile"/);assert.match(client,/function renderOutgoingOpponentProfile\(player\)/);assert.match(client,/player\.headToHead/);assert.match(client,/player\.gamesPlayed/);assert.match(client,/player\.wins/);assert.match(client,/player\.losses/);assert.match(client,/player\.totalCoinsEarned/);assert.match(client,/neverPlayedBefore/);
+  assert.match(server,/sendToAccount\(target\.account\.id,\{type:'playRequest'/);assert.match(server,/message\.type==='challengeResponse'/);assert.match(server,/challenge\.to!==client\.account\.id/);assert.match(server,/challenge\.toClientId=client\.clientId/);
+  assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
 });
 
 test('Share Link creates a direct URL with Copy URL while direct-link joining remains supported',()=>{
@@ -153,7 +172,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-5/);
-  assert.match(index,/app\.js\?v=20260920-2/);
+  assert.match(index,/ranked-client\.js\?v=20260920-6/);
+  assert.match(index,/app\.js\?v=20260920-3/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });

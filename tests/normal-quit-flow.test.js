@@ -23,11 +23,24 @@ test('finished-game Quit Game requires confirmation and No returns to Play Again
   assert.match(flow,/else\{els\.quitConfirmDialog\.close\(\);onlineQuitFromResult=false;cancelLocalGamePresentation\(\);setTrainingMode\(false\);els\.soloStartOverlay\.hidden=false;\}/);
 });
 
-test('normal in-game Quit Game continues to use quitGame session flow rather than abandonment',()=>{
-  assert.match(app,/optionsQuitBtn\.addEventListener/);
+test('normal in-game header has one red Quit Game action and continues to use quitGame session flow rather than abandonment',()=>{
+  assert.match(html,/id="newGameBtn"[^>]*class="glass-btn stop-btn game-quit-header"[^>]*>Quit Game</);
+  assert.doesNotMatch(html,/id="optionsNewGameBtn"|id="optionsQuitBtn"|id="languageBtn"/);
+  assert.match(app,/els\.newGameBtn\.addEventListener\('click',\(\)=>\{onlineQuitFromResult=false/);
   assert.match(app,/quitYesBtn\.addEventListener[^]*onlineSubmit\(\{type:'quitGame'\}\)/);
+  const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
+  assert.match(ranked,/\.game-quit-header\{background:linear-gradient/);
 });
 
+
+test('quit requester waiting dialog hides Accept and Decline while opponent still receives them',()=>{
+  const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
+  assert.match(ranked,/#rankedQuitActions\[hidden\]\{display:none!important\}/);
+  const flow=ranked.slice(ranked.indexOf('const quit=flow.quitRequest'),ranked.indexOf('if(flow.scheduledQuitByYou)'));
+  assert.match(flow,/rankedQuitActions'\)\.hidden=quit\.requestedByYou/);
+  assert.match(flow,/rankedQuitActions'\)\.style\.display=quit\.requestedByYou\?'none':''/);
+  assert.match(flow,/opponentWantsQuit/);assert.match(ranked,/id="rankedQuitAccept"/);assert.match(ranked,/id="rankedQuitDecline"/);
+});
 
 test('local quit cancels stale First Poop and delayed AI presentation work',()=>{
   assert.match(app,/let localGameGeneration=0,localGameActive=false/);

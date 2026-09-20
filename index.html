@@ -14,11 +14,9 @@
       <div class="brand">
         <span class="brand-mark">GoStop <em>Live!</em></span>
       </div>
-      <div class="round-status" data-i18n-aria="language" aria-label="Game controls">
+      <div class="round-status" aria-label="Game controls">
         <button data-i18n="howTo" id="howToBtn" class="glass-btn" type="button">How to Play</button>
-        <button id="languageBtn" class="glass-btn" type="button" aria-haspopup="true">English ▾</button>
-        <div id="languageMenu" class="language-menu" hidden></div>
-        <div class="options-control"><button data-i18n="options" id="newGameBtn" class="glass-btn strong" type="button" aria-haspopup="menu" aria-expanded="false">Options ▾</button><div id="optionsMenu" class="options-menu" role="menu" hidden><button id="optionsNewGameBtn" type="button" role="menuitem" data-i18n="newGame">New Game</button><button id="optionsQuitBtn" type="button" role="menuitem" data-i18n="quit">Quit</button></div></div>
+        <button data-i18n="resultQuit" id="newGameBtn" class="glass-btn stop-btn game-quit-header" type="button">Quit Game</button>
       </div>
     </header>
 
@@ -206,7 +204,7 @@
   <div id="soloStartOverlay" class="solo-start-overlay" hidden data-current-menu-ready="false">
     <strong>GoStop <em>Live!</em></strong>
     <div class="start-actions"><button id="playSoloBtn" class="play-solo-btn" type="button" data-i18n="playSolo">Play Solo</button><button id="createOnlineBtn" class="play-solo-btn" type="button" data-i18n="createOnlineGame">Create Online Game</button></div>
-    <form id="joinOnlineForm" class="online-join-form"><label for="onlineRoomCode" data-i18n="roomCode">Room code</label><input id="onlineRoomCode" autocomplete="off" maxlength="14" pattern="[A-Za-z2-9]{14}" required><button type="submit" class="glass-btn strong" data-i18n="joinGame">Join Game</button></form>
+    <form id="joinOnlineForm" class="online-join-form" hidden style="display:none!important"><label for="onlineRoomCode" data-i18n="roomCode">Room code</label><input id="onlineRoomCode" autocomplete="off" maxlength="14" pattern="[A-Za-z2-9]{14}" required><button type="submit" class="glass-btn strong" data-i18n="joinGame">Join Game</button></form>
     <p id="onlineStatus" class="online-status" role="status" aria-live="polite"></p>
   </div>
   <div id="openingOverlay" class="opening-overlay" aria-live="polite" aria-hidden="true">
@@ -239,10 +237,10 @@
   <script src="game-engine.js"></script>
   <script src="session-authority.js"></script>
   <script src="runtime-config.js"></script>
-  <script src="ranked-client.js?v=20260920-5"></script>
+  <script src="ranked-client.js?v=20260920-6"></script>
   <script src="online-client.js?v=20260919-3"></script>
   <script src="presentation-plan.js"></script>
-  <script src="app.js?v=20260920-2"></script>
+  <script src="app.js?v=20260920-3"></script>
   <script src="diagnostics.js"></script>
 </body>
 </html>

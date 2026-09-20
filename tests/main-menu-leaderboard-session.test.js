@@ -151,7 +151,8 @@ test('saved account identity hydrates synchronously before background session ve
   assert.match(source,/const ACCOUNT_CACHE_KEY='gostop-account-cache'/);
   assert.match(source,/const cached=JSON\.parse\(localStorage\.getItem\(ACCOUNT_CACHE_KEY\)\|\|'null'\);if\(authToken&&cached&&typeof cached==='object'&&cached\.nickname\)\{account=cached;readAcknowledgedNoticeCache\(account\.id\);\}/);
   assert.match(source,/function persistAccountCache\(\)\{try\{if\(authToken&&account\)localStorage\.setItem\(ACCOUNT_CACHE_KEY,JSON\.stringify\(account\)\)/);
-  assert.match(source,/if\(authToken&&!account\)\{accountBox\.hidden=true;return;\}/);
+  assert.match(source,/accountIdentity\.hidden=!!authToken&&!account/);
+  assert.match(source,/if\(authToken&&!account\)\{accountIdentity\.innerHTML='';return;\}/);
   assert.match(source,/localStorage\.removeItem\(TOKEN_KEY\);localStorage\.removeItem\(ACCOUNT_CACHE_KEY\)/);
 });
 
@@ -230,6 +231,14 @@ test('Coin mode buttons reflect the account-wide active ranked game and resume t
   assert.match(worker,/Only one Coin game can be active at a time/);
 });
 
+
+test('main menu owns Language and Enable Notifications while legacy Room code Join Game is visually removed',()=>{
+  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  assert.match(source,/languageBtn\.id='languageBtn'/);assert.match(source,/languageMenu\.id='languageMenu'/);assert.match(source,/notificationsBtn\.id='enablePlayNotificationsBtn'/);
+  assert.match(source,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
+  assert.doesNotMatch(html,/id="languageBtn"/);assert.match(html,/id="joinOnlineForm"[^>]*hidden[^>]*display:none!important/);
+  assert.match(source,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
+});
 
 test('main menu separates Training, Free Gaming, Competitive Gaming, and Leaderboards',()=>{
   assert.match(source,/trainingBtn\.textContent='Training Mode'/);
