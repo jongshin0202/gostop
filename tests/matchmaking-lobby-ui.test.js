@@ -16,6 +16,8 @@ test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and 
   assert.match(panel,/id="competitiveShareLink"/);assert.match(panel,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
   assert.match(client,/if\(createRoom\)\{createRoom\.textContent='Create Room';controls\.appendChild\(createRoom\);\}/);
   assert.match(client,/if\(joinForm\)joinForm\.hidden=true/);
+  assert.doesNotMatch(client,/controls\.appendChild\(onlineStatus\)/);
+  assert.match(client,/onlineNicknameSearch'\)\.value='';\$\('lobbyStatus'\)\.textContent=''/);
 });
 
 test('Browse and Search player cards show ranks, Coins, record, matchup history, and Available Away Busy Offline states',()=>{
@@ -140,10 +142,10 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 });
 
 
-test('frontend cache versions advance after presence and reconnect fixes',()=>{
+test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-3/);
-  assert.match(index,/app\.js\?v=20260920-1/);
+  assert.match(index,/ranked-client\.js\?v=20260920-4/);
+  assert.match(index,/app\.js\?v=20260920-2/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
