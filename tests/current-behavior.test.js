@@ -2298,7 +2298,7 @@ test('Online New Game submits to server authority without creating a local game'
 
 test('multiplayer flow UI and Go submission remain authoritative and fail closed',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
-  assert.match(html,/id="newGameBtn"[^>]*data-i18n="resultQuit"[^>]*>Quit Game</);assert.doesNotMatch(html,/id="optionsMenu"|id="optionsNewGameBtn"|id="optionsQuitBtn"/);
+  assert.match(html,/data-i18n="resultQuit"[^>]*id="newGameBtn"[^>]*>Quit Game</);assert.doesNotMatch(html,/id="optionsMenu"|id="optionsNewGameBtn"|id="optionsQuitBtn"/);
   for(const id of ['replayWaitingDialog','resultQuitBtn','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','opponentEndedDialog'])assert.ok(html.includes(`id="${id}"`),id);
   assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareGo'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
   assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareStop'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
