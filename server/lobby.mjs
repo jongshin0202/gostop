@@ -2,6 +2,7 @@ const CHALLENGE_TTL_MS=60000;
 const ACCEPTED_CHALLENGE_TTL_MS=120000;
 const REQUEST_COOLDOWN_MS=5000;
 const PRESENCE_AWAY_MS=300000;
+const PRESENCE_HEARTBEAT_STALE_MS=90000;
 const MAX_LOBBY_RESULTS=10;
 const MAX_SEARCH_RESULTS=20;
 const MATCH_WEIGHTS=Object.freeze({coinsPerGame:.60,gamesPlayed:.25,walletCoins:.15});
@@ -37,9 +38,9 @@ export class Lobby{
   clientById(clientId){for(const client of this.clients.values())if(client.clientId===clientId)return client;return null;}
   clientPresence(client,now=Date.now()){
     if(!client)return {active:false,away:false,notifyable:false};
-    const last=Math.min(now,Number(client.lastActivityAt)||Number(client.connectedAt)||0),recent=last>0&&now-last<=PRESENCE_AWAY_MS,foreground=client.foreground===true;
-    const active=!client.twoPlayer&&client.available!==false&&foreground&&recent,away=!client.twoPlayer&&(!foreground||!recent),notifyable=away&&client.notificationsEnabled===true;
-    return {active,away,notifyable,recent,foreground};
+    const last=Math.min(now,Number(client.lastActivityAt)||Number(client.connectedAt)||0),recent=last>0&&now-last<=PRESENCE_AWAY_MS,foreground=client.foreground===true,lastPresence=Math.min(now,Number(client.lastPresenceAt)||Number(client.connectedAt)||0),heartbeatFresh=lastPresence>0&&now-lastPresence<=PRESENCE_HEARTBEAT_STALE_MS;
+    const active=!client.twoPlayer&&client.available!==false&&foreground&&recent,away=!client.twoPlayer&&(!foreground||!recent),notifyable=away&&client.available!==false&&client.notificationsEnabled===true&&heartbeatFresh;
+    return {active,away,notifyable,recent,foreground,heartbeatFresh};
   }
   clientCanReceiveChallenge(client){const state=this.clientPresence(client);return !client?.twoPlayer&&(state.active||state.notifyable);}
   clientByAccountId(accountId,{challengeableOnly=false,activeOnly=false}={}){
@@ -115,7 +116,7 @@ export class Lobby{
     if(message.type==='autoMatchStart'){if(!this.clientPresence(client).active||client.twoPlayer)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'You are already in a two-player game.'});client.autoMatching=true;await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
     if(message.type==='autoMatchCancel'){const pending=this.pendingChallengeFor(client.account.id);if(pending?.automatic)this.cancelPendingChallenge(pending,'Auto Match was cancelled.');client.autoMatching=false;this.send(client.socket,{type:'autoMatchCancelled'});await this.broadcastRecommendations();return;}
     if(message.type==='setAvailability'){
-      client.available=message.available!==false;client.twoPlayer=!!message.twoPlayer;client.mode=String(message.mode||'menu').slice(0,32);client.foreground=message.foreground===true;client.notificationsEnabled=message.notificationsEnabled===true;const reported=Number(message.lastActivityAt);if(Number.isFinite(reported)&&reported>0)client.lastActivityAt=Math.min(Date.now(),reported);
+      client.available=message.available!==false;client.twoPlayer=!!message.twoPlayer;client.mode=String(message.mode||'menu').slice(0,32);client.foreground=message.foreground===true;client.notificationsEnabled=message.notificationsEnabled===true;client.lastPresenceAt=Date.now();const reported=Number(message.lastActivityAt);if(Number.isFinite(reported)&&reported>0)client.lastActivityAt=Math.min(Date.now(),reported);
       if(client.twoPlayer){client.autoMatching=false;const pending=this.pendingChallengeFor(client.account.id);if(pending)this.cancelPendingChallenge(pending,'The player is no longer available.');}
       else if(this.clientPresence(client).active)await this.tryWaitingAutoMatches();
       await this.broadcastRecommendations();return;
@@ -167,7 +168,7 @@ export class Lobby{
     const url=new URL(request.url);if(request.method!=='GET'||url.pathname!=='/connect')return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     if(request.headers.get('Upgrade')!=='websocket')return json({ok:false,error:{code:'UPGRADE_REQUIRED',message:'WebSocket upgrade required.'}},426);
     const protocol=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(value=>value.trim()).find(value=>value.startsWith('gostop-auth.')),token=protocol?.slice('gostop-auth.'.length),geoHeaders={country:request.headers.get('x-gostop-country')||'',region:request.headers.get('x-gostop-region')||''},account=await this.resolveAccount(token,geoHeaders);if(!account)return json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401);
-    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',autoMatching:false,searchQuery:'',connectedAt,lastActivityAt:connectedAt,foreground:false,notificationsEnabled:false};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.handle(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
+    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',autoMatching:false,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.handle(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
   }
 }
 
