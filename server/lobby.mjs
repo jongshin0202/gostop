@@ -185,8 +185,26 @@ export class Lobby{
     }
   }
   async disconnect(socket){const client=this.clients.get(socket);if(!client)return;this.clients.delete(socket);const challenge=this.activeChallengeFor(client.account.id),ownsChallenge=challenge&&(challenge.fromClientId===client.clientId||challenge.toClientId===client.clientId);if(ownsChallenge){if(challenge.status==='pending')this.cancelPendingChallenge(challenge,'The other player went offline.');else{this.releaseChallenge(challenge);const otherId=challenge.fromClientId===client.clientId?challenge.toClientId:challenge.fromClientId,other=this.clientById(otherId);if(other){other.available=true;this.send(other.socket,{type:'challengeCancelled',requestId:challenge.id,message:'The other player went offline before the game started.'});}this.challenges.delete(challenge.id);}}await this.broadcastRecommendations();}
+  resetLobbyRuntime(reason='System reset'){
+    for(const challenge of this.challenges.values())this.clearChallengeTimer(challenge);
+    this.challenges.clear();this.lastRequestAt.clear();
+    for(const client of this.clients.values()){try{client.socket.close(4002,reason);}catch(_){}}
+    this.clients.clear();return {ok:true};
+  }
+  removeAccountRuntime(accountId){
+    const id=String(accountId||'');for(const challenge of [...this.challenges.values()])if(challenge.from===id||challenge.to===id)this.cancelPendingChallenge(challenge,'The player account was removed.');
+    this.lastRequestAt.delete(id);for(const [socket,client] of [...this.clients])if(client.account?.id===id){this.clients.delete(socket);try{socket.close(4003,'Account removed');}catch(_){}}
+    return {ok:true};
+  }
   async fetch(request){
-    const url=new URL(request.url);if(request.method!=='GET'||url.pathname!=='/connect')return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
+    const url=new URL(request.url);
+    if(url.pathname==='/system-reset'||url.pathname==='/system-delete-account'){
+      if(request.headers.get('x-gostop-system-admin')!=='1')return json({ok:false,error:{code:'SYSTEM_ADMIN_REQUIRED',message:'System admin authorization required.'}},401);
+      if(request.method!=='POST')return json({ok:false,error:{code:'METHOD_NOT_ALLOWED',message:'POST required.'}},405);
+      if(url.pathname==='/system-reset')return json(this.resetLobbyRuntime());
+      const body=await request.json().catch(()=>({}));return json(this.removeAccountRuntime(body.accountId));
+    }
+    if(request.method!=='GET'||url.pathname!=='/connect')return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     if(request.headers.get('Upgrade')!=='websocket')return json({ok:false,error:{code:'UPGRADE_REQUIRED',message:'WebSocket upgrade required.'}},426);
     const protocol=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(value=>value.trim()).find(value=>value.startsWith('gostop-auth.')),token=protocol?.slice('gostop-auth.'.length),geoHeaders={country:request.headers.get('x-gostop-country')||'',region:request.headers.get('x-gostop-region')||''},account=await this.resolveAccount(token,geoHeaders);if(!account)return json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401);
     const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',autoMatching:false,autoMatchTried:new Set(),searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.handle(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});

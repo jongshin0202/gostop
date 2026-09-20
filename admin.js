@@ -240,6 +240,51 @@
     }finally{setBusy(false);}
   }
 
+  async function loadSystemReset(){
+    setBusy(true);try{
+      const data=await api('/system-reset/status'),backup=data.primary||null,restore=$('restorePreviousReset');
+      restore.disabled=!backup;
+      $('systemResetBackupStatus').innerHTML=backup
+        ?detailBoxes([['Backup created',esc(date(backup.createdAt))],['Reset type',pill(humanize(backup.resetMode||'reset point'))],['Accounts',fmt(backup.accountCount)],['Games',fmt(backup.gameCount)],['Sessions',fmt(backup.sessionCount)],['Active rooms',fmt(backup.rooms)]])
+        +`<p class="muted">This restore point contains a complete snapshot taken immediately before the last reset or restore. Restoring it first saves the current system as the new rollback point.</p>`
+        :'<div class="empty">No previous reset point is available yet. The first system reset will create one automatically.</div>';
+      setExport('system-reset-backup',backup?[backup]:[]);
+    }finally{setBusy(false);}
+  }
+
+  async function systemResetAction(mode){
+    const full=mode==='full',question=full
+      ?'This will back up the entire system and then delete ALL system data and ALL player accounts. Are you sure you want to continue?'
+      :'This will back up the entire system and then clear all system activity while keeping complete player account records. Are you sure you want to continue?';
+    if(!window.confirm(question))return;
+    const form=await actionPrompt({
+      title:full?'Confirm Full System Reset':'Confirm Reset — Keep Accounts',
+      fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize this destructive reset.'}],
+      confirmText:full?'Reset Entire System':'Reset System Data',
+      intro:'A verified backup is created before any data is cleared. The reset will not begin if backup creation fails.'
+    });if(!form)return;
+    try{
+      setBusy(true);const result=await api('/system-reset',{method:'POST',body:{mode,confirmPassword:form.adminPassword,reason:form.reason}});
+      alert(full?'Full system reset completed. A restore point was saved first.':`System data reset completed. ${fmt(result.accountsPreserved)} account records were preserved and a restore point was saved first.`);
+      await loadSystemReset();
+    }catch(error){fail(error);}finally{setBusy(false);}
+  }
+
+  async function restorePreviousResetPoint(){
+    if(!window.confirm('Restore the entire system from the previous reset point? The current system will first be saved as a safety backup so this restore can be reversed.'))return;
+    const form=await actionPrompt({
+      title:'Restore Data from Previous Reset Point',
+      fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize the restore.'}],
+      confirmText:'Restore Entire System',
+      intro:'The current system will be backed up first. The previous reset point is restored only after the safety backup succeeds.'
+    });if(!form)return;
+    try{
+      setBusy(true);await api('/system-restore',{method:'POST',body:{confirmPassword:form.adminPassword,reason:form.reason}});
+      alert('System restore completed successfully. The state from before this restore is now the available reset point.');
+      await loadSystemReset();
+    }catch(error){fail(error);}finally{setBusy(false);}
+  }
+
   async function loadAudit(){
     setBusy(true);try{
       const data=await api('/audit?limit=1000');auditById=new Map(data.audit.map(item=>[String(item.id),item]));
@@ -249,8 +294,8 @@
   }
 
   async function selectView(view){
-    currentView=view;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===`view-${view}`));document.querySelectorAll('#adminNav button').forEach(btn=>btn.classList.toggle('active',btn.dataset.view===view));$('viewTitle').textContent=({overview:'Overview',players:'All Players',games:'All Games',abandoned:'Forcefully Abandoned Games',rankings:'Player Rankings',leaderboards:'Leaderboards',sessions:'Game Sessions',geography:'Geography / IP',abuse:'Fraud / Abuse Signals',system:'System Health',audit:'Admin Audit Log'})[view]||view;
-    try{resetStatus();if(view==='overview')await loadOverview();else if(view==='players')await loadPlayers();else if(view==='games')await loadGames();else if(view==='abandoned')await loadGames('abandoned');else if(view==='rankings')await loadRankings();else if(view==='leaderboards')await loadLeaderboards();else if(view==='sessions')await loadSessions();else if(view==='geography')await loadGeography();else if(view==='abuse')await loadAbuse();else if(view==='system')await loadSystem();else if(view==='audit')await loadAudit();}catch(error){fail(error);}
+    currentView=view;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('active',el.id===`view-${view}`));document.querySelectorAll('#adminNav button').forEach(btn=>btn.classList.toggle('active',btn.dataset.view===view));$('viewTitle').textContent=({overview:'Overview',players:'All Players',games:'All Games',abandoned:'Forcefully Abandoned Games',rankings:'Player Rankings',leaderboards:'Leaderboards',sessions:'Game Sessions',geography:'Geography / IP',abuse:'Fraud / Abuse Signals',system:'System Health',audit:'Admin Audit Log','system-reset':'System Reset'})[view]||view;
+    try{resetStatus();if(view==='overview')await loadOverview();else if(view==='players')await loadPlayers();else if(view==='games')await loadGames();else if(view==='abandoned')await loadGames('abandoned');else if(view==='rankings')await loadRankings();else if(view==='leaderboards')await loadLeaderboards();else if(view==='sessions')await loadSessions();else if(view==='geography')await loadGeography();else if(view==='abuse')await loadAbuse();else if(view==='system')await loadSystem();else if(view==='audit')await loadAudit();else if(view==='system-reset')await loadSystemReset();}catch(error){fail(error);}
   }
 
   function detailBoxes(items){return `<div class="detail-grid">${items.map(([label,value])=>`<div class="detail-box"><span>${esc(label)}</span><strong>${value}</strong></div>`).join('')}</div>`;}
@@ -277,7 +322,7 @@
     try{
       const data=await api(`/players/${encodeURIComponent(id)}`),p=data.player;$('detailTitle').textContent=`${p.nickname} — Player`;
       const loc=[p.location?.city,p.location?.region,p.location?.countryCode].filter(Boolean).join(', ')||'—';
-      const controls=`<div class="detail-actions"><button class="secondary" data-admin-action="wallet" data-id="${esc(id)}">Adjust Wallet</button><button class="secondary" data-admin-action="profile" data-id="${esc(id)}">Edit Profile</button><button class="${p.suspended?'secondary':'danger'}" data-admin-action="suspend" data-id="${esc(id)}" data-suspended="${p.suspended?'1':'0'}">${p.suspended?'Unsuspend':'Suspend'}</button><button class="danger" data-admin-action="disconnect" data-id="${esc(id)}">Reset Disconnect Allowance</button><button class="danger" data-admin-action="player-global" data-id="${esc(id)}">Reset Player Global</button><button class="danger" data-admin-action="player-month" data-id="${esc(id)}">Reset Player Month</button></div>`;
+      const controls=`<div class="detail-actions"><button class="secondary" data-admin-action="wallet" data-id="${esc(id)}">Adjust Wallet</button><button class="secondary" data-admin-action="profile" data-id="${esc(id)}">Edit Profile</button><button class="${p.suspended?'secondary':'danger'}" data-admin-action="suspend" data-id="${esc(id)}" data-suspended="${p.suspended?'1':'0'}">${p.suspended?'Unsuspend':'Suspend'}</button><button class="danger" data-admin-action="disconnect" data-id="${esc(id)}">Reset Disconnect Allowance</button><button class="danger" data-admin-action="player-global" data-id="${esc(id)}">Reset Player Global</button><button class="danger" data-admin-action="player-month" data-id="${esc(id)}">Reset Player Month</button><button class="danger" data-admin-action="delete-player" data-id="${esc(id)}">Delete Account & All Records</button></div>`;
       const connections=data.connections.map(x=>`<tr><td>${date(x.recordedAt)}</td><td>${mono(x.ip)}</td><td>${esc(x.city||'—')}</td><td>${esc(x.region||x.regionCode||'—')}</td><td>${esc(x.countryCode||'—')}</td><td>${esc(x.timeZone||'—')}</td><td>${esc(humanize(x.kind||'—'))}</td></tr>`);
       const ledger=data.ledger.map(x=>`<tr><td>${date(x.createdAt)}</td><td>${pill(humanize(x.type||'unknown'))}</td><td class="number">${Number(x.amount)>0?'+':''}${fmt(x.amount)}</td><td>${mono(x.gameId||'')}</td><td>${esc(x.reason||'')}</td></tr>`);
       $('detailBody').innerHTML=
@@ -417,6 +462,11 @@
       else if(kind==='disconnect'){const month=new Date().toISOString().slice(0,7),form=await actionPrompt({title:'Reset Monthly Disconnect Allowance',fields:[{name:'month',label:'Month (YYYY-MM)',value:month}]});if(!form)return;await api(`/players/${encodeURIComponent(id)}/disconnect-reset`,{method:'POST',body:{month:form.month,reason:form.reason}});await showPlayer(id);}
       else if(kind==='player-global'||kind==='player-month'){const month=$('leaderboardMonth').value||new Date().toISOString().slice(0,7),form=await actionPrompt({title:kind==='player-global'?'Reset Player Global Leaderboard':'Reset Player Monthly Leaderboard',fields:kind==='player-month'?[{name:'month',label:'Month',type:'month',value:month}]:[]});if(!form)return;await api('/leaderboards/reset',{method:'POST',body:{scope:kind,accountId:id,month:form.month||month,reason:form.reason}});await showPlayer(id);}
       else if(kind==='game-correct'){const correction=await gameCorrectionPrompt(id);if(!correction)return;if(!Object.keys(correction.patch).length&&!correction.walletAdjustments.length){alert('No values were changed.');return;}await api(`/games/${encodeURIComponent(id)}/correct`,{method:'POST',body:correction});await showGame(id);}
+      else if(kind==='delete-player'){
+        if(!window.confirm('Delete this account and every stored record associated with this player ID? This cannot be undone except through a system backup that predates the deletion.'))return;
+        const form=await actionPrompt({title:'Delete Account & All Records',fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize permanent account deletion.'}],confirmText:'Delete Account',intro:'This removes the account, login sessions, games, sessions, ledgers, connection history and other records that reference this player. Existing system backups are also purged so they cannot restore the deleted account.'});if(!form)return;
+        await api(`/players/${encodeURIComponent(id)}/delete`,{method:'POST',body:{confirmPassword:form.adminPassword,reason:form.reason}});if($('detailDialog').open)$('detailDialog').close();alert('Player account and associated records were deleted.');
+      }
       await refreshCurrent();
     }catch(error){fail(error);}
   }
@@ -451,6 +501,7 @@
   $('playerSearchBtn').addEventListener('click',loadPlayers);$('playerSort').addEventListener('change',loadPlayers);$('playerSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadPlayers();});
   $('gameSearchBtn').addEventListener('click',()=>loadGames());$('abandonSearchBtn').addEventListener('click',()=>loadGames('abandoned'));$('rankingRefresh').addEventListener('click',loadRankings);$('rankingMetric').addEventListener('change',loadRankings);$('sessionRefresh').addEventListener('click',loadSessions);
   $('resetGlobal').addEventListener('click',()=>leaderboardAction('resetGlobal'));$('resetMonth').addEventListener('click',()=>leaderboardAction('resetMonth'));$('rebuildGlobal').addEventListener('click',()=>leaderboardAction('rebuildGlobal'));$('rebuildMonth').addEventListener('click',()=>leaderboardAction('rebuildMonth'));$('leaderboardMonth').addEventListener('change',loadLeaderboards);
+  $('resetKeepAccounts').addEventListener('click',()=>systemResetAction('preserve-accounts'));$('resetEverything').addEventListener('click',()=>systemResetAction('full'));$('restorePreviousReset').addEventListener('click',restorePreviousResetPoint);
 
   window.addEventListener('error',event=>{if(!$('adminApp')?.hidden)return;showFailureDialog(event.error||new Error(event.message),'JavaScript error prevented admin login from completing.');});
   window.addEventListener('unhandledrejection',event=>{if(!$('adminApp')?.hidden)return;const error=event.reason instanceof Error?event.reason:new Error(String(event.reason));showFailureDialog(error,'Unhandled promise error prevented admin login from completing.');});

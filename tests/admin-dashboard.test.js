@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import fs from 'node:fs';
 import {AccountStore} from '../server/ranked-account-store.mjs';
+import {BackupStore} from '../server/backup-store.mjs';
 import worker from '../server/worker.mjs';
 
 class MemoryStorage{
@@ -17,6 +18,12 @@ const request=(path,{method='GET',body,headers={}}={})=>new Request(`https://acc
 const admin=(path,options={})=>request(path,{...options,headers:{'x-gostop-admin':'1',...geo,...(options.headers||{})}});
 const register=async(store,email='admin-player@example.com',nickname='AdminPlayer')=>(await (await store.fetch(request('/register',{method:'POST',headers:geo,body:{email,nickname,password:'UsefulPass9',confirmPassword:'UsefulPass9'}}))).json());
 const storeAt=(iso='2026-09-18T15:00:00.000Z')=>new AccountStore({storage:new MemoryStorage()},{},{cryptoApi:webcrypto,now:()=>iso});
+const storeWithBackup=(iso='2026-09-20T07:00:00.000Z')=>{
+  const backup=new BackupStore({storage:new MemoryStorage()},{},{cryptoApi:webcrypto,now:()=>iso});
+  const binding={idFromName:name=>name,get:()=>({fetch:request=>backup.fetch(request)})};
+  const env={ADMIN_TOKEN:'test-admin-token',BACKUP_STORE:binding};
+  return {store:new AccountStore({storage:new MemoryStorage()},env,{cryptoApi:webcrypto,now:()=>iso}),backup};
+};
 
 test('admin gateway requires configured secret and valid bearer token',async()=>{
   const origin={'Origin':'https://gostoplive.com'};
@@ -78,6 +85,40 @@ test('admin suspension blocks login and authenticated game resolution',async()=>
   const resolve=await (await store.fetch(request('/internal/resolve',{headers:{...geo,Authorization:`Bearer ${registered.session.token}`}}))).json();assert.equal(resolve.account,null);
 });
 
+test('system reset preserves complete account records when requested, backs up first, and restore swaps rollback point',async()=>{
+  const {store,backup}=storeWithBackup(),registered=await register(store,'preserve@example.com','PreservePlayer'),id=registered.account.id;
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{gameId:'preserve-game',mode:'solo',winnerPlayerId:'human',participants:[{accountId:id,playerId:'human',nickname:'PreservePlayer',won:true,walletDelta:9,coinsWon:9}]}}));
+  const account=await store.accountById(id);account.activeRanked={sessionId:'active-session',mode:'solo',roomCode:'ABCDEFGHJK2345',startedAt:'2026-09-20T06:00:00.000Z'};await store.storage.put(`account:${id}`,account);
+  const before=structuredClone(account);
+  const reset=await (await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'preserve-accounts',confirmPassword:'test-admin-token',reason:'Pre-launch cleanup'}}))).json();
+  assert.equal(reset.ok,true);assert.equal(reset.accountsPreserved,1);assert.ok(reset.backup?.id);
+  const kept=await store.accountById(id);assert.equal(kept.walletCoins,before.walletCoins);assert.deepEqual(kept.stats,before.stats);assert.equal(kept.activeRanked,null);
+  assert.equal((await store.storage.list({prefix:'game:'})).size,0);assert.equal((await store.storage.list({prefix:`ledger:${id}:`})).size,0);assert.equal((await store.storage.list({prefix:'auth:'})).size,0);
+  let status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.equal(status.primary.resetMode,'preserve-accounts');
+  const restored=await (await store.fetch(admin('/admin/system-restore',{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Undo test reset'}}))).json();
+  assert.equal(restored.ok,true);assert.ok(await store.storage.get('game:preserve-game'));assert.equal((await store.accountById(id)).activeRanked.roomCode,'ABCDEFGHJK2345');
+  status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.equal(status.primary.resetMode,'pre-restore-safety');assert.equal(status.safety,null);
+});
+
+test('full system reset removes accounts too and restore returns the entire system',async()=>{
+  const {store,backup}=storeWithBackup(),registered=await register(store,'fullreset@example.com','FullResetPlayer'),id=registered.account.id;
+  const denied=await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'wrong',reason:'Should fail'}}));assert.equal(denied.status,403);assert.ok(await store.accountById(id));
+  const reset=await (await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'test-admin-token',reason:'Clean launch'}}))).json();assert.equal(reset.ok,true);assert.equal(await store.accountById(id),undefined);
+  assert.equal((await store.storage.list()).size,0);const status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.ok(status.primary);
+  const restored=await (await store.fetch(admin('/admin/system-restore',{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Restore clean-launch backup'}}))).json();assert.equal(restored.ok,true);assert.equal((await store.accountById(id)).nickname,'FullResetPlayer');
+});
+
+test('deleting a player removes ID-linked records and purges restore points',async()=>{
+  const {store,backup}=storeWithBackup(),a=await register(store,'delete-me@example.com','DeleteMe'),b=await register(store,'keep-me@example.com','KeepMe'),id=a.account.id;
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{gameId:'delete-player-game',mode:'online',winnerPlayerId:'a',participants:[{accountId:id,playerId:'a',nickname:'DeleteMe',won:true,walletDelta:7,coinsWon:7},{accountId:b.account.id,playerId:'b',nickname:'KeepMe',won:false,walletDelta:-7,coinsWon:0}]}}));
+  const snapshotEntries=[...(await store.storage.list()).entries()].map(([key,value])=>({key,value}));
+  await backup.fetch(new Request('https://backup/snapshot/write',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slot:'primary',snapshot:{accountEntries:snapshotEntries,rooms:[]},metadata:{fingerprint:'contains-player'}})}));
+  const deleted=await (await store.fetch(admin(`/admin/players/${id}/delete`,{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Remove test ID'}}))).json();assert.equal(deleted.ok,true);
+  assert.equal(await store.accountById(id),undefined);assert.ok(await store.accountById(b.account.id));assert.equal(await store.storage.get('game:delete-player-game'),undefined);
+  assert.equal((await store.storage.list({prefix:`ledger:${id}:`})).size,0);assert.equal((await store.storage.list({prefix:`connection:${id}:`})).size,0);
+  const backupData=await (await backup.fetch(new Request('https://backup/snapshot/primary'))).json();assert.equal(JSON.stringify(backupData.snapshot).includes(id),false);
+});
+
 test('new ranked settlements persist authoritative history and admin files stay unlinked from public menu',()=>{
   const finalRoom=fs.readFileSync(new URL('../server/ranked-room-final.mjs',import.meta.url),'utf8'),index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
   assert.match(finalRoom,/adminGameHistory\(\)/);assert.match(finalRoom,/history:this\.adminGameHistory\(\)/);
@@ -95,7 +136,7 @@ test('admin login uses explicit button handler, novice-friendly feedback, and ca
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
   assert.match(adminHtml,/Admin Password/);
-  assert.match(adminHtml,/admin\.js\?v=20260918-10/);
+  assert.match(adminHtml,/admin\.js\?v=20260920-1/);
   assert.match(adminJs,/openDashboardBtn'\)\.addEventListener\('click',submitAdminLogin\)/);
   assert.match(adminJs,/Connecting…/);
   assert.match(adminJs,/Connecting to the game server/);
@@ -123,6 +164,20 @@ test('admin authentication failure uses a simple in-page message with no technic
   assert.match(adminJs,/overlay\.hidden=false;overlay\.style\.display='grid'/);
   assert.match(adminCss,/\.failure-overlay\{/);
   const failureBlock=adminJs.slice(adminJs.indexOf('function showFailureDialog'),adminJs.indexOf('async function authenticate'));assert.doesNotMatch(failureBlock,/showModal\(\)|HTTP|failureCode|failureStatus|failureServer/);
+});
+
+test('System Reset is the final admin section with two backup-first reset modes and restore',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
+  assert.match(adminHtml,/data-view="audit">Audit Log<\/button>\s*<button data-view="system-reset">System Reset<\/button>/);
+  assert.match(adminHtml,/id="resetKeepAccounts"/);assert.match(adminHtml,/id="resetEverything"/);assert.match(adminHtml,/id="restorePreviousReset"[^>]*disabled/);
+  assert.match(adminJs,/systemResetAction\('preserve-accounts'\)/);assert.match(adminJs,/systemResetAction\('full'\)/);assert.match(adminJs,/restorePreviousResetPoint/);
+  assert.match(adminJs,/name:'adminPassword'.*type:'password'/);assert.match(adminApi,/requireConfirmationPassword/);assert.match(adminApi,/writeBackup\(store,'primary'/);assert.match(adminApi,/writeBackup\(store,'safety'/);assert.match(adminApi,/promote-safety/);
+});
+
+test('player detail includes password-confirmed complete account deletion',()=>{
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
+  assert.match(adminJs,/Delete Account & All Records/);assert.match(adminJs,/kind==='delete-player'/);assert.match(adminJs,/adminPassword/);
+  assert.match(adminApi,/deletePlayerCompletely/);assert.match(adminApi,/purge-account/);assert.match(adminApi,/entryReferencesAccount/);
 });
 
 test('admin action Cancel buttons never submit required fields or trigger validation',()=>{
@@ -182,7 +237,7 @@ test('admin login still cannot fail silently and keeps simple request progress p
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.match(adminHtml,/Admin build 2026-09-19\.14/);
+  assert.match(adminHtml,/Admin build 2026-09-20\.1/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
     const headers=bySource.get(source);assert.ok(headers,source);
