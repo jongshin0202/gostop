@@ -166,6 +166,20 @@ test('admin authentication failure uses a simple in-page message with no technic
   const failureBlock=adminJs.slice(adminJs.indexOf('function showFailureDialog'),adminJs.indexOf('async function authenticate'));assert.doesNotMatch(failureBlock,/showModal\(\)|HTTP|failureCode|failureStatus|failureServer/);
 });
 
+test('System Reset is the final admin section with two backup-first reset modes and restore',()=>{
+  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
+  assert.match(adminHtml,/data-view="audit">Audit Log<\/button>\s*<button data-view="system-reset">System Reset<\/button>/);
+  assert.match(adminHtml,/id="resetKeepAccounts"/);assert.match(adminHtml,/id="resetEverything"/);assert.match(adminHtml,/id="restorePreviousReset"[^>]*disabled/);
+  assert.match(adminJs,/systemResetAction\('preserve-accounts'\)/);assert.match(adminJs,/systemResetAction\('full'\)/);assert.match(adminJs,/restorePreviousResetPoint/);
+  assert.match(adminJs,/name:'adminPassword'.*type:'password'/);assert.match(adminApi,/requireConfirmationPassword/);assert.match(adminApi,/writeBackup\(store,'primary'/);assert.match(adminApi,/writeBackup\(store,'safety'/);assert.match(adminApi,/promote-safety/);
+});
+
+test('player detail includes password-confirmed complete account deletion',()=>{
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
+  assert.match(adminJs,/Delete Account & All Records/);assert.match(adminJs,/kind==='delete-player'/);assert.match(adminJs,/adminPassword/);
+  assert.match(adminApi,/deletePlayerCompletely/);assert.match(adminApi,/purge-account/);assert.match(adminApi,/entryReferencesAccount/);
+});
+
 test('admin action Cancel buttons never submit required fields or trigger validation',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="actionCancelTop" type="button"/);
