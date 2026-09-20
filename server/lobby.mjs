@@ -101,7 +101,7 @@ export class Lobby{
       const creator=this.clientById(challenge.fromClientId),missed={type:'challengeMissed',requestId:challenge.id,automatic:!!challenge.automatic,createdAt:challenge.createdAt,from:challenge.fromProfile||{accountId:challenge.from,nickname:'Player'}};
       this.sendToAccount(challenge.to,missed);this.challenges.delete(challenge.id);
       if(challenge.automatic&&creator){
-        for(const item of this.clientsForAccount(challenge.to))item.autoMatching=false;creator.autoMatching=true;
+        for(const item of this.clientsForAccount(challenge.to))item.autoMatching=false;creator.autoMatching=true;creator.autoMatchCandidateId=null;
         await this.tryAutoMatch(creator);
       }else{
         this.releaseChallenge(challenge);if(creator)this.send(creator.socket,{type:'challengeNoAnswer',requestId:challenge.id,by:challenge.toProfile||{accountId:challenge.to,nickname:'Player'}});
@@ -114,17 +114,28 @@ export class Lobby{
   async tryAutoMatch(client){
     if(!this.clientCanReceiveChallenge(client)||client.twoPlayer||this.activeChallengeFor(client.account.id))return false;
     const rows=await this.leaderboardRows(),tried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set(),candidates=this.candidateClients(client).filter(candidate=>!tried.has(candidate.account.id));
-    if(!candidates.length){client.autoMatching=true;this.send(client.socket,{type:'autoMatchWaiting'});return false;}
+    if(!candidates.length){client.autoMatching=true;client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchWaiting'});return false;}
     const me=this.profile(client,rows),partner=candidates.map(candidate=>({candidate,profile:this.profile(candidate,rows)})).sort((a,b)=>distance(me,a.profile)-distance(me,b.profile)||b.profile.gamesPlayed-a.profile.gamesPlayed||a.profile.nickname.localeCompare(b.profile.nickname))[0].candidate;
     const details=await this.directoryProfiles([partner.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(partner,rows),...detail,...this.presenceForAccount(partner.account.id)}:this.profile(partner,rows);
-    const challenge=this.startChallenge(client,partner,rows,{automatic:true,toProfileOverride:toProfile});if(!challenge){this.send(client.socket,{type:'autoMatchWaiting'});return false;}
+    client.autoMatching=true;client.autoMatchCandidateId=partner.account.id;
+    this.send(client.socket,{type:'autoMatchCandidate',candidate:toProfile});
+    return true;
+  }
+  async acceptAutoMatchCandidate(client){
+    if(!client.autoMatching||!client.autoMatchCandidateId||this.activeChallengeFor(client.account.id))return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
+    const accountId=client.autoMatchCandidateId,target=this.clientByAccountId(accountId,{challengeableOnly:true});
+    if(!target){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
+    const rows=await this.leaderboardRows(),details=await this.directoryProfiles([target.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(target,rows),...detail,...this.presenceForAccount(target.account.id)}:this.profile(target,rows);
+    client.autoMatchCandidateId=null;
+    const challenge=this.startChallenge(client,target,rows,{automatic:true,toProfileOverride:toProfile});
+    if(!challenge){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);await this.tryAutoMatch(client);return false;}
     return true;
   }
   async tryWaitingAutoMatches(){
     const seen=new Set();
     for(const client of this.clients.values()){
       if(seen.has(client.account.id))continue;seen.add(client.account.id);
-      if(!client.autoMatching||!this.clientCanReceiveChallenge(client)||client.twoPlayer||this.activeChallengeFor(client.account.id))continue;
+      if(!client.autoMatching||client.autoMatchCandidateId||!this.clientCanReceiveChallenge(client)||client.twoPlayer||this.activeChallengeFor(client.account.id))continue;
       if(await this.tryAutoMatch(client))break;
     }
   }
@@ -135,11 +146,13 @@ export class Lobby{
     await this.pruneChallenges();
     if(message.type==='recommendations'){client.searchQuery='';const rows=await this.leaderboardRows();this.send(client.socket,{type:'recommendations',players:await this.recommendations(client,rows),onlineCount:this.onlineAccountCount(client),autoMatching:!!client.autoMatching});return;}
     if(message.type==='search'){client.searchQuery=String(message.query||'').trim();const rows=await this.leaderboardRows();this.send(client.socket,{type:'searchResults',query:client.searchQuery,players:await this.search(client,client.searchQuery,rows),onlineCount:this.onlineAccountCount(client),autoMatching:!!client.autoMatching});return;}
-    if(message.type==='autoMatchStart'){if(!this.clientCanReceiveChallenge(client)||client.twoPlayer)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'You are already in a two-player game.'});client.autoMatching=true;client.autoMatchTried=new Set();await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
-    if(message.type==='autoMatchCancel'){const pending=this.pendingChallengeFor(client.account.id);if(pending?.automatic)this.cancelPendingChallenge(pending,'Auto Match was cancelled.');client.autoMatching=false;client.autoMatchTried=new Set();this.send(client.socket,{type:'autoMatchCancelled'});await this.broadcastRecommendations();return;}
+    if(message.type==='autoMatchStart'){if(!this.clientCanReceiveChallenge(client)||client.twoPlayer)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'You are already in a two-player game.'});client.autoMatching=true;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
+    if(message.type==='autoMatchNext'){if(!client.autoMatching)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'Auto Match is no longer active.'});client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();if(client.autoMatchCandidateId)client.autoMatchTried.add(client.autoMatchCandidateId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
+    if(message.type==='autoMatchAccept'){await this.acceptAutoMatchCandidate(client);await this.broadcastRecommendations();return;}
+    if(message.type==='autoMatchCancel'){const pending=this.pendingChallengeFor(client.account.id);if(pending?.automatic)this.cancelPendingChallenge(pending,'Auto Match was cancelled.');client.autoMatching=false;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchCancelled'});await this.broadcastRecommendations();return;}
     if(message.type==='setAvailability'){
       client.available=message.available!==false;client.twoPlayer=!!message.twoPlayer;client.mode=String(message.mode||'menu').slice(0,32);client.foreground=message.foreground===true;client.notificationsEnabled=message.notificationsEnabled===true;client.lastPresenceAt=Date.now();const reported=Number(message.lastActivityAt);if(Number.isFinite(reported)&&reported>0)client.lastActivityAt=Math.min(Date.now(),reported);
-      if(client.twoPlayer){client.autoMatching=false;const pending=this.pendingChallengeFor(client.account.id);if(pending)this.cancelPendingChallenge(pending,'The player is no longer available.');}
+      if(client.twoPlayer){client.autoMatching=false;client.autoMatchCandidateId=null;const pending=this.pendingChallengeFor(client.account.id);if(pending)this.cancelPendingChallenge(pending,'The player is no longer available.');}
       else if(this.clientCanReceiveChallenge(client))await this.tryWaitingAutoMatches();
       await this.broadcastRecommendations();return;
     }
@@ -159,7 +172,7 @@ export class Lobby{
       this.challenges.delete(challenge.id);await this.broadcastRecommendations();return;
     }
     if(message.type==='challenge'){
-      client.autoMatching=false;
+      client.autoMatching=false;client.autoMatchCandidateId=null;
       const now=Date.now(),last=this.lastRequestAt.get(client.account.id)||0;if(now-last<REQUEST_COOLDOWN_MS)return this.send(client.socket,{type:'challengeError',code:'REQUEST_COOLDOWN',message:'Please wait a moment before sending another request.'});this.lastRequestAt.set(client.account.id,now);
       const target=this.clientByAccountId(message.accountId,{challengeableOnly:true}),rows=await this.leaderboardRows(),challenge=this.startChallenge(client,target,rows,{automatic:false});if(!challenge)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'That player is no longer available.'});
       await this.broadcastRecommendations();return;
@@ -171,7 +184,7 @@ export class Lobby{
       if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});await this.broadcastRecommendations();return;}
       if(!this.challengeParticipantsAvailable(challenge)){this.cancelPendingChallenge(challenge,'One of the players is already in a two-player game.');await this.broadcastRecommendations();return;}
       this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});
-      const rows=await this.leaderboardRows();this.releaseChallenge(challenge);for(const item of this.clientsForAccount(challenge.from)){item.available=false;item.autoMatching=false;item.autoMatchTried=new Set();}for(const item of this.clientsForAccount(challenge.to)){item.available=false;item.autoMatching=false;}challenge.status='accepted';challenge.acceptedAt=Date.now();challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
+      const rows=await this.leaderboardRows();this.releaseChallenge(challenge);for(const item of this.clientsForAccount(challenge.from)){item.available=false;item.autoMatching=false;item.autoMatchTried=new Set();item.autoMatchCandidateId=null;}for(const item of this.clientsForAccount(challenge.to)){item.available=false;item.autoMatching=false;}challenge.status='accepted';challenge.acceptedAt=Date.now();challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
       this.send(challenger.socket,{type:'challengeAcceptedCreateRoom',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(client,rows)});this.send(client.socket,{type:'challengeAcceptedWaiting',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(challenger,rows)});await this.broadcastRecommendations();return;
     }
     if(message.type==='challengeRoomReady'){
@@ -210,7 +223,7 @@ export class Lobby{
     if(request.method!=='GET'||url.pathname!=='/connect')return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     if(request.headers.get('Upgrade')!=='websocket')return json({ok:false,error:{code:'UPGRADE_REQUIRED',message:'WebSocket upgrade required.'}},426);
     const protocol=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(value=>value.trim()).find(value=>value.startsWith('gostop-auth.')),token=protocol?.slice('gostop-auth.'.length),geoHeaders={country:request.headers.get('x-gostop-country')||'',region:request.headers.get('x-gostop-region')||''},account=await this.resolveAccount(token,geoHeaders);if(!account)return json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401);
-    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',autoMatching:false,autoMatchTried:new Set(),searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.handle(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
+    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',autoMatching:false,autoMatchTried:new Set(),autoMatchCandidateId:null,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.handle(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
   }
 }
 
