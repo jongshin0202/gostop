@@ -10,7 +10,7 @@ export class FinalRankedRoomCore extends RankedRoomCore{
   resetPauseBudgetForCurrentGame(){
     const flow=this.room.rankFlow;if(!flow)return;
     const sequence=this.room.gameSequence||0;if(flow.pauseGameSequence===sequence)return;
-    flow.pauseGameSequence=sequence;flow.pause=null;flow.pauseRemaining={};
+    flow.pauseGameSequence=sequence;flow.pause=null;flow.pauseResolution=null;flow.pauseRemaining={};
     for(const participant of this.room.participants)flow.pauseRemaining[participant.playerId]=participant.bot?0:2;
   }
   async load(){const room=await super.load();if(room)this.resetPauseBudgetForCurrentGame();return room;}

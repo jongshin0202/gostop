@@ -74,7 +74,7 @@ test('main-menu attract mode starts ten seconds after the visible menu becomes i
   assert.match(docs,/After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats/);
 });
 test('inactivity warning dismissal is sticky for the current warning while server countdown continues',()=>{
-  assert.match(source,/let flowInterval=null,dismissedInactivityKey=''/);
+  assert.match(source,/let flowInterval=null,dismissedInactivityKey='',pauseActionPending=false/);
   assert.match(source,/function inactivityDialogKey\(snapshot,inactivity=/);
   assert.match(source,/setDialog\(inactivityDialog,dismissedInactivityKey!==key\)/);
   assert.match(source,/rankedInactivityOk'\)\.addEventListener\('click',\(\)=>\{const key=inactivityDialogKey\(currentSnapshot\);if\(key\)dismissedInactivityKey=key;inactivityDialog\.close\(\);\}\)/);
@@ -88,16 +88,26 @@ test('nudge dialog never shows the abandonment countdown before warning phase',(
   assert.match(flow,/inactivity\.phase==='warning'[\s\S]*rankedInactivityCountdown'\)\.hidden=false/);
 });
 
-test('pause dialog gives requester Cancel, opponent Quit Game, and confirmation before penalty-free quit',()=>{
+test('pause UI supports draw quit, expired-pause win claim, requester cancel, and closes stale pause after Yes',()=>{
   assert.match(source,/rankedPauseCountdown\" class=\"ranked-countdown\">3:00/);
   assert.match(source,/id=\"rankedPauseAction\"/);
   assert.match(source,/id=\"rankedPauseQuitConfirmTitle\"/);
   assert.match(source,/id=\"rankedPauseQuitYes\"/);
   assert.match(source,/id=\"rankedPauseQuitNo\"/);
-  assert.match(source,/rt\(own\?'cancelPause':'quitPausedGame'\)/);
+  assert.match(source,/id=\"rankedPauseOutcomeTitle\"/);
+  assert.match(source,/waitingOnYou:'Waiting On You'/);
+  assert.match(source,/expiredPauseOpponent:'You can end the session with a win for the current game'/);
+  assert.match(source,/expiredPauseYou:'Opponent can end the session with a win for the current game'/);
+  assert.match(source,/pauseDrawTitle:'Game Ended in a Draw'/);
+  assert.match(source,/pause\.expired===true/);
   assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
   assert.match(source,/submitRanked\(\{type:'quitPausedGame'\}\)/);
-  assert.match(source,/pauseQuitConfirmDialog\.close\(\);if\(currentSnapshot\?\.sessionFlow\?\.pause\)renderRankedFlow\(currentSnapshot\)/);
+  assert.match(source,/submitRanked\(\{type:'claimExpiredPauseWin'\}\)/);
+  assert.match(source,/pauseActionPending=true;pauseQuitConfirmDialog\.close\(\);setDialog\(pauseDialog,false\)/);
+  assert.match(source,/pauseResolutionChanged/);
+  assert.match(source,/returnEndedOnlineSessionToMenu/);
+  assert.match(appSource,/if\(flow\.pauseResolution\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
+  assert.match(appSource,/returnEndedOnlineSessionToMenu\(\)\{returnOnlineToMenu\(\);\}/);
 });
 
 test('share-link room creator leaves Online Play overlay when the friend makes the room ready',()=>{

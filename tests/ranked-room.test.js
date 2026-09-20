@@ -53,23 +53,59 @@ test('pause requester can cancel immediately and resume normal inactivity timing
   assert.equal(core.room.rankFlow.pauseRemaining[a.playerId],1);
 });
 
-test('pause opponent can quit with no abandonment or Coin penalty',async()=>{
+test('opponent quit during active pause settles the current game as a draw with zero Coins and points',async()=>{
   const {core,sa,sb,accountStore}=await onlineRoom(),revision=sa.last('snapshot').snapshot.revision;
   await core.handle(sa,flow('pause-quit-start',revision,{type:'requestPause'}));
   const result=await core.handle(sb,flow('pause-quit-confirmed',revision,{type:'quitPausedGame'}));
   assert.equal(result.type,'actionAccepted');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.rankFlow.pause,null);assert.equal(core.room.rankFlow.abandonment,null);
+  assert.equal(core.room.rankFlow.pauseResolution.type,'draw');assert.equal(core.room.rankFlow.pauseResolution.points,0);
+  const settlement=accountStore.calls.findLast(call=>call.path==='/internal/game/settle');assert.ok(settlement);assert.equal(settlement.body.winnerPlayerId,null);assert.equal(settlement.body.finalPoints,0);assert.equal(settlement.body.settlementType,'pause-draw');
+  assert.ok(settlement.body.participants.every(item=>item.won===false&&item.walletDelta===0&&item.coinsWon===0&&item.points===0));
   assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
-  assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'&&call.body.summary?.reason==='opponent-quit-during-pause'));
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/session/end'&&call.body.summary?.reason==='pause-opponent-quit-draw'));
+  assert.equal(sa.last('snapshot').snapshot.sessionFlow.pauseResolution.type,'draw');assert.equal(sb.last('snapshot').snapshot.sessionFlow.pauseResolution.type,'draw');
 });
 
-test('pause timeout starts the 30-second abandonment warning immediately',async()=>{
+test('pause timeout becomes an indefinite expired-pause choice instead of abandonment',async()=>{
   let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
-  const {core,sa,accountStore}=await onlineRoom({now:clock}),revision=sa.last('snapshot').snapshot.revision;
+  const {core,sa,sb,accountStore}=await onlineRoom({now:clock}),revision=sa.last('snapshot').snapshot.revision;
   await core.handle(sa,flow('pause-timeout-start',revision,{type:'requestPause'}));
   instant='2026-09-15T04:48:00.001Z';await core.alarm();
-  assert.equal(core.room.rankFlow.pause,null);assert.equal(core.room.rankFlow.inactivity.phase,'warning');
-  assert.equal(core.room.rankFlow.inactivity.abandonAt-Date.parse(instant),30000);
-  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
+  assert.equal(core.room.rankFlow.pause.phase,'expired');assert.equal(core.room.rankFlow.inactivity,null);assert.equal(core.room.sessionFlow.ended,false);
+  assert.equal(sa.last('snapshot').snapshot.sessionFlow.pause.expired,true);assert.equal(sb.last('snapshot').snapshot.sessionFlow.pause.expired,true);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);assert.equal(core.storage.alarm,null);
+});
+
+test('paused player can Cancel after pause expiry and resume with fresh inactivity timing',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
+  const {core,sa}=await onlineRoom({now:clock}),revision=sa.last('snapshot').snapshot.revision;
+  await core.handle(sa,flow('pause-expire-cancel-start',revision,{type:'requestPause'}));instant='2026-09-15T04:48:00.001Z';await core.alarm();
+  const latest=sa.last('snapshot').snapshot.revision,result=await core.handle(sa,flow('pause-expire-cancel',latest,{type:'cancelPause'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.room.rankFlow.pause,null);assert.equal(core.room.sessionFlow.ended,false);assert.equal(core.room.rankFlow.inactivity.phase,'waiting');assert.equal(core.room.rankFlow.inactivity.nudgeAt-Date.parse(instant),180000);
+});
+
+test('opponent claiming an expired pause win gets base seven plus multipliers and forced Go-bak',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
+  const {core,a,b,sa,sb,accountStore}=await onlineRoom({now:clock}),revision=sa.last('snapshot').snapshot.revision;
+  await core.handle(sa,flow('pause-claim-start',revision,{type:'requestPause'}));instant='2026-09-15T04:48:00.001Z';await core.alarm();
+  const record=core.authority.exportMatch(core.room.matchId),winnerSide=record.seatByPlayer[b.playerId]==='playerA'?'human':'ai',loserSide=record.seatByPlayer[a.playerId]==='playerA'?'human':'ai';
+  record.state[winnerSide].go=0;record.state[winnerSide].shakes=1;record.state[winnerSide].shakeMultiplier=2;record.state[loserSide].go=1;record.state[loserSide].lastGoScore=999;
+  core.authority=core.authorityFactory({crypto:webcrypto,now:clock,trustedRuntime:true});core.authority.restoreMatch(record);await core.persist();
+  const latest=sb.last('snapshot').snapshot.revision,result=await core.handle(sb,flow('pause-claim-win',latest,{type:'claimExpiredPauseWin'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.rankFlow.pauseResolution.type,'win');assert.equal(core.room.rankFlow.pauseResolution.winnerPlayerId,b.playerId);assert.equal(core.room.rankFlow.pauseResolution.points,28);
+  const settlement=accountStore.calls.findLast(call=>call.path==='/internal/game/settle');assert.equal(settlement.body.finalPoints,28);assert.equal(settlement.body.winnerPlayerId,b.playerId);assert.equal(settlement.body.settlementType,'pause-expired-win');assert.ok(settlement.body.settlementReasons.includes('Shake ×2'));assert.ok(settlement.body.settlementReasons.includes('Go-bak ×2'));
+  const winner=settlement.body.participants.find(item=>item.playerId===b.playerId),loser=settlement.body.participants.find(item=>item.playerId===a.playerId);assert.equal(winner.walletDelta,28);assert.equal(winner.points,28);assert.equal(winner.coinsWon,28);assert.equal(loser.walletDelta,-28);assert.equal(loser.points,0);
+});
+
+test('opponent already in Go uses current score and Go scoring when claiming expired pause win',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant;
+  const {core,b,sa,sb,accountStore}=await onlineRoom({now:clock}),revision=sa.last('snapshot').snapshot.revision;
+  await core.handle(sa,flow('pause-go-start',revision,{type:'requestPause'}));instant='2026-09-15T04:48:00.001Z';await core.alarm();
+  const record=core.authority.exportMatch(core.room.matchId),winnerSide=record.seatByPlayer[b.playerId]==='playerA'?'human':'ai',loserSide=winnerSide==='human'?'ai':'human';
+  record.state[winnerSide].firstPpeokPoints=9;record.state[winnerSide].go=1;record.state[winnerSide].lastGoScore=9;record.state[winnerSide].shakes=0;record.state[winnerSide].shakeMultiplier=1;record.state[loserSide].go=0;
+  core.authority=core.authorityFactory({crypto:webcrypto,now:clock,trustedRuntime:true});core.authority.restoreMatch(record);await core.persist();
+  const latest=sb.last('snapshot').snapshot.revision;await core.handle(sb,flow('pause-go-win',latest,{type:'claimExpiredPauseWin'}));
+  const settlement=accountStore.calls.findLast(call=>call.path==='/internal/game/settle');assert.equal(settlement.body.finalPoints,10);assert.ok(settlement.body.formulaSteps.includes('First Ppeok +9'));assert.ok(settlement.body.formulaSteps.includes('Go bonus +1'));
 });
 
 test('orphaned ranked lock gets a short runtime recovery grace then ends without abandonment',async()=>{

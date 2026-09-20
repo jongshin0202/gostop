@@ -12,7 +12,7 @@ const clone=value=>JSON.parse(JSON.stringify(value));
 const sideForSeat=seat=>seat==='playerA'?'human':'ai';
 const otherSeat=seat=>seat==='playerA'?'playerB':'playerA';
 
-function freshRankFlow(){return {pauseRemaining:{},pause:null,quitRequest:null,quitGeneration:0,scheduledQuitBy:null,inactivity:null,disconnectDeadlines:{},disconnectSettlements:{},runtimeOrphanDeadlines:{},disconnectCancelled:false,abandonment:null,botPendingCardId:null};}
+function freshRankFlow(){return {pauseRemaining:{},pause:null,pauseResolution:null,quitRequest:null,quitGeneration:0,scheduledQuitBy:null,inactivity:null,disconnectDeadlines:{},disconnectSettlements:{},runtimeOrphanDeadlines:{},disconnectCancelled:false,abandonment:null,botPendingCardId:null};}
 function randomUnit(cryptoApi){const b=new Uint32Array(1);cryptoApi.getRandomValues(b);return b[0]/0x100000000;}
 function captureValue(card){let value={bright:12,animal:5,ribbon:4,pi:2}[card?.type]||1;if(card?.flags?.includes('doublePi'))value+=4;if(card?.flags?.includes('godori'))value+=4;if(card?.ribbonSet)value+=2;return value;}
 
@@ -51,8 +51,8 @@ export class RankedRoomCore extends RoomCore{
   participantProfile(participant){return {...super.participantProfile(participant),bot:!!participant.bot,computerLevel:participant.computerLevel||null};}
   publicRoom(){return {...super.publicRoom(),rankedMode:this.room.rankedMode||'online'};}
   flowFor(participant){
-    const base=super.flowFor(participant),flow=this.room.rankFlow||freshRankFlow(),pause=flow.pause,quit=flow.quitRequest,inactivity=flow.inactivity,abandonment=flow.abandonment;
-    return {...base,rankedMode:this.room.rankedMode||'online',disconnectCancelled:!!flow.disconnectCancelled,pause:pause?{active:true,requestedByYou:pause.playerId===participant.playerId,until:pause.until,remainingForYou:flow.pauseRemaining[participant.playerId]??2,remainingForOpponent:flow.pauseRemaining[this.room.participants.find(item=>item.playerId!==participant.playerId)?.playerId]??2}:null,quitRequest:quit?{requestId:quit.requestId,requestedByYou:quit.requesterPlayerId===participant.playerId}:null,scheduledQuitByYou:flow.scheduledQuitBy===participant.playerId,inactivity:inactivity?{phase:inactivity.phase,byYou:inactivity.playerId===participant.playerId,playerId:inactivity.playerId,nudgeAt:inactivity.nudgeAt,warningAt:inactivity.warningAt,abandonAt:inactivity.abandonAt,penaltyCoins:inactivity.penaltyCoins||null}:null,abandonment:abandonment?{byYou:abandonment.playerId===participant.playerId,penaltyCoins:abandonment.penaltyCoins,rewardCoins:abandonment.rewardCoins||0,fairPoints:abandonment.fairPoints||0,settlementType:abandonment.settlementType||'legacy',quitterScore:abandonment.quitterScore||0,opponentScore:abandonment.opponentScore||0,firstEver:!!abandonment.firstEver,firstOfMonth:!!abandonment.firstOfMonth,refundable:!!abandonment.refundable,rewardNoticeId:abandonment.rewardNoticeId||null,reason:abandonment.reason}:null};
+    const base=super.flowFor(participant),flow=this.room.rankFlow||freshRankFlow(),pause=flow.pause,resolution=flow.pauseResolution,quit=flow.quitRequest,inactivity=flow.inactivity,abandonment=flow.abandonment;
+    return {...base,rankedMode:this.room.rankedMode||'online',disconnectCancelled:!!flow.disconnectCancelled,pause:pause?{active:true,expired:pause.phase==='expired',requestedByYou:pause.playerId===participant.playerId,until:pause.until,expiredAt:pause.expiredAt||null,remainingForYou:flow.pauseRemaining[participant.playerId]??2,remainingForOpponent:flow.pauseRemaining[this.room.participants.find(item=>item.playerId!==participant.playerId)?.playerId]??2}:null,pauseResolution:resolution?{type:resolution.type,winnerPlayerId:resolution.winnerPlayerId||null,wonByYou:resolution.winnerPlayerId?resolution.winnerPlayerId===participant.playerId:null,points:resolution.points||0,reason:resolution.reason||null}:null,quitRequest:quit?{requestId:quit.requestId,requestedByYou:quit.requesterPlayerId===participant.playerId}:null,scheduledQuitByYou:flow.scheduledQuitBy===participant.playerId,inactivity:inactivity?{phase:inactivity.phase,byYou:inactivity.playerId===participant.playerId,playerId:inactivity.playerId,nudgeAt:inactivity.nudgeAt,warningAt:inactivity.warningAt,abandonAt:inactivity.abandonAt,penaltyCoins:inactivity.penaltyCoins||null}:null,abandonment:abandonment?{byYou:abandonment.playerId===participant.playerId,penaltyCoins:abandonment.penaltyCoins,rewardCoins:abandonment.rewardCoins||0,fairPoints:abandonment.fairPoints||0,settlementType:abandonment.settlementType||'legacy',quitterScore:abandonment.quitterScore||0,opponentScore:abandonment.opponentScore||0,firstEver:!!abandonment.firstEver,firstOfMonth:!!abandonment.firstOfMonth,refundable:!!abandonment.refundable,rewardNoticeId:abandonment.rewardNoticeId||null,reason:abandonment.reason}:null};
   }
   async createSolo(roomCode){
     const created=await super.create(roomCode,null);await this.load();
@@ -163,6 +163,25 @@ export class RankedRoomCore extends RoomCore{
     this.room.sessionStats.forceQuits=(this.room.sessionStats.forceQuits||0)+1;this.room.rankFlow.abandonment={playerId,penaltyCoins,rewardCoins,fairPoints:settlement.fairPoints,settlementType:settlement.settlementType,quitterScore:settlement.quitterScore,opponentScore:settlement.opponentScore,firstOfMonth:!!response?.firstOfMonth,rewardNoticeId:response?.opponentNotice?.id||null,reason,at:this.now()};
     this.room.rankFlow.inactivity=null;this.room.rankFlow.pause=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};await this.endRankedSession(reason);this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.status='ended';await this.persist();this.broadcastSnapshots();return response;
   }
+  pauseSettlementForWinner(winnerParticipant,pausedParticipant){
+    const state=this.engineState();if(!state||!winnerParticipant||!pausedParticipant)return {total:7,reasons:[],formulaSteps:['Base 7'],baseTotal:7};
+    const winner=state[sideForSeat(winnerParticipant.seatId)],loser=state[sideForSeat(pausedParticipant.seatId)],winnerHasGo=(Number(winner?.go)||0)>0;
+    return globalThis.GoStopEngine.calculateSettlement({winner,loser,nagariCarryPower:state.matchContext?.nagariCarryPower||0,baseOverride:winnerHasGo?null:7,forceGoBak:(Number(loser?.go)||0)>0});
+  }
+  async settlePauseOutcome({type,winnerParticipant=null,endedBy=null,reason,settlement=null}){
+    const gameId=this.currentGameId(),winnerId=winnerParticipant?.playerId||null,points=winnerId?Math.max(0,Math.trunc(Number(settlement?.total)||0)):0,milestones=this.milestonesForCurrentGame(),state=this.engineState(),scores={};
+    for(const item of this.room.participants){const raw=state?globalThis.GoStopEngine.scorePlayer(state[sideForSeat(item.seatId)]).total:0;scores[item.playerId]={rawScore:raw,points:item.playerId===winnerId?points:0};}
+    if(!this.room.settledGameIds.includes(gameId)){
+      this.room.settledGameIds.push(gameId);
+      const participants=this.room.participants.map(item=>({accountId:item.accountId,playerId:item.playerId,nickname:item.nickname,won:!!winnerId&&item.playerId===winnerId,walletDelta:!winnerId?0:(item.playerId===winnerId?points:-points),coinsWon:item.playerId===winnerId?points:0,points:item.playerId===winnerId?points:0,rawScore:scores[item.playerId]?.rawScore||0,milestones:milestones[item.playerId]||{}})),formulaSteps=[...(settlement?.formulaSteps||[])],settlementReasons=[...(settlement?.reasons||[])];
+      if(points&&formulaSteps.at(-1)!==`Final ${points}`)formulaSteps.push(`Final ${points}`);
+      const response=await this.accountRequest('/internal/game/settle',{gameId,sessionId:this.room.sessionId,mode:'online',winnerPlayerId:winnerId,finalPoints:points,scores,settlementType:type==='draw'?'pause-draw':'pause-expired-win',settlementReasons,formulaSteps,participants,history:this.adminGameHistory?.()||null,recordedAt:this.now()});
+      for(const settled of response?.game?.participants||[]){const participant=this.room.participants.find(item=>item.accountId===settled.accountId);if(participant&&Number.isFinite(settled.walletAfter))participant.walletCoins=settled.walletAfter;}
+      this.room.sessionStats.gamesPlayed=(this.room.sessionStats.gamesPlayed||0)+1;
+      for(const item of participants){const accountId=item.accountId;if(!accountId)continue;if(item.walletDelta>0)this.room.sessionStats.coinsWonByAccount[accountId]=(this.room.sessionStats.coinsWonByAccount[accountId]||0)+item.walletDelta;if(item.walletDelta<0)this.room.sessionStats.coinsLostByAccount[accountId]=(this.room.sessionStats.coinsLostByAccount[accountId]||0)+Math.abs(item.walletDelta);const target=this.room.sessionStats.milestonesByAccount[accountId]||(this.room.sessionStats.milestonesByAccount[accountId]={});for(const [name,count] of Object.entries(item.milestones||{}))target[name]=(target[name]||0)+(Number(count)||0);}
+    }
+    this.room.rankFlow.pauseResolution={type,winnerPlayerId:winnerId,points,reason,at:this.now()};this.room.rankFlow.pause=null;this.room.rankFlow.inactivity=null;this.room.rankFlow.quitRequest=null;this.room.rankFlow.disconnectDeadlines={};this.room.rankFlow.disconnectSettlements={};await this.endRankedSession(reason);this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=endedBy||winnerId;this.room.status='ended';return {type,winnerPlayerId:winnerId,points};
+  }
   async startAbandonmentWarningForCurrentTurn(){
     if(!this.room||this.isSolo()||!this.isRanked()||this.room.sessionFlow.ended||this.room.terminalResult){this.room.rankFlow.inactivity=null;return;}
     const state=this.engineState();if(!state){this.room.rankFlow.inactivity=null;return;}
@@ -176,11 +195,11 @@ export class RankedRoomCore extends RoomCore{
     const now=this.nowMs(),nudgeAt=now+this.inactivityNudgeMs,warningAt=nudgeAt+this.nudgePhaseMs;this.room.rankFlow.inactivity={playerId:participant.playerId,phase:'waiting',nudgeAt,warningAt,abandonAt:warningAt+this.abandonmentCountdownMs,penaltyCoins:null};
   }
   async scheduleAlarm(){
-    if(!this.storage?.setAlarm||!this.room)return;const flow=this.room.rankFlow||freshRankFlow(),times=[];if(flow.pause?.until)times.push(flow.pause.until);for(const value of Object.values(flow.disconnectDeadlines||{}))if(value)times.push(value);for(const value of Object.values(flow.runtimeOrphanDeadlines||{}))if(value)times.push(value);if(flow.inactivity){if(flow.inactivity.phase==='waiting')times.push(flow.inactivity.nudgeAt);else if(flow.inactivity.phase==='nudge')times.push(flow.inactivity.warningAt);else if(flow.inactivity.phase==='warning')times.push(flow.inactivity.abandonAt);}if(times.length)await this.storage.setAlarm(Math.min(...times));else if(this.storage.deleteAlarm)await this.storage.deleteAlarm();
+    if(!this.storage?.setAlarm||!this.room)return;const flow=this.room.rankFlow||freshRankFlow(),times=[];if(flow.pause?.until&&flow.pause.phase!=='expired')times.push(flow.pause.until);for(const value of Object.values(flow.disconnectDeadlines||{}))if(value)times.push(value);for(const value of Object.values(flow.runtimeOrphanDeadlines||{}))if(value)times.push(value);if(flow.inactivity){if(flow.inactivity.phase==='waiting')times.push(flow.inactivity.nudgeAt);else if(flow.inactivity.phase==='nudge')times.push(flow.inactivity.warningAt);else if(flow.inactivity.phase==='warning')times.push(flow.inactivity.abandonAt);}if(times.length)await this.storage.setAlarm(Math.min(...times));else if(this.storage.deleteAlarm)await this.storage.deleteAlarm();
   }
   async alarm(){
     await this.load();if(!this.room||this.room.sessionFlow.ended)return;const now=this.nowMs(),flow=this.room.rankFlow;
-    if(flow.pause&&now>=flow.pause.until){flow.pause=null;await this.startAbandonmentWarningForCurrentTurn();}
+    if(flow.pause&&flow.pause.phase!=='expired'&&now>=flow.pause.until){flow.pause.phase='expired';flow.pause.expiredAt=now;flow.inactivity=null;this.broadcastSnapshots();}
     for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!this.sockets.has(playerId)&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId)){await this.endPreFirstTurnDisconnect(playerId);return;}await this.abandon(playerId,'disconnect-timeout');return;}}}
     for(const [playerId,deadline] of Object.entries({...flow.runtimeOrphanDeadlines})){if(now>=deadline){delete flow.runtimeOrphanDeadlines[playerId];if(!this.sockets.has(playerId)){await this.endRuntimeOrphan(playerId);return;}}}
     const inactivity=flow.inactivity;if(inactivity){if(now>=inactivity.abandonAt){await this.abandon(inactivity.playerId,'inactivity-timeout');return;}if(inactivity.phase!=='warning'&&now>=inactivity.warningAt){inactivity.phase='warning';inactivity.penaltyCoins=this.calculatePenalty(inactivity.playerId);this.broadcastSnapshots();}else if(inactivity.phase==='waiting'&&now>=inactivity.nudgeAt){inactivity.phase='nudge';this.broadcastSnapshots();}}
@@ -193,15 +212,20 @@ export class RankedRoomCore extends RoomCore{
     const flow=this.room.rankFlow,participant=this.room.participants.find(item=>item.playerId===socket.__playerId);if(!participant)return false;
     if(message.action.type==='requestPause'){
       if(this.isSolo())throw new RoomError('PAUSE_NOT_AVAILABLE','Pause requests are for Online Play.',409);if(this.room.terminalResult)throw new RoomError('HAND_COMPLETE','The current game is already complete.',409);if(flow.pause)throw new RoomError('PAUSE_ACTIVE','A pause is already active.',409);if((flow.pauseRemaining[participant.playerId]??2)<=0)throw new RoomError('NO_PAUSES_LEFT','No pauses remain for this game.',409);
-      await this.acceptFlowAction(socket,message,async()=>{flow.pauseRemaining[participant.playerId]=(flow.pauseRemaining[participant.playerId]??2)-1;flow.pause={playerId:participant.playerId,until:this.nowMs()+this.pauseDurationMs};flow.inactivity=null;});return true;
+      await this.acceptFlowAction(socket,message,async()=>{flow.pauseRemaining[participant.playerId]=(flow.pauseRemaining[participant.playerId]??2)-1;flow.pause={playerId:participant.playerId,until:this.nowMs()+this.pauseDurationMs,phase:'active'};flow.pauseResolution=null;flow.inactivity=null;});return true;
     }
     if(message.action.type==='cancelPause'){
       if(!flow.pause||flow.pause.playerId!==participant.playerId)throw new RoomError('PAUSE_NOT_OWNED','Only the player who requested this pause can cancel it.',409);
       await this.acceptFlowAction(socket,message,async()=>{flow.pause=null;await this.refreshInactivity();});return true;
     }
     if(message.action.type==='quitPausedGame'){
-      if(!flow.pause||flow.pause.playerId===participant.playerId)throw new RoomError('PAUSE_QUIT_NOT_AVAILABLE','Only the opponent may quit during another player’s pause.',409);
-      await this.acceptFlowAction(socket,message,async()=>{flow.pause=null;flow.inactivity=null;flow.quitRequest=null;await this.endRankedSession('opponent-quit-during-pause');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=participant.playerId;this.room.status='ended';});return true;
+      if(!flow.pause||flow.pause.phase==='expired'||flow.pause.playerId===participant.playerId)throw new RoomError('PAUSE_QUIT_NOT_AVAILABLE','Only the opponent may quit during an active pause.',409);
+      await this.acceptFlowAction(socket,message,async()=>{await this.settlePauseOutcome({type:'draw',endedBy:participant.playerId,reason:'pause-opponent-quit-draw'});});return true;
+    }
+    if(message.action.type==='claimExpiredPauseWin'){
+      if(!flow.pause||flow.pause.phase!=='expired'||flow.pause.playerId===participant.playerId)throw new RoomError('PAUSE_WIN_NOT_AVAILABLE','Only the opponent may claim the win after the pause expires.',409);
+      const paused=this.room.participants.find(item=>item.playerId===flow.pause.playerId),settlement=this.pauseSettlementForWinner(participant,paused);
+      await this.acceptFlowAction(socket,message,async()=>{await this.settlePauseOutcome({type:'win',winnerParticipant:participant,endedBy:participant.playerId,reason:'pause-expired-opponent-win',settlement});});return true;
     }
     if(message.action.type==='quitGame'){
       await this.acceptFlowAction(socket,message,async()=>{if(this.room.terminalResult){await this.endRankedSession('quit-after-game');this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=participant.playerId;this.room.status='ended';return;}if(this.isSolo()){flow.scheduledQuitBy=participant.playerId;return;}if(!flow.quitRequest)flow.quitRequest={requestId:`quit-${++flow.quitGeneration}`,requesterPlayerId:participant.playerId,createdAt:this.now()};});return true;
@@ -217,7 +241,7 @@ export class RankedRoomCore extends RoomCore{
     return false;
   }
   async handle(socket,input){
-    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
+    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
       try{await this.handleRankedFlow(socket,message);}catch(error){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:error.code||'ILLEGAL_ACTION',message:error.message}});this.send(socket,response);return response;}return envelope('actionAccepted',{actionId:message.actionId});
     }
     if(message.type==='action'&&this.room.rankFlow?.pause){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:'PAUSED',message:'The game is paused.'}});this.send(socket,response);return response;}
