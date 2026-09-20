@@ -47,6 +47,16 @@ export class BackupStore{
     meta.slot='primary';await this.storage.put(`snapshotMeta:${safetyId}`,meta);await this.storage.put('pointer:primary',safetyId);await this.storage.delete('pointer:safety');return clone(meta);
   }
   async status(){return {primary:await this.metadata('primary'),safety:await this.metadata('safety')};}
+  async purgeAccount(accountId){
+    const id=String(accountId||'').trim();if(!id)throw Object.assign(new Error('Account ID is required.'),{status:400,code:'ACCOUNT_REQUIRED'});
+    const pointers=[await this.pointer('primary'),await this.pointer('safety')].filter(Boolean),updated=[];
+    for(const snapshotId of [...new Set(pointers)]){
+      const rows=await this.storage.list({prefix:`snapshot:${snapshotId}:`});let removed=0;
+      for(const [key,item] of rows){const hay=`${item?.key||''}\n${JSON.stringify(item?.value??item?.room??null)}`;if(hay.includes(id)){await this.storage.delete(key);removed++;}}
+      const meta=await this.metadataById(snapshotId);if(meta&&removed){const accountRows=await this.storage.list({prefix:`snapshot:${snapshotId}:account:`}),roomRows=await this.storage.list({prefix:`snapshot:${snapshotId}:room:`});meta.accountEntries=accountRows.size;meta.rooms=roomRows.size;meta.fingerprint='';meta.redactedAt=this.now();meta.redactedAccountIds=[...(meta.redactedAccountIds||[]),id];await this.storage.put(`snapshotMeta:${snapshotId}`,meta);updated.push({snapshotId,removed});}
+    }
+    return {ok:true,updated};
+  }
   async fetch(request){
     const url=new URL(request.url),path=url.pathname;
     try{
@@ -54,6 +64,7 @@ export class BackupStore{
       if(request.method==='GET'&&(path==='/snapshot/primary'||path==='/snapshot/safety')){const slot=path.endsWith('safety')?'safety':'primary',snapshot=await this.read(slot);return snapshot?json({ok:true,snapshot}):json({ok:false,error:{code:'BACKUP_NOT_FOUND',message:'No backup is available.'}},404);}
       if(request.method==='POST'&&path==='/snapshot/write'){const body=await request.json().catch(()=>({})),metadata=await this.write(body.slot,body.snapshot,body.metadata);return json({ok:true,metadata},201);}
       if(request.method==='POST'&&path==='/promote-safety')return json({ok:true,primary:await this.promoteSafety()});
+      if(request.method==='POST'&&path==='/purge-account'){const body=await request.json().catch(()=>({}));return json(await this.purgeAccount(body.accountId));}
       return json({ok:false,error:{code:'NOT_FOUND',message:'Backup endpoint not found.'}},404);
     }catch(error){return json({ok:false,error:{code:error.code||'INTERNAL_ERROR',message:error.message||'Backup request failed.'}},error.status||500);}
   }
