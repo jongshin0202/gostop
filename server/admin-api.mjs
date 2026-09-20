@@ -271,6 +271,116 @@ async function correctGame(store,request,id,body){
   await audit(store,request,{action:'game-correction',target:key,reason,before:gameSummary(before),after:gameSummary(game),details:correction});return json({ok:true,game,correction,leaderboardRebuildRecommended:true});
 }
 
+
+const snapshotEncoder=new TextEncoder();
+const constantTimeEqual=(a,b)=>{a=String(a||'');b=String(b||'');if(!a||!b||a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0;};
+function requireConfirmationPassword(store,body){
+  const configured=String(store.env?.ADMIN_TOKEN||'');if(!configured){const error=new Error('Admin password verification is not configured.');error.status=503;error.code='ADMIN_NOT_CONFIGURED';throw error;}
+  if(!constantTimeEqual(body?.confirmPassword,configured)){const error=new Error('The admin password was not accepted.');error.status=403;error.code='ADMIN_PASSWORD_INVALID';throw error;}
+}
+const canonicalSnapshot=value=>Array.isArray(value)?value.map(canonicalSnapshot):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonicalSnapshot(value[key])])):value;
+async function fingerprintSnapshot(store,snapshot){
+  const normalized={accountEntries:[...(snapshot.accountEntries||[])].sort((a,b)=>a.key.localeCompare(b.key)),rooms:[...(snapshot.rooms||[])].sort((a,b)=>a.roomCode.localeCompare(b.roomCode))};
+  const digest=await store.crypto.subtle.digest('SHA-256',snapshotEncoder.encode(JSON.stringify(canonicalSnapshot(normalized))));
+  return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function allStorageEntries(store){return [...(await store.storage.list()).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>({key,value:clone(value)}));}
+async function clearStoreStorage(store){if(typeof store.storage.deleteAll==='function')await store.storage.deleteAll();else{const rows=await store.storage.list();for(const key of rows.keys())await store.storage.delete(key);}}
+async function replaceStoreEntries(store,entries){await clearStoreStorage(store);for(const entry of entries||[])if(entry?.key)await store.storage.put(entry.key,clone(entry.value));}
+function roomCodesFromEntries(entries){
+  const codes=new Set();
+  for(const entry of entries||[]){
+    const value=entry?.value;
+    if(entry?.key?.startsWith('roomRegistry:')&&value?.roomCode)codes.add(String(value.roomCode));
+    if(entry?.key?.startsWith('account:')&&value?.activeRanked?.roomCode)codes.add(String(value.activeRanked.roomCode));
+    if(entry?.key?.startsWith('gameSession:')&&!value?.endedAt&&value?.roomCode)codes.add(String(value.roomCode));
+  }
+  return [...codes].filter(code=>/^[A-Z2-9]{14}$/.test(code)).sort();
+}
+async function roomSystemRequest(store,roomCode,path,{method='GET',body}={}){
+  const binding=store.env?.GAME_ROOMS;if(!binding)return null;
+  const stub=binding.get(binding.idFromName(roomCode)),headers=new Headers({'x-gostop-system-admin':'1'});if(body!==undefined)headers.set('content-type','application/json');
+  const response=await stub.fetch(new Request(`https://room${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}));
+  const data=await response.json().catch(()=>({}));if(!response.ok||data.ok===false){const error=new Error(data.error?.message||`Room ${roomCode} system operation failed.`);error.status=response.status;error.code=data.error?.code||'ROOM_SYSTEM_ERROR';throw error;}return data;
+}
+async function captureRooms(store,entries){
+  const rooms=[];for(const roomCode of roomCodesFromEntries(entries)){const data=await roomSystemRequest(store,roomCode,'/system-snapshot');if(data)rooms.push({roomCode,room:clone(data.room||null)});}return rooms;
+}
+async function resetRooms(store,roomCodes){for(const roomCode of [...new Set(roomCodes||[])])await roomSystemRequest(store,roomCode,'/system-reset',{method:'POST',body:{}});}
+async function restoreRooms(store,rooms){for(const item of rooms||[])if(item?.roomCode)await roomSystemRequest(store,item.roomCode,'/system-restore',{method:'POST',body:{room:clone(item.room||null)}});}
+async function captureSystemSnapshot(store){
+  const accountEntries=await allStorageEntries(store),rooms=await captureRooms(store,accountEntries),snapshot={accountEntries,rooms},fingerprint=await fingerprintSnapshot(store,snapshot);
+  const count=prefix=>accountEntries.filter(item=>item.key.startsWith(prefix)).length;
+  return {snapshot,fingerprint,accountCount:count('account:'),gameCount:count('game:'),sessionCount:count('gameSession:')};
+}
+function backupStoreStub(store){const binding=store.env?.BACKUP_STORE;if(!binding){const error=new Error('System backup storage is not configured.');error.status=503;error.code='BACKUP_NOT_CONFIGURED';throw error;}return binding.get(binding.idFromName('global'));}
+async function backupRequest(store,path,{method='GET',body}={}){
+  const headers=new Headers();if(body!==undefined)headers.set('content-type','application/json');
+  const response=await backupStoreStub(store).fetch(new Request(`https://backup${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)})),data=await response.json().catch(()=>({}));
+  if(!response.ok||data.ok===false){const error=new Error(data.error?.message||'Backup storage operation failed.');error.status=response.status;error.code=data.error?.code||'BACKUP_ERROR';throw error;}return data;
+}
+async function writeBackup(store,slot,captured,{resetMode=null,reason=null}={}){
+  const result=await backupRequest(store,'/snapshot/write',{method:'POST',body:{slot,snapshot:captured.snapshot,metadata:{fingerprint:captured.fingerprint,resetMode,reason,accountCount:captured.accountCount,gameCount:captured.gameCount,sessionCount:captured.sessionCount}}});return result.metadata;
+}
+async function systemResetStatus(store){const status=await backupRequest(store,'/status');return {backupAvailable:!!status.primary,primary:status.primary||null,safety:status.safety||null};}
+async function performSystemReset(store,request,body){
+  const reason=reasonOf(body);requireConfirmationPassword(store,body);const mode=clean(body.mode);
+  if(!['preserve-accounts','full'].includes(mode))return json({ok:false,error:{code:'INVALID_RESET_MODE',message:'Reset mode must preserve accounts or clear the full system.'}},400);
+  const captured=await captureSystemSnapshot(store),backup=await writeBackup(store,'primary',captured,{resetMode:mode,reason});
+  await resetRooms(store,captured.snapshot.rooms.map(item=>item.roomCode));
+  if(mode==='full')await clearStoreStorage(store);
+  else{
+    const preserved=captured.snapshot.accountEntries.filter(entry=>entry.key.startsWith('account:')||entry.key.startsWith('email:')||entry.key.startsWith('nickname:')).map(entry=>{
+      if(!entry.key.startsWith('account:'))return entry;
+      const account=clone(entry.value);if(account?.activeRanked)account.activeRanked=null;return {key:entry.key,value:account};
+    });
+    await replaceStoreEntries(store,preserved);
+  }
+  return json({ok:true,mode,backup,accountsPreserved:mode==='preserve-accounts'?captured.accountCount:0});
+}
+async function performSystemRestore(store,request,body){
+  const reason=reasonOf(body);requireConfirmationPassword(store,body);
+  const primaryData=await backupRequest(store,'/snapshot/primary'),target=primaryData.snapshot;if(!target)throw Object.assign(new Error('No reset point is available.'),{status:404,code:'BACKUP_NOT_FOUND'});
+  const current=await captureSystemSnapshot(store);await writeBackup(store,'safety',current,{resetMode:'pre-restore-safety',reason});
+  const targetFingerprint=target.metadata?.fingerprint||await fingerprintSnapshot(store,target),roomCodes=[...new Set([...current.snapshot.rooms.map(item=>item.roomCode),...(target.rooms||[]).map(item=>item.roomCode)])];
+  try{
+    await resetRooms(store,roomCodes);await replaceStoreEntries(store,target.accountEntries||[]);await restoreRooms(store,target.rooms||[]);
+    const verified=await captureSystemSnapshot(store),actualFingerprint=await fingerprintSnapshot(store,verified.snapshot);
+    if(actualFingerprint!==targetFingerprint){const error=new Error('Restore verification failed. The current system will be rolled back to its safety copy.');error.code='RESTORE_VERIFY_FAILED';error.status=500;throw error;}
+    const promoted=await backupRequest(store,'/promote-safety',{method:'POST',body:{}});
+    return json({ok:true,restoredFrom:target.metadata||null,backup:promoted.primary||null,reason});
+  }catch(error){
+    try{await resetRooms(store,roomCodes);await replaceStoreEntries(store,current.snapshot.accountEntries);await restoreRooms(store,current.snapshot.rooms);}catch(_){}
+    throw error;
+  }
+}
+function entryReferencesAccount(key,value,id,account){
+  if(key===`account:${id}`||key.startsWith(`ledger:${id}:`)||key.startsWith(`connection:${id}:`))return true;
+  if((key.startsWith('email:')||key.startsWith('nickname:'))&&String(value)===id)return true;
+  if(key.startsWith('auth:')&&String(value?.accountId||'')===id)return true;
+  if(key.startsWith('game:')&&gameAccountIds(value).includes(id))return true;
+  if(key.startsWith('forceQuit:')&&[value?.accountId,value?.opponentAccountId,value?.account?.id,value?.opponent?.id].map(String).includes(id))return true;
+  if(key.startsWith('gameSession:')&&(value?.accountIds||[]).map(String).includes(id))return true;
+  if(key.startsWith('leaderboardArchive:')||key.startsWith('adminAudit:'))return JSON.stringify(value||{}).includes(id);
+  if(key.startsWith('emailVerification:')||key.startsWith('passwordReset:'))return JSON.stringify(value||{}).includes(id);
+  if(account&&key===`email:${String(account.email||'').toLowerCase()}`)return true;
+  if(account&&key===`nickname:${String(account.nicknameKey||account.nickname||'').toLowerCase()}`)return true;
+  return false;
+}
+async function deletePlayerCompletely(store,request,id,body){
+  const reason=reasonOf(body);requireConfirmationPassword(store,body);const account=await store.accountById(id);if(!account)return json({ok:false,error:{code:'ACCOUNT_NOT_FOUND',message:'Account not found.'}},404);
+  const activeRoom=account.activeRanked?.roomCode;if(activeRoom&&/^[A-Z2-9]{14}$/.test(activeRoom))await resetRooms(store,[activeRoom]);
+  if(store.env?.BACKUP_STORE)await backupRequest(store,'/purge-account',{method:'POST',body:{accountId:id}});
+  const rows=await store.storage.list(),deleteKeys=[];for(const [key,value] of rows)if(entryReferencesAccount(key,value,id,account))deleteKeys.push(key);
+  for(const key of deleteKeys)await store.storage.delete(key);
+  if(activeRoom){
+    const others=await store.storage.list({prefix:'account:'});
+    for(const [key,value] of others)if(value?.activeRanked?.roomCode===activeRoom){value.activeRanked=null;await store.storage.put(key,value);}
+    await store.storage.delete(`roomRegistry:${activeRoom}`);
+  }
+  return json({ok:true,deletedAccountId:id,recordsDeleted:deleteKeys.length,reason});
+}
+
 export async function handleAdminRequest(store,request){
   if(request.headers.get('x-gostop-admin')!=='1')return json({ok:false,error:{code:'ADMIN_AUTH_REQUIRED',message:'Admin authorization required.'}},401);
   const url=new URL(request.url),path=url.pathname;
