@@ -199,7 +199,7 @@ test('declining a request immediately makes the same player challengeable again'
   assert.equal(requests[1].from.nickname,'Jong');
 });
 
-test('Auto Match requests the closest available skill match, includes rich opponent history, and still requires acceptance',async()=>{
+test('Auto Match previews the closest skill match with rich history before sending any request',async()=>{
   const rows=rowsFor([
     ['Jong',10,100,1000,1],['Closest',10.01,100,1002,2],['Near',10.2,102,1040,3],['Far',30,5,150,4]
   ]);
@@ -207,20 +207,34 @@ test('Auto Match requests the closest available skill match, includes rich oppon
   lobby.directoryProfiles=async ids=>ids.includes('closest')?[{accountId:'closest',nickname:'Closest',walletCoins:1002,score:10.01,gamesPlayed:100,wins:55,losses:45,totalCoins:1002,globalRank:2,rank:2,headToHead:{wins:3,losses:2,draws:0,coinsWon:22,coinsLost:15,lastPlayedAt:'2026-09-19T10:00:00.000Z'}}]:[];
   add(lobby,me,closest,near,far);
   assert.equal(await lobby.tryAutoMatch(me),true);
+  const preview=me.socket.messages.find(message=>message.type==='autoMatchCandidate');
+  assert.equal(preview?.candidate?.nickname,'Closest');assert.equal(preview?.candidate?.globalRank,2);assert.equal(preview?.candidate?.wins,55);assert.equal(preview?.candidate?.headToHead?.wins,3);assert.equal(preview?.candidate?.headToHead?.coinsLost,15);
+  assert.equal(closest.socket.messages.some(message=>message.type==='playRequest'),false);assert.equal(me.socket.messages.some(message=>message.type==='challengeSent'),false);
+  await lobby.handle(me,JSON.stringify({type:'autoMatchAccept'}));
   const sent=me.socket.messages.find(message=>message.type==='challengeSent'),request=closest.socket.messages.find(message=>message.type==='playRequest');
-  assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(sent?.to?.globalRank,2);assert.equal(sent?.to?.wins,55);assert.equal(sent?.to?.headToHead?.wins,3);assert.equal(sent?.to?.headToHead?.coinsLost,15);assert.equal(request?.automatic,true);
-  assert.equal(me.available,true);assert.equal(closest.available,true);
-  assert.equal(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
+  assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(request?.automatic,true);
 });
 
-test('searching a player before Auto Match does not suppress the request and every target tab receives it',async()=>{
+test('searching a player before Auto Match does not suppress candidate preview or request delivery',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),directory=[{accountId:'sono',nickname:'Sonogong',walletCoins:1000,score:10.05,gamesPlayed:100,wins:50,losses:50,totalCoins:1000,rank:2,globalRank:2,countryCode:'US'}],lobby=makeLobby(rows,directory);
   const me=client('me','Jong',1000),sonoFront=client('sono','Sonogong',1000),sonoAway=client('sono','Sonogong',1000,{foreground:false});add(lobby,me,sonoFront,sonoAway);
   await lobby.handle(me,JSON.stringify({type:'search',query:'Sonogong'}));assert.ok(me.socket.messages.some(message=>message.type==='searchResults'));
   await lobby.handle(me,JSON.stringify({type:'autoMatchStart'}));
+  const preview=me.socket.messages.find(message=>message.type==='autoMatchCandidate');assert.equal(preview?.candidate?.nickname,'Sonogong');
+  assert.equal(sonoFront.socket.messages.some(message=>message.type==='playRequest'),false);
+  await lobby.handle(me,JSON.stringify({type:'autoMatchAccept'}));
   const frontRequest=sonoFront.socket.messages.find(message=>message.type==='playRequest'&&message.automatic),awayRequest=sonoAway.socket.messages.find(message=>message.type==='playRequest'&&message.automatic);
   assert.ok(frontRequest?.requestId);assert.equal(awayRequest?.requestId,frontRequest.requestId);
   assert.ok(me.socket.messages.some(message=>message.type==='challengeSent'&&message.requestId===frontRequest.requestId));
+});
+
+test('Someone Else advances through the Auto Match list without sending a request',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['First',10.01,100,1000,2],['Second',10.2,100,1000,3]]),lobby=makeLobby(rows),me=client('me','Jong',1000,{autoMatching:true}),first=client('first','First',1000),second=client('second','Second',1000);
+  add(lobby,me,first,second);me.autoMatchTried=new Set();
+  await lobby.tryAutoMatch(me);assert.equal(me.socket.messages.filter(message=>message.type==='autoMatchCandidate').at(-1)?.candidate?.nickname,'First');
+  await lobby.handle(me,JSON.stringify({type:'autoMatchNext'}));
+  assert.equal(me.socket.messages.filter(message=>message.type==='autoMatchCandidate').at(-1)?.candidate?.nickname,'Second');
+  assert.ok(me.autoMatchTried.has('first'));assert.equal(first.socket.messages.some(message=>message.type==='playRequest'),false);assert.equal(second.socket.messages.some(message=>message.type==='playRequest'),false);
 });
 
 test('manual Play can target an Online - Away player and expires after 30 seconds with no-answer and missed-request notices',async()=>{
@@ -234,24 +248,28 @@ test('manual Play can target an Online - Away player and expires after 30 second
   assert.ok(away.socket.messages.some(message=>message.type==='challengeMissed'&&message.from?.nickname==='Jong'&&message.createdAt));
 });
 
-test('Auto Match includes Away players and rotates to the next skill match after 30 seconds without a reply',async()=>{
+test('Auto Match includes Away players and advances to the next candidate preview after 30 seconds without a reply',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['ClosestAway',10.01,100,1000,2],['NextAvailable',10.2,100,1000,3]]),lobby=makeLobby(rows),me=client('me','Jong',1000,{autoMatching:true}),away=client('away','ClosestAway',1000,{foreground:false}),next=client('next','NextAvailable',1000);
   add(lobby,me,away,next);
   me.autoMatchTried=new Set();assert.equal(await lobby.tryAutoMatch(me),true);
+  assert.equal(me.socket.messages.find(message=>message.type==='autoMatchCandidate')?.candidate?.nickname,'ClosestAway');
+  await lobby.handle(me,JSON.stringify({type:'autoMatchAccept'}));
   const first=away.socket.messages.find(message=>message.type==='playRequest');assert.ok(first);assert.equal(first.automatic,true);
   const firstChallenge=lobby.challenges.get(first.requestId);firstChallenge.expiresAt=Date.now()-1;await lobby.expireChallenge(first.requestId);
-  const second=next.socket.messages.find(message=>message.type==='playRequest');assert.ok(second);assert.equal(second.automatic,true);
-  assert.equal(me.autoMatching,true);assert.ok(me.autoMatchTried.has('away'));assert.ok(me.autoMatchTried.has('next'));
+  const previews=me.socket.messages.filter(message=>message.type==='autoMatchCandidate');assert.equal(previews.at(-1)?.candidate?.nickname,'NextAvailable');
+  assert.equal(next.socket.messages.some(message=>message.type==='playRequest'),false);
+  assert.equal(me.autoMatching,true);assert.ok(me.autoMatchTried.has('away'));assert.equal(me.autoMatchTried.has('next'),false);
   assert.ok(away.socket.messages.some(message=>message.type==='challengeMissed'&&message.requestId===first.requestId));
 });
 
-test('Auto Match waiting wakes automatically when a challengeable player becomes available',async()=>{
+test('Auto Match waiting wakes with a candidate preview when a challengeable player becomes available',async()=>{
   const rows=rowsFor([['Jong',10,10,100,1],['Sonogong',10.1,11,110,2]]);
   const lobby=makeLobby(rows),me=client('me','Jong',100,{autoMatching:true}),other=client('other','Sonogong',110,{available:false,twoPlayer:false});
   add(lobby,me,other);
   assert.equal(await lobby.tryAutoMatch(me),false);assert.ok(me.socket.messages.some(message=>message.type==='autoMatchWaiting'));
   await lobby.handle(other,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu',foreground:true,lastActivityAt:Date.now(),notificationsEnabled:false}));
-  assert.ok(other.socket.messages.some(message=>message.type==='playRequest'));assert.ok(me.socket.messages.some(message=>message.type==='challengeSent'));
+  assert.equal(me.socket.messages.filter(message=>message.type==='autoMatchCandidate').at(-1)?.candidate?.nickname,'Sonogong');
+  assert.equal(other.socket.messages.some(message=>message.type==='playRequest'),false);
 });
 
 test('a pending request is cancelled if either player enters a two-player game before answering',async()=>{
