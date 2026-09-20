@@ -249,7 +249,7 @@ export class RankedRoomCore extends RoomCore{
     return false;
   }
   async handle(socket,input){
-    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}await this.resolveExpiredDisconnects();if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
+    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}const expiredResolved=await this.resolveExpiredDisconnects();if(expiredResolved&&message.type==='action'){const participant=this.room.participants.find(item=>item.playerId===socket.__playerId),revision=participant&&this.room.matchId?this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision:0,response=envelope('actionAccepted',{actionId:message.actionId,matchId:this.room.matchId,revision,duplicate:false});this.send(socket,response);return response;}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
       try{await this.handleRankedFlow(socket,message);}catch(error){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:error.code||'ILLEGAL_ACTION',message:error.message}});this.send(socket,response);return response;}return envelope('actionAccepted',{actionId:message.actionId});
     }
     if(message.type==='action'&&this.room.rankFlow?.pause){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:'PAUSED',message:'The game is paused.'}});this.send(socket,response);return response;}
