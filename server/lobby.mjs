@@ -26,7 +26,7 @@ export class Lobby{
   async resolveAccount(token,geoHeaders={}){if(!token)return null;const headers=new Headers({Authorization:`Bearer ${token}`});if(geoHeaders.country)headers.set('x-gostop-country',geoHeaders.country);if(geoHeaders.region)headers.set('x-gostop-region',geoHeaders.region);const response=await this.accountStore().fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
   async leaderboardRows(){
     const response=await this.accountStore().fetch(new Request('https://accounts/leaderboards'));if(!response.ok)return new Map();const body=await response.json(),monthly=new Map((body.monthly||[]).map(row=>[String(row.nickname||'').toLowerCase(),row]));
-    return new Map((body.global||[]).map(row=>{const key=String(row.nickname||'').toLowerCase(),monthRow=monthly.get(key);return [key,{...row,globalRank:Number(row.rank)||null,globalProvisional:!!row.provisional,monthlyRank:Number(monthRow?.rank)||null,monthlyProvisional:!!monthRow?.provisional}];}));
+    return new Map((body.global||[]).map(row=>{const key=String(row.nickname||'').toLowerCase(),monthRow=monthly.get(key);return [key,{...row,globalRank:Number.isFinite(Number(row.rank))?Number(row.rank):0,globalProvisional:!!row.provisional,monthlyRank:Number.isFinite(Number(monthRow?.rank))?Number(monthRow.rank):0,monthlyProvisional:!!monthRow?.provisional}];}));
   }
   async directorySearch(query,requesterAccountId=null){const response=await this.accountStore().fetch(new Request('https://accounts/internal/player-search',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,requesterAccountId})}));if(!response.ok)return [];const body=await response.json();return Array.isArray(body.players)?body.players:[];}
   async directoryProfiles(accountIds,requesterAccountId=null){
@@ -50,7 +50,7 @@ export class Lobby{
     return clients[0]||null;
   }
   sendToAccount(accountId,message){for(const client of this.clientsForAccount(accountId))this.send(client.socket,message);}
-  sendToChallengeClient(challenge,side,message){const client=this.clientById(side==='from'?challenge?.fromClientId:challenge?.toClientId);if(client)this.send(client.socket,message);}
+  sendToChallengeClient(challenge,side,message){const client=this.clientById(side==='from'?challenge?.fromClientId:challenge?.toClientId);if(client)this.send(client.socket,message);else if(side==='to'&&challenge?.to)this.sendToAccount(challenge.to,message);}
   pendingChallengeFor(accountId){for(const challenge of this.challenges.values())if(challenge.status==='pending'&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
   activeChallengeFor(accountId){for(const challenge of this.challenges.values())if(['pending','accepted','room-ready'].includes(challenge.status)&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
   accountTwoPlayerBusy(accountId){return this.clientsForAccount(accountId).some(client=>!!client.twoPlayer);}
@@ -64,7 +64,7 @@ export class Lobby{
     if(away)return {online:true,challengeable:!this.pendingChallengeFor(accountId),status:'away',mode:away.mode||'menu',notificationsEnabled:notifyable};
     return {online:true,challengeable:false,status:'not-available',mode:clients[0]?.mode||'menu'};
   }
-  profile(client,rows){const row=rows.get(String(client.account.nickname||'').toLowerCase())||{},gamesPlayed=finite(row.gamesPlayed),wins=finite(row.wins),totalCoinsEarned=finite(row.totalCoins),rate=Number.isFinite(Number(row.score))?Number(row.score):(gamesPlayed?totalCoinsEarned/gamesPlayed:0),presence=this.presenceForAccount(client.account.id),globalRank=Number(row.globalRank??row.rank)||null;return {accountId:client.account.id,nickname:client.account.nickname,score:rate,coinsPerGame:rate,totalCoinsEarned,gamesPlayed,wins,losses:Number.isFinite(Number(row.losses))?Math.max(0,Number(row.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(client.account.walletCoins),rank:globalRank,globalRank,globalProvisional:!!(row.globalProvisional??row.provisional),monthlyRank:Number(row.monthlyRank)||null,monthlyProvisional:!!row.monthlyProvisional,headToHead:row.headToHead||null,countryCode:client.account.countryCode||row.countryCode||null,regionCode:client.account.regionCode||row.regionCode||null,...presence};}
+  profile(client,rows){const row=rows.get(String(client.account.nickname||'').toLowerCase())||{},gamesPlayed=finite(row.gamesPlayed),wins=finite(row.wins),totalCoinsEarned=finite(row.totalCoins),rate=Number.isFinite(Number(row.score))?Number(row.score):(gamesPlayed?totalCoinsEarned/gamesPlayed:0),presence=this.presenceForAccount(client.account.id),globalRank=Number.isFinite(Number(row.globalRank??row.rank))?Number(row.globalRank??row.rank):0;return {accountId:client.account.id,nickname:client.account.nickname,score:rate,coinsPerGame:rate,totalCoinsEarned,gamesPlayed,wins,losses:Number.isFinite(Number(row.losses))?Math.max(0,Number(row.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(client.account.walletCoins),rank:globalRank,globalRank,globalProvisional:!!(row.globalProvisional??row.provisional),monthlyRank:Number.isFinite(Number(row.monthlyRank))?Number(row.monthlyRank):0,monthlyProvisional:!!row.monthlyProvisional,headToHead:row.headToHead||null,countryCode:client.account.countryCode||row.countryCode||null,regionCode:client.account.regionCode||row.regionCode||null,...presence};}
   candidateClients(client,{activeOnly=false}={}){const unique=new Map();for(const candidate of this.clients.values()){const id=candidate.account.id,presence=this.clientPresence(candidate);if(candidate===client||id===client.account.id||candidate.twoPlayer||this.accountTwoPlayerBusy(id)||this.activeChallengeFor(id))continue;if(activeOnly?!presence.active:!this.clientCanReceiveChallenge(candidate))continue;const prior=unique.get(id);if(!prior||this.clientPresence(candidate).active&&!this.clientPresence(prior).active||(Number(candidate.lastActivityAt)||0)>(Number(prior.lastActivityAt)||0))unique.set(id,candidate);}return [...unique.values()];}
   rankedProfiles(client,rows,candidates=this.candidateClients(client)){const me=this.profile(client,rows);return candidates.map(candidate=>{const profile=this.profile(candidate,rows);return {...profile,similarity:similarityPercent(me,profile)};}).sort((a,b)=>distance(me,a)-distance(me,b)||b.gamesPlayed-a.gamesPlayed||a.nickname.localeCompare(b.nickname));}
   async recommendations(client,rows=null){
@@ -74,20 +74,20 @@ export class Lobby{
   async search(client,query,rows=null){
     rows=rows||await this.leaderboardRows();const me=this.profile(client,rows),directory=await this.directorySearch(query,client.account.id);
     return directory.filter(player=>player.accountId!==client.account.id).map(player=>{
-      const presence=this.presenceForAccount(player.accountId),gamesPlayed=finite(player.gamesPlayed),wins=finite(player.wins),globalRank=Number(player.globalRank??player.rank)||null,profile={...player,totalCoinsEarned:finite(player.totalCoins),coinsPerGame:finite(player.score),score:finite(player.score),gamesPlayed,wins,losses:Number.isFinite(Number(player.losses))?Math.max(0,Number(player.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(player.walletCoins),rank:globalRank,globalRank,monthlyRank:Number(player.monthlyRank)||null,...presence};
+      const presence=this.presenceForAccount(player.accountId),gamesPlayed=finite(player.gamesPlayed),wins=finite(player.wins),globalRank=Number.isFinite(Number(player.globalRank??player.rank))?Number(player.globalRank??player.rank):0,profile={...player,totalCoinsEarned:finite(player.totalCoins),coinsPerGame:finite(player.score),score:finite(player.score),gamesPlayed,wins,losses:Number.isFinite(Number(player.losses))?Math.max(0,Number(player.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(player.walletCoins),rank:globalRank,globalRank,monthlyRank:Number.isFinite(Number(player.monthlyRank))?Number(player.monthlyRank):0,...presence};
       return {...profile,similarity:similarityPercent(me,profile)};
     }).slice(0,MAX_SEARCH_RESULTS);
   }
   async broadcastRecommendations(){
     const rows=await this.leaderboardRows();for(const client of this.clients.values()){if(client.available===false||client.twoPlayer)continue;const query=String(client.searchQuery||'').trim(),onlineCount=this.onlineAccountCount(client);this.send(client.socket,{type:'recommendations',players:await this.recommendations(client,rows),onlineCount,autoMatching:!!client.autoMatching});if(query)this.send(client.socket,{type:'searchResults',query,players:await this.search(client,query,rows),onlineCount,autoMatching:!!client.autoMatching});}
   }
-  challengeParticipantsAvailable(challenge){const from=this.clientById(challenge.fromClientId),to=this.clientById(challenge.toClientId);return !!from&&!!to&&!from.twoPlayer&&!to.twoPlayer&&this.clientCanReceiveChallenge(from)&&this.clientCanReceiveChallenge(to);}
+  challengeParticipantsAvailable(challenge){const from=this.clientById(challenge.fromClientId),to=challenge.toClientId?this.clientById(challenge.toClientId):null;return !!from&&!from.twoPlayer&&this.clientCanReceiveChallenge(from)&&this.accountAvailable(challenge.to)&&(!to||!to.twoPlayer&&this.clientCanReceiveChallenge(to));}
   clearChallengeTimer(challenge){if(challenge?.expiryTimer){clearTimeout(challenge.expiryTimer);challenge.expiryTimer=null;}}
   armChallengeExpiry(challenge){if(!challenge)return;this.clearChallengeTimer(challenge);const delay=Math.max(0,Number(challenge.expiresAt||0)-Date.now());challenge.expiryTimer=setTimeout(()=>{void this.expireChallenge(challenge.id);},delay);challenge.expiryTimer?.unref?.();}
-  startChallenge(creator,target,rows,{automatic=false}={}){
+  startChallenge(creator,target,rows,{automatic=false,toProfileOverride=null}={}){
     if(!creator||!target||creator.account.id===target.account.id||!this.clientCanReceiveChallenge(creator)||!this.clientCanReceiveChallenge(target)||this.accountTwoPlayerBusy(creator.account.id)||this.accountTwoPlayerBusy(target.account.id)||this.activeChallengeFor(creator.account.id)||this.activeChallengeFor(target.account.id))return null;
-    const now=Date.now(),id=randomId(this.crypto,'challenge'),fromProfile=this.profile(creator,rows),toProfile=this.profile(target,rows),challenge={id,from:creator.account.id,to:target.account.id,fromClientId:creator.clientId,toClientId:target.clientId,status:'pending',automatic,createdAt:now,expiresAt:now+CHALLENGE_TTL_MS,fromProfile:clone(fromProfile),toProfile:clone(toProfile),expiryTimer:null};this.challenges.set(id,challenge);creator.autoMatching=!!automatic;if(automatic){creator.autoMatchTried=creator.autoMatchTried instanceof Set?creator.autoMatchTried:new Set();creator.autoMatchTried.add(target.account.id);}
-    this.send(target.socket,{type:'playRequest',requestId:id,automatic,expiresInSeconds:Math.round(CHALLENGE_TTL_MS/1000),createdAt:now,from:fromProfile});
+    const now=Date.now(),id=randomId(this.crypto,'challenge'),fromProfile=this.profile(creator,rows),baseToProfile=this.profile(target,rows),toProfile=toProfileOverride?{...baseToProfile,...toProfileOverride,...this.presenceForAccount(target.account.id)}:baseToProfile,challenge={id,from:creator.account.id,to:target.account.id,fromClientId:creator.clientId,toClientId:null,status:'pending',automatic,createdAt:now,expiresAt:now+CHALLENGE_TTL_MS,fromProfile:clone(fromProfile),toProfile:clone(toProfile),expiryTimer:null};this.challenges.set(id,challenge);creator.autoMatching=!!automatic;if(automatic){creator.autoMatchTried=creator.autoMatchTried instanceof Set?creator.autoMatchTried:new Set();creator.autoMatchTried.add(target.account.id);}
+    this.sendToAccount(target.account.id,{type:'playRequest',requestId:id,automatic,expiresInSeconds:Math.round(CHALLENGE_TTL_MS/1000),createdAt:now,from:fromProfile});
     this.send(creator.socket,{type:'challengeSent',requestId:id,automatic,expiresInSeconds:Math.round(CHALLENGE_TTL_MS/1000),createdAt:now,to:toProfile});
     this.armChallengeExpiry(challenge);
     return challenge;
@@ -115,8 +115,9 @@ export class Lobby{
     if(!this.clientCanReceiveChallenge(client)||client.twoPlayer||this.activeChallengeFor(client.account.id))return false;
     const rows=await this.leaderboardRows(),tried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set(),candidates=this.candidateClients(client).filter(candidate=>!tried.has(candidate.account.id));
     if(!candidates.length){client.autoMatching=true;this.send(client.socket,{type:'autoMatchWaiting'});return false;}
-    const me=this.profile(client,rows),partner=candidates.map(candidate=>({candidate,profile:this.profile(candidate,rows)})).sort((a,b)=>distance(me,a.profile)-distance(me,b.profile)||b.profile.gamesPlayed-a.gamesPlayed||a.profile.nickname.localeCompare(b.profile.nickname))[0].candidate;
-    const challenge=this.startChallenge(client,partner,rows,{automatic:true});if(!challenge){this.send(client.socket,{type:'autoMatchWaiting'});return false;}
+    const me=this.profile(client,rows),partner=candidates.map(candidate=>({candidate,profile:this.profile(candidate,rows)})).sort((a,b)=>distance(me,a.profile)-distance(me,b.profile)||b.profile.gamesPlayed-a.profile.gamesPlayed||a.profile.nickname.localeCompare(b.profile.nickname))[0].candidate;
+    const details=await this.directoryProfiles([partner.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(partner,rows),...detail,...this.presenceForAccount(partner.account.id)}:this.profile(partner,rows);
+    const challenge=this.startChallenge(client,partner,rows,{automatic:true,toProfileOverride:toProfile});if(!challenge){this.send(client.socket,{type:'autoMatchWaiting'});return false;}
     return true;
   }
   async tryWaitingAutoMatches(){
@@ -127,7 +128,7 @@ export class Lobby{
       if(await this.tryAutoMatch(client))break;
     }
   }
-  cancelPendingChallenge(challenge,message='The play request was cancelled.'){if(!challenge)return;this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.sendToChallengeClient(challenge,'from',{type:'challengeCancelled',requestId:challenge.id,message});this.sendToChallengeClient(challenge,'to',{type:'challengeCancelled',requestId:challenge.id,message});this.challenges.delete(challenge.id);}
+  cancelPendingChallenge(challenge,message='The play request was cancelled.'){if(!challenge)return;this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.sendToChallengeClient(challenge,'from',{type:'challengeCancelled',requestId:challenge.id,message});this.sendToAccount(challenge.to,{type:'challengeCancelled',requestId:challenge.id,message});this.challenges.delete(challenge.id);}
   async pruneChallenges(){const now=Date.now();for(const [id,challenge] of [...this.challenges])if(Number(challenge.expiresAt||0)<=now)await this.expireChallenge(id);}
   async handle(client,data){
     let message;try{message=JSON.parse(data);}catch(_){return this.send(client.socket,{type:'error',code:'MALFORMED_MESSAGE',message:'Lobby message is invalid.'});}
@@ -146,7 +147,7 @@ export class Lobby{
       const challenge=this.challenges.get(message.requestId);
       if(!challenge||challenge.status!=='pending'||challenge.from!==client.account.id||challenge.fromClientId!==client.clientId)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request can no longer be cancelled.'});
       this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);
-      this.sendToChallengeClient(challenge,'to',{type:'challengeCancelled',requestId:challenge.id,message:'The play request was cancelled.'});
+      this.sendToAccount(challenge.to,{type:'challengeCancelled',requestId:challenge.id,message:'The play request was cancelled.'});
       this.sendToChallengeClient(challenge,'from',{type:'challengeCancelled',requestId:challenge.id,message:'Play request cancelled.'});
       await this.broadcastRecommendations();return;
     }
@@ -164,10 +165,12 @@ export class Lobby{
       await this.broadcastRecommendations();return;
     }
     if(message.type==='challengeResponse'){
-      const challenge=this.challenges.get(message.requestId);if(!challenge||challenge.status!=='pending'||challenge.to!==client.account.id||challenge.toClientId!==client.clientId)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request has expired.'});
+      const challenge=this.challenges.get(message.requestId);if(!challenge||challenge.status!=='pending'||challenge.to!==client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request has expired.'});
+      challenge.toClientId=client.clientId;
       const challenger=this.clientById(challenge.fromClientId);if(!challenger){this.cancelPendingChallenge(challenge,'The requesting player is no longer online.');await this.broadcastRecommendations();return;}
-      if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.send(client.socket,{type:'challengeResolved',requestId:challenge.id});await this.broadcastRecommendations();return;}
+      if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});await this.broadcastRecommendations();return;}
       if(!this.challengeParticipantsAvailable(challenge)){this.cancelPendingChallenge(challenge,'One of the players is already in a two-player game.');await this.broadcastRecommendations();return;}
+      this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});
       const rows=await this.leaderboardRows();this.releaseChallenge(challenge);for(const item of this.clientsForAccount(challenge.from)){item.available=false;item.autoMatching=false;item.autoMatchTried=new Set();}for(const item of this.clientsForAccount(challenge.to)){item.available=false;item.autoMatching=false;}challenge.status='accepted';challenge.acceptedAt=Date.now();challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
       this.send(challenger.socket,{type:'challengeAcceptedCreateRoom',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(client,rows)});this.send(client.socket,{type:'challengeAcceptedWaiting',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(challenger,rows)});await this.broadcastRecommendations();return;
     }
