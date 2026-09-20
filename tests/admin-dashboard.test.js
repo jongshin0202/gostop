@@ -108,6 +108,17 @@ test('full system reset removes accounts too and restore returns the entire syst
   const restored=await (await store.fetch(admin('/admin/system-restore',{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Restore clean-launch backup'}}))).json();assert.equal(restored.ok,true);assert.equal((await store.accountById(id)).nickname,'FullResetPlayer');
 });
 
+test('deleting a player removes ID-linked records and purges restore points',async()=>{
+  const {store,backup}=storeWithBackup(),a=await register(store,'delete-me@example.com','DeleteMe'),b=await register(store,'keep-me@example.com','KeepMe'),id=a.account.id;
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{gameId:'delete-player-game',mode:'online',winnerPlayerId:'a',participants:[{accountId:id,playerId:'a',nickname:'DeleteMe',won:true,walletDelta:7,coinsWon:7},{accountId:b.account.id,playerId:'b',nickname:'KeepMe',won:false,walletDelta:-7,coinsWon:0}]}}));
+  const snapshotEntries=[...(await store.storage.list()).entries()].map(([key,value])=>({key,value}));
+  await backup.fetch(new Request('https://backup/snapshot/write',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slot:'primary',snapshot:{accountEntries:snapshotEntries,rooms:[]},metadata:{fingerprint:'contains-player'}})}));
+  const deleted=await (await store.fetch(admin(`/admin/players/${id}/delete`,{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Remove test ID'}}))).json();assert.equal(deleted.ok,true);
+  assert.equal(await store.accountById(id),null);assert.ok(await store.accountById(b.account.id));assert.equal(await store.storage.get('game:delete-player-game'),undefined);
+  assert.equal((await store.storage.list({prefix:`ledger:${id}:`})).size,0);assert.equal((await store.storage.list({prefix:`connection:${id}:`})).size,0);
+  const backupData=await (await backup.fetch(new Request('https://backup/snapshot/primary'))).json();assert.equal(JSON.stringify(backupData.snapshot).includes(id),false);
+});
+
 test('new ranked settlements persist authoritative history and admin files stay unlinked from public menu',()=>{
   const finalRoom=fs.readFileSync(new URL('../server/ranked-room-final.mjs',import.meta.url),'utf8'),index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
   assert.match(finalRoom,/adminGameHistory\(\)/);assert.match(finalRoom,/history:this\.adminGameHistory\(\)/);
