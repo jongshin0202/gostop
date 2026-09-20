@@ -121,6 +121,25 @@ test('orphaned ranked lock gets a short runtime recovery grace then ends without
   assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
 });
 
+test('closing a displaced same-seat socket does not create a false reconnect deadline',async()=>{
+  const {core,a,sa,sb}=await onlineRoom(),replacement=new Socket();
+  await core.connect(a.credential,replacement);assert.equal(core.sockets.get(a.playerId),replacement);
+  const disconnected=await core.disconnect(sa);assert.equal(disconnected,false);assert.equal(core.sockets.get(a.playerId),replacement);
+  assert.equal(core.room.rankFlow.disconnectDeadlines[a.playerId],undefined);
+  assert.equal(sb.last('snapshot').snapshot.sessionFlow.opponentReconnectUntil,null);
+});
+
+test('sync request after reconnect deadline resolves the session instead of leaving 0:00 stuck',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?b:a,quitterSocket=quitter.playerId===a.playerId?sa:sb,otherSocket=quitter.playerId===a.playerId?sb:sa;
+  await core.disconnect(quitterSocket);assert.ok(core.room.rankFlow.disconnectDeadlines[quitter.playerId]);
+  instant='2026-09-15T04:46:01.000Z';
+  await core.handle(otherSocket,JSON.stringify({type:'syncRequest',protocolVersion:1,sinceRevision:0}));
+  assert.equal(core.room.sessionFlow.ended,true);assert.deepEqual(core.room.rankFlow.disconnectDeadlines,{});
+  assert.equal(otherSocket.last('snapshot').snapshot.sessionFlow.ended,true);
+  assert.equal(otherSocket.last('snapshot').snapshot.sessionFlow.opponentReconnectUntil,null);
+});
+
 test('live ranked socket survives account reconciliation and clears any orphan deadline',async()=>{
   const {core,a}=await onlineRoom();core.room.rankFlow.runtimeOrphanDeadlines[a.playerId]=Date.parse(now())+15000;
   const status=await core.reconcileActiveRanked('a',core.room.sessionId);
