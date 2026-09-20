@@ -88,25 +88,29 @@ test('nudge dialog never shows the abandonment countdown before warning phase',(
   assert.match(flow,/inactivity\.phase==='warning'[\s\S]*rankedInactivityCountdown'\)\.hidden=false/);
 });
 
-test('pause UI supports draw quit, expired-pause win claim, requester cancel, and closes stale pause after Yes',()=>{
+test('pause UI resumes requester, confirms opponent quit in both phases, and receives ended snapshots',()=>{
   assert.match(source,/rankedPauseCountdown\" class=\"ranked-countdown\">3:00/);
   assert.match(source,/id=\"rankedPauseAction\"/);
   assert.match(source,/id=\"rankedPauseQuitConfirmTitle\"/);
   assert.match(source,/id=\"rankedPauseQuitYes\"/);
   assert.match(source,/id=\"rankedPauseQuitNo\"/);
   assert.match(source,/id=\"rankedPauseOutcomeTitle\"/);
+  assert.match(source,/resumeGame:'Resume Game'/);
   assert.match(source,/waitingOnYou:'Waiting On You'/);
   assert.match(source,/expiredPauseOpponent:'You can end the session with a win for the current game'/);
   assert.match(source,/expiredPauseYou:'Opponent can end the session with a win for the current game'/);
-  assert.match(source,/pauseDrawTitle:'Game Ended in a Draw'/);
-  assert.match(source,/pause\.expired===true/);
+  assert.match(source,/expiredPauseQuitConfirmTitle:'End Session With Win\?'/);
+  assert.match(source,/own\?\(expired\?'resumeGame':'cancelPause'\):'quitPausedGame'/);
+  assert.match(source,/pauseQuitConfirmAction=pause\.expired\?'expired-win':'active-draw'/);
+  assert.match(source,/renderPauseQuitConfirmationLocale\(\);setDialog\(pauseDialog,false\);setDialog\(pauseQuitConfirmDialog,true\)/);
+  assert.match(source,/pauseQuitConfirmAction==='expired-win'\?\{type:'claimExpiredPauseWin'\}:\{type:'quitPausedGame'\}/);
   assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
-  assert.match(source,/submitRanked\(\{type:'quitPausedGame'\}\)/);
-  assert.match(source,/submitRanked\(\{type:'claimExpiredPauseWin'\}\)/);
-  assert.match(source,/pauseActionPending=true;pauseQuitConfirmDialog\.close\(\);setDialog\(pauseDialog,false\)/);
   assert.match(source,/pauseResolutionChanged/);
   assert.match(source,/returnEndedOnlineSessionToMenu/);
   assert.match(appSource,/if\(flow\.pauseResolution\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
+  const snapshotHandler=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
+  assert.match(snapshotHandler,/sessionFlow\?\.ended[\s\S]*reconcileOnlineFlow\(event\.detail\.snapshot\)[\s\S]*gostop-online-snapshot/);
+  assert.match(appSource,/dialog\[open\]:not\(\.ranked-flow-dialog\)/);
   assert.match(appSource,/returnEndedOnlineSessionToMenu\(\)\{returnOnlineToMenu\(\);\}/);
 });
 

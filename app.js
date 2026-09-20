@@ -103,7 +103,7 @@
   function beginGameplayPresentation(){gameplayPresentationActive=true;return ++gameplayPresentationEpoch;}
   function closeAllGameplayPresentationUi(){
     if(TEST_MODE)return;
-    document.querySelectorAll('dialog[open]').forEach(dialog=>{try{dialog.close();}catch(_){ }});
+    document.querySelectorAll('dialog[open]:not(.ranked-flow-dialog):not(.gostop-account-dialog):not(.gostop-request-dialog)').forEach(dialog=>{try{dialog.close();}catch(_){ }});
     document.querySelectorAll('.milestone-overlay.show,.opening-overlay.show,.go-callout.show').forEach(node=>{node.classList.remove('show');if(node.hasAttribute('aria-hidden'))node.setAttribute('aria-hidden','true');});
     hideActionCue();
   }
@@ -2675,7 +2675,7 @@
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
