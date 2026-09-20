@@ -123,7 +123,7 @@ export class RoomCore{
   send(socket,message){socket.send(JSON.stringify(message));}
   sendTo(playerId,message){const socket=this.sockets.get(playerId);if(socket)this.send(socket,message);}
   broadcastPresence(playerId,connected){for(const participant of this.room.participants)if(participant.playerId!==playerId)this.sendTo(participant.playerId,envelope(connected?'opponentConnected':'opponentDisconnected',{}));}
-  async disconnect(socket){const playerId=socket.__playerId;if(!playerId||this.sockets.get(playerId)!==socket)return;this.sockets.delete(playerId);const participant=this.room.participants.find(item=>item.playerId===playerId);if(participant)participant.connected=false;await this.persist();this.broadcastPresence(playerId,false);}
+  async disconnect(socket){const playerId=socket.__playerId;if(!playerId||this.sockets.get(playerId)!==socket)return false;this.sockets.delete(playerId);const participant=this.room.participants.find(item=>item.playerId===playerId);if(participant)participant.connected=false;await this.persist();this.broadcastPresence(playerId,false);return true;}
   async handle(socket,input){
     let message;try{message=parseClientMessage(input);}catch(error){const response=protocolError(error.code||'MALFORMED_MESSAGE',error.message);this.send(socket,response);return response;}
     const participant=this.room?.participants.find(item=>item.playerId===socket.__playerId);if(!participant){const response=protocolError('NOT_AUTHENTICATED','Socket is not authenticated.');this.send(socket,response);return response;}
