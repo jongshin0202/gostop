@@ -80,11 +80,26 @@ test('presence requires foreground activity within five minutes and publishes no
   assert.match(app,/const twoPlayer=!!anonymous\|\|room\?\.rankedMode!=='solo'/);
 });
 
-test('play notifications remain opt-in while Online - Away itself stays playable',()=>{
-  assert.match(client,/enablePlayNotificationsBtn/);assert.match(client,/Notification\.requestPermission\(\)/);assert.match(client,/serviceWorker\.register\('\.\/gostop-notifications-sw\.js\?v=20260920-1'\)/);
+test('notification button toggles app notifications, lights green when enabled, and keeps blocked state clickable',()=>{
+  assert.match(client,/const NOTIFICATION_PREF_KEY='gostop-play-notifications-enabled'/);
+  assert.match(client,/notificationsBtn\.className='account-menu-control notification-control'/);
+  assert.match(client,/\.notification-control\.notification-enabled/);assert.match(client,/\.notification-control\.notification-enabled::before/);
+  assert.match(client,/button\.classList\.toggle\('notification-enabled',enabled\)/);assert.match(client,/button\.setAttribute\('aria-pressed',String\(enabled\)\)/);
+  assert.match(client,/button\.disabled=false/);assert.match(client,/button\.title=Notification\.permission==='denied'/);
+  assert.match(client,/function disablePlayNotifications\(\)/);assert.match(client,/function togglePlayNotifications\(\)/);assert.match(client,/setNotificationPreference\(false\)/);
+  assert.match(client,/Notification\.requestPermission\(\)/);assert.match(client,/serviceWorker\.register\('\.\/gostop-notifications-sw\.js\?v=20260920-1'\)/);
   assert.match(client,/showPlayRequestNotification\(message\)/);assert.match(client,/showNotification\('GoStop Live! Play Request'/);
   assert.match(server,/notifyable=away&&client\.notificationsEnabled===true&&heartbeatFresh/);
   assert.match(server,/state\.active\|\|state\.away/);assert.match(server,/status:'away'/);assert.match(server,/challengeable:!this\.pendingChallengeFor\(accountId\)/);
+});
+
+test('blocked browser notifications show a recovery dialog instead of silently doing nothing',()=>{
+  assert.match(client,/id="notificationBlockedTitle">Notifications Blocked/);assert.match(client,/id="notificationBlockedReady"/);assert.match(client,/id="notificationBlockedRetry"/);assert.match(client,/id="notificationBlockedCancel"/);
+  assert.match(client,/notificationBlockedText:'Notifications are blocked for this site/);assert.match(client,/notificationBlockedSteps:'Use the site controls next to the address bar/);
+  assert.match(client,/notificationChangedCheck:'I changed Notifications for this site to Allow'/);assert.match(client,/recheckNotifications:'Check Again & Enable'/);
+  assert.match(client,/if\(permission==='denied'\)[^]*showNotificationBlockedDialog\(\)/);
+  assert.match(client,/notificationBlockedReady'\)\.addEventListener\('change'/);assert.match(client,/retryBlockedNotifications/);
+  assert.match(client,/navigator\.permissions\.query\(\{name:'notifications'\}\)/);assert.match(client,/notificationEnablePending/);
 });
 
 test('incoming player request is Yes No and accepting a Solo game is covered until multiplayer begins',()=>{
@@ -172,7 +187,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-6/);
+  assert.match(index,/ranked-client\.js\?v=20260920-7/);
   assert.match(index,/app\.js\?v=20260920-3/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
