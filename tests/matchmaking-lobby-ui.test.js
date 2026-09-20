@@ -64,7 +64,7 @@ test('presence requires foreground activity within five minutes and publishes no
 test('play request notifications are opt-in and Away Play requires a fresh notification-capable tab',()=>{
   assert.match(client,/enablePlayNotificationsBtn/);assert.match(client,/Notification\.requestPermission\(\)/);assert.match(client,/serviceWorker\.register\('\.\/gostop-notifications-sw\.js\?v=20260920-1'\)/);
   assert.match(client,/showPlayRequestNotification\(message\)/);assert.match(client,/showNotification\('GoStop Live! Play Request'/);
-  assert.match(server,/notifyable=away&&client\.available!==false&&client\.notificationsEnabled===true&&heartbeatFresh/);
+  assert.match(server,/notifyable=away&&client\.notificationsEnabled===true&&heartbeatFresh/);
   assert.match(server,/clientCanReceiveChallenge\(client\)/);
 });
 
