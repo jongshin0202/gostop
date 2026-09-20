@@ -1,6 +1,7 @@
 export {GameRoom} from './game-room.mjs';
 export {AccountStore} from './ranked-account-store.mjs';
 export {Lobby} from './lobby.mjs';
+export {BackupStore} from './backup-store.mjs';
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function roomCode(cryptoApi){const bytes=new Uint8Array(14),limit=256-(256%alphabet.length);cryptoApi.getRandomValues(bytes);let result='';for(const byte of bytes){if(byte>=limit)return roomCode(cryptoApi);result+=alphabet[byte%alphabet.length];}return result;}
 export function configuredOrigins(env){return new Set(String(env.ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(Boolean));}
@@ -13,6 +14,7 @@ const adminAuthorized=(request,env)=>{const auth=request.headers.get('Authorizat
 function withCors(response,origin){const next=new Response(response.body,response);for(const [key,value] of Object.entries(corsHeaders(origin)))next.headers.set(key,value);return next;}
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const accountStub=env=>env.ACCOUNT_STORE.get(env.ACCOUNT_STORE.idFromName('global'));
+async function registerAllocatedRoom(env,roomCodeValue,mode){try{await accountStub(env).fetch(new Request('https://accounts/internal/room/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({roomCode:roomCodeValue,mode})}));}catch(_){}}
 const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
 function geoHeadersFor(request){const headers=new Headers(),country=coarseCode(request.cf?.country||request.headers.get('CF-IPCountry'),2),region=coarseCode(request.cf?.regionCode),regionName=String(request.cf?.region||'').trim(),city=String(request.cf?.city||'').trim(),postalCode=String(request.cf?.postalCode||'').trim(),timeZone=String(request.cf?.timezone||'').trim(),ip=String(request.headers.get('CF-Connecting-IP')||'').trim();if(country)headers.set('x-gostop-country',country);if(region)headers.set('x-gostop-region',region);if(regionName&&regionName.length<=80)headers.set('x-gostop-region-name',regionName);if(city&&city.length<=100)headers.set('x-gostop-city',city);if(postalCode&&postalCode.length<=24)headers.set('x-gostop-postal',postalCode);if(timeZone&&timeZone.length<=64&&/^[A-Za-z0-9_+./-]+$/.test(timeZone))headers.set('x-gostop-timezone',timeZone);if(ip&&ip.length<=64)headers.set('x-gostop-ip',ip);return headers;}
 function copyGeoHeaders(source,target){for(const name of ['x-gostop-country','x-gostop-region','x-gostop-region-name','x-gostop-city','x-gostop-postal','x-gostop-timezone','x-gostop-ip']){const value=source.get(name);if(value)target.set(name,value);}return target;}
@@ -32,7 +34,7 @@ async function requireAccount(request,env){const account=await resolveAccount(re
 async function allocateRoom(env,{solo=false,account=null}={}){
   for(let attempt=0;attempt<5;attempt++){
     const code=roomCode(globalThis.crypto),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(code)),path=solo?'/initialize-solo':'/initialize',body=solo?{roomCode:code}:{roomCode:code,account};
-    const response=await stub.fetch(new Request(`https://room${path}`,{method:'POST',body:JSON.stringify(body),headers:{'content-type':'application/json'}}));if(response.status!==409)return response;
+    const response=await stub.fetch(new Request(`https://room${path}`,{method:'POST',body:JSON.stringify(body),headers:{'content-type':'application/json'}}));if(response.status!==409){if(response.ok)await registerAllocatedRoom(env,code,solo?'solo':account?'online':'free');return response;}
   }
   return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
 }
