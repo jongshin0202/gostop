@@ -303,6 +303,10 @@ async function roomSystemRequest(store,roomCode,path,{method='GET',body}={}){
   const response=await stub.fetch(new Request(`https://room${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}));
   const data=await response.json().catch(()=>({}));if(!response.ok||data.ok===false){const error=new Error(data.error?.message||`Room ${roomCode} system operation failed.`);error.status=response.status;error.code=data.error?.code||'ROOM_SYSTEM_ERROR';throw error;}return data;
 }
+async function lobbySystemRequest(store,path,body={}){
+  const binding=store.env?.LOBBY;if(!binding)return null;const stub=binding.get(binding.idFromName('global')),response=await stub.fetch(new Request(`https://lobby${path}`,{method:'POST',headers:{'content-type':'application/json','x-gostop-system-admin':'1'},body:JSON.stringify(body)})),data=await response.json().catch(()=>({}));
+  if(!response.ok||data.ok===false){const error=new Error(data.error?.message||'Lobby system operation failed.');error.status=response.status;error.code=data.error?.code||'LOBBY_SYSTEM_ERROR';throw error;}return data;
+}
 async function captureRooms(store,entries){
   const rooms=[];for(const roomCode of roomCodesFromEntries(entries)){const data=await roomSystemRequest(store,roomCode,'/system-snapshot');if(data)rooms.push({roomCode,room:clone(data.room||null)});}return rooms;
 }
@@ -327,6 +331,7 @@ async function performSystemReset(store,request,body){
   const reason=reasonOf(body);requireConfirmationPassword(store,body);const mode=clean(body.mode);
   if(!['preserve-accounts','full'].includes(mode))return json({ok:false,error:{code:'INVALID_RESET_MODE',message:'Reset mode must preserve accounts or clear the full system.'}},400);
   const captured=await captureSystemSnapshot(store),backup=await writeBackup(store,'primary',captured,{resetMode:mode,reason});
+  await lobbySystemRequest(store,'/system-reset');
   await resetRooms(store,captured.snapshot.rooms.map(item=>item.roomCode));
   if(mode==='full')await clearStoreStorage(store);
   else{
@@ -344,13 +349,13 @@ async function performSystemRestore(store,request,body){
   const current=await captureSystemSnapshot(store);await writeBackup(store,'safety',current,{resetMode:'pre-restore-safety',reason});
   const targetFingerprint=target.metadata?.fingerprint||await fingerprintSnapshot(store,target),roomCodes=[...new Set([...current.snapshot.rooms.map(item=>item.roomCode),...(target.rooms||[]).map(item=>item.roomCode)])];
   try{
-    await resetRooms(store,roomCodes);await replaceStoreEntries(store,target.accountEntries||[]);await restoreRooms(store,target.rooms||[]);
+    await lobbySystemRequest(store,'/system-reset');await resetRooms(store,roomCodes);await replaceStoreEntries(store,target.accountEntries||[]);await restoreRooms(store,target.rooms||[]);
     const verified=await captureSystemSnapshot(store),actualFingerprint=await fingerprintSnapshot(store,verified.snapshot);
     if(actualFingerprint!==targetFingerprint){const error=new Error('Restore verification failed. The current system will be rolled back to its safety copy.');error.code='RESTORE_VERIFY_FAILED';error.status=500;throw error;}
     const promoted=await backupRequest(store,'/promote-safety',{method:'POST',body:{}});
     return json({ok:true,restoredFrom:target.metadata||null,backup:promoted.primary||null,reason});
   }catch(error){
-    try{await resetRooms(store,roomCodes);await replaceStoreEntries(store,current.snapshot.accountEntries);await restoreRooms(store,current.snapshot.rooms);}catch(_){}
+    try{await lobbySystemRequest(store,'/system-reset');await resetRooms(store,roomCodes);await replaceStoreEntries(store,current.snapshot.accountEntries);await restoreRooms(store,current.snapshot.rooms);}catch(_){}
     throw error;
   }
 }
@@ -369,7 +374,7 @@ function entryReferencesAccount(key,value,id,account){
 }
 async function deletePlayerCompletely(store,request,id,body){
   const reason=reasonOf(body);requireConfirmationPassword(store,body);const account=await store.accountById(id);if(!account)return json({ok:false,error:{code:'ACCOUNT_NOT_FOUND',message:'Account not found.'}},404);
-  const activeRoom=account.activeRanked?.roomCode;if(activeRoom&&/^[A-Z2-9]{14}$/.test(activeRoom))await resetRooms(store,[activeRoom]);
+  const activeRoom=account.activeRanked?.roomCode;await lobbySystemRequest(store,'/system-delete-account',{accountId:id});if(activeRoom&&/^[A-Z2-9]{14}$/.test(activeRoom))await resetRooms(store,[activeRoom]);
   if(store.env?.BACKUP_STORE)await backupRequest(store,'/purge-account',{method:'POST',body:{accountId:id}});
   const rows=await store.storage.list(),deleteKeys=[];for(const [key,value] of rows)if(entryReferencesAccount(key,value,id,account))deleteKeys.push(key);
   for(const key of deleteKeys)await store.storage.delete(key);
