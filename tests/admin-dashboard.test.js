@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import fs from 'node:fs';
 import {AccountStore} from '../server/ranked-account-store.mjs';
+import {BackupStore} from '../server/backup-store.mjs';
 import worker from '../server/worker.mjs';
 
 class MemoryStorage{
@@ -17,6 +18,12 @@ const request=(path,{method='GET',body,headers={}}={})=>new Request(`https://acc
 const admin=(path,options={})=>request(path,{...options,headers:{'x-gostop-admin':'1',...geo,...(options.headers||{})}});
 const register=async(store,email='admin-player@example.com',nickname='AdminPlayer')=>(await (await store.fetch(request('/register',{method:'POST',headers:geo,body:{email,nickname,password:'UsefulPass9',confirmPassword:'UsefulPass9'}}))).json());
 const storeAt=(iso='2026-09-18T15:00:00.000Z')=>new AccountStore({storage:new MemoryStorage()},{},{cryptoApi:webcrypto,now:()=>iso});
+const storeWithBackup=(iso='2026-09-20T07:00:00.000Z')=>{
+  const backup=new BackupStore({storage:new MemoryStorage()},{},{cryptoApi:webcrypto,now:()=>iso});
+  const binding={idFromName:name=>name,get:()=>({fetch:request=>backup.fetch(request)})};
+  const env={ADMIN_TOKEN:'test-admin-token',BACKUP_STORE:binding};
+  return {store:new AccountStore({storage:new MemoryStorage()},env,{cryptoApi:webcrypto,now:()=>iso}),backup};
+};
 
 test('admin gateway requires configured secret and valid bearer token',async()=>{
   const origin={'Origin':'https://gostoplive.com'};
