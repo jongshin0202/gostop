@@ -39,7 +39,7 @@ export class Lobby{
   clientPresence(client,now=Date.now()){
     if(!client)return {active:false,away:false,notifyable:false};
     const last=Math.min(now,Number(client.lastActivityAt)||Number(client.connectedAt)||0),recent=last>0&&now-last<=PRESENCE_AWAY_MS,foreground=client.foreground===true,lastPresence=Math.min(now,Number(client.lastPresenceAt)||Number(client.connectedAt)||0),heartbeatFresh=lastPresence>0&&now-lastPresence<=PRESENCE_HEARTBEAT_STALE_MS;
-    const active=!client.twoPlayer&&client.available!==false&&foreground&&recent,away=!client.twoPlayer&&(!foreground||!recent),notifyable=away&&client.available!==false&&client.notificationsEnabled===true&&heartbeatFresh;
+    const active=!client.twoPlayer&&client.available!==false&&foreground&&recent,away=!client.twoPlayer&&client.available!==false&&(!foreground||!recent),notifyable=away&&client.notificationsEnabled===true&&heartbeatFresh;
     return {active,away,notifyable,recent,foreground,heartbeatFresh};
   }
   clientCanReceiveChallenge(client){const state=this.clientPresence(client);return !client?.twoPlayer&&(state.active||state.notifyable);}
