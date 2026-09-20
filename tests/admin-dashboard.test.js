@@ -103,7 +103,7 @@ test('system reset preserves complete account records when requested, backs up f
 test('full system reset removes accounts too and restore returns the entire system',async()=>{
   const {store,backup}=storeWithBackup(),registered=await register(store,'fullreset@example.com','FullResetPlayer'),id=registered.account.id;
   const denied=await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'wrong',reason:'Should fail'}}));assert.equal(denied.status,403);assert.ok(await store.accountById(id));
-  const reset=await (await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'test-admin-token',reason:'Clean launch'}}))).json();assert.equal(reset.ok,true);assert.equal(await store.accountById(id),null);
+  const reset=await (await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'test-admin-token',reason:'Clean launch'}}))).json();assert.equal(reset.ok,true);assert.equal(await store.accountById(id),undefined);
   assert.equal((await store.storage.list()).size,0);const status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.ok(status.primary);
   const restored=await (await store.fetch(admin('/admin/system-restore',{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Restore clean-launch backup'}}))).json();assert.equal(restored.ok,true);assert.equal((await store.accountById(id)).nickname,'FullResetPlayer');
 });
@@ -114,7 +114,7 @@ test('deleting a player removes ID-linked records and purges restore points',asy
   const snapshotEntries=[...(await store.storage.list()).entries()].map(([key,value])=>({key,value}));
   await backup.fetch(new Request('https://backup/snapshot/write',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slot:'primary',snapshot:{accountEntries:snapshotEntries,rooms:[]},metadata:{fingerprint:'contains-player'}})}));
   const deleted=await (await store.fetch(admin(`/admin/players/${id}/delete`,{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Remove test ID'}}))).json();assert.equal(deleted.ok,true);
-  assert.equal(await store.accountById(id),null);assert.ok(await store.accountById(b.account.id));assert.equal(await store.storage.get('game:delete-player-game'),undefined);
+  assert.equal(await store.accountById(id),undefined);assert.ok(await store.accountById(b.account.id));assert.equal(await store.storage.get('game:delete-player-game'),undefined);
   assert.equal((await store.storage.list({prefix:`ledger:${id}:`})).size,0);assert.equal((await store.storage.list({prefix:`connection:${id}:`})).size,0);
   const backupData=await (await backup.fetch(new Request('https://backup/snapshot/primary'))).json();assert.equal(JSON.stringify(backupData.snapshot).includes(id),false);
 });
