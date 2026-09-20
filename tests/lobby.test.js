@@ -70,18 +70,19 @@ test('Solo and Training presence remains challengeable while any two-player pres
   assert.equal(lobby.presenceForAccount('busy').status,'in-game');
 });
 
-test('foreground plus activity within five minutes is Available; hidden or stale activity is Away',()=>{
+test('foreground plus activity within five minutes is Available; hidden or stale activity is Away and still challengeable',()=>{
   const rows=rowsFor([['Viewer',1,1,1,1],['Active',1,1,1,2],['Hidden',1,1,1,3],['Idle',1,1,1,4]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100),active=client('active','Active',100,{foreground:true,lastActivityAt:now}),hidden=client('hidden','Hidden',100,{foreground:false,lastActivityAt:now}),idle=client('idle','Idle',100,{foreground:true,lastActivityAt:now-300001});
   add(lobby,viewer,active,hidden,idle);
   assert.equal(lobby.presenceForAccount('active').status,'available');assert.equal(lobby.presenceForAccount('active').challengeable,true);
-  assert.equal(lobby.presenceForAccount('hidden').status,'away');assert.equal(lobby.presenceForAccount('hidden').challengeable,false);
-  assert.equal(lobby.presenceForAccount('idle').status,'away');assert.equal(lobby.presenceForAccount('idle').challengeable,false);
+  assert.equal(lobby.presenceForAccount('hidden').status,'away');assert.equal(lobby.presenceForAccount('hidden').challengeable,true);
+  assert.equal(lobby.presenceForAccount('idle').status,'away');assert.equal(lobby.presenceForAccount('idle').challengeable,true);
 });
 
-test('Away is challengeable only while notification permission and a fresh page heartbeat are both present',()=>{
-  const rows=rowsFor([['Viewer',1,1,1,1],['Away',1,1,1,2]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100),away=client('away','Away',100,{foreground:false,lastActivityAt:now,notificationsEnabled:true,lastPresenceAt:now});
-  add(lobby,viewer,away);assert.equal(lobby.presenceForAccount('away').status,'away');assert.equal(lobby.presenceForAccount('away').challengeable,true);
-  away.lastPresenceAt=now-90001;assert.equal(lobby.presenceForAccount('away').status,'away');assert.equal(lobby.presenceForAccount('away').challengeable,false);
+test('Away remains challengeable even without notification permission while notification capability is tracked separately',()=>{
+  const rows=rowsFor([['Viewer',1,1,1,1],['Away',1,1,1,2]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100),away=client('away','Away',100,{foreground:false,lastActivityAt:now,notificationsEnabled:false,lastPresenceAt:now});
+  add(lobby,viewer,away);
+  assert.equal(lobby.presenceForAccount('away').status,'away');assert.equal(lobby.presenceForAccount('away').challengeable,true);assert.equal(lobby.presenceForAccount('away').notificationsEnabled,false);
+  away.notificationsEnabled=true;assert.equal(lobby.presenceForAccount('away').notificationsEnabled,true);
 });
 
 test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
@@ -208,6 +209,28 @@ test('Auto Match requests the closest available skill match and still requires t
   assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(request?.automatic,true);
   assert.equal(me.available,true);assert.equal(closest.available,true);
   assert.equal(me.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
+});
+
+test('manual Play can target an Online - Away player and expires after 30 seconds with no-answer and missed-request notices',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),me=client('me','Jong',1000),away=client('away','Sonogong',1000,{foreground:false,notificationsEnabled:false});
+  add(lobby,me,away);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'away'}));
+  const request=away.socket.messages.find(message=>message.type==='playRequest');assert.ok(request);assert.equal(request.expiresInSeconds,30);
+  const challenge=lobby.challenges.get(request.requestId);challenge.expiresAt=Date.now()-1;await lobby.expireChallenge(request.requestId);
+  assert.equal(lobby.challenges.has(request.requestId),false);
+  assert.ok(me.socket.messages.some(message=>message.type==='challengeNoAnswer'&&message.by?.nickname==='Sonogong'));
+  assert.ok(away.socket.messages.some(message=>message.type==='challengeMissed'&&message.from?.nickname==='Jong'&&message.createdAt));
+});
+
+test('Auto Match includes Away players and rotates to the next skill match after 30 seconds without a reply',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['ClosestAway',10.01,100,1000,2],['NextAvailable',10.2,100,1000,3]]),lobby=makeLobby(rows),me=client('me','Jong',1000,{autoMatching:true}),away=client('away','ClosestAway',1000,{foreground:false}),next=client('next','NextAvailable',1000);
+  add(lobby,me,away,next);
+  me.autoMatchTried=new Set();assert.equal(await lobby.tryAutoMatch(me),true);
+  const first=away.socket.messages.find(message=>message.type==='playRequest');assert.ok(first);assert.equal(first.automatic,true);
+  const firstChallenge=lobby.challenges.get(first.requestId);firstChallenge.expiresAt=Date.now()-1;await lobby.expireChallenge(first.requestId);
+  const second=next.socket.messages.find(message=>message.type==='playRequest');assert.ok(second);assert.equal(second.automatic,true);
+  assert.equal(me.autoMatching,true);assert.ok(me.autoMatchTried.has('away'));assert.ok(me.autoMatchTried.has('next'));
+  assert.ok(away.socket.messages.some(message=>message.type==='challengeMissed'&&message.requestId===first.requestId));
 });
 
 test('Auto Match waiting wakes automatically when a challengeable player becomes available',async()=>{
