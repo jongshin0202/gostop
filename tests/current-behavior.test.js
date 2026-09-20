@@ -2285,9 +2285,9 @@ test('tutorial Overview renders every four-card month family through canonical c
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');assert.equal(html.includes('id="monthGuide"'),true);assert.equal(source.includes('for(let month=1;month<=12;month++)'),true);assert.equal(source.includes('MASTER_DECK.filter(card=>card.month===month)'),true);
 });
 
-test('New Game confirmation rejection preserves authority while acceptance resets the session seam',()=>{
+test('New Game authority seam still works internally even though the in-game New Game control is removed',()=>{
   const original=stateWith({human:api.makePlayer({hand:[card('m1-1')]})});api.setState(original);const before=JSON.stringify(api.getState());assert.equal(api.confirmNewGame(false),false);assert.equal(JSON.stringify(api.getState()),before);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.equal(source.includes("optionsNewGameBtn.addEventListener('click'"),true);assert.match(source,/invalidateGameplayPresentation\(\);beginGameplayPresentation\(\);[^]*resetSession\(\);startGame\(gameplayPresentationEpoch\)/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');assert.equal(source.includes("optionsNewGameBtn.addEventListener('click'"),false);assert.doesNotMatch(html,/id="optionsNewGameBtn"/);assert.match(source,/invalidateGameplayPresentation\(\);beginGameplayPresentation\(\);[^]*resetSession\(\);startGame\(gameplayPresentationEpoch\)/);
 });
 
 test('Online New Game submits to server authority without creating a local game',()=>{
@@ -2298,7 +2298,7 @@ test('Online New Game submits to server authority without creating a local game'
 
 test('multiplayer flow UI and Go submission remain authoritative and fail closed',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
-  assert.match(html,/id="optionsMenu"[^]*id="optionsNewGameBtn"[^]*id="optionsQuitBtn"/);
+  assert.match(html,/id="newGameBtn"[^>]*data-i18n="resultQuit"[^>]*>Quit Game</);assert.doesNotMatch(html,/id="optionsMenu"|id="optionsNewGameBtn"|id="optionsQuitBtn"/);
   for(const id of ['replayWaitingDialog','resultQuitBtn','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','opponentEndedDialog'])assert.ok(html.includes(`id="${id}"`),id);
   assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareGo'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
   assert.match(source,/if\(onlineMode\)\{if\(onlineSubmit\(\{type:'declareStop'\}\)\)els\.decisionDialog\.close\(\);return;\}/);
