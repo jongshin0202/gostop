@@ -93,11 +93,17 @@ Session summaries include games played, opponent, total Coins won/lost/net, comp
 
 ## Online Play entry paths
 
-1. **Invite by email** — enter the opponent's email and send a signed, expiring game link. An authenticated recipient enters the game flow directly; a new recipient completes account creation first, receives signup/daily awards, then returns to the invitation.
-2. **Find an online player** — search by Nickname or choose from five recommended players who are online and available now. Each recommendation displays Nickname, Score, Games Played, and current Wallet Coins. Recommendations are ordered by closest normalized similarity using Score, Games Played, and Wallet Coins with equal weighting. Clicking a player sends a real-time play request. The recipient receives an accept/decline dialog; acceptance creates the authoritative ranked room for both players. Requests expire after 60 seconds and are rate-limited to reduce spam.
-3. **Room code / share link** — retain the existing direct room-entry path for players who already have a code/link.
+Competitive Online Play has exactly three visible sections:
 
-Online-lobby presence is ephemeral: a user is recommended only while actively connected to the authenticated lobby and marked available. Starting a game marks both participants unavailable so they cannot be recommended/challenged again until they return to the lobby. Email addresses are never exposed in the public lobby or recommendations.
+1. **Matchmaking Lobby** — Auto Match requests the closest available skill match. Browse Top 10 shows the ten closest available players and the total number of other signed-in players currently online, including players who are online but unavailable.
+2. **Search Player** — Nickname search covers the registered-player directory, so a player can be found whether available, busy in another two-player game, or offline.
+3. **Share Link** — Create Room creates an authenticated Competitive room and displays its direct URL with Copy URL. Competitive Online Play does not expose the legacy Room Code / Join Game controls. Direct room URLs still contain the internal room identifier and continue to join the exact authoritative room.
+
+Browse and Search use the same player profile card. It displays current Coins, overall Wins / Losses, leaderboard Score, **Global Rank**, **Monthly Rank**, the viewer's historical **Wins / Losses** against that player, Coins won/lost against that player, and the last-played date. Search presence is simplified to **Online - Available** (green with Play), **Online - Not Available** (orange with no Play), or **Not Online** (red with no Play). Training and Solo remain challengeable; an active two-player game makes the account unavailable.
+
+Matchup history is derived from authoritative stored Online game and abandonment records. Protected monthly disconnects can waive the disconnected player's Coin deduction, but a non-nagari settled disconnect is still a ranked loss for the quitter and a win for the opponent. A one-time server repair reconciles previously stored outcome history so older protected disconnect losses omitted by the prior counter logic are restored where authoritative game records exist.
+
+Online-lobby presence is ephemeral. Browse recommendations include only challengeable accounts; Search can show any registered account. Starting a two-player game makes both participants unavailable so they cannot be challenged again until they leave that game. Email addresses are never exposed in the public lobby or player profiles.
 
 ## Leaderboard display / attract mode
 
