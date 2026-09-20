@@ -118,14 +118,15 @@ test('missed play requests are stored, show local date/time, and support arrows,
   assert.match(server,/const CHALLENGE_TTL_MS=30000/);assert.match(server,/type:'challengeNoAnswer'/);assert.match(server,/type:'challengeMissed'/);assert.match(server,/await this\.tryAutoMatch\(creator\)/);
 });
 
-test('requester sees Waiting for Opponent to Respond immediately and can cancel before acceptance',()=>{
+test('manual Play shows Waiting immediately while Auto Match waits until the candidate is accepted',()=>{
   assert.match(client,/id="outgoingRequestTitle">Waiting for Opponent to Respond</);assert.match(client,/id="cancelOutgoingRequest"[^>]*>Cancel Request</);
   assert.match(client,/function showOutgoingRequest\(message\)/);
   const render=client.slice(client.indexOf('function renderPlayers'),client.indexOf('function closeRequestDialog'));
   assert.match(render,/showOutgoingRequest\(optimistic\)/);assert.match(render,/type:'challenge',accountId:button\.dataset\.challengeAccountId/);
   assert.match(client,/message\.type==='challengeSent'[^]*showOutgoingRequest\(message\)/);
-  const auto=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("\$('autoMatchCancelBtn').addEventListener"));
-  assert.match(auto,/showOutgoingRequest\(\{requestId:null,automatic:true,to:null\}\)/);
+  const auto=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("function roomShareUrl"));
+  assert.doesNotMatch(auto,/autoMatchBtn[^]*showOutgoingRequest/);
+  assert.match(auto,/autoMatchCandidateAccept[^]*showOutgoingRequest\(\{requestId:null,automatic:true,to:candidate\}\)[^]*type:'autoMatchAccept'/);
   const cancel=client.slice(client.indexOf("\$('cancelOutgoingRequest').addEventListener"),client.indexOf("\$('declinedDialogOk').addEventListener"));
   assert.match(cancel,/type:'challengeCancel'/);assert.match(cancel,/type:'autoMatchCancel'/);assert.match(server,/message\.type==='challengeCancel'/);
 });
@@ -146,10 +147,13 @@ test('accepted challenge uses explicit app bridge and stays active until second 
   assert.match(server,/fromClientId/);assert.match(server,/toClientId/);assert.match(server,/challenge\.status='room-ready'/);assert.match(server,/message\.type==='challengeJoined'/);assert.match(server,/type:'challengeRoomHandoffComplete'/);
 });
 
-test('Auto Match chooses a target, shows rich matched-player information, and still routes through request acceptance',()=>{
-  assert.match(client,/type:'autoMatchStart'/);assert.match(server,/directoryProfiles\(\[partner\.account\.id\],client\.account\.id\)/);assert.match(server,/startChallenge\(client,partner,rows,\{automatic:true,toProfileOverride:toProfile\}\)/);
-  assert.match(client,/id="outgoingOpponentProfile"/);assert.match(client,/function renderOutgoingOpponentProfile\(player\)/);assert.match(client,/player\.headToHead/);assert.match(client,/player\.gamesPlayed/);assert.match(client,/player\.wins/);assert.match(client,/player\.losses/);assert.match(client,/player\.totalCoinsEarned/);assert.match(client,/neverPlayedBefore/);
-  assert.match(server,/sendToAccount\(target\.account\.id,\{type:'playRequest'/);assert.match(server,/message\.type==='challengeResponse'/);assert.match(server,/challenge\.to!==client\.account\.id/);assert.match(server,/challenge\.toClientId=client\.clientId/);
+test('Auto Match previews the best candidate, supports Someone Else, then sends the request only after Accept',()=>{
+  assert.match(client,/id="autoMatchCandidateTitle">Matched Opponent/);assert.match(client,/id="autoMatchCandidateAccept"[^>]*>Accept</);assert.match(client,/id="autoMatchCandidateNext"[^>]*>Someone Else</);assert.match(client,/id="autoMatchCandidateCancel"[^>]*>Cancel Auto Match</);
+  assert.match(client,/message\.type==='autoMatchCandidate'/);assert.match(client,/showAutoMatchCandidate\(message\.candidate\|\|null\)/);
+  assert.match(client,/function renderOpponentProfile\(rootId,player\)/);assert.match(client,/player\.headToHead/);assert.match(client,/player\.gamesPlayed/);assert.match(client,/player\.wins/);assert.match(client,/player\.losses/);assert.match(client,/player\.totalCoinsEarned/);assert.match(client,/neverPlayedBefore/);
+  assert.match(client,/autoMatchCandidateNext[^]*type:'autoMatchNext'/);assert.match(client,/autoMatchCandidateAccept[^]*type:'autoMatchAccept'/);assert.match(client,/autoMatchCandidateCancel[^]*type:'autoMatchCancel'/);
+  assert.match(server,/type:'autoMatchCandidate',candidate:toProfile/);assert.match(server,/message\.type==='autoMatchNext'/);assert.match(server,/message\.type==='autoMatchAccept'/);assert.match(server,/acceptAutoMatchCandidate\(client\)/);
+  assert.match(server,/startChallenge\(client,target,rows,\{automatic:true,toProfileOverride:toProfile\}\)/);assert.match(server,/sendToAccount\(target\.account\.id,\{type:'playRequest'/);
   assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
 });
 
@@ -187,7 +191,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-7/);
+  assert.match(index,/ranked-client\.js\?v=20260920-8/);
   assert.match(index,/app\.js\?v=20260920-3/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
