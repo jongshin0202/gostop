@@ -11,6 +11,13 @@ test('ranked wallet labels are locale-aware instead of hard-coded English Coins'
   assert.doesNotMatch(source,/opponent\.walletCoins\)\|\|0\} Coins/);
 });
 
+test('expired pause Resume and win confirmation use ranked locale fallback keys',()=>{
+  assert.match(source,/resumeGame:'Resume Game'/);
+  assert.match(source,/expiredPauseQuitConfirmTitle:'End Session With Win\\?'/);
+  assert.match(source,/function renderPauseQuitConfirmationLocale\\(\\)/);
+  assert.match(source,/rt\\(expired\\?'expiredPauseQuitConfirmTitle':'quitPauseConfirmTitle'\\)/);
+});
+
 test('ranked UI listens to the base document language',()=>{
   assert.match(source,/document\.documentElement\.lang/);
   assert.match(source,/MutationObserver/);
