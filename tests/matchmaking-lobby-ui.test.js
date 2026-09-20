@@ -6,36 +6,49 @@ const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf
 const server=fs.readFileSync(new URL('../server/lobby.mjs',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 
-test('Competitive Online Play offers Auto Match, Browse Top 10, nickname Search, and skill details',()=>{
-  assert.match(client,/id="autoMatchBtn"/);assert.match(client,/id="browsePlayersBtn"/);assert.match(client,/Browse Top 10/);
-  assert.match(client,/id="onlineNicknameSearchBtn"/);assert.match(client,/id="onlinePlayerCount"/);assert.match(server,/const MAX_LOBBY_RESULTS=10/);
-  const render=client.slice(client.indexOf('function playerStatusText'),client.indexOf('function handleLobbyMessage'));
-  assert.match(render,/player\.similarity/);assert.match(render,/player\.walletCoins/);assert.match(render,/player\.wins/);assert.match(render,/player\.losses/);assert.match(render,/leaderboardScore/);assert.match(render,/leaderboardRank/);
+test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and Share Link sections',()=>{
+  const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
+  assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.match(panel,/data-online-section="share"/);
+  assert.equal((panel.match(/data-online-section=/g)||[]).length,3);
+  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
+  assert.match(panel,/id="onlineNicknameSearchBtn"/);assert.match(panel,/id="browsePlayerResults"/);assert.match(panel,/id="searchPlayerResults"/);
+  assert.doesNotMatch(panel,/onlineInviteEmail|Invite by Email|Send Invite/);
+  assert.match(panel,/id="competitiveShareLink"/);assert.match(panel,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
+  assert.match(client,/if\(createRoom\)\{createRoom\.textContent='Create Room';controls\.appendChild\(createRoom\);\}/);
+  assert.match(client,/if\(joinForm\)joinForm\.hidden=true/);
 });
 
-test('Search is a player directory lookup and returns profile status even when player is offline or busy',()=>{
-  assert.match(server,/async directorySearch\(query\)/);
-  assert.match(server,/\/internal\/player-search/);
+test('Browse and Search player cards show ranks, Coins, record, matchup history, and three simple availability states',()=>{
+  assert.match(server,/const MAX_LOBBY_RESULTS=10/);
+  const render=client.slice(client.indexOf('function playerStatusText'),client.indexOf('function closeRequestDialog'));
+  assert.match(render,/statusNotOnline/);assert.match(render,/statusAvailableSimple/);assert.match(render,/statusNotAvailable/);
+  assert.match(render,/playerStatusClass/);assert.match(render,/globalRank/);assert.match(render,/monthlyRank/);
+  assert.match(render,/coinsLabel/);assert.match(render,/player\.wins/);assert.match(render,/player\.losses/);assert.match(render,/headToHead/);
+  assert.match(render,/history\.wins/);assert.match(render,/history\.losses/);assert.match(render,/history\.coinsWon/);assert.match(render,/history\.coinsLost/);assert.match(render,/history\.lastPlayedAt/);
+  assert.match(render,/const challengeable=player\.challengeable===true&&player\.online!==false/);
+  assert.match(render,/playButton=challengeable\?/);
+  assert.doesNotMatch(render,/leaderboardRank/);
+});
+
+test('Search is a registered-player directory lookup and overlays current online availability',()=>{
+  assert.match(server,/async directorySearch\(query,requesterAccountId=null\)/);
+  assert.match(server,/\/internal\/player-search/);assert.match(server,/\/internal\/player-profiles/);
   const search=server.slice(server.indexOf('async search(client,query'),server.indexOf('async broadcastRecommendations'));
-  assert.match(search,/await this\.directorySearch\(query\)/);assert.match(search,/this\.presenceForAccount\(player\.accountId\)/);
-  assert.match(server,/status:'offline'/);assert.match(server,/status:'in-game'/);assert.match(server,/mode==='competitive-solo'\?'competitive-solo'/);
-  const render=client.slice(client.indexOf('function playerStatusText'),client.indexOf('function handleLobbyMessage'));
-  assert.match(render,/statusOffline/);assert.match(render,/statusInGame/);assert.match(render,/data-challengeable/);
+  assert.match(search,/await this\.directorySearch\(query,client\.account\.id\)/);assert.match(search,/this\.presenceForAccount\(player\.accountId\)/);
+  assert.match(server,/status:'offline'/);assert.match(server,/status:'in-game'/);
+  assert.match(client,/statusNotOnline:'Not Online'/);assert.match(client,/statusNotAvailable:'Online - Not Available'/);assert.match(client,/statusAvailableSimple:'Online - Available'/);
 });
 
-test('Browse Top 10 is opt-in and the list stays hidden until Browse or Search is selected',()=>{
-  assert.match(client,/recommendedPlayers" class="online-player-list" hidden/);
+test('Browse and Search use separate result lists and refresh independently after reconnect',()=>{
+  assert.match(client,/browsePlayerResults" class="online-player-list" hidden/);assert.match(client,/searchPlayerResults" class="online-player-list" hidden/);
   const render=client.slice(client.indexOf('function renderLobbyPresence'),client.indexOf('function connectLobby'));
-  assert.match(render,/list\.hidden=!\(browsePlayersActive\|\|lobbySearchActive\)/);
+  assert.match(render,/list=\$\('browsePlayerResults'\)/);assert.match(render,/list\.hidden=!browsePlayersActive/);
   const browse=client.slice(client.indexOf("\$('browsePlayersBtn').addEventListener"),client.indexOf("\$('onlineNicknameSearchBtn').addEventListener"));
-  assert.match(browse,/browsePlayersActive=true/);assert.match(browse,/lobbySearchActive=false/);assert.match(browse,/type:'recommendations'/);
-});
-
-test('Search reconnects instead of silently doing nothing when lobby socket is not open',()=>{
-  const transport=client.slice(client.indexOf('function connectLobby'),client.indexOf('function playerStatusText'));
-  assert.match(transport,/function sendLobbyMessage\(message,statusKey='lobbyConnecting'\)/);assert.match(transport,/pendingLobbyMessage=message/);assert.match(transport,/connectLobby\(\)/);
+  assert.match(browse,/browsePlayersActive=true/);assert.match(browse,/browsePlayerResults/);assert.match(browse,/type:'recommendations'/);
   const search=client.slice(client.indexOf("\$('onlineNicknameSearchBtn').addEventListener"),client.indexOf("\$('autoMatchBtn').addEventListener"));
-  assert.match(search,/searchingOnline/);assert.match(search,/sendLobbyMessage\(query\?\{type:'search',query\}:\{type:'recommendations'\}/);
+  assert.match(search,/lobbySearchActive=!!query/);assert.match(search,/searchPlayerResults/);assert.match(search,/type:'search',query/);
+  const transport=client.slice(client.indexOf('function connectLobby'),client.indexOf('function closeLobby'));
+  assert.match(transport,/browsePlayersActive\)requestRecommendations\(\)/);assert.match(transport,/lobbySearchActive/);assert.match(transport,/lobbySend\(\{type:'search',query\}\)/);
 });
 
 test('presence distinguishes two-player busy state from Solo and Training activity and publishes exact mode',()=>{
@@ -87,11 +100,11 @@ test('Auto Match chooses a target but still routes through same request acceptan
   assert.match(server,/type:'playRequest'/);assert.match(server,/message\.type==='challengeResponse'/);assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
 });
 
-test('Free and Competitive manual rooms expose clickable direct-join share links',()=>{
-  assert.match(client,/id="freeShareLink"/);assert.match(client,/id="competitiveShareLink"/);assert.match(client,/id="freeCopyLinkBtn"/);assert.match(client,/id="competitiveCopyLinkBtn"/);
+test('Share Link creates a direct URL with Copy URL while direct-link joining remains supported',()=>{
+  assert.match(client,/id="freeShareLink"/);assert.match(client,/id="competitiveShareLink"/);assert.match(client,/id="freeCopyLinkBtn"/);assert.match(client,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
   assert.match(client,/function roomShareUrl\(roomCode,mode\)/);assert.match(client,/searchParams\.set\('room'/);assert.match(client,/searchParams\.set\('mode',mode==='free'\?'free':'competitive'\)/);
   assert.match(client,/function showRoomShareLink\(roomCode,mode\)/);assert.match(client,/navigator\.clipboard\.writeText\(link\.href\)/);
-  assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode\)/);
+  assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode\)/);
 });
 
 test('Competitive direct link requires Log In or Create ID first and resumes intent after either flow',()=>{
