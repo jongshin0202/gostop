@@ -21,6 +21,10 @@ class_name = "AccountStore"
 name = "LOBBY"
 class_name = "Lobby"
 
+[[durable_objects.bindings]]
+name = "BACKUP_STORE"
+class_name = "BackupStore"
+
 [exports.GameRoom]
 type = "durable-object"
 storage = "sqlite"
@@ -30,6 +34,10 @@ type = "durable-object"
 storage = "sqlite"
 
 [exports.Lobby]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.BackupStore]
 type = "durable-object"
 storage = "sqlite"
 
