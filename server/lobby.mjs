@@ -102,7 +102,7 @@ export class Lobby{
       this.sendToAccount(challenge.to,missed);this.challenges.delete(challenge.id);
       if(challenge.automatic&&creator){
         for(const item of this.clientsForAccount(challenge.to))item.autoMatching=false;creator.autoMatching=true;
-        if(!(await this.tryAutoMatch(creator)))this.send(creator.socket,{type:'autoMatchWaiting'});
+        await this.tryAutoMatch(creator);
       }else{
         this.releaseChallenge(challenge);if(creator)this.send(creator.socket,{type:'challengeNoAnswer',requestId:challenge.id,by:challenge.toProfile||{accountId:challenge.to,nickname:'Player'}});
       }
