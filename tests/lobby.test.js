@@ -4,7 +4,8 @@ import {Lobby,distance,similarityPercent,MATCH_WEIGHTS,MAX_LOBBY_RESULTS} from '
 
 const socket=()=>({messages:[],send(data){this.messages.push(JSON.parse(data));}});
 const account=(id,nickname,walletCoins)=>({id,nickname,walletCoins,countryCode:'US'});
-const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu'}={})=>({socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,autoMatching,searchQuery:''});
+let clientSequence=0;
+const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu',foreground=true,lastActivityAt=Date.now(),lastPresenceAt=Date.now(),notificationsEnabled=false}={})=>({clientId:`test-client-${++clientSequence}`,socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,autoMatching,searchQuery:'',connectedAt:Date.now(),lastActivityAt,lastPresenceAt,foreground,notificationsEnabled});
 const rowsFor=entries=>new Map(entries.map(([nickname,score,gamesPlayed,totalCoins,rank,wins=0,losses=Math.max(0,gamesPlayed-wins)])=>[
   nickname.toLowerCase(),
   {nickname,score,gamesPlayed,totalCoins,rank,wins,losses,provisional:gamesPlayed<10,countryCode:'US'}
@@ -64,9 +65,23 @@ test('Solo and Training presence remains challengeable while any two-player pres
   const names=(await lobby.recommendations(me)).map(player=>player.nickname);
   assert.deepEqual(names,['SoloPlayer','TrainingPlayer']);
   assert.equal(lobby.accountTwoPlayerBusy('busy'),true);
-  assert.equal(lobby.presenceForAccount('solo').status,'competitive-solo');
-  assert.equal(lobby.presenceForAccount('training').status,'training');
+  assert.equal(lobby.presenceForAccount('solo').status,'available');
+  assert.equal(lobby.presenceForAccount('training').status,'available');
   assert.equal(lobby.presenceForAccount('busy').status,'in-game');
+});
+
+test('foreground plus activity within five minutes is Available; hidden or stale activity is Away',()=>{
+  const rows=rowsFor([['Viewer',1,1,1,1],['Active',1,1,1,2],['Hidden',1,1,1,3],['Idle',1,1,1,4]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100),active=client('active','Active',100,{foreground:true,lastActivityAt:now}),hidden=client('hidden','Hidden',100,{foreground:false,lastActivityAt:now}),idle=client('idle','Idle',100,{foreground:true,lastActivityAt:now-300001});
+  add(lobby,viewer,active,hidden,idle);
+  assert.equal(lobby.presenceForAccount('active').status,'available');assert.equal(lobby.presenceForAccount('active').challengeable,true);
+  assert.equal(lobby.presenceForAccount('hidden').status,'away');assert.equal(lobby.presenceForAccount('hidden').challengeable,false);
+  assert.equal(lobby.presenceForAccount('idle').status,'away');assert.equal(lobby.presenceForAccount('idle').challengeable,false);
+});
+
+test('Away is challengeable only while notification permission and a fresh page heartbeat are both present',()=>{
+  const rows=rowsFor([['Viewer',1,1,1,1],['Away',1,1,1,2]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100),away=client('away','Away',100,{foreground:false,lastActivityAt:now,notificationsEnabled:true,lastPresenceAt:now});
+  add(lobby,viewer,away);assert.equal(lobby.presenceForAccount('away').status,'away');assert.equal(lobby.presenceForAccount('away').challengeable,true);
+  away.lastPresenceAt=now-90001;assert.equal(lobby.presenceForAccount('away').status,'away');assert.equal(lobby.presenceForAccount('away').challengeable,false);
 });
 
 test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
@@ -98,6 +113,19 @@ test('player search preserves an explicit zero-loss count instead of treating ev
   const lobby=makeLobby(rows,directory),me=client('me','Jong',320);add(lobby,me);
   const [player]=await lobby.search(me,'nagari');
   assert.equal(player.gamesPlayed,1);assert.equal(player.wins,0);assert.equal(player.losses,0);
+});
+
+test('accepted challenge is bound to the exact requesting and accepting browser tabs',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.2,102,1040,2]]),lobby=makeLobby(rows);
+  const jongPrimary=client('jong','Jong',1000),jongOther=client('jong','Jong',1000,{foreground:false}),sonoPrimary=client('sono','Sonogong',1040),sonoOther=client('sono','Sonogong',1040,{foreground:false});
+  add(lobby,jongPrimary,jongOther,sonoPrimary,sonoOther);
+  await lobby.handle(jongPrimary,JSON.stringify({type:'challenge',accountId:'sono'}));
+  const request=sonoPrimary.socket.messages.find(message=>message.type==='playRequest');assert.ok(request?.requestId);assert.equal(sonoOther.socket.messages.some(message=>message.type==='playRequest'),false);
+  await lobby.handle(sonoPrimary,JSON.stringify({type:'challengeResponse',requestId:request.requestId,accept:true}));
+  assert.equal(jongPrimary.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),true);assert.equal(jongOther.socket.messages.some(message=>message.type==='challengeAcceptedCreateRoom'),false);
+  assert.equal(sonoPrimary.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),true);assert.equal(sonoOther.socket.messages.some(message=>message.type==='challengeAcceptedWaiting'),false);
+  await lobby.handle(jongPrimary,JSON.stringify({type:'challengeRoomReady',requestId:request.requestId,roomCode:'ABCDEFGHJK2345'}));
+  assert.equal(sonoPrimary.socket.messages.some(message=>message.type==='challengeRoomReady'&&message.roomCode==='ABCDEFGHJK2345'),true);assert.equal(sonoOther.socket.messages.some(message=>message.type==='challengeRoomReady'),false);
 });
 
 test('manual player selection sends a Yes/No play request rather than starting a game immediately',async()=>{
