@@ -215,7 +215,7 @@ test('Auto Match waiting wakes automatically when a challengeable player becomes
   const lobby=makeLobby(rows),me=client('me','Jong',100,{autoMatching:true}),other=client('other','Sonogong',110,{available:false,twoPlayer:false});
   add(lobby,me,other);
   assert.equal(await lobby.tryAutoMatch(me),false);assert.ok(me.socket.messages.some(message=>message.type==='autoMatchWaiting'));
-  await lobby.handle(other,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu'}));
+  await lobby.handle(other,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu',foreground:true,lastActivityAt:Date.now(),notificationsEnabled:false}));
   assert.ok(other.socket.messages.some(message=>message.type==='playRequest'));assert.ok(me.socket.messages.some(message=>message.type==='challengeSent'));
 });
 
