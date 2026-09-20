@@ -111,10 +111,10 @@ export class RankedRoomCore extends RoomCore{
     await this.scheduleAlarm();await this.persist();this.broadcastSnapshots();return participant;
   }
   async disconnect(socket){
-    const playerId=socket.__playerId;await super.disconnect(socket);if(!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return;
-    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot||!this.isRanked())return;
+    const playerId=socket.__playerId,disconnected=await super.disconnect(socket);if(!disconnected||!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return false;
+    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot||!this.isRanked())return disconnected;
     if(this.room.rankFlow.runtimeOrphanDeadlines?.[playerId])delete this.room.rankFlow.runtimeOrphanDeadlines[playerId];
-    this.room.rankFlow.disconnectSettlements[playerId]=this.calculateDisconnectSettlement(playerId);this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();
+    this.room.rankFlow.disconnectSettlements[playerId]=this.calculateDisconnectSettlement(playerId);this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();return true;
   }
   async endRuntimeOrphan(playerId){
     if(!this.room||this.room.sessionFlow.ended)return {active:false,reason:'ended'};
@@ -197,10 +197,18 @@ export class RankedRoomCore extends RoomCore{
   async scheduleAlarm(){
     if(!this.storage?.setAlarm||!this.room)return;const flow=this.room.rankFlow||freshRankFlow(),times=[];if(flow.pause?.until&&flow.pause.phase!=='expired')times.push(flow.pause.until);for(const value of Object.values(flow.disconnectDeadlines||{}))if(value)times.push(value);for(const value of Object.values(flow.runtimeOrphanDeadlines||{}))if(value)times.push(value);if(flow.inactivity){if(flow.inactivity.phase==='waiting')times.push(flow.inactivity.nudgeAt);else if(flow.inactivity.phase==='nudge')times.push(flow.inactivity.warningAt);else if(flow.inactivity.phase==='warning')times.push(flow.inactivity.abandonAt);}if(times.length)await this.storage.setAlarm(Math.min(...times));else if(this.storage.deleteAlarm)await this.storage.deleteAlarm();
   }
+  async resolveExpiredDisconnects(now=this.nowMs()){
+    const flow=this.room?.rankFlow;if(!flow||this.room.sessionFlow?.ended)return false;
+    for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){
+      if(now<deadline)continue;const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];
+      if(participant&&!this.sockets.has(playerId)&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId))await this.endPreFirstTurnDisconnect(playerId);else await this.abandon(playerId,'disconnect-timeout');return true;}
+    }
+    return false;
+  }
   async alarm(){
     await this.load();if(!this.room||this.room.sessionFlow.ended)return;const now=this.nowMs(),flow=this.room.rankFlow;
     if(flow.pause&&flow.pause.phase!=='expired'&&now>=flow.pause.until){flow.pause.phase='expired';flow.pause.expiredAt=now;flow.inactivity=null;this.broadcastSnapshots();}
-    for(const [playerId,deadline] of Object.entries({...flow.disconnectDeadlines})){if(now>=deadline){const participant=this.room.participants.find(item=>item.playerId===playerId);delete flow.disconnectDeadlines[playerId];if(participant&&!this.sockets.has(playerId)&&!this.room.terminalResult){if(this.isBeforeFirstTurn(playerId)){await this.endPreFirstTurnDisconnect(playerId);return;}await this.abandon(playerId,'disconnect-timeout');return;}}}
+    if(await this.resolveExpiredDisconnects(now))return;
     for(const [playerId,deadline] of Object.entries({...flow.runtimeOrphanDeadlines})){if(now>=deadline){delete flow.runtimeOrphanDeadlines[playerId];if(!this.sockets.has(playerId)){await this.endRuntimeOrphan(playerId);return;}}}
     const inactivity=flow.inactivity;if(inactivity){if(now>=inactivity.abandonAt){await this.abandon(inactivity.playerId,'inactivity-timeout');return;}if(inactivity.phase!=='warning'&&now>=inactivity.warningAt){inactivity.phase='warning';inactivity.penaltyCoins=this.calculatePenalty(inactivity.playerId);this.broadcastSnapshots();}else if(inactivity.phase==='waiting'&&now>=inactivity.nudgeAt){inactivity.phase='nudge';this.broadcastSnapshots();}}
     await this.persist();await this.scheduleAlarm();
@@ -241,7 +249,7 @@ export class RankedRoomCore extends RoomCore{
     return false;
   }
   async handle(socket,input){
-    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
+    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}const expiredResolved=await this.resolveExpiredDisconnects();if(expiredResolved&&message.type==='action'){const participant=this.room.participants.find(item=>item.playerId===socket.__playerId),revision=participant&&this.room.matchId?this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision:0,response=envelope('actionAccepted',{actionId:message.actionId,matchId:this.room.matchId,revision,duplicate:false});this.send(socket,response);return response;}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
       try{await this.handleRankedFlow(socket,message);}catch(error){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:error.code||'ILLEGAL_ACTION',message:error.message}});this.send(socket,response);return response;}return envelope('actionAccepted',{actionId:message.actionId});
     }
     if(message.type==='action'&&this.room.rankFlow?.pause){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:'PAUSED',message:'The game is paused.'}});this.send(socket,response);return response;}

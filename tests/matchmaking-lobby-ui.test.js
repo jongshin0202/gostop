@@ -10,7 +10,7 @@ test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and 
   const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
   assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.match(panel,/data-online-section="share"/);
   assert.equal((panel.match(/data-online-section=/g)||[]).length,3);
-  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
+  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.match(panel,/id="enablePlayNotificationsBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
   assert.match(panel,/id="onlineNicknameSearchBtn"/);assert.match(panel,/id="browsePlayerResults"/);assert.match(panel,/id="searchPlayerResults"/);
   assert.doesNotMatch(panel,/onlineInviteEmail|Invite by Email|Send Invite/);
   assert.match(panel,/id="competitiveShareLink"/);assert.match(panel,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
@@ -18,10 +18,10 @@ test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and 
   assert.match(client,/if\(joinForm\)joinForm\.hidden=true/);
 });
 
-test('Browse and Search player cards show ranks, Coins, record, matchup history, and three simple availability states',()=>{
+test('Browse and Search player cards show ranks, Coins, record, matchup history, and Available Away Busy Offline states',()=>{
   assert.match(server,/const MAX_LOBBY_RESULTS=10/);
   const render=client.slice(client.indexOf('function playerStatusText'),client.indexOf('function closeRequestDialog'));
-  assert.match(render,/statusNotOnline/);assert.match(render,/statusAvailableSimple/);assert.match(render,/statusNotAvailable/);
+  assert.match(render,/statusNotOnline/);assert.match(render,/statusAvailableSimple/);assert.match(render,/statusAway/);assert.match(render,/statusNotAvailable/);
   assert.match(render,/playerStatusClass/);assert.match(render,/globalRank/);assert.match(render,/monthlyRank/);
   assert.match(render,/coinsLabel/);assert.match(render,/player\.wins/);assert.match(render,/player\.losses/);assert.match(render,/headToHead/);
   assert.match(render,/history\.wins/);assert.match(render,/history\.losses/);assert.match(render,/history\.coinsWon/);assert.match(render,/history\.coinsLost/);assert.match(render,/history\.lastPlayedAt/);
@@ -36,7 +36,7 @@ test('Search is a registered-player directory lookup and overlays current online
   const search=server.slice(server.indexOf('async search(client,query'),server.indexOf('async broadcastRecommendations'));
   assert.match(search,/await this\.directorySearch\(query,client\.account\.id\)/);assert.match(search,/this\.presenceForAccount\(player\.accountId\)/);
   assert.match(server,/status:'offline'/);assert.match(server,/status:'in-game'/);
-  assert.match(client,/statusNotOnline:'Not Online'/);assert.match(client,/statusNotAvailable:'Online - Not Available'/);assert.match(client,/statusAvailableSimple:'Online - Available'/);
+  assert.match(client,/statusNotOnline:'Not Online'/);assert.match(client,/statusNotAvailable:'Online - Not Available'/);assert.match(client,/statusAway:'Online - Away'/);assert.match(client,/statusAvailableSimple:'Online - Available'/);
 });
 
 test('Browse and Search use separate result lists and refresh independently after reconnect',()=>{
@@ -51,12 +51,21 @@ test('Browse and Search use separate result lists and refresh independently afte
   assert.match(transport,/browsePlayersActive\)requestRecommendations\(\)/);assert.match(transport,/lobbySearchActive/);assert.match(transport,/lobbySend\(\{type:'search',query\}\)/);
 });
 
-test('presence distinguishes two-player busy state from Solo and Training activity and publishes exact mode',()=>{
-  assert.match(client,/function desiredLobbyAvailability\(\)\{return !!account&&!playerTwoPlayerActive&&account\?\.activeRanked\?\.mode!=='online';\}/);
-  assert.match(client,/twoPlayer:playerTwoPlayerActive\|\|account\?\.activeRanked\?\.mode==='online',mode:playerPresenceMode/);
-  assert.match(client,/playerPresenceMode=String\(event\.detail\?\.mode\|\|'menu'\)/);
+test('presence requires foreground activity within five minutes and publishes notification capability',()=>{
+  assert.match(client,/const PRESENCE_AWAY_MS=300000/);assert.match(client,/const PRESENCE_HEARTBEAT_MS=30000/);
+  assert.match(client,/function tabForeground\(\)/);assert.match(client,/document\.visibilityState==='visible'/);assert.match(client,/document\.hasFocus/);
+  assert.match(client,/lastActivityAt:lastPlayerActivityAt/);assert.match(client,/foreground:tabForeground\(\)/);assert.match(client,/notificationsEnabled:notificationPermissionGranted\(\)/);
+  assert.match(client,/document\.addEventListener\('pointerdown',markPlayerActivity/);assert.match(client,/document\.addEventListener\('visibilitychange',syncLobbyAvailability/);
+  assert.match(server,/const PRESENCE_AWAY_MS=300000/);assert.match(server,/const PRESENCE_HEARTBEAT_STALE_MS=90000/);assert.match(server,/status:'away'/);
   assert.match(app,/function publishPlayerActivity\(active,mode='',twoPlayer=false\)/);assert.match(app,/publishPlayerActivity\(true,training\?'training':'free-solo',false\)/);
   assert.match(app,/const twoPlayer=!!anonymous\|\|room\?\.rankedMode!=='solo'/);
+});
+
+test('play request notifications are opt-in and Away Play requires a fresh notification-capable tab',()=>{
+  assert.match(client,/enablePlayNotificationsBtn/);assert.match(client,/Notification\.requestPermission\(\)/);assert.match(client,/serviceWorker\.register\('\.\/gostop-notifications-sw\.js\?v=20260920-1'\)/);
+  assert.match(client,/showPlayRequestNotification\(message\)/);assert.match(client,/showNotification\('GoStop Live! Play Request'/);
+  assert.match(server,/notifyable=away&&client\.notificationsEnabled===true&&heartbeatFresh/);
+  assert.match(server,/clientCanReceiveChallenge\(client\)/);
 });
 
 test('incoming player request is Yes No and accepting a Solo game is covered until multiplayer begins',()=>{
@@ -92,7 +101,7 @@ test('accepted challenge uses explicit app bridge and stays active until second 
   const handler=client.slice(client.indexOf('async function createAcceptedChallengeRoom'),client.indexOf('async function prepareToAcceptMultiplayerChallenge'));
   assert.match(handler,/bridge\.createCompetitiveRoom\(\)/);assert.match(handler,/bridge\.joinCompetitiveRoom\(message\.roomCode\)/);
   assert.doesNotMatch(handler,/createRoom\?\.click\(\)|joinForm\.requestSubmit\(\)/);
-  assert.match(server,/challenge\.status='room-ready'/);assert.match(server,/message\.type==='challengeJoined'/);assert.match(server,/type:'challengeRoomHandoffComplete'/);
+  assert.match(server,/fromClientId/);assert.match(server,/toClientId/);assert.match(server,/challenge\.status='room-ready'/);assert.match(server,/message\.type==='challengeJoined'/);assert.match(server,/type:'challengeRoomHandoffComplete'/);
 });
 
 test('Auto Match chooses a target but still routes through same request acceptance flow',()=>{
@@ -131,8 +140,10 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 });
 
 
-test('frontend cache versions advance after Online Play profile changes',()=>{
+test('frontend cache versions advance after presence and reconnect fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.match(index,/ranked-client\.js\?v=20260920-2/);
+  assert.match(index,/i18n\.js\?v=20260920-1/);
+  assert.match(index,/ranked-client\.js\?v=20260920-3/);
   assert.match(index,/app\.js\?v=20260920-1/);
+  assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });

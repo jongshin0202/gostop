@@ -97,5 +97,5 @@ export class FinalRankedRoomCore extends RankedRoomCore{
     if(this.room&&(this.room.gameSequence||0)!==beforeSequence){this.resetPauseBudgetForCurrentGame();await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}
     return response;
   }
-  async disconnect(socket){const playerId=socket.__playerId;await super.disconnect(socket);if(this.room&&playerId){await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}}
+  async disconnect(socket){const playerId=socket.__playerId,disconnected=await super.disconnect(socket);if(disconnected&&this.room&&playerId){await this.persist();this.broadcastSnapshots();await this.scheduleAlarm();}return disconnected;}
 }
