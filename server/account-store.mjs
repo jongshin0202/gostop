@@ -75,6 +75,11 @@ function canonicalGlobalStats(account){
   return stored;
 }
 function sortRows(rows){return rows.sort((a,b)=>b.score-a.score||b.gamesPlayed-a.gamesPlayed||b.totalCoins-a.totalCoins||a.nickname.localeCompare(b.nickname));}
+function rankRows(rows){
+  const ranked=sortRows(rows.filter(row=>!row.provisional)).map((row,index)=>({...row,rank:index+1}));
+  const notYetRanked=sortRows(rows.filter(row=>row.provisional)).map(row=>({...row,rank:0}));
+  return [...ranked,...notYetRanked];
+}
 
 export class AccountStore{
   constructor(state,env,{cryptoApi=globalThis.crypto,now=()=>new Date().toISOString()}={}){this.state=state;this.storage=state.storage;this.env=env;this.crypto=cryptoApi;this.now=now;}
@@ -251,19 +256,19 @@ export class AccountStore{
   async directoryProfiles({requesterAccountId=null,accountIds=null,query=''}={}){
     await this.ensureOutcomeHistoryRepair();
     const needle=String(query||'').trim().toLowerCase(),wanted=Array.isArray(accountIds)?new Set(accountIds.map(String)):null,month=utcMonth(this.now()),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
-    const global=sortRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0}))).map((row,index)=>({...row,rank:index+1}));
-    const monthly=sortRows(accounts.map(account=>({...leaderboardRow(account,account.stats?.monthly?.[month]||blankStats()),accountId:account.id}))).map((row,index)=>({...row,rank:index+1})),monthlyById=new Map(monthly.map(row=>[String(row.accountId),row]));
+    const global=rankRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0})));
+    const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES,accountId:account.id};})),monthlyById=new Map(monthly.map(row=>[String(row.accountId),row]));
     let players=global.filter(row=>(!wanted||wanted.has(String(row.accountId)))&&(!needle||String(row.nickname||'').toLowerCase().includes(needle)));
-    if(needle)players=players.sort((a,b)=>{const an=String(a.nickname||'').toLowerCase(),bn=String(b.nickname||'').toLowerCase(),ax=an===needle?0:an.startsWith(needle)?1:2,bx=bn===needle?0:bn.startsWith(needle)?1:2;return ax-bx||a.rank-b.rank||an.localeCompare(bn);});
+    if(needle)players=players.sort((a,b)=>{const an=String(a.nickname||'').toLowerCase(),bn=String(b.nickname||'').toLowerCase(),ax=an===needle?0:an.startsWith(needle)?1:2,bx=bn===needle?0:bn.startsWith(needle)?1:2,ar=Number(a.rank)||Number.MAX_SAFE_INTEGER,br=Number(b.rank)||Number.MAX_SAFE_INTEGER;return ax-bx||ar-br||an.localeCompare(bn);});
     const headToHead=await this.headToHeadFor(requesterAccountId,players.map(row=>row.accountId));
-    return players.map(row=>{const monthlyRow=monthlyById.get(String(row.accountId));return {...row,globalRank:row.rank,globalProvisional:!!row.provisional,monthlyRank:monthlyRow?.rank||null,monthlyProvisional:!!monthlyRow?.provisional,headToHead:headToHead[String(row.accountId)]||{wins:0,losses:0,draws:0,coinsWon:0,coinsLost:0,lastPlayedAt:null}};});
+    return players.map(row=>{const monthlyRow=monthlyById.get(String(row.accountId));return {...row,globalRank:Number(row.rank)||0,globalProvisional:!!row.provisional,monthlyRank:Number(monthlyRow?.rank)||0,monthlyProvisional:!!monthlyRow?.provisional,headToHead:headToHead[String(row.accountId)]||{wins:0,losses:0,draws:0,coinsWon:0,coinsLost:0,lastPlayedAt:null}};});
   }
 
   async leaderboard(){
     await this.ensureOutcomeHistoryRepair();
     const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()];
-    const global=sortRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account)))).map((row,index)=>({...row,rank:index+1}));
-    const monthly=sortRows(accounts.map(account=>leaderboardRow(account,account.stats?.monthly?.[month]||blankStats()))).map((row,index)=>({...row,rank:index+1}));
+    const global=rankRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account))));
+    const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES};}));
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
   }
 
