@@ -53,7 +53,7 @@ export class BackupStore{
     for(const snapshotId of [...new Set(pointers)]){
       const rows=await this.storage.list({prefix:`snapshot:${snapshotId}:`});let removed=0;
       for(const [key,item] of rows){const hay=`${item?.key||''}\n${JSON.stringify(item?.value??item?.room??null)}`;if(hay.includes(id)){await this.storage.delete(key);removed++;}}
-      const meta=await this.metadataById(snapshotId);if(meta&&removed){const accountRows=await this.storage.list({prefix:`snapshot:${snapshotId}:account:`}),roomRows=await this.storage.list({prefix:`snapshot:${snapshotId}:room:`});meta.accountEntries=accountRows.size;meta.rooms=roomRows.size;meta.fingerprint='';meta.redactedAt=this.now();meta.redactedAccountIds=[...(meta.redactedAccountIds||[]),id];await this.storage.put(`snapshotMeta:${snapshotId}`,meta);updated.push({snapshotId,removed});}
+      const meta=await this.metadataById(snapshotId);if(meta&&removed){const accountRows=await this.storage.list({prefix:`snapshot:${snapshotId}:account:`}),roomRows=await this.storage.list({prefix:`snapshot:${snapshotId}:room:`});meta.accountEntries=accountRows.size;meta.rooms=roomRows.size;meta.fingerprint='';meta.redactedAt=this.now();await this.storage.put(`snapshotMeta:${snapshotId}`,meta);updated.push({snapshotId,removed});}
     }
     return {ok:true,updated};
   }
