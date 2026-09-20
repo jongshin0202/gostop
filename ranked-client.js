@@ -238,6 +238,7 @@
     trainingBtn.textContent=rt('training');playPractice.textContent=rt('solo');freeGroup.dataset.label=rt('freeGaming');freeFriendBtn.textContent=rt('playWithFriend');rankedGroup.dataset.label=rt('competitiveGaming');syncRankedButtons();leaderboardBtn.textContent=rt('leaderboards');if(howTo)howTo.textContent=rt('howTo');
     $('freeFriendTitle').textContent=rt('playWithFriend');$('freeFriendHelp').textContent=rt('freeFriendHelp');$('freeRoomShareTitle').textContent=rt('roomShare');$('freeCreateRoomBtn').textContent=rt('createRoomShare');$('freeRoomCodeLabel').textContent=rt('roomCode');$('freeJoinBtn').textContent=rt('joinGame');$('freeCopyLinkBtn').textContent=rt('copyLink');$('freeFriendClose').textContent=rt('cancel');
     const lobbyCard=onlinePanel.querySelector('.online-lobby-card'),methods=onlinePanel.querySelectorAll('.online-method');if(lobbyCard?.querySelector('h2'))lobbyCard.querySelector('h2').textContent=rt('online');if(methods[0]){methods[0].querySelector('strong').textContent=rt('findOnline');methods[0].querySelector('p').textContent=rt('findOnlineHelp');$('autoMatchBtn').textContent=rt('autoMatch');$('autoMatchCancelBtn').textContent=rt('cancelAutoMatch');$('browsePlayersBtn').textContent=rt('browsePlayers');syncNotificationButton();}if(methods[1]){methods[1].querySelector('strong').textContent=rt('searchPlayer');$('onlineNicknameSearch').placeholder=rt('nickname');$('onlineNicknameSearchBtn').textContent=rt('search');}if(methods[2]?.querySelector('strong'))methods[2].querySelector('strong').textContent=rt('roomShare');if(createRoom)createRoom.textContent=rt('createRoom');$('competitiveCopyLinkBtn').textContent=rt('copyUrl');$('onlineLobbyClose').textContent=rt('return');renderLobbyPresence(lastLobbyPlayers,lastLobbyOnlineCount);if(lobbySearchActive)renderPlayers(lastSearchPlayers,'searchPlayerResults');
+    renderNotificationBlockedDialog();syncNotificationButton();
     $('loginTab').textContent=rt('login');$('registerTab').textContent=rt('createId');const loginLabels=$('loginForm').querySelectorAll('label'),registerLabels=$('registerForm').querySelectorAll('label');if(loginLabels[0])loginLabels[0].childNodes[0].nodeValue=rt('email');if(loginLabels[1])loginLabels[1].childNodes[0].nodeValue=rt('password');$('loginForm').querySelector('button[type="submit"]').textContent=rt('login');if(registerLabels[0])registerLabels[0].childNodes[0].nodeValue=rt('email');if(registerLabels[1])registerLabels[1].childNodes[0].nodeValue=rt('nickname');if(registerLabels[2])registerLabels[2].childNodes[0].nodeValue=rt('password');if(registerLabels[3])registerLabels[3].childNodes[0].nodeValue=rt('confirmPassword');$('registerForm').querySelector('.account-help').textContent=rt('passwordHelp');$('registerForm').querySelector('button[type="submit"]').textContent=rt('register');authDialog.querySelector('h2').textContent=$('registerForm').hidden?rt('login'):rt('createId');$('registrationPolicyTitle').textContent=rt('signupPolicyTitle');$('registrationPolicyText').textContent=rt('signupPolicyText');$('registrationPolicyOk').textContent=rt('ok');successDialog.querySelector('h2').textContent=rt('registeredTitle');successDialog.querySelector('p').textContent=rt('registeredBonus');$('registrationOk').textContent=rt('ok');requestDialog.querySelector('h2').textContent=rt('onlineRequest');$('requestAccept').textContent=rt('yes');$('requestDecline').textContent=rt('no');$('outgoingRequestTitle').textContent=rt('waitingOpponentResponse');$('cancelOutgoingRequest').textContent=rt('cancelRequest');$('declinedDialogTitle').textContent=rt('requestDeclinedTitle');$('declinedDialogOk').textContent=rt('ok');$('missedRequestOk').textContent=rt('ok');$('missedRequestClearAll').textContent=rt('clearAll');renderMissedRequestDialog();$('matchHandoffTitle').textContent=rt('startingMatch');
     const heads=leaderboardScreen.querySelectorAll('th');if(heads[0])heads[0].textContent=rt('rankHeading');if(heads[1])heads[1].textContent=rt('nickname');if(heads[2])heads[2].textContent=rt('score');if(heads[3])heads[3].textContent=rt('totalCoins');if(heads[4])heads[4].textContent=rt('gamesPlayed');leaderboardScreen.querySelector('.leaderboard-return').textContent=rt('return');pauseDialog.querySelector('h2').textContent=rt('pause');renderPauseQuitConfirmationLocale();$('rankedPauseQuitYes').textContent=rt('yes');$('rankedPauseQuitNo').textContent=rt('no');$('rankedPauseOutcomeOk').textContent=rt('ok');abandonmentDialog.querySelector('h2').textContent=rt('gameEnded');$('rankedInactivityOk').textContent=rt('ok');$('rankedQuitAccept').textContent=rt('accept');$('rankedQuitDecline').textContent=rt('decline');$('rankedAbandonmentOk').textContent=rt('ok');$('rankedReconnectTitle').textContent=rt('opponentReconnectTitle');$('rankedReconnectText').textContent=rt('opponentReconnectText');$('rankedReconnectQuit').textContent=rt('quitDisconnectedGame');
     renderAccountBox();if(leaderboardData)renderLeaderboard();renderOutgoingOpponentProfile(pendingOutgoingRequest?.to||null);patchGameIdentity();if(currentSnapshot)renderRankedFlow(currentSnapshot);
@@ -333,14 +334,62 @@
   function lobbyUrl(){const url=new URL(`${baseUrl}/api/lobby/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';return url;}
   function desiredLobbyAvailability(){return !!account&&!playerTwoPlayerActive&&account?.activeRanked?.mode!=='online';}
   function tabForeground(){return document.visibilityState==='visible'&&(typeof document.hasFocus!=='function'||document.hasFocus());}
-  function notificationPermissionGranted(){return typeof Notification!=='undefined'&&Notification.permission==='granted'&&!!notificationRegistration&&playRequestNotificationsReady;}
+  function notificationPreferenceEnabled(){
+    try{const value=localStorage.getItem(NOTIFICATION_PREF_KEY);if(value==='0')return false;if(value==='1')return true;}catch(_){}
+    return typeof Notification!=='undefined'&&Notification.permission==='granted';
+  }
+  function setNotificationPreference(enabled){try{localStorage.setItem(NOTIFICATION_PREF_KEY,enabled?'1':'0');}catch(_){}}
+  function notificationPermissionGranted(){return typeof Notification!=='undefined'&&Notification.permission==='granted'&&notificationPreferenceEnabled()&&!!notificationRegistration&&playRequestNotificationsReady;}
   function syncLobbyAvailability(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',available:desiredLobbyAvailability(),twoPlayer:playerTwoPlayerActive||account?.activeRanked?.mode==='online',mode:playerPresenceMode,foreground:tabForeground(),lastActivityAt:lastPlayerActivityAt,notificationsEnabled:notificationPermissionGranted()});}
   function markPlayerActivity(event){if(event&&event.isTrusted===false)return;const now=Date.now(),wasAway=now-lastPlayerActivityAt>PRESENCE_AWAY_MS;lastPlayerActivityAt=now;if(wasAway||now-lastPresenceActivitySyncAt>=5000){lastPresenceActivitySyncAt=now;syncLobbyAvailability();}}
   function startPresenceHeartbeat(){if(presenceHeartbeatTimer)return;presenceHeartbeatTimer=setInterval(syncLobbyAvailability,PRESENCE_HEARTBEAT_MS);}
   function stopPresenceHeartbeat(){if(presenceHeartbeatTimer){clearInterval(presenceHeartbeatTimer);presenceHeartbeatTimer=null;}}
-  function syncNotificationButton(){const button=$('enablePlayNotificationsBtn');if(!button)return;const supported=typeof Notification!=='undefined'&&'serviceWorker' in navigator;if(!supported){button.textContent=rt('notificationUnsupported');button.disabled=true;return;}if(notificationPermissionGranted()){button.textContent=rt('notificationsOn');button.disabled=true;return;}button.textContent=rt('enableNotifications');button.disabled=Notification.permission==='denied';}
-  async function prepareNotificationRegistration(){if(!('serviceWorker' in navigator)||typeof Notification==='undefined')return null;try{notificationRegistration=await navigator.serviceWorker.register('./gostop-notifications-sw.js?v=20260920-1');playRequestNotificationsReady=Notification.permission==='granted';syncNotificationButton();syncLobbyAvailability();return notificationRegistration;}catch(_){notificationRegistration=null;playRequestNotificationsReady=false;syncNotificationButton();return null;}}
-  async function enablePlayNotifications(){if(typeof Notification==='undefined'||!('serviceWorker' in navigator)){showToast(rt('notificationUnsupported'),4000);return;}await prepareNotificationRegistration();let permission=Notification.permission;if(permission==='default')permission=await Notification.requestPermission();playRequestNotificationsReady=permission==='granted'&&!!notificationRegistration;syncNotificationButton();syncLobbyAvailability();if(permission==='denied')showToast(rt('notificationsDenied'),4000);}
+  function syncNotificationButton(){
+    const button=$('enablePlayNotificationsBtn');if(!button)return;
+    const supported=typeof Notification!=='undefined'&&'serviceWorker' in navigator;
+    if(!supported){button.textContent=rt('notificationUnsupported');button.classList.remove('notification-enabled');button.setAttribute('aria-pressed','false');button.disabled=true;return;}
+    const enabled=notificationPermissionGranted();button.disabled=false;button.classList.toggle('notification-enabled',enabled);button.setAttribute('aria-pressed',String(enabled));button.textContent=enabled?rt('notificationsOn'):rt('enableNotifications');button.title=Notification.permission==='denied'?rt('notificationsDenied'):'';
+  }
+  function renderNotificationBlockedDialog(){
+    $('notificationBlockedTitle').textContent=rt('notificationBlockedTitle');$('notificationBlockedText').textContent=rt('notificationBlockedText');$('notificationBlockedSteps').textContent=rt('notificationBlockedSteps');$('notificationBlockedReadyLabel').textContent=rt('notificationChangedCheck');$('notificationBlockedRetry').textContent=rt('recheckNotifications');$('notificationBlockedCancel').textContent=rt('cancel');
+  }
+  function showNotificationBlockedDialog(){
+    notificationEnablePending=true;renderNotificationBlockedDialog();$('notificationBlockedReady').checked=false;$('notificationBlockedRetry').disabled=true;$('notificationBlockedStatus').textContent='';if(!notificationBlockedDialog.open)notificationBlockedDialog.showModal();
+  }
+  async function prepareNotificationRegistration(){
+    if(!('serviceWorker' in navigator)||typeof Notification==='undefined')return null;
+    try{notificationRegistration=await navigator.serviceWorker.register('./gostop-notifications-sw.js?v=20260920-1');playRequestNotificationsReady=Notification.permission==='granted'&&notificationPreferenceEnabled();syncNotificationButton();syncLobbyAvailability();return notificationRegistration;}
+    catch(_){notificationRegistration=null;playRequestNotificationsReady=false;syncNotificationButton();return null;}
+  }
+  async function finishEnablingNotifications(){
+    setNotificationPreference(true);const registration=notificationRegistration||await prepareNotificationRegistration();playRequestNotificationsReady=Notification.permission==='granted'&&!!registration;notificationEnablePending=false;syncNotificationButton();syncLobbyAvailability();if(notificationBlockedDialog.open)notificationBlockedDialog.close();return playRequestNotificationsReady;
+  }
+  function disablePlayNotifications(){setNotificationPreference(false);notificationEnablePending=false;playRequestNotificationsReady=false;syncNotificationButton();syncLobbyAvailability();}
+  async function enablePlayNotifications(){
+    if(typeof Notification==='undefined'||!('serviceWorker' in navigator)){showToast(rt('notificationUnsupported'),4000);return;}
+    const registration=await prepareNotificationRegistration();if(!registration){showToast(rt('notificationSetupFailed'),5000);return;}
+    let permission=Notification.permission;
+    if(permission==='denied'){setNotificationPreference(false);playRequestNotificationsReady=false;syncNotificationButton();showNotificationBlockedDialog();return;}
+    if(permission==='default')permission=await Notification.requestPermission();
+    if(permission==='granted'){await finishEnablingNotifications();return;}
+    setNotificationPreference(false);playRequestNotificationsReady=false;syncNotificationButton();syncLobbyAvailability();
+    if(permission==='denied')showNotificationBlockedDialog();else showToast(rt('notificationPermissionDismissed'),4500);
+  }
+  async function togglePlayNotifications(){if(notificationPermissionGranted()){disablePlayNotifications();return;}await enablePlayNotifications();}
+  async function retryBlockedNotifications(){
+    const permission=Notification.permission;
+    if(permission==='granted'){await finishEnablingNotifications();return;}
+    if(permission==='default'){notificationBlockedDialog.close();await enablePlayNotifications();return;}
+    $('notificationBlockedStatus').textContent=rt('notificationStillBlocked');$('notificationBlockedReady').checked=false;$('notificationBlockedRetry').disabled=true;
+  }
+  async function watchNotificationPermission(){
+    if(!navigator.permissions?.query||typeof Notification==='undefined')return;
+    try{
+      notificationPermissionStatus=await navigator.permissions.query({name:'notifications'});
+      const changed=async()=>{playRequestNotificationsReady=Notification.permission==='granted'&&notificationPreferenceEnabled()&&!!notificationRegistration;if(Notification.permission==='granted'&&notificationEnablePending)await finishEnablingNotifications();else{syncNotificationButton();syncLobbyAvailability();}};
+      notificationPermissionStatus.addEventListener?.('change',changed);
+    }catch(_){notificationPermissionStatus=null;}
+  }
   async function showPlayRequestNotification(message){if(!notificationPermissionGranted())return;const name=message?.from?.nickname||rt('playerFallback');try{await notificationRegistration.showNotification('GoStop Live! Play Request',{body:`${name} wants to play GoStop with you.`,tag:`gostop-play-request-${message?.requestId||name}`,renotify:true,data:{url:location.href}});}catch(_){}}
   function ensureLobbyPresence(){lobbyShouldConnect=!!authToken&&!!account;if(!lobbyShouldConnect){closeLobby();return;}startPresenceHeartbeat();connectLobby();}
   function syncAutoMatchControls(){const start=$('autoMatchBtn'),cancel=$('autoMatchCancelBtn');if(start)start.hidden=autoMatchSearching;if(cancel)cancel.hidden=!autoMatchSearching;for(const listId of ['browsePlayerResults','searchPlayerResults'])for(const button of $(listId)?.querySelectorAll('[data-challenge-account-id]')||[])button.disabled=autoMatchSearching||button.dataset.challengeable!=='true';}
@@ -527,7 +576,11 @@
   $('missedRequestOk').addEventListener('click',clearCurrentMissedRequest);$('missedRequestClearAll').addEventListener('click',()=>{writeMissedRequests([]);missedRequestIndex=0;missedRequestDialog.close();});$('missedRequestPrev').addEventListener('click',()=>{missedRequestIndex=Math.max(0,missedRequestIndex-1);renderMissedRequestDialog();});$('missedRequestNext').addEventListener('click',()=>{missedRequestIndex=Math.min(readMissedRequests().length-1,missedRequestIndex+1);renderMissedRequestDialog();});
   [outgoingRequestDialog,matchHandoffDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
   $('browsePlayersBtn').addEventListener('click',()=>{browsePlayersActive=true;$('browsePlayerResults').hidden=false;$('lobbyStatus').textContent='';sendLobbyMessage({type:'recommendations'});});
-  $('enablePlayNotificationsBtn').addEventListener('click',()=>{void enablePlayNotifications();});
+  $('enablePlayNotificationsBtn').addEventListener('click',()=>{void togglePlayNotifications();});
+  $('notificationBlockedReady').addEventListener('change',event=>{$('notificationBlockedRetry').disabled=!event.target.checked;$('notificationBlockedStatus').textContent='';});
+  $('notificationBlockedRetry').addEventListener('click',()=>{void retryBlockedNotifications();});
+  $('notificationBlockedCancel').addEventListener('click',()=>{notificationEnablePending=false;notificationBlockedDialog.close();});
+  notificationBlockedDialog.addEventListener('cancel',()=>{notificationEnablePending=false;});
   $('onlineNicknameSearchBtn').addEventListener('click',()=>{const query=$('onlineNicknameSearch').value.trim();lobbySearchActive=!!query;const list=$('searchPlayerResults');if(!query){lastSearchPlayers=[];if(list){list.innerHTML='';list.hidden=true;}$('lobbyStatus').textContent='';return;}if(list)list.hidden=false;$('lobbyStatus').textContent=rt('searchingOnline');sendLobbyMessage({type:'search',query},'lobbyConnecting');});$('onlineNicknameSearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineNicknameSearchBtn').click();}});
   $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';showOutgoingRequest({requestId:null,automatic:true,to:null});sendLobbyMessage({type:'autoMatchStart'});});
   $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchSearching=false;syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
@@ -602,5 +655,5 @@
 
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity});
   new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
-  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}revealCurrentMainMenu();});
+  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}revealCurrentMainMenu();});
 })();
