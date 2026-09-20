@@ -76,6 +76,30 @@ test('player directory search returns wallet wins losses leaderboard score and r
   assert.equal(player.nickname,'LookupAlpha');assert.equal(player.accountId,a.account.id);assert.equal(player.walletCoins,209);assert.equal(player.gamesPlayed,1);assert.equal(player.wins,1);assert.equal(player.losses,0);assert.equal(player.score,9);assert.equal(player.rank,1);
 });
 
+test('player directory returns Global and Monthly ranks plus head-to-head history against the viewer',async()=>{
+  const store=makeStore('2026-09-20T12:00:00.000Z');
+  const viewer=await (await store.fetch(post('/register',{email:'viewer@example.com',nickname:'Viewer',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const opponent=await (await store.fetch(post('/register',{email:'opponent@example.com',nickname:'Opponent',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  await store.fetch(post('/internal/game/settle',{gameId:'h2h-1',mode:'online',recordedAt:'2026-09-18T12:00:00.000Z',winnerPlayerId:'viewer-seat',participants:[{accountId:viewer.account.id,playerId:'viewer-seat',won:true,walletDelta:11,coinsWon:11},{accountId:opponent.account.id,playerId:'opponent-seat',won:false,walletDelta:-11,coinsWon:0}]}));
+  await store.fetch(post('/internal/game/settle',{gameId:'h2h-2',mode:'online',recordedAt:'2026-09-19T12:00:00.000Z',winnerPlayerId:'opponent-seat',participants:[{accountId:viewer.account.id,playerId:'viewer-seat',won:false,walletDelta:-7,coinsWon:0},{accountId:opponent.account.id,playerId:'opponent-seat',won:true,walletDelta:7,coinsWon:7}]}));
+  const result=await (await store.fetch(post('/internal/player-search',{query:'Opponent',requesterAccountId:viewer.account.id}))).json();
+  assert.equal(result.players.length,1);const player=result.players[0];
+  assert.ok(Number.isInteger(player.globalRank));assert.ok(Number.isInteger(player.monthlyRank));
+  assert.equal(player.headToHead.wins,1);assert.equal(player.headToHead.losses,1);assert.equal(player.headToHead.draws,0);
+  assert.equal(player.headToHead.coinsWon,11);assert.equal(player.headToHead.coinsLost,7);assert.equal(player.headToHead.lastPlayedAt,'2026-09-19T12:00:00.000Z');
+});
+
+test('outcome-history repair restores a historical protected disconnect loss from authoritative game records',async()=>{
+  const store=makeStore('2026-09-20T12:00:00.000Z');
+  const quitter=await (await store.fetch(post('/register',{email:'repair-loss@example.com',nickname:'RepairLoss',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const winner=await (await store.fetch(post('/register',{email:'repair-win@example.com',nickname:'RepairWin',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
+  const account=await store.accountById(quitter.account.id);account.stats={global:{gamesPlayed:1,wins:0,losses:0,totalCoinsWon:0,milestones:{}},monthly:{'2026-09':{gamesPlayed:1,wins:0,losses:0,totalCoinsWon:0,milestones:{}}}};await store.storage.put(`account:${account.id}`,account);
+  await store.storage.put('game:historical-protected',{gameId:'historical-protected',type:'abandonment',mode:'online',accountId:quitter.account.id,opponentAccountId:winner.account.id,settlementType:'current-settlement',penaltyCoins:0,opponentRewardCoins:13,recordedAt:'2026-09-18T12:00:00.000Z'});
+  const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json(),row=board.global.find(item=>item.nickname==='RepairLoss');
+  assert.equal(row.gamesPlayed,1);assert.equal(row.losses,1);
+  const stored=await store.accountById(quitter.account.id);assert.equal(stored.stats.global.losses,1);assert.equal(stored.stats.monthly['2026-09'].losses,1);
+});
+
 test('nagari-style settlement increments games but not wins or losses',async()=>{
   const store=makeStore(),a=await (await store.fetch(post('/register',{email:'nagari-profile@example.com',nickname:'NagariProfile',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
   await store.fetch(post('/internal/game/settle',{gameId:'nagari-profile-1',mode:'solo',winnerPlayerId:null,participants:[{accountId:a.account.id,playerId:'a',won:false,walletDelta:0,coinsWon:0}]}));

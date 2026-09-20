@@ -69,6 +69,14 @@ test('Solo and Training presence remains challengeable while any two-player pres
   assert.equal(lobby.presenceForAccount('busy').status,'in-game');
 });
 
+test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Available',10.1,90,900,2],['Busy',10.2,80,800,3]]);
+  const lobby=makeLobby(rows),me=client('me','Jong',1000),available=client('available','Available',900),busy=client('busy','Busy',800,{available:false,twoPlayer:true,mode:'competitive-online'});
+  add(lobby,me,available,busy);
+  assert.equal(lobby.onlineAccountCount(me),2);
+  const recommendations=await lobby.recommendations(me);assert.deepEqual(recommendations.map(player=>player.nickname),['Available']);
+});
+
 test('player search looks up registered players even when offline or already in a two-player game and overlays profile status',async()=>{
   const rows=rowsFor([['Jong',8,40,320,1,20,20]]);
   const directory=[

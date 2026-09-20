@@ -183,7 +183,84 @@ export class AccountStore{
   }
   async logout(request){const token=this.bearer(request);if(token)await this.storage.delete(`auth:${await hashToken(this.crypto,token)}`);return json({ok:true});}
 
+  async ensureOutcomeHistoryRepair(){
+    const markerKey='migration:outcome-history-v1';if(await this.storage.get(markerKey))return;
+    const games=[...(await this.storage.list({prefix:'game:'})).values()],derived=new Map();
+    const bucketFor=(accountId,month)=>{let item=derived.get(accountId);if(!item){item={global:{wins:0,losses:0},monthly:{}};derived.set(accountId,item);}if(!item.monthly[month])item.monthly[month]={wins:0,losses:0};return item;};
+    const addOutcome=(accountId,recordedAt,won,lost)=>{if(!accountId||(!won&&!lost))return;const month=utcMonth(recordedAt||this.now()),item=bucketFor(accountId,month);if(won){item.global.wins++;item.monthly[month].wins++;}if(lost){item.global.losses++;item.monthly[month].losses++;}};
+    for(const game of games){
+      const recordedAt=game?.recordedAt||this.now();
+      if(Array.isArray(game?.participants)&&game.participants.length){
+        const winnerPlayerId=String(game.winnerPlayerId||''),hasWinner=!!winnerPlayerId||game.participants.some(item=>item?.won===true);
+        for(const item of game.participants){
+          const won=item?.won===true||!!winnerPlayerId&&String(item?.playerId||'')===winnerPlayerId;
+          addOutcome(item?.accountId,recordedAt,won,hasWinner&&!won);
+        }
+        continue;
+      }
+      if(game?.type==='abandonment'&&game?.settlementType!=='nagari'){
+        addOutcome(game.accountId,recordedAt,false,true);
+        if(game.opponentAccountId)addOutcome(game.opponentAccountId,recordedAt,true,false);
+      }
+    }
+    for(const [accountId,outcomes] of derived){
+      const account=await this.accountById(accountId);if(!account)continue;
+      account.stats=account.stats||{global:blankStats(),monthly:{}};account.stats.global=account.stats.global||blankStats();account.stats.monthly=account.stats.monthly||{};
+      account.stats.global.wins=Math.max(Number(account.stats.global.wins)||0,outcomes.global.wins);
+      account.stats.global.losses=Math.max(Number(account.stats.global.losses)||0,outcomes.global.losses);
+      for(const [month,monthOutcomes] of Object.entries(outcomes.monthly)){
+        account.stats.monthly[month]=account.stats.monthly[month]||blankStats();
+        account.stats.monthly[month].wins=Math.max(Number(account.stats.monthly[month].wins)||0,monthOutcomes.wins);
+        account.stats.monthly[month].losses=Math.max(Number(account.stats.monthly[month].losses)||0,monthOutcomes.losses);
+      }
+      await this.storage.put(`account:${account.id}`,account);
+    }
+    await this.storage.put(markerKey,{completedAt:this.now(),gamesScanned:games.length});
+  }
+
+  async headToHeadFor(requesterAccountId,opponentIds=[]){
+    const ids=new Set((opponentIds||[]).filter(Boolean).map(String)),result={};for(const id of ids)result[id]={wins:0,losses:0,draws:0,coinsWon:0,coinsLost:0,lastPlayedAt:null};
+    if(!requesterAccountId||!ids.size)return result;
+    const touch=(opponentId,recordedAt)=>{const row=result[opponentId];if(!row)return null;const at=recordedAt||this.now();if(!row.lastPlayedAt||Date.parse(at)>Date.parse(row.lastPlayedAt))row.lastPlayedAt=at;return row;};
+    const games=[...(await this.storage.list({prefix:'game:'})).values()];
+    for(const game of games){
+      if(game?.mode&&game.mode!=='online')continue;
+      const recordedAt=game?.recordedAt||this.now();
+      if(Array.isArray(game?.participants)&&game.participants.length>=2){
+        const mine=game.participants.find(item=>String(item?.accountId||'')===String(requesterAccountId));if(!mine)continue;
+        const other=game.participants.find(item=>ids.has(String(item?.accountId||'')));if(!other)continue;
+        const row=touch(String(other.accountId),recordedAt);if(!row)continue;
+        const winnerPlayerId=String(game.winnerPlayerId||''),hasWinner=!!winnerPlayerId||game.participants.some(item=>item?.won===true),mineWon=mine.won===true||!!winnerPlayerId&&String(mine.playerId||'')===winnerPlayerId;
+        if(mineWon)row.wins++;else if(hasWinner)row.losses++;else row.draws++;
+        const delta=Number(mine.walletDelta)||0;if(delta>0)row.coinsWon+=delta;else if(delta<0)row.coinsLost+=Math.abs(delta);
+        continue;
+      }
+      if(game?.type==='abandonment'){
+        const quitterId=String(game.accountId||''),opponentId=String(game.opponentAccountId||'');let otherId=null,mineQuit=false;
+        if(quitterId===String(requesterAccountId)&&ids.has(opponentId)){otherId=opponentId;mineQuit=true;}
+        else if(opponentId===String(requesterAccountId)&&ids.has(quitterId))otherId=quitterId;
+        if(!otherId)continue;const row=touch(otherId,recordedAt);if(!row)continue;
+        if(game.settlementType==='nagari')row.draws++;
+        else if(mineQuit){row.losses++;row.coinsLost+=Math.max(0,Number(game.penaltyCoins)||0);}
+        else {row.wins++;row.coinsWon+=Math.max(0,Number(game.opponentRewardCoins??game.fairPoints)||0);}
+      }
+    }
+    return result;
+  }
+
+  async directoryProfiles({requesterAccountId=null,accountIds=null,query=''}={}){
+    await this.ensureOutcomeHistoryRepair();
+    const needle=String(query||'').trim().toLowerCase(),wanted=Array.isArray(accountIds)?new Set(accountIds.map(String)):null,month=utcMonth(this.now()),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
+    const global=sortRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0}))).map((row,index)=>({...row,rank:index+1}));
+    const monthly=sortRows(accounts.map(account=>({...leaderboardRow(account,account.stats?.monthly?.[month]||blankStats()),accountId:account.id}))).map((row,index)=>({...row,rank:index+1})),monthlyById=new Map(monthly.map(row=>[String(row.accountId),row]));
+    let players=global.filter(row=>(!wanted||wanted.has(String(row.accountId)))&&(!needle||String(row.nickname||'').toLowerCase().includes(needle)));
+    if(needle)players=players.sort((a,b)=>{const an=String(a.nickname||'').toLowerCase(),bn=String(b.nickname||'').toLowerCase(),ax=an===needle?0:an.startsWith(needle)?1:2,bx=bn===needle?0:bn.startsWith(needle)?1:2;return ax-bx||a.rank-b.rank||an.localeCompare(bn);});
+    const headToHead=await this.headToHeadFor(requesterAccountId,players.map(row=>row.accountId));
+    return players.map(row=>{const monthlyRow=monthlyById.get(String(row.accountId));return {...row,globalRank:row.rank,globalProvisional:!!row.provisional,monthlyRank:monthlyRow?.rank||null,monthlyProvisional:!!monthlyRow?.provisional,headToHead:headToHead[String(row.accountId)]||{wins:0,losses:0,draws:0,coinsWon:0,coinsLost:0,lastPlayedAt:null}};});
+  }
+
   async leaderboard(){
+    await this.ensureOutcomeHistoryRepair();
     const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()];
     const global=sortRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account)))).map((row,index)=>({...row,rank:index+1}));
     const monthly=sortRows(accounts.map(account=>leaderboardRow(account,account.stats?.monthly?.[month]||blankStats()))).map((row,index)=>({...row,rank:index+1}));
@@ -191,15 +268,16 @@ export class AccountStore{
   }
 
   async playerSearch(request){
-    const body=await request.json().catch(()=>({})),needle=String(body.query||'').trim().toLowerCase();
+    const body=await request.json().catch(()=>({})),needle=String(body.query||'').trim();
     if(!needle)return json({ok:true,players:[]});
-    const accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
-    const ranked=sortRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0}))).map((row,index)=>({...row,rank:index+1}));
-    const players=ranked.filter(row=>String(row.nickname||'').toLowerCase().includes(needle)).sort((a,b)=>{
-      const an=String(a.nickname||'').toLowerCase(),bn=String(b.nickname||'').toLowerCase();
-      const ax=an===needle?0:an.startsWith(needle)?1:2,bx=bn===needle?0:bn.startsWith(needle)?1:2;
-      return ax-bx||a.rank-b.rank||an.localeCompare(bn);
-    }).slice(0,20);
+    const players=(await this.directoryProfiles({requesterAccountId:body.requesterAccountId||null,query:needle})).slice(0,20);
+    return json({ok:true,players});
+  }
+
+  async playerProfiles(request){
+    const body=await request.json().catch(()=>({})),ids=Array.isArray(body.accountIds)?body.accountIds.map(String).filter(Boolean).slice(0,20):[];
+    if(!ids.length)return json({ok:true,players:[]});
+    const players=await this.directoryProfiles({requesterAccountId:body.requesterAccountId||null,accountIds:ids});
     return json({ok:true,players});
   }
 
@@ -261,6 +339,7 @@ export class AccountStore{
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
       if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
+      if(request.method==='POST'&&path==='/internal/player-profiles')return await this.playerProfiles(request);
       if(request.method==='POST'&&path==='/internal/active-ranked/clear')return await this.clearActiveRanked(request);
       if(request.method==='GET'&&path==='/internal/resolve')return await this.resolveSession(request);
       if(request.method==='POST'&&path==='/internal/session/start')return await this.startGameSession(request);
