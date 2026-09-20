@@ -124,8 +124,9 @@ test('manual Play shows Waiting immediately while Auto Match waits until the can
   const render=client.slice(client.indexOf('function renderPlayers'),client.indexOf('function closeRequestDialog'));
   assert.match(render,/showOutgoingRequest\(optimistic\)/);assert.match(render,/type:'challenge',accountId:button\.dataset\.challengeAccountId/);
   assert.match(client,/message\.type==='challengeSent'[^]*showOutgoingRequest\(message\)/);
-  const auto=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("function roomShareUrl"));
-  assert.doesNotMatch(auto,/autoMatchBtn[^]*showOutgoingRequest/);
+  const autoStart=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("\$('autoMatchCandidateAccept').addEventListener"));
+  assert.doesNotMatch(autoStart,/showOutgoingRequest/);assert.match(autoStart,/type:'autoMatchStart'/);
+  const auto=client.slice(client.indexOf("\$('autoMatchCandidateAccept').addEventListener"),client.indexOf("function roomShareUrl"));
   assert.match(auto,/autoMatchCandidateAccept[^]*showOutgoingRequest\(\{requestId:null,automatic:true,to:candidate\}\)[^]*type:'autoMatchAccept'/);
   const cancel=client.slice(client.indexOf("\$('cancelOutgoingRequest').addEventListener"),client.indexOf("\$('declinedDialogOk').addEventListener"));
   assert.match(cancel,/type:'challengeCancel'/);assert.match(cancel,/type:'autoMatchCancel'/);assert.match(server,/message\.type==='challengeCancel'/);
