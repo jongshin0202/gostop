@@ -13,7 +13,7 @@
       <div class="brand-mark">GSL</div>
       <p class="eyebrow">GoStop Live!</p>
       <h1>Server Admin</h1>
-      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p><p class="muted mono" id="adminBuild">Admin build 2026-09-19.14</p>
+      <p class="muted">Authorized administrators only. The admin token is kept only for this browser session.</p><p class="muted mono" id="adminBuild">Admin build 2026-09-20.1</p>
       <label>Admin Password<input id="adminToken" type="password" autocomplete="current-password" required></label>
       <button id="openDashboardBtn" class="primary" type="button">Open Dashboard</button>
       <p id="loginError" class="error" aria-live="polite"></p><p id="loginTrace" class="muted mono" aria-live="polite"></p>
@@ -38,6 +38,7 @@
         <button data-view="abuse">Fraud / Abuse</button>
         <button data-view="system">System</button>
         <button data-view="audit">Audit Log</button>
+        <button data-view="system-reset">System Reset</button>
       </nav>
       <div class="side-footer">
         <span id="serverStatus" class="status-dot">● Connected</span>
@@ -206,6 +207,24 @@
           <div id="auditTable"></div>
         </section>
       </section>
+
+      <section id="view-system-reset" class="view">
+        <section class="card">
+          <div class="section-head"><div><h2>Previous Reset Point</h2><p class="muted">Every reset creates a complete backup first. Restore returns the entire system, including all account information, to that point.</p></div></div>
+          <div id="systemResetBackupStatus"></div>
+          <div class="toolbar"><button id="restorePreviousReset" class="secondary" disabled>Restore Data from Previous Reset Point</button></div>
+        </section>
+        <div class="grid-two" style="margin-top:16px">
+          <section class="card danger-zone">
+            <div class="section-head"><div><h2>Reset System Data — Keep Accounts</h2><p class="muted">Backs up everything, then clears games, sessions, connection history, ledgers, audit records, room state, login sessions and other system data. Complete account records are kept, including Wallet Coins and player statistics. Active-game pointers are cleared.</p></div></div>
+            <button id="resetKeepAccounts" class="danger">Reset Everything Except Accounts</button>
+          </section>
+          <section class="card danger-zone">
+            <div class="section-head"><div><h2>Full System Reset</h2><p class="muted">Backs up everything, then removes all system data and all player accounts. This is the complete clean-launch reset.</p></div></div>
+            <button id="resetEverything" class="danger">Reset Entire System</button>
+          </section>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -235,6 +254,6 @@
   </dialog>
 
   <script src="runtime-config.js"></script>
-  <script src="admin.js?v=20260918-10"></script>
+  <script src="admin.js?v=20260920-1"></script>
 </body>
 </html>
