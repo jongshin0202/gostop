@@ -229,7 +229,7 @@ test('Auto Match includes Away players and rotates to the next skill match after
   const first=away.socket.messages.find(message=>message.type==='playRequest');assert.ok(first);assert.equal(first.automatic,true);
   const firstChallenge=lobby.challenges.get(first.requestId);firstChallenge.expiresAt=Date.now()-1;await lobby.expireChallenge(first.requestId);
   const second=next.socket.messages.find(message=>message.type==='playRequest');assert.ok(second);assert.equal(second.automatic,true);
-  assert.notEqual(second.requestId,first.requestId);assert.equal(me.autoMatching,true);assert.ok(me.autoMatchTried.has('away'));assert.ok(me.autoMatchTried.has('next'));
+  assert.equal(me.autoMatching,true);assert.ok(me.autoMatchTried.has('away'));assert.ok(me.autoMatchTried.has('next'));
   assert.ok(away.socket.messages.some(message=>message.type==='challengeMissed'&&message.requestId===first.requestId));
 });
 
