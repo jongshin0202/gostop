@@ -50,6 +50,7 @@ export class Lobby{
     return clients[0]||null;
   }
   sendToAccount(accountId,message){for(const client of this.clientsForAccount(accountId))this.send(client.socket,message);}
+  sendToChallengeClient(challenge,side,message){const client=this.clientById(side==='from'?challenge?.fromClientId:challenge?.toClientId);if(client)this.send(client.socket,message);}
   pendingChallengeFor(accountId){for(const challenge of this.challenges.values())if(challenge.status==='pending'&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
   activeChallengeFor(accountId){for(const challenge of this.challenges.values())if(['pending','accepted','room-ready'].includes(challenge.status)&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
   accountTwoPlayerBusy(accountId){return this.clientsForAccount(accountId).some(client=>!!client.twoPlayer);}
@@ -106,8 +107,8 @@ export class Lobby{
       if(await this.tryAutoMatch(client))break;
     }
   }
-  cancelPendingChallenge(challenge,message='The play request was cancelled.'){if(!challenge)return;this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.sendToAccount(challenge.from,{type:'challengeCancelled',requestId:challenge.id,message});this.sendToAccount(challenge.to,{type:'challengeCancelled',requestId:challenge.id,message});this.challenges.delete(challenge.id);}
-  pruneChallenges(){const now=Date.now();for(const [id,challenge] of this.challenges){if(challenge.expiresAt>now)continue;if(challenge.status==='accepted'||challenge.status==='room-ready'){for(const client of this.clientsForAccount(challenge.from))client.available=true;for(const client of this.clientsForAccount(challenge.to))client.available=true;}this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.sendToAccount(challenge.from,{type:'challengeCancelled',requestId:id,message:'The play request expired.'});this.sendToAccount(challenge.to,{type:'challengeCancelled',requestId:id,message:'The play request expired.'});this.challenges.delete(id);}}
+  cancelPendingChallenge(challenge,message='The play request was cancelled.'){if(!challenge)return;this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.sendToChallengeClient(challenge,'from',{type:'challengeCancelled',requestId:challenge.id,message});this.sendToChallengeClient(challenge,'to',{type:'challengeCancelled',requestId:challenge.id,message});this.challenges.delete(challenge.id);}
+  pruneChallenges(){const now=Date.now();for(const [id,challenge] of this.challenges){if(challenge.expiresAt>now)continue;if(challenge.status==='accepted'||challenge.status==='room-ready'){for(const client of this.clientsForAccount(challenge.from))client.available=true;for(const client of this.clientsForAccount(challenge.to))client.available=true;}this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.sendToChallengeClient(challenge,'from',{type:'challengeCancelled',requestId:id,message:'The play request expired.'});this.sendToChallengeClient(challenge,'to',{type:'challengeCancelled',requestId:id,message:'The play request expired.'});this.challenges.delete(id);}}
   async handle(client,data){
     let message;try{message=JSON.parse(data);}catch(_){return this.send(client.socket,{type:'error',code:'MALFORMED_MESSAGE',message:'Lobby message is invalid.'});}
     this.pruneChallenges();
@@ -125,15 +126,15 @@ export class Lobby{
       const challenge=this.challenges.get(message.requestId);
       if(!challenge||challenge.status!=='pending'||challenge.from!==client.account.id||challenge.fromClientId!==client.clientId)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request can no longer be cancelled.'});
       this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);
-      this.sendToAccount(challenge.to,{type:'challengeCancelled',requestId:challenge.id,message:'The play request was cancelled.'});
-      this.sendToAccount(challenge.from,{type:'challengeCancelled',requestId:challenge.id,message:'Play request cancelled.'});
+      this.sendToChallengeClient(challenge,'to',{type:'challengeCancelled',requestId:challenge.id,message:'The play request was cancelled.'});
+      this.sendToChallengeClient(challenge,'from',{type:'challengeCancelled',requestId:challenge.id,message:'Play request cancelled.'});
       await this.broadcastRecommendations();return;
     }
     if(message.type==='challengeAbort'){
       const challenge=this.challenges.get(message.requestId);
       if(!challenge||!['accepted','room-ready'].includes(challenge.status)||![[challenge.from,challenge.fromClientId],[challenge.to,challenge.toClientId]].some(([accountId,clientId])=>accountId===client.account.id&&clientId===client.clientId))return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That game handoff is no longer active.'});
       this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);for(const item of this.clientsForAccount(challenge.from))item.available=true;for(const item of this.clientsForAccount(challenge.to))item.available=true;
-      const other=challenge.from===client.account.id?challenge.to:challenge.from;this.sendToAccount(other,{type:'challengeCancelled',requestId:challenge.id,message:'The game could not be started.'});this.sendToAccount(client.account.id,{type:'challengeCancelled',requestId:challenge.id,message:'The game could not be started.'});
+      const ownSide=challenge.fromClientId===client.clientId?'from':'to',otherSide=ownSide==='from'?'to':'from';this.sendToChallengeClient(challenge,otherSide,{type:'challengeCancelled',requestId:challenge.id,message:'The game could not be started.'});this.sendToChallengeClient(challenge,ownSide,{type:'challengeCancelled',requestId:challenge.id,message:'The game could not be started.'});
       this.challenges.delete(challenge.id);await this.broadcastRecommendations();return;
     }
     if(message.type==='challenge'){
