@@ -115,15 +115,16 @@
     };
   }
 
-  function calculateSettlement({winner,loser,nagariCarryPower=0}){
+  function calculateSettlement({winner,loser,nagariCarryPower=0,baseOverride=null,forceGoBak=false}){
     const winnerScore=scorePlayer(winner),loserScore=scorePlayer(loser);
-    const baseTotal=winnerScore.total;
+    const hasBaseOverride=baseOverride!==null&&baseOverride!==undefined&&Number.isFinite(Number(baseOverride));
+    const baseTotal=hasBaseOverride?Math.max(0,Number(baseOverride)):winnerScore.total;
     const goBonus=winner.go>0&&winner.go<3?winner.go:0;
     let total=baseTotal+goBonus;
     const reasons=[];
-    const formulaSteps=[`Base ${winnerScore.capturedTotal}`];
+    const formulaSteps=[`Base ${hasBaseOverride?baseTotal:winnerScore.capturedTotal}`];
 
-    if(winnerScore.bonusPoints)formulaSteps.push(`First Ppeok +${winnerScore.bonusPoints}`);
+    if(!hasBaseOverride&&winnerScore.bonusPoints)formulaSteps.push(`First Ppeok +${winnerScore.bonusPoints}`);
 
     if(goBonus>0)formulaSteps.push(`Go bonus +${goBonus}`);
     if(winner.go>=3){
@@ -143,7 +144,7 @@
     if(winnerScore.animals>=7){doublePower++;reasons.push('Meong-bak ×2');formulaSteps.push('Meong-bak ×2');}
     if(winnerScore.piCount>=10&&loserScore.piCount>=1&&loserScore.piCount<=7){doublePower++;reasons.push('Pi-bak ×2');formulaSteps.push('Pi-bak ×2');}
     if(winnerScore.bright>=3&&loserScore.bright===0){doublePower++;reasons.push('Gwang-bak ×2');formulaSteps.push('Gwang-bak ×2');}
-    if(loser.go>0&&loserScore.total<=loser.lastGoScore){doublePower++;reasons.push('Go-bak ×2');formulaSteps.push('Go-bak ×2');}
+    if(loser.go>0&&(forceGoBak||loserScore.total<=loser.lastGoScore)){doublePower++;reasons.push('Go-bak ×2');formulaSteps.push('Go-bak ×2');}
     if(nagariCarryPower>0){
       const multiplier=2**nagariCarryPower;
       doublePower+=nagariCarryPower;
