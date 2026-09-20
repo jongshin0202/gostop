@@ -85,6 +85,29 @@ test('admin suspension blocks login and authenticated game resolution',async()=>
   const resolve=await (await store.fetch(request('/internal/resolve',{headers:{...geo,Authorization:`Bearer ${registered.session.token}`}}))).json();assert.equal(resolve.account,null);
 });
 
+test('system reset preserves complete account records when requested, backs up first, and restore swaps rollback point',async()=>{
+  const {store,backup}=storeWithBackup(),registered=await register(store,'preserve@example.com','PreservePlayer'),id=registered.account.id;
+  await store.fetch(request('/internal/game/settle',{method:'POST',body:{gameId:'preserve-game',mode:'solo',winnerPlayerId:'human',participants:[{accountId:id,playerId:'human',nickname:'PreservePlayer',won:true,walletDelta:9,coinsWon:9}]}}));
+  const account=await store.accountById(id);account.activeRanked={sessionId:'active-session',mode:'solo',roomCode:'ABCDEFGHJK2345',startedAt:'2026-09-20T06:00:00.000Z'};await store.storage.put(`account:${id}`,account);
+  const before=structuredClone(account);
+  const reset=await (await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'preserve-accounts',confirmPassword:'test-admin-token',reason:'Pre-launch cleanup'}}))).json();
+  assert.equal(reset.ok,true);assert.equal(reset.accountsPreserved,1);assert.ok(reset.backup?.id);
+  const kept=await store.accountById(id);assert.equal(kept.walletCoins,before.walletCoins);assert.deepEqual(kept.stats,before.stats);assert.equal(kept.activeRanked,null);
+  assert.equal((await store.storage.list({prefix:'game:'})).size,0);assert.equal((await store.storage.list({prefix:`ledger:${id}:`})).size,0);assert.equal((await store.storage.list({prefix:'auth:'})).size,0);
+  let status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.equal(status.primary.resetMode,'preserve-accounts');
+  const restored=await (await store.fetch(admin('/admin/system-restore',{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Undo test reset'}}))).json();
+  assert.equal(restored.ok,true);assert.ok(await store.storage.get('game:preserve-game'));assert.equal((await store.accountById(id)).activeRanked.roomCode,'ABCDEFGHJK2345');
+  status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.equal(status.primary.resetMode,'pre-restore-safety');assert.equal(status.safety,null);
+});
+
+test('full system reset removes accounts too and restore returns the entire system',async()=>{
+  const {store,backup}=storeWithBackup(),registered=await register(store,'fullreset@example.com','FullResetPlayer'),id=registered.account.id;
+  const denied=await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'wrong',reason:'Should fail'}}));assert.equal(denied.status,403);assert.ok(await store.accountById(id));
+  const reset=await (await store.fetch(admin('/admin/system-reset',{method:'POST',body:{mode:'full',confirmPassword:'test-admin-token',reason:'Clean launch'}}))).json();assert.equal(reset.ok,true);assert.equal(await store.accountById(id),null);
+  assert.equal((await store.storage.list()).size,0);const status=await (await backup.fetch(new Request('https://backup/status'))).json();assert.ok(status.primary);
+  const restored=await (await store.fetch(admin('/admin/system-restore',{method:'POST',body:{confirmPassword:'test-admin-token',reason:'Restore clean-launch backup'}}))).json();assert.equal(restored.ok,true);assert.equal((await store.accountById(id)).nickname,'FullResetPlayer');
+});
+
 test('new ranked settlements persist authoritative history and admin files stay unlinked from public menu',()=>{
   const finalRoom=fs.readFileSync(new URL('../server/ranked-room-final.mjs',import.meta.url),'utf8'),index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
   assert.match(finalRoom,/adminGameHistory\(\)/);assert.match(finalRoom,/history:this\.adminGameHistory\(\)/);
