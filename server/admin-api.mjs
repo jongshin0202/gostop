@@ -399,9 +399,13 @@ export async function handleAdminRequest(store,request){
     if(request.method==='GET'&&path==='/admin/geography')return json({ok:true,...await geography(store,url)});
     if(request.method==='GET'&&path==='/admin/abuse')return json({ok:true,...await abuseSignals(store,url)});
     if(request.method==='GET'&&path==='/admin/system')return json({ok:true,...await systemStatus(store)});
+    if(request.method==='GET'&&path==='/admin/system-reset/status')return json({ok:true,...await systemResetStatus(store)});
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/wallet$/)))return await walletAdjust(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/disconnect-reset$/)))return await resetDisconnect(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/profile$/)))return await editProfile(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
+    if(request.method==='POST'&&(match=path.match(/^\/admin\/players\/([^/]+)\/delete$/)))return await deletePlayerCompletely(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
+    if(request.method==='POST'&&path==='/admin/system-reset')return await performSystemReset(store,request,await request.json().catch(()=>({})));
+    if(request.method==='POST'&&path==='/admin/system-restore')return await performSystemRestore(store,request,await request.json().catch(()=>({})));
     if(request.method==='POST'&&path==='/admin/leaderboards/reset')return await resetLeaderboard(store,request,await request.json().catch(()=>({})));
     if(request.method==='POST'&&path==='/admin/leaderboards/rebuild')return await rebuildLeaderboard(store,request,await request.json().catch(()=>({})));
     if(request.method==='POST'&&(match=path.match(/^\/admin\/games\/([^/]+)\/correct$/)))return await correctGame(store,request,decodeURIComponent(match[1]),await request.json().catch(()=>({})));
