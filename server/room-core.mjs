@@ -121,7 +121,7 @@ export class RoomCore{
     if(!wasConnected)this.broadcastPresence(participant.playerId,true);return participant;
   }
   send(socket,message){socket.send(JSON.stringify(message));}
-  sendTo(playerId,message){const sockets=this.sockets.get(playerId);if(!sockets)return;for(const socket of sockets instanceof Set?sockets:[sockets])this.send(socket,message);}
+  sendTo(playerId,message){const sockets=this.sockets.get(playerId);if(!sockets)return;for(const socket of sockets instanceof Set?sockets:[sockets]){try{this.send(socket,message);}catch(_){}}}
   broadcastPresence(playerId,connected){for(const participant of this.room.participants)if(participant.playerId!==playerId)this.sendTo(participant.playerId,envelope(connected?'opponentConnected':'opponentDisconnected',{}));}
   async disconnect(socket){
     const playerId=socket.__playerId,sockets=playerId?this.sockets.get(playerId):null;if(!playerId||!sockets)return false;
