@@ -85,6 +85,33 @@ test('Away remains challengeable even without notification permission while noti
   away.notificationsEnabled=true;assert.equal(lobby.presenceForAccount('away').notificationsEnabled,true);
 });
 
+
+test('stale lobby heartbeat is not challengeable or counted online',()=>{
+  const rows=rowsFor([['Viewer',1,1,1,1],['Ghost',1,1,1,2]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100,{lastPresenceAt:now}),ghost=client('ghost','Ghost',100,{foreground:false,lastActivityAt:now,lastPresenceAt:now-90001});
+  add(lobby,viewer,ghost);
+  assert.equal(lobby.clientCanReceiveChallenge(ghost),false);
+  assert.deepEqual(lobby.presenceForAccount('ghost'),{online:false,challengeable:false,status:'offline',mode:'offline'});
+  assert.equal(lobby.onlineAccountCount(viewer),0);
+});
+
+test('stale two-player sibling cannot block a fresh menu socket for the same account',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),now=Date.now(),jong=client('jong','Jong',1000,{lastPresenceAt:now}),staleBusy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now-90001}),sono=client('sono','Sonogong',1000,{lastPresenceAt:now});
+  add(lobby,jong,staleBusy,sono);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),false);
+  assert.equal(lobby.presenceForAccount('jong').status,'available');
+  const rowsNow=await lobby.leaderboardRows();
+  const challenge=lobby.startChallenge(jong,sono,rowsNow,{automatic:true});
+  assert.ok(challenge);
+  assert.ok(jong.socket.messages.some(message=>message.type==='challengeSent'));
+  assert.ok(sono.socket.messages.some(message=>message.type==='playRequest'));
+});
+
+test('fresh two-player sibling still blocks the account',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),menu=client('jong','Jong',1000,{lastPresenceAt:now}),busy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now});
+  add(lobby,menu,busy);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+  assert.equal(lobby.presenceForAccount('jong').status,'in-game');
+});
 test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Available',10.1,90,900,2],['Busy',10.2,80,800,3]]);
   const lobby=makeLobby(rows),me=client('me','Jong',1000),available=client('available','Available',900),busy=client('busy','Busy',800,{available:false,twoPlayer:true,mode:'competitive-online'});
