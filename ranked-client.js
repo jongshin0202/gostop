@@ -7,6 +7,7 @@
   const ACK_NOTICE_CACHE_KEY='gostop-acknowledged-notice-cache';
   const MISSED_REQUESTS_KEY='gostop-missed-play-requests';
   const NOTIFICATION_PREF_KEY='gostop-play-notifications-enabled';
+  const LOBBY_TAB_ID_KEY='gostop-lobby-tab-id';
   const DEFAULT_SERVER_URL='https://gostop-authority.jwshin1.workers.dev';
   const LEADERBOARD_ROTATE_MS=5000;
   const ATTRACT_IDLE_MS=10000;
@@ -15,6 +16,7 @@
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
   let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false;
+  const lobbyTabId=(()=>{try{let value=sessionStorage.getItem(LOBBY_TAB_ID_KEY);if(!value){value=globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;sessionStorage.setItem(LOBBY_TAB_ID_KEY,value);}return value;}catch(_){return globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;}})();
   let missedRequestIndex=0;
   const acknowledgedNoticeIds=new Set();
   const acknowledgedRoomAbandonments=new Set();
@@ -341,7 +343,7 @@
   }
   function setNotificationPreference(enabled){try{localStorage.setItem(NOTIFICATION_PREF_KEY,enabled?'1':'0');}catch(_){}}
   function notificationPermissionGranted(){return typeof Notification!=='undefined'&&Notification.permission==='granted'&&notificationPreferenceEnabled()&&!!notificationRegistration&&playRequestNotificationsReady;}
-  function syncLobbyAvailability(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',available:desiredLobbyAvailability(),twoPlayer:playerTwoPlayerActive||account?.activeRanked?.mode==='online',mode:playerPresenceMode,foreground:tabForeground(),lastActivityAt:lastPlayerActivityAt,notificationsEnabled:notificationPermissionGranted()});}
+  function syncLobbyAvailability(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'setAvailability',tabId:lobbyTabId,available:desiredLobbyAvailability(),twoPlayer:playerTwoPlayerActive||account?.activeRanked?.mode==='online',mode:playerPresenceMode,foreground:tabForeground(),lastActivityAt:lastPlayerActivityAt,notificationsEnabled:notificationPermissionGranted()});}
   function markPlayerActivity(event){if(event&&event.isTrusted===false)return;const now=Date.now(),wasAway=now-lastPlayerActivityAt>PRESENCE_AWAY_MS;lastPlayerActivityAt=now;if(wasAway||now-lastPresenceActivitySyncAt>=5000){lastPresenceActivitySyncAt=now;syncLobbyAvailability();}}
   function startPresenceHeartbeat(){if(presenceHeartbeatTimer)return;presenceHeartbeatTimer=setInterval(syncLobbyAvailability,PRESENCE_HEARTBEAT_MS);}
   function stopPresenceHeartbeat(){if(presenceHeartbeatTimer){clearInterval(presenceHeartbeatTimer);presenceHeartbeatTimer=null;}}
