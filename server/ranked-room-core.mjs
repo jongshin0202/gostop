@@ -164,11 +164,12 @@ export class RankedRoomCore extends RoomCore{
     if(this.sockets.has(participant.playerId))throw new RoomError('PLAYER_CONNECTED','This player is already connected to the game.',409);
     const deadline=this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0;
     if(!deadline){if(await this.resolveExpiredDisconnects(this.nowMs()))return {ok:true,ended:true,reason:'disconnect-timeout'};throw new RoomError('RECONNECT_NOT_PENDING','There is no active reconnect window for this player.',409);}
-    const timedOut=this.nowMs()>=deadline;
-    if(this.isBeforeFirstTurn(participant.playerId))await this.endPreFirstTurnDisconnect(participant.playerId);
+    const timedOut=this.nowMs()>=deadline,normalQuit=this.isBeforeFirstTurn(participant.playerId);
+    if(normalQuit)await this.endPreFirstTurnDisconnect(participant.playerId);
     else await this.abandon(participant.playerId,timedOut?'disconnect-timeout':'reconnect-declined');
     await this.scheduleAlarm();
-    return {ok:true,ended:true,reason:timedOut?'disconnect-timeout':'reconnect-declined'};
+    const abandonment=this.room.rankFlow.abandonment;
+    return {ok:true,ended:true,reason:timedOut?'disconnect-timeout':'reconnect-declined',normalQuit,penaltyCoins:Math.max(0,Number(abandonment?.penaltyCoins)||0),fairPoints:Math.max(0,Number(abandonment?.fairPoints)||0),settlementType:abandonment?.settlementType||null};
   }
   engineState(){return this.room?.matchId?this.authority.readTrustedState(this.room.matchId):null;}
   calculateDisconnectSettlement(playerId){

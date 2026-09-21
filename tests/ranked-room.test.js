@@ -159,7 +159,8 @@ test('returning Competitive player can choose No and immediately apply normal di
   const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.playerId===a.playerId?'a':'b',sessionId=core.room.sessionId;
   await core.disconnect(socket);assert.ok(core.room.rankFlow.disconnectDeadlines[quitter.playerId]);
   const result=await core.declineReconnect(accountId,sessionId);
-  assert.equal(result.ok,true);assert.equal(result.ended,true);assert.equal(result.reason,'reconnect-declined');
+  assert.equal(result.ok,true);assert.equal(result.ended,true);assert.equal(result.reason,'reconnect-declined');assert.equal(result.normalQuit,false);
+  assert.equal(result.penaltyCoins,core.room.rankFlow.abandonment.penaltyCoins);assert.equal(result.fairPoints,core.room.rankFlow.abandonment.fairPoints);assert.equal(result.settlementType,core.room.rankFlow.abandonment.settlementType);
   assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,quitter.playerId);assert.equal(core.room.status,'ended');
   assert.equal(core.room.rankFlow.abandonment.playerId,quitter.playerId);assert.equal(core.room.rankFlow.abandonment.reason,'reconnect-declined');
   const forceQuit=accountStore.calls.findLast(call=>call.path==='/internal/force-quit');assert.ok(forceQuit);assert.equal(forceQuit.body.accountId,accountId);assert.equal(forceQuit.body.reason,'reconnect-declined');

@@ -316,11 +316,15 @@ test('root URL offers a timed Yes/No return dialog only for a saved Competitive 
   assert.match(source,/id="returnGameCountdown" class="ranked-countdown">1:00/);
   assert.match(source,/id="returnGameYes"[^>]*>Yes</);
   assert.match(source,/id="returnGameNo"[^>]*>No</);
+  assert.match(source,/id="returnGameOk"[^>]*hidden>OK</);
   assert.match(boot,/function promptTechnicalReconnectIfNeeded\(\)/);
   assert.match(boot,/active\?\.mode!=='online'\|\|!active\.roomCode\|\|active\.connected!==false\|\|reconnectUntil<=Date\.now\(\)\|\|!savedCompetitiveRoom\(active\.roomCode\)/);
   assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
   assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode\)/);
   assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',[\s\S]*finishReconnectAsAbandonment/);
+  assert.match(boot,/function showReconnectAbandonmentOutcome\(result\)[\s\S]*returnGameDialog\.dataset\.outcome='1'[\s\S]*returnGameCountdown'\)\.hidden=true[\s\S]*returnGameActions'\)\.hidden=true[\s\S]*returnGameOk'\)\.hidden=false/);
+  assert.match(boot,/\$\('returnGameText'\)\.textContent=result\?\.normalQuit\?rt\('pauseDrawText'\):rt\('abandonedYou'/);
+  assert.match(boot,/\$\('returnGameOk'\)\.addEventListener\('click',async\(\)=>[\s\S]*closeReturnGameDialog\(\);await refreshAccount\(\);revealCurrentMainMenu\(\)/);
   assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
   assert.match(boot,/if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
 });
