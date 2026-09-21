@@ -155,7 +155,7 @@ test('Auto Match previews the best candidate, supports Someone Else, then sends 
   assert.match(client,/function renderOpponentProfile\(rootId,player\)/);assert.match(client,/player\.headToHead/);assert.match(client,/player\.gamesPlayed/);assert.match(client,/player\.wins/);assert.match(client,/player\.losses/);assert.match(client,/player\.totalCoinsEarned/);assert.match(client,/neverPlayedBefore/);
   assert.match(client,/autoMatchCandidateNext[^]*type:'autoMatchNext'/);assert.match(client,/autoMatchCandidateAccept[^]*type:'autoMatchAccept'/);assert.match(client,/autoMatchCandidateCancel[^]*type:'autoMatchCancel'/);
   assert.match(server,/type:'autoMatchCandidate',candidate:toProfile/);assert.match(server,/message\.type==='autoMatchNext'/);assert.match(server,/message\.type==='autoMatchAccept'/);assert.match(server,/acceptAutoMatchCandidate\(client\)/);
-  assert.match(server,/startChallenge\(client,target,rows,\{automatic:true,toProfileOverride:toProfile\}\)/);assert.match(server,/sendToAccount\(target\.account\.id,\{type:'playRequest'/);
+  assert.match(server,/startChallenge\(client,target,rows,\{automatic:true,toProfileOverride:toProfile\}\)/);assert.match(server,/challengeRequestMessage\(challenge\)/);assert.match(server,/sendToAccount\(target\.account\.id,this\.challengeRequestMessage\(challenge\)\)/);
   assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
 });
 
