@@ -127,7 +127,8 @@ test('manual Play shows Waiting immediately while Auto Match waits until the can
   const autoStart=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("\$('autoMatchCandidateAccept').addEventListener"));
   assert.doesNotMatch(autoStart,/showOutgoingRequest/);assert.match(autoStart,/type:'autoMatchStart'/);
   const auto=client.slice(client.indexOf("\$('autoMatchCandidateAccept').addEventListener"),client.indexOf("function roomShareUrl"));
-  assert.match(auto,/autoMatchCandidateAccept[^]*showOutgoingRequest\(\{requestId:null,automatic:true,to:candidate\}\)[^]*type:'autoMatchAccept'/);
+  assert.match(auto,/autoMatchCandidateAccept[^]*button\.disabled=true[^]*type:'autoMatchAccept'/);assert.doesNotMatch(auto,/showOutgoingRequest/);
+  assert.match(client,/message\.type==='playRequest'[^]*type:'challengeReceipt'/);assert.match(server,/message\.type==='challengeReceipt'/);assert.match(server,/deliverPendingChallenge\(client\)/);
   const cancel=client.slice(client.indexOf("\$('cancelOutgoingRequest').addEventListener"),client.indexOf("\$('declinedDialogOk').addEventListener"));
   assert.match(cancel,/type:'challengeCancel'/);assert.match(cancel,/type:'autoMatchCancel'/);assert.match(server,/message\.type==='challengeCancel'/);
 });
