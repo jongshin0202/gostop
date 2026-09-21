@@ -341,7 +341,7 @@ test('root URL offers a timed Yes/No return dialog only for a saved Competitive 
   assert.match(source,/id="returnGameYes"[^>]*>Yes</);
   assert.match(source,/id="returnGameNo"[^>]*>No</);
   assert.match(source,/id="returnGameOk"[^>]*hidden>OK</);
-  assert.match(source,/#returnGameActions\[hidden\],#returnGameOk\[hidden\]\{display:none!important\}/);
+  assert.match(source,/#returnGameActions\[hidden\],#returnGameOk\[hidden\],#verificationResend\[hidden\]\{display:none!important\}/);
   assert.match(boot,/function promptTechnicalReconnectIfNeeded\(\)/);
   assert.match(boot,/active\?\.mode!=='online'\|\|!active\.roomCode\|\|active\.connected!==false\|\|reconnectUntil<=Date\.now\(\)\|\|!savedCompetitiveRoom\(active\.roomCode\)/);
   assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
