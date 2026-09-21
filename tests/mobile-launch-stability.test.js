@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+const gameCss=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8');
 
 test('ranked Solo and Online entry are single-flight and cannot overlap while a notice is pending',()=>{
   assert.match(ranked,/let rankedEntryPending=null/);
@@ -55,6 +56,15 @@ test('leaving an online game invalidates all stale session events',()=>{
   const block=app.slice(start,end);
   assert.match(block,/onlineSessionGeneration\+\+/);
   assert.match(block,/goStopOnlineSession\?\.close\(\)/);
+});
+
+test('phone portrait keeps the player identity row fully inside the fixed mobile game stage',()=>{
+  const portrait=gameCss.slice(gameCss.indexOf('/* Mobile web layout pass'),gameCss.indexOf('/* Phones wider than the portrait breakpoint'));
+  assert.match(portrait,/\.player-zone\{grid-template-rows:44px 96px 50px!important/);
+  assert.match(portrait,/\.player-row\{grid-column:1!important;grid-row:1!important;min-height:0;align-items:center\}/);
+  assert.match(portrait,/\.hand\{grid-column:1!important;grid-row:2!important;height:96px/);
+  assert.match(portrait,/\.player-capture-panel\{grid-column:1!important;grid-row:3!important\}/);
+  assert.match(portrait,/\.game-capture-panel\{height:50px;min-height:0;max-height:50px/);
 });
 
 test('admin tables fit desktop width and only use horizontal scrolling on small screens',()=>{
