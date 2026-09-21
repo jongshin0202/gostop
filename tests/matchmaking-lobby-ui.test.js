@@ -7,7 +7,7 @@ const server=fs.readFileSync(new URL('../server/lobby.mjs',import.meta.url),'utf
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 
 test('connection protection signup notice stays short and action-focused',()=>{
-  assert.match(client,/signupPolicyText:'If you disconnect during a Coin game, you have 1 minute to return\\n\\nYour first forced disconnect each month is protected, so no Coins are deducted\. After that, a disconnect may count as a loss if your opponent was ahead\.\\n\\nPress OK to continue\.'/);
+  assert.ok(client.includes("signupPolicyText:'If you disconnect during a Coin game, you have 1 minute to return.\\n\\nYour first forced disconnect each month is protected, so no Coins are deducted. After that, a disconnect may count as a loss if your opponent was ahead.\\n\\nPress OK to continue.'"));
   assert.doesNotMatch(client,/Sometimes a ranked game can be interrupted by a Wi-Fi/);
 });
 
