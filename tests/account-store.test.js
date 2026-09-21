@@ -20,7 +20,7 @@ const makeVerificationStore=(initialIso='2026-09-15T03:30:00.000Z')=>{
   return {store,sent,setNow:value=>{now=value;}};
 };
 const verificationTokenFrom=sent=>{
-  const payload=JSON.parse(sent.at(-1).options.body),match=String(payload.html||'').match(/[?&]verify=([a-f0-9]{64})/i);
+  const payload=JSON.parse(sent.at(-1).options.body),match=String(payload.html||'').match(/[#?&]verify=([a-f0-9]{64})/i);
   assert.ok(match,'verification email should contain a 64-character token');return match[1];
 };
 
