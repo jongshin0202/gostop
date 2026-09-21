@@ -129,12 +129,14 @@ export class Lobby{
     this.send(client.socket,{type:'autoMatchCandidate',candidate:toProfile});
     return true;
   }
-  async acceptAutoMatchCandidate(client){
-    if(!client.autoMatching||!client.autoMatchCandidateId||this.activeChallengeFor(client.account.id))return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
-    const accountId=client.autoMatchCandidateId,target=this.clientByAccountId(accountId,{challengeableOnly:true});
-    if(!target){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
+  async acceptAutoMatchCandidate(client,requestedAccountId=null){
+    if(this.activeChallengeFor(client.account.id))return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
+    const explicit=String(requestedAccountId||'').trim(),accountId=explicit||client.autoMatchCandidateId;
+    if(!accountId||accountId===client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
+    const target=this.clientByAccountId(accountId,{challengeableOnly:true});
+    if(!target){client.autoMatching=true;client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
     const rows=await this.leaderboardRows(),details=await this.directoryProfiles([target.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(target,rows),...detail,...this.presenceForAccount(target.account.id)}:this.profile(target,rows);
-    client.autoMatchCandidateId=null;
+    client.autoMatching=true;client.autoMatchCandidateId=null;
     const challenge=this.startChallenge(client,target,rows,{automatic:true,toProfileOverride:toProfile});
     if(!challenge){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);await this.tryAutoMatch(client);return false;}
     return true;
@@ -156,7 +158,7 @@ export class Lobby{
     if(message.type==='search'){client.searchQuery=String(message.query||'').trim();const rows=await this.leaderboardRows();this.send(client.socket,{type:'searchResults',query:client.searchQuery,players:await this.search(client,client.searchQuery,rows),onlineCount:this.onlineAccountCount(client),autoMatching:!!client.autoMatching});return;}
     if(message.type==='autoMatchStart'){if(!this.clientCanReceiveChallenge(client)||client.twoPlayer)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'You are already in a two-player game.'});client.autoMatching=true;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
     if(message.type==='autoMatchNext'){if(!client.autoMatching)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'Auto Match is no longer active.'});client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();if(client.autoMatchCandidateId)client.autoMatchTried.add(client.autoMatchCandidateId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
-    if(message.type==='autoMatchAccept'){await this.acceptAutoMatchCandidate(client);await this.broadcastRecommendations();return;}
+    if(message.type==='autoMatchAccept'){await this.acceptAutoMatchCandidate(client,message.accountId);await this.broadcastRecommendations();return;}
     if(message.type==='autoMatchCancel'){const pending=this.pendingChallengeFor(client.account.id);if(pending?.automatic)this.cancelPendingChallenge(pending,'Auto Match was cancelled.');client.autoMatching=false;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchCancelled'});await this.broadcastRecommendations();return;}
     if(message.type==='setAvailability'){
       client.available=message.available!==false;client.twoPlayer=!!message.twoPlayer;client.mode=String(message.mode||'menu').slice(0,32);client.foreground=message.foreground===true;client.notificationsEnabled=message.notificationsEnabled===true;client.lastPresenceAt=Date.now();const reported=Number(message.lastActivityAt);if(Number.isFinite(reported)&&reported>0)client.lastActivityAt=Math.min(Date.now(),reported);
