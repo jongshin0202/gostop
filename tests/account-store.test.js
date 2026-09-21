@@ -12,6 +12,58 @@ class MemoryStorage{
 const makeStore=(iso='2026-09-15T03:30:00.000Z')=>new AccountStore({storage:new MemoryStorage()},{},{cryptoApi:globalThis.crypto,now:()=>iso});
 const post=(path,body,headers={})=>new Request(`https://accounts${path}`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)});
 
+const makeVerificationStore=(initialIso='2026-09-15T03:30:00.000Z')=>{
+  let now=initialIso;const sent=[];
+  const env={EMAIL_VERIFICATION_REQUIRED:'true',RESEND_API_KEY:'re_test',EMAIL_FROM:'GoStop Live <verify@gostoplive.com>',EMAIL_VERIFY_BASE_URL:'https://gostoplive.com'};
+  const fetchApi=async(url,options={})=>{sent.push({url,options});return new Response(JSON.stringify({id:`email-${sent.length}`}),{status:200,headers:{'content-type':'application/json'}});};
+  const store=new AccountStore({storage:new MemoryStorage()},env,{cryptoApi:globalThis.crypto,now:()=>now,fetchApi});
+  return {store,sent,setNow:value=>{now=value;}};
+};
+const verificationTokenFrom=sent=>{
+  const payload=JSON.parse(sent.at(-1).options.body),match=String(payload.html||'').match(/[?&]verify=([a-f0-9]{64})/i);
+  assert.ok(match,'verification email should contain a 64-character token');return match[1];
+};
+
+test('verification-enabled registration reserves identity but grants no Coins or session until email is verified',async()=>{
+  const {store,sent}=makeVerificationStore();
+  const response=await store.fetch(post('/register',{email:'verify@example.com',nickname:'VerifyPlayer',password:'BetterPass9',confirmPassword:'BetterPass9'}));
+  assert.equal(response.status,202);const pending=await response.json();
+  assert.equal(pending.ok,true);assert.equal(pending.verificationPending,true);assert.equal(pending.email,'verify@example.com');assert.equal(pending.session,undefined);assert.equal(sent.length,1);
+  const account=await store.accountByEmail('verify@example.com');assert.equal(account.emailVerified,false);assert.equal(account.walletCoins,0);assert.equal(account.signupAwardedAt,undefined);
+  const login=await store.fetch(post('/login',{email:'verify@example.com',password:'BetterPass9'}));assert.equal(login.status,403);assert.equal((await login.json()).error.code,'EMAIL_NOT_VERIFIED');
+  const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json();assert.equal(board.global.some(row=>row.nickname==='VerifyPlayer'),false);
+});
+
+test('single-use verification link activates the account, awards signup plus daily Coins, and creates a session',async()=>{
+  const {store,sent}=makeVerificationStore();
+  await store.fetch(post('/register',{email:'activate@example.com',nickname:'ActivateMe',password:'BetterPass9',confirmPassword:'BetterPass9'}));
+  const token=verificationTokenFrom(sent);
+  const verifiedResponse=await store.fetch(post('/verify-email',{token},{'x-gostop-timezone':'America/Chicago'}));assert.equal(verifiedResponse.status,200);
+  const verified=await verifiedResponse.json();assert.equal(verified.account.emailVerified,true);assert.equal(verified.account.walletCoins,200);assert.equal(verified.awards.signupCoins,100);assert.equal(verified.awards.dailyCoins,100);assert.ok(verified.session.token.length>=40);
+  const stored=await store.accountByEmail('activate@example.com');assert.ok(stored.signupAwardedAt);assert.ok(stored.emailVerifiedAt);assert.equal(stored.emailVerificationTokenHash,undefined);
+  const reuse=await store.fetch(post('/verify-email',{token}));assert.equal(reuse.status,400);assert.equal((await reuse.json()).error.code,'INVALID_VERIFICATION_TOKEN');
+  const login=await (await store.fetch(post('/login',{email:'activate@example.com',password:'BetterPass9'}))).json();assert.equal(login.account.walletCoins,200);assert.equal(login.awards.dailyCoins,0);
+});
+
+test('resending verification requires the account password, rate limits requests, and invalidates the old link',async()=>{
+  const {store,sent,setNow}=makeVerificationStore();
+  await store.fetch(post('/register',{email:'resend@example.com',nickname:'ResendMe',password:'BetterPass9',confirmPassword:'BetterPass9'}));
+  const oldToken=verificationTokenFrom(sent);
+  const wrong=await store.fetch(post('/resend-verification',{email:'resend@example.com',password:'WrongPass9'}));assert.equal(wrong.status,401);
+  const limited=await store.fetch(post('/resend-verification',{email:'resend@example.com',password:'BetterPass9'}));assert.equal(limited.status,429);assert.equal((await limited.json()).error.code,'VERIFICATION_RATE_LIMIT');
+  setNow('2026-09-15T03:31:01.000Z');
+  const resent=await store.fetch(post('/resend-verification',{email:'resend@example.com',password:'BetterPass9'}));assert.equal(resent.status,200);assert.equal(sent.length,2);
+  const newToken=verificationTokenFrom(sent);assert.notEqual(newToken,oldToken);
+  const oldResult=await store.fetch(post('/verify-email',{token:oldToken}));assert.equal(oldResult.status,400);
+  const newResult=await store.fetch(post('/verify-email',{token:newToken}));assert.equal(newResult.status,200);
+});
+
+test('verification-required registration fails safely before reserving an account when email delivery is not configured',async()=>{
+  const store=new AccountStore({storage:new MemoryStorage()},{EMAIL_VERIFICATION_REQUIRED:'true'},{cryptoApi:globalThis.crypto,now:()=> '2026-09-15T03:30:00.000Z'});
+  const response=await store.fetch(post('/register',{email:'nomailer@example.com',nickname:'NoMailer',password:'BetterPass9',confirmPassword:'BetterPass9'}));
+  assert.equal(response.status,503);assert.equal((await response.json()).error.code,'EMAIL_SERVICE_NOT_CONFIGURED');assert.equal(await store.accountByEmail('nomailer@example.com'),null);
+});
+
 test('registration creates account, awards signup and first daily coins, and returns a session',async()=>{
   const store=makeStore();
   const response=await store.fetch(post('/register',{email:'Player@example.com',nickname:'Player One',password:'BetterPass9',confirmPassword:'BetterPass9'}));
