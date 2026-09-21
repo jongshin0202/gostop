@@ -45,6 +45,23 @@ export class Lobby{
     return {active,away,notifyable,recent,foreground,heartbeatFresh};
   }
   clientCanReceiveChallenge(client){const state=this.clientPresence(client);return !client?.twoPlayer&&client.available!==false&&(state.active||state.away);}
+  autoMatchDebugClient(client){
+    if(!client)return null;
+    return {clientId:client.clientId,accountId:client.account?.id||null,nickname:client.account?.nickname||null,available:client.available!==false,twoPlayer:!!client.twoPlayer,mode:client.mode||null,autoMatching:!!client.autoMatching,autoMatchCandidateId:client.autoMatchCandidateId||null,presence:this.clientPresence(client),connectedAt:client.connectedAt||null,lastActivityAt:client.lastActivityAt||null,lastPresenceAt:client.lastPresenceAt||null};
+  }
+  autoMatchRejectReasons(creator,target){
+    const reasons=[];
+    if(!creator)reasons.push('missing-creator');
+    if(!target)reasons.push('missing-target');
+    if(creator&&target&&creator.account.id===target.account.id)reasons.push('same-account');
+    if(creator&&!this.clientCanReceiveChallenge(creator))reasons.push('creator-not-challengeable');
+    if(target&&!this.clientCanReceiveChallenge(target))reasons.push('target-not-challengeable');
+    if(creator&&this.accountTwoPlayerBusy(creator.account.id))reasons.push('creator-account-busy');
+    if(target&&this.accountTwoPlayerBusy(target.account.id))reasons.push('target-account-busy');
+    if(creator&&this.activeChallengeFor(creator.account.id))reasons.push('creator-active-challenge');
+    if(target&&this.activeChallengeFor(target.account.id))reasons.push('target-active-challenge');
+    return reasons;
+  }
   clientByAccountId(accountId,{challengeableOnly=false,activeOnly=false}={}){
     const clients=this.clientsForAccount(accountId).slice().sort((a,b)=>{const ap=this.clientPresence(a),bp=this.clientPresence(b),ar=ap.active?0:ap.away?1:2,br=bp.active?0:bp.away?1:2;return ar-br||(Number(b.lastActivityAt)||0)-(Number(a.lastActivityAt)||0);});
     if(activeOnly)return clients.find(client=>this.clientPresence(client).active)||null;
@@ -131,15 +148,19 @@ export class Lobby{
     return true;
   }
   async acceptAutoMatchCandidate(client,requestedAccountId=null){
-    if(this.activeChallengeFor(client.account.id))return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
     const explicit=String(requestedAccountId||'').trim(),accountId=explicit||client.autoMatchCandidateId;
+    console.log('AUTO_MATCH_ACCEPT_RECEIVED',JSON.stringify({requestedAccountId:explicit||null,resolvedAccountId:accountId||null,creator:this.autoMatchDebugClient(client),creatorActiveChallenge:this.activeChallengeFor(client.account.id)?true:false}));
+    if(this.activeChallengeFor(client.account.id))return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
     if(!accountId||accountId===client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
-    const target=this.clientByAccountId(accountId,{challengeableOnly:true});
-    if(!target){client.autoMatching=true;client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
+    const targetClients=this.clientsForAccount(accountId),target=this.clientByAccountId(accountId,{challengeableOnly:true});
+    console.log('AUTO_MATCH_TARGET_LOOKUP',JSON.stringify({accountId,targetFound:!!target,targetClients:targetClients.map(item=>this.autoMatchDebugClient(item)),targetAccountBusy:this.accountTwoPlayerBusy(accountId),targetActiveChallenge:this.activeChallengeFor(accountId)?true:false}));
+    if(!target){client.autoMatching=true;client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;console.log('AUTO_MATCH_ACCEPT_REJECTED',JSON.stringify({stage:'target-lookup',accountId,reasons:['no-challengeable-target']}));await this.tryAutoMatch(client);return false;}
     const rows=await this.leaderboardRows(),details=await this.directoryProfiles([target.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(target,rows),...detail,...this.presenceForAccount(target.account.id)}:this.profile(target,rows);
     client.autoMatching=true;client.autoMatchCandidateId=null;
+    const reasons=this.autoMatchRejectReasons(client,target);
     const challenge=this.startChallenge(client,target,rows,{automatic:true,toProfileOverride:toProfile});
-    if(!challenge){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);await this.tryAutoMatch(client);return false;}
+    if(!challenge){console.log('AUTO_MATCH_ACCEPT_REJECTED',JSON.stringify({stage:'start-challenge',accountId,reasons,creator:this.autoMatchDebugClient(client),target:this.autoMatchDebugClient(target)}));client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);await this.tryAutoMatch(client);return false;}
+    console.log('AUTO_MATCH_ACCEPT_CREATED',JSON.stringify({requestId:challenge.id,from:challenge.from,to:challenge.to}));
     return true;
   }
   async tryWaitingAutoMatches(){
