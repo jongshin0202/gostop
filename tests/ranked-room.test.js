@@ -156,7 +156,7 @@ test('disconnected Competitive seat reconciliation exposes the active reconnect 
 
 test('returning Competitive player can choose No and immediately apply normal disconnect abandonment rules',async()=>{
   const {core,a,b,sa,sb,accountStore}=await onlineRoom(),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
-  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.account.id,sessionId=core.room.sessionId;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.playerId===a.playerId?'a':'b',sessionId=core.room.sessionId;
   await core.disconnect(socket);assert.ok(core.room.rankFlow.disconnectDeadlines[quitter.playerId]);
   const result=await core.declineReconnect(accountId,sessionId);
   assert.equal(result.ok,true);assert.equal(result.ended,true);assert.equal(result.reason,'reconnect-declined');
@@ -169,17 +169,17 @@ test('expired reconnect reconciliation settles the disconnect before returning a
   let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
   const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb;
   await core.disconnect(socket);instant='2026-09-15T04:46:01.000Z';
-  const status=await core.reconcileActiveRanked(quitter.account.id,core.room.sessionId);
+  const accountId=quitter.playerId===a.playerId?'a':'b',status=await core.reconcileActiveRanked(accountId,core.room.sessionId);
   assert.equal(status.active,false);assert.equal(status.reason,'disconnect-timeout');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
 });
 
 test('Competitive player cannot choose Yes after reconnect grace has expired',async()=>{
   let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb,accountStore}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
-  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,account=quitter.account,credential=quitter.credential;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.playerId===a.playerId?'a':'b',credential=quitter.credential,stored=core.room.participants.find(item=>item.playerId===quitter.playerId),returningAccount={id:accountId,nickname:stored.nickname,walletCoins:stored.walletCoins};
   await core.disconnect(socket);instant='2026-09-15T04:46:01.000Z';
-  await assert.rejects(()=>core.join(credential,account),error=>error?.code==='ROOM_NOT_FOUND');
+  await assert.rejects(()=>core.join(credential,returningAccount),error=>error?.code==='ROOM_NOT_FOUND');
   assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
-  assert.ok(accountStore.calls.some(call=>call.path==='/internal/force-quit'&&call.body.accountId===account.id));
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/force-quit'&&call.body.accountId===accountId));
 });
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
