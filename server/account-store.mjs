@@ -27,36 +27,7 @@ const randomId=(cryptoApi,prefix)=>`${prefix}_${randomHex(cryptoApi,16)}`;
 const toHex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,'0')).join('');
 const fromHex=hex=>new Uint8Array(String(hex).match(/../g)?.map(v=>parseInt(v,16))||[]);
 const safeEqual=(a,b)=>{if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;};
-const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}const encoder=new TextEncoder();
-const COMMON_PASSWORDS=new Set(['12345','123456','12345678','password','password1','qwerty','qwerty123','abc123','letmein','111111','000000']);
-const PROVISIONAL_GAMES=10;
-const SESSION_TTL_MS=1000*60*60*24*30;
-const PBKDF2_ITERATIONS=100000;
-const EMAIL_VERIFY_TTL_MS=1000*60*60*24;
-const EMAIL_VERIFY_RESEND_MS=1000*60;
-
-const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
-const normalizeEmail=value=>String(value||'').trim().toLowerCase();
-const normalizeNickname=value=>String(value||'').trim().replace(/\s+/g,' ');
-const nicknameKey=value=>normalizeNickname(value).toLowerCase();
-const utcDay=iso=>String(iso).slice(0,10);
-const utcMonth=iso=>String(iso).slice(0,7);
-const normalizeTimeZone=value=>{
-  const timeZone=String(value||'').trim();
-  if(!timeZone||timeZone.length>64||!/^[A-Za-z0-9_+./-]+$/.test(timeZone))return 'UTC';
-  try{new Intl.DateTimeFormat('en-US',{timeZone}).format(new Date(0));return timeZone;}catch(_){return 'UTC';}
-};
-const dayInTimeZone=(iso,timeZone)=>{
-  const parts=new Intl.DateTimeFormat('en-US',{timeZone:normalizeTimeZone(timeZone),year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(iso));
-  const values=Object.fromEntries(parts.filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-};
-const randomHex=(cryptoApi,bytes=24)=>{const data=new Uint8Array(bytes);cryptoApi.getRandomValues(data);return Array.from(data,b=>b.toString(16).padStart(2,'0')).join('');};
-const randomId=(cryptoApi,prefix)=>`${prefix}_${randomHex(cryptoApi,16)}`;
-const toHex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart(2,'0')).join('');
-const fromHex=hex=>new Uint8Array(String(hex).match(/../g)?.map(v=>parseInt(v,16))||[]);
-const safeEqual=(a,b)=>{if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;};
-).test(code)?code:null;};
+const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
 const htmlEscape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 async function hashToken(cryptoApi,token){return toHex(await cryptoApi.subtle.digest('SHA-256',encoder.encode(token)));}
