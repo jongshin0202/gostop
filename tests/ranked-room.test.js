@@ -121,12 +121,17 @@ test('orphaned ranked lock gets a short runtime recovery grace then ends without
   assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
 });
 
-test('closing a displaced same-seat socket does not create a false reconnect deadline',async()=>{
-  const {core,a,sa,sb}=await onlineRoom(),replacement=new Socket();
-  await core.connect(a.credential,replacement);assert.equal(core.sockets.get(a.playerId),replacement);
-  const disconnected=await core.disconnect(sa);assert.equal(disconnected,false);assert.equal(core.sockets.get(a.playerId),replacement);
+test('same authenticated seat stays live on two devices until the last device disconnects',async()=>{
+  const {core,a,sa,sb}=await onlineRoom(),secondDevice=new Socket(),resumed=await core.join(null,account('a','Alpha'));
+  assert.equal(resumed.playerId,a.playerId);assert.equal(resumed.seatId,a.seatId);assert.equal(resumed.resumedByAccount,true);
+  await core.connect(resumed.credential,secondDevice);
+  const live=core.sockets.get(a.playerId);assert.ok(live instanceof Set);assert.equal(live.size,2);
+  core.broadcastSnapshots();assert.ok(sa.last('snapshot'));assert.ok(secondDevice.last('snapshot'));
+  const firstDisconnect=await core.disconnect(sa);assert.equal(firstDisconnect,false);assert.equal(core.sockets.get(a.playerId).size,1);
   assert.equal(core.room.rankFlow.disconnectDeadlines[a.playerId],undefined);
   assert.equal(sb.last('snapshot').snapshot.sessionFlow.opponentReconnectUntil,null);
+  const lastDisconnect=await core.disconnect(secondDevice);assert.equal(lastDisconnect,true);assert.equal(core.sockets.has(a.playerId),false);
+  assert.ok(core.room.rankFlow.disconnectDeadlines[a.playerId]);
 });
 
 test('sync request after reconnect deadline resolves the session instead of leaving 0:00 stuck',async()=>{
