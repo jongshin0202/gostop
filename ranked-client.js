@@ -476,7 +476,7 @@
     root.hidden=false;root.innerHTML=`<div class="outgoing-opponent-name">${flagEmoji(player.countryCode)} ${escapeHtml(player.nickname||rt('playerFallback'))}</div><div class="outgoing-opponent-grid"><span><strong>${escapeHtml(rt('rankHeading'))}:</strong> ${rankNumberHtml(rank)}</span><span><strong>${escapeHtml(rt('leaderboardScore'))}:</strong> ${fmtScore(player.score??player.coinsPerGame)}</span><span><strong>${escapeHtml(rt('gamesPlayed'))}:</strong> ${Number(player.gamesPlayed)||0}</span><span><strong>${escapeHtml(rt('winsLosses'))}:</strong> ${Number(player.wins)||0} / ${Number(player.losses)||0}</span><span><strong>${escapeHtml(rt('totalCoins'))}:</strong> 🪙 ${totalCoins}</span></div><div class="outgoing-h2h">${played?`<strong>${escapeHtml(rt('yourWinsLosses'))}:</strong> ${Number(history.wins)||0} / ${Number(history.losses)||0}<br><strong>${escapeHtml(rt('coinsWonLost'))}:</strong> 🪙 ${Number(history.coinsWon)||0} / ${Number(history.coinsLost)||0}<br><strong>${escapeHtml(rt('lastPlayed'))}:</strong> ${escapeHtml(formatLastPlayed(history.lastPlayedAt))}`:escapeHtml(rt('neverPlayedBefore'))}</div>`;
   }
   function showAutoMatchCandidate(player){
-    autoMatchCandidate=player||null;renderOpponentProfile('autoMatchCandidateProfile',autoMatchCandidate);closeRequestDialog(outgoingRequestDialog);
+    autoMatchCandidate=player||null;renderOpponentProfile('autoMatchCandidateProfile',autoMatchCandidate);closeRequestDialog(outgoingRequestDialog);const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}
     if(autoMatchCandidate&&!autoMatchCandidateDialog.open)autoMatchCandidateDialog.showModal();
   }
   function showOutgoingRequest(message){
@@ -519,9 +519,10 @@
     if(message.type==='autoMatchCandidate'){autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';pendingOutgoingRequest=null;showAutoMatchCandidate(message.candidate||null);return;}
     if(message.type==='autoMatchWaiting'){autoMatchSearching=true;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';closeRequestDialog(autoMatchCandidateDialog);if(!pendingOutgoingRequest)showOutgoingRequest({requestId:null,automatic:true,to:null});return;}
     if(message.type==='autoMatchCancelled'){autoMatchSearching=false;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';if(pendingOutgoingRequest?.automatic)pendingOutgoingRequest=null;closeRequestDialog(autoMatchCandidateDialog);closeRequestDialog(outgoingRequestDialog);refreshVisibleLobbyResults();return;}
-    if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;autoMatchCandidate=null;syncAutoMatchControls();closeRequestDialog(autoMatchCandidateDialog);showOutgoingRequest(message);return;}
+    if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;autoMatchCandidate=null;const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}syncAutoMatchControls();closeRequestDialog(autoMatchCandidateDialog);showOutgoingRequest(message);return;}
+    if(message.type==='challengeDelivered'){return;}
     if(message.type==='playRequest'){
-      pendingRequest=message;void showPlayRequestNotification(message);const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=Number.isFinite(Number(from.globalRank??from.rank))?Number(from.globalRank??from.rank):0;
+      pendingRequest=message;lobbySend({type:'challengeReceipt',requestId:message.requestId});void showPlayRequestNotification(message);const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=Number.isFinite(Number(from.globalRank??from.rank))?Number(from.globalRank??from.rank):0;
       $('requestPlayerName').textContent=`${flagEmoji(from.countryCode)} ${rt('wantsPlay',{name})}`;
       $('requestPlayerStats').innerHTML=`${escapeHtml(rt('rankHeading'))}: ${rankNumberHtml(rank)} · ${escapeHtml(rt('score'))} ${fmtScore(from.coinsPerGame??from.score)} · ${Number(from.gamesPlayed)||0} ${escapeHtml(rt('games'))} · ${escapeHtml(coinText(from.walletCoins))}`;
       $('requestAccept').disabled=false;$('requestDecline').disabled=false;
@@ -548,6 +549,7 @@
       refreshVisibleLobbyResults();return;
     }
     if(message.type==='challengeCancelled'||message.type==='challengeError'){
+      const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}
       const incomingCancelled=!!pendingRequest&&(!message.requestId||pendingRequest.requestId===message.requestId),outgoingCancelled=!!pendingOutgoingRequest&&(!message.requestId||pendingOutgoingRequest.requestId===message.requestId);
       if(incomingCancelled){pendingRequest=null;closeRequestDialog(requestDialog);}if(outgoingCancelled){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);}
       if(pendingChallengeCreate===message.requestId)pendingChallengeCreate=null;closeRequestDialog(matchHandoffDialog);closeRequestDialog(autoMatchCandidateDialog);autoMatchCandidate=null;autoMatchSearching=false;syncAutoMatchControls();
@@ -589,7 +591,7 @@
   notificationBlockedDialog.addEventListener('cancel',()=>{notificationEnablePending=false;});
   $('onlineNicknameSearchBtn').addEventListener('click',()=>{const query=$('onlineNicknameSearch').value.trim();lobbySearchActive=!!query;const list=$('searchPlayerResults');if(!query){lastSearchPlayers=[];if(list){list.innerHTML='';list.hidden=true;}$('lobbyStatus').textContent='';return;}if(list)list.hidden=false;$('lobbyStatus').textContent=rt('searchingOnline');sendLobbyMessage({type:'search',query},'lobbyConnecting');});$('onlineNicknameSearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineNicknameSearchBtn').click();}});
   $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchStart'});});
-  $('autoMatchCandidateAccept').addEventListener('click',()=>{if(!autoMatchCandidate)return;const candidate=autoMatchCandidate;closeRequestDialog(autoMatchCandidateDialog);showOutgoingRequest({requestId:null,automatic:true,to:candidate});sendLobbyMessage({type:'autoMatchAccept'});});
+  $('autoMatchCandidateAccept').addEventListener('click',()=>{if(!autoMatchCandidate)return;const button=$('autoMatchCandidateAccept');button.disabled=true;button.textContent='Sending…';sendLobbyMessage({type:'autoMatchAccept'});});
   $('autoMatchCandidateNext').addEventListener('click',()=>{if(!autoMatchCandidate)return;autoMatchCandidate=null;closeRequestDialog(autoMatchCandidateDialog);sendLobbyMessage({type:'autoMatchNext'});});
   $('autoMatchCandidateCancel').addEventListener('click',()=>{autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();sendLobbyMessage({type:'autoMatchCancel'});});
   $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
