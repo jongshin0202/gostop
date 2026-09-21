@@ -114,8 +114,17 @@ export class RoomCore{
   }
   async connect(credential,socket){
     const participant=await this.authenticate(credential);if(!participant)throw new RoomError('INVALID_CREDENTIAL','Room credential is invalid.',401);
-    let sockets=this.sockets.get(participant.playerId);if(!(sockets instanceof Set))sockets=new Set(sockets?[sockets]:[]);
-    const wasConnected=sockets.size>0;sockets.add(socket);this.sockets.set(participant.playerId,sockets);participant.connected=true;socket.__playerId=participant.playerId;await this.persist();
+    const allowSiblingSockets=this.isRanked();
+    let wasConnected=false;
+    if(allowSiblingSockets){
+      let sockets=this.sockets.get(participant.playerId);if(!(sockets instanceof Set))sockets=new Set(sockets?[sockets]:[]);
+      wasConnected=sockets.size>0;sockets.add(socket);this.sockets.set(participant.playerId,sockets);
+    }else{
+      const old=this.sockets.get(participant.playerId),oldSockets=old instanceof Set?[...old]:old?[old]:[];wasConnected=oldSockets.length>0;
+      for(const prior of oldSockets)if(prior!==socket){try{prior.close(4001,'Reconnected elsewhere');}catch(_){}}
+      this.sockets.set(participant.playerId,socket);
+    }
+    participant.connected=true;socket.__playerId=participant.playerId;await this.persist();
     this.send(socket,envelope('connected',{...this.publicRoom(),playerId:participant.playerId,seatId:participant.seatId,profile:this.participantProfile(participant)}));
     if(this.room.matchId)this.send(socket,envelope('snapshot',{snapshot:this.snapshotFor(participant),events:[]}));
     if(!wasConnected)this.broadcastPresence(participant.playerId,true);return participant;
