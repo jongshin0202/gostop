@@ -172,6 +172,15 @@ test('expired reconnect reconciliation settles the disconnect before returning a
   const status=await core.reconcileActiveRanked(quitter.account.id,core.room.sessionId);
   assert.equal(status.active,false);assert.equal(status.reason,'disconnect-timeout');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
 });
+
+test('Competitive player cannot choose Yes after reconnect grace has expired',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb,accountStore}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,account=quitter.account,credential=quitter.credential;
+  await core.disconnect(socket);instant='2026-09-15T04:46:01.000Z';
+  await assert.rejects(()=>core.join(credential,account),error=>error?.code==='ROOM_NOT_FOUND');
+  assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/force-quit'&&call.body.accountId===account.id));
+});
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
   assert.equal(core.room.sessionFlow.ended,false);
