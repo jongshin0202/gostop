@@ -35,7 +35,7 @@ test('Create ID requires email verification before session and Coin rewards in p
   assert.match(accountStoreSource,/signupAwardedAt/);assert.match(accountStoreSource,/account\.emailVerified===false/);
   assert.match(source,/id="verificationTitle">Verify Your Email</);assert.match(source,/id="verificationResend"/);
   assert.match(source,/api\('\/api\/auth\/resend-verification'/);assert.match(source,/error\?\.code==='EMAIL_NOT_VERIFIED'/);
-  assert.match(source,/verificationToken=inviteUrl\.searchParams\.get\('verify'\)/);assert.match(source,/api\('\/api\/auth\/verify-email'/);
+  assert.match(source,/verificationHash=inviteUrl\.hash\.match\(\/\^#verify=/);assert.match(source,/verificationToken=verificationHash\?\.\[1\]\|\|inviteUrl\.searchParams\.get\('verify'\)/);assert.match(source,/api\('\/api\/auth\/verify-email'/);
   assert.match(source,/if\(validVerificationToken\)\{await launchEmailVerification\(\);return;\}/);
 });
 
