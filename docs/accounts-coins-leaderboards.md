@@ -27,7 +27,11 @@ Ranking order is Score descending, Games Played descending, Total Coins descendi
 - Rewards never affect leaderboard Total Coins or Score.
 - Daily Coins are committed server-side before the notice is acknowledged. Every signed-in device displays the authoritative Wallet immediately; the notice explains the award but never hides or re-applies it.
 
-Passwords are salted and hashed on the server using PBKDF2-SHA-256. Authentication uses random bearer tokens; the password is not stored on the device. A valid saved browser session is restored automatically when GoStop Live opens; only an invalid or expired session requires login again. The current server data model includes `emailVerified`; outbound email verification will be enabled when an email delivery provider is connected.
+Passwords are salted and hashed on the server using PBKDF2-SHA-256. Authentication uses random bearer tokens; the password is not stored on the device. A valid saved browser session is restored automatically when GoStop Live opens; only an invalid or expired session requires login again.
+
+Create ID uses server-authoritative email verification in production. A newly registered email and nickname are reserved immediately, but the account remains `emailVerified: false`, receives no authenticated session, and receives no signup or daily Coins until the verification link is used. Verification tokens are random, stored only as SHA-256 hashes, single-use, and expire after 24 hours. Resending requires the account email and password, invalidates the prior token, and is rate-limited. Successful verification activates the account, grants the one-time +100 signup Coins and that day's +100 daily Coins, and creates the persistent authenticated session. Unverified accounts cannot log in, enter ranked play, or appear in public player search/leaderboards.
+
+Transactional verification email is sent through Resend from the Cloudflare Worker/Durable Object path. Production requires `EMAIL_VERIFICATION_REQUIRED=true`, `EMAIL_VERIFY_BASE_URL=https://gostoplive.com`, `EMAIL_FROM`, and the secret `RESEND_API_KEY`. The API key is never committed to the repository.
 
 ## Main menu
 

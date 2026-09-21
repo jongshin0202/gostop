@@ -3,6 +3,8 @@ const COMMON_PASSWORDS=new Set(['12345','123456','12345678','password','password
 const PROVISIONAL_GAMES=10;
 const SESSION_TTL_MS=1000*60*60*24*30;
 const PBKDF2_ITERATIONS=100000;
+const EMAIL_VERIFY_TTL_MS=1000*60*60*24;
+const EMAIL_VERIFY_RESEND_MS=1000*60;
 
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const normalizeEmail=value=>String(value||'').trim().toLowerCase();
@@ -26,6 +28,7 @@ const toHex=buffer=>Array.from(new Uint8Array(buffer),b=>b.toString(16).padStart
 const fromHex=hex=>new Uint8Array(String(hex).match(/../g)?.map(v=>parseInt(v,16))||[]);
 const safeEqual=(a,b)=>{if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;};
 const coarseCode=(value,max=8)=>{const code=String(value||'').trim().toUpperCase();return code&&new RegExp(`^[A-Z0-9-]{1,${max}}$`).test(code)?code:null;};
+const htmlEscape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 async function hashToken(cryptoApi,token){return toHex(await cryptoApi.subtle.digest('SHA-256',encoder.encode(token)));}
 async function hashPassword(cryptoApi,password,saltHex,iterations=PBKDF2_ITERATIONS){
@@ -82,7 +85,10 @@ function rankRows(rows){
 }
 
 export class AccountStore{
-  constructor(state,env,{cryptoApi=globalThis.crypto,now=()=>new Date().toISOString()}={}){this.state=state;this.storage=state.storage;this.env=env;this.crypto=cryptoApi;this.now=now;}
+  constructor(state,env,{cryptoApi=globalThis.crypto,now=()=>new Date().toISOString(),fetchApi=globalThis.fetch}={}){this.state=state;this.storage=state.storage;this.env=env||{};this.crypto=cryptoApi;this.now=now;this.fetchApi=fetchApi;}
+  emailVerificationRequired(){return String(this.env.EMAIL_VERIFICATION_REQUIRED||'').toLowerCase()==='true';}
+  emailVerificationConfigured(){return !!String(this.env.RESEND_API_KEY||'').trim()&&!!String(this.env.EMAIL_FROM||'').trim();}
+  verificationBaseUrl(){return String(this.env.EMAIL_VERIFY_BASE_URL||'https://gostoplive.com').trim()||'https://gostoplive.com';}
 
   async accountById(id){return id?await this.storage.get(`account:${id}`):null;}
   async accountByEmail(email){const id=await this.storage.get(`email:${normalizeEmail(email)}`);return id?this.accountById(id):null;}
@@ -124,6 +130,7 @@ export class AccountStore{
     return latest;
   }
   async awardDaily(account,request){
+    if(account.emailVerified===false)return false;
     const createdAt=this.now(),timeZone=timeZoneFromRequest(request),today=dayInTimeZone(createdAt,timeZone),latestAt=await this.latestDailyAwardAt(account),lastDay=latestAt?dayInTimeZone(latestAt,timeZone):account.lastDailyAwardDate;
     if(lastDay===today){
       let changed=false;
@@ -139,12 +146,69 @@ export class AccountStore{
     return true;
   }
   async appendLedger(accountId,entry){const id=randomId(this.crypto,'ledger');await this.storage.put(`ledger:${accountId}:${entry.createdAt}:${id}`,{id,accountId,...entry});}
+  async awardSignup(account){
+    if(account.signupAwardedAt)return false;
+    const createdAt=this.now();account.signupAwardedAt=createdAt;account.walletCoins=(Number(account.walletCoins)||0)+100;account.updatedAt=createdAt;
+    await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'signup',amount:100,createdAt});return true;
+  }
+  async sendVerificationEmail(account,{bypassRateLimit=false}={}){
+    if(!this.emailVerificationRequired())return {sent:false,disabled:true};
+    if(!this.emailVerificationConfigured())throw Object.assign(new Error('Email verification is temporarily unavailable.'),{status:503,code:'EMAIL_SERVICE_NOT_CONFIGURED'});
+    const nowMs=Date.parse(this.now()),lastSentMs=Date.parse(account.emailVerificationSentAt||'');
+    if(!bypassRateLimit&&Number.isFinite(lastSentMs)&&nowMs-lastSentMs<EMAIL_VERIFY_RESEND_MS){
+      const retryAfterSeconds=Math.max(1,Math.ceil((EMAIL_VERIFY_RESEND_MS-(nowMs-lastSentMs))/1000));
+      throw Object.assign(new Error(`Please wait ${retryAfterSeconds} seconds before requesting another verification email.`),{status:429,code:'VERIFICATION_RATE_LIMIT',retryAfterSeconds});
+    }
+    if(account.emailVerificationTokenHash)await this.storage.delete(`verify:${account.emailVerificationTokenHash}`);
+    const token=randomHex(this.crypto,32),tokenHash=await hashToken(this.crypto,token),createdAt=this.now(),expiresAt=new Date(Date.parse(createdAt)+EMAIL_VERIFY_TTL_MS).toISOString();
+    account.emailVerificationTokenHash=tokenHash;account.emailVerificationSentAt=createdAt;account.emailVerificationExpiresAt=expiresAt;account.updatedAt=createdAt;
+    await this.storage.put(`account:${account.id}`,account);await this.storage.put(`verify:${tokenHash}`,{accountId:account.id,email:account.email,createdAt,expiresAt});
+    const verifyUrl=new URL(this.verificationBaseUrl());verifyUrl.hash=`verify=${token}`;
+    const safeNickname=htmlEscape(account.nickname),safeUrl=htmlEscape(verifyUrl.toString()),plainUrl=verifyUrl.toString();
+    let response;
+    try{
+      response=await this.fetchApi('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${this.env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:this.env.EMAIL_FROM,to:[account.email],subject:'Verify your GoStop Live account',text:`Hi ${account.nickname},\n\nVerify your GoStop Live account: ${plainUrl}\n\nThis link expires in 24 hours and can be used only once.\n\nIf you did not create this account, you can ignore this email.`,html:`<div style="font-family:Arial,sans-serif;line-height:1.5;color:#24170f"><h2>Verify your GoStop Live account</h2><p>Hi ${safeNickname},</p><p>Confirm your email address to activate your account and receive your signup and daily Coin rewards.</p><p><a href="${safeUrl}" style="display:inline-block;padding:12px 18px;background:#8f2f22;color:#fff;text-decoration:none;border-radius:8px">Verify Email</a></p><p>This link expires in 24 hours and can be used only once.</p><p>If you did not create this account, you can ignore this email.</p></div>`})});
+    }catch(_){
+      await this.storage.delete(`verify:${tokenHash}`);delete account.emailVerificationTokenHash;delete account.emailVerificationSentAt;delete account.emailVerificationExpiresAt;await this.storage.put(`account:${account.id}`,account);
+      throw Object.assign(new Error('Account created, but the verification email could not be sent. Please try Resend Verification Email.'),{status:503,code:'EMAIL_SEND_FAILED',email:account.email});
+    }
+    if(!response?.ok){
+      await this.storage.delete(`verify:${tokenHash}`);delete account.emailVerificationTokenHash;delete account.emailVerificationSentAt;delete account.emailVerificationExpiresAt;await this.storage.put(`account:${account.id}`,account);
+      throw Object.assign(new Error('Account created, but the verification email could not be sent. Please try Resend Verification Email.'),{status:503,code:'EMAIL_SEND_FAILED',email:account.email});
+    }
+    return {sent:true,email:account.email,expiresAt};
+  }
+  async verifyEmail(request){
+    if(!this.emailVerificationRequired())return json({ok:false,error:{code:'EMAIL_VERIFICATION_DISABLED',message:'Email verification is not enabled.'}},404);
+    const body=await request.json().catch(()=>({})),token=String(body.token||'').trim();
+    if(!/^[a-f0-9]{64}$/i.test(token))return json({ok:false,error:{code:'INVALID_VERIFICATION_TOKEN',message:'This verification link is invalid.'}},400);
+    const tokenHash=await hashToken(this.crypto,token),record=await this.storage.get(`verify:${tokenHash}`);
+    if(!record)return json({ok:false,error:{code:'INVALID_VERIFICATION_TOKEN',message:'This verification link is invalid or has already been used.'}},400);
+    if(Date.parse(record.expiresAt)<=Date.parse(this.now())){await this.storage.delete(`verify:${tokenHash}`);return json({ok:false,error:{code:'VERIFICATION_EXPIRED',message:'This verification link has expired. Log in and request a new verification email.'}},410);}
+    const account=await this.accountById(record.accountId);
+    if(!account||account.emailVerificationTokenHash!==tokenHash||normalizeEmail(account.email)!==normalizeEmail(record.email))return json({ok:false,error:{code:'INVALID_VERIFICATION_TOKEN',message:'This verification link is no longer valid.'}},400);
+    account.emailVerified=true;account.emailVerifiedAt=this.now();delete account.emailVerificationTokenHash;delete account.emailVerificationExpiresAt;delete account.emailVerificationSentAt;account.updatedAt=this.now();
+    await this.storage.put(`account:${account.id}`,account);await this.storage.delete(`verify:${tokenHash}`);
+    const signupAwarded=await this.awardSignup(account),dailyAwarded=await this.awardDaily(account,request),session=await this.createSession(account);await this.recordConnection(account,request,'verify-email');
+    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:signupAwarded?100:0,dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});
+  }
+  async resendVerification(request){
+    if(!this.emailVerificationRequired())return json({ok:false,error:{code:'EMAIL_VERIFICATION_DISABLED',message:'Email verification is not enabled.'}},404);
+    const body=await request.json().catch(()=>({})),email=normalizeEmail(body.email),password=String(body.password||'');
+    if(!email||!password)return json({ok:false,error:{code:'INCOMPLETE_LOGIN',message:'Enter your email and password.'}},400);
+    const account=await this.accountByEmail(email);
+    if(!account)return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
+    const candidate=await hashPassword(this.crypto,password,account.passwordSalt,account.passwordIterations||PBKDF2_ITERATIONS);
+    if(!safeEqual(candidate,account.passwordHash))return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
+    if(account.emailVerified!==false)return json({ok:true,alreadyVerified:true,email:account.email});
+    const sent=await this.sendVerificationEmail(account);return json({ok:true,verificationPending:true,email:account.email,expiresAt:sent.expiresAt});
+  }
   async createSession(account){
     const token=randomHex(this.crypto,32),hash=await hashToken(this.crypto,token),expiresAt=new Date(Date.parse(this.now())+SESSION_TTL_MS).toISOString();
     await this.storage.put(`auth:${hash}`,{accountId:account.id,createdAt:this.now(),expiresAt});
     return {token,expiresAt};
   }
-  async requireAccount(request){const account=await this.accountFromToken(this.bearer(request));if(!account)throw Object.assign(new Error('Login required.'),{status:401,code:'AUTH_REQUIRED'});if(account.suspended)throw Object.assign(new Error('Account is suspended.'),{status:403,code:'ACCOUNT_SUSPENDED'});return account;}
+  async requireAccount(request){const account=await this.accountFromToken(this.bearer(request));if(!account)throw Object.assign(new Error('Login required.'),{status:401,code:'AUTH_REQUIRED'});if(account.suspended)throw Object.assign(new Error('Account is suspended.'),{status:403,code:'ACCOUNT_SUSPENDED'});if(this.emailVerificationRequired()&&account.emailVerified===false)throw Object.assign(new Error('Verify your email before using this account.'),{status:403,code:'EMAIL_NOT_VERIFIED'});return account;}
 
   async register(request){
     const body=await request.json().catch(()=>({}));
@@ -154,12 +218,15 @@ export class AccountStore{
     if(nickname.length<3||nickname.length>16||!/^[\p{L}\p{N}_ -]+$/u.test(nickname))return json({ok:false,error:{code:'INVALID_NICKNAME',message:'Nickname must be 3-16 letters, numbers, spaces, underscores, or hyphens.'}},400);
     if(password!==confirm)return json({ok:false,error:{code:'PASSWORD_MISMATCH',message:'Password and confirmation do not match.'}},400);
     const problem=passwordProblem(password);if(problem)return json({ok:false,error:{code:'WEAK_PASSWORD',message:problem}},400);
-    if(await this.storage.get(`email:${email}`))return json({ok:false,error:{code:'EMAIL_IN_USE',message:'An account already exists for this email.'}},409);
+    if(this.emailVerificationRequired()&&!this.emailVerificationConfigured())return json({ok:false,error:{code:'EMAIL_SERVICE_NOT_CONFIGURED',message:'Email verification is temporarily unavailable.'}},503);
+    const existingEmailId=await this.storage.get(`email:${email}`);
+    if(existingEmailId){const existing=await this.accountById(existingEmailId);return json({ok:false,error:{code:existing?.emailVerified===false?'EMAIL_PENDING_VERIFICATION':'EMAIL_IN_USE',message:existing?.emailVerified===false?'This email is already awaiting verification. Log in to resend the verification email.':'An account already exists for this email.'}},409);}
     const nickKey=nicknameKey(nickname);if(await this.storage.get(`nickname:${nickKey}`))return json({ok:false,error:{code:'NICKNAME_IN_USE',message:'That nickname is already in use.'}},409);
-    const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt),coarseLocation=locationFromRequest(request);
-    const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:true,walletCoins:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},location:coarseLocation?{...coarseLocation,source:'edge-coarse',updatedAt:this.now()}:null,createdAt:this.now(),updatedAt:this.now()};
+    const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt),coarseLocation=locationFromRequest(request),verificationRequired=this.emailVerificationRequired();
+    const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:!verificationRequired,walletCoins:verificationRequired?0:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},location:coarseLocation?{...coarseLocation,source:'edge-coarse',updatedAt:this.now()}:null,createdAt:this.now(),updatedAt:this.now()};
     await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
-    await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});await this.awardDaily(account,request);
+    if(verificationRequired){try{const sent=await this.sendVerificationEmail(account,{bypassRateLimit:true});return json({ok:true,verificationPending:true,email:account.email,emailSent:sent.sent,expiresAt:sent.expiresAt},202);}catch(error){return json({ok:false,error:{code:error.code||'EMAIL_SEND_FAILED',message:error.message,email:account.email}},error.status||503);}}
+    await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});account.signupAwardedAt=this.now();await this.storage.put(`account:${id}`,account);await this.awardDaily(account,request);
     const session=await this.createSession(account);await this.recordConnection(account,request,'register');
     return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100},notices:this.noticeList(account)},201);
   }
@@ -170,6 +237,7 @@ export class AccountStore{
     const candidate=await hashPassword(this.crypto,password,account.passwordSalt,account.passwordIterations||PBKDF2_ITERATIONS);
     if(!safeEqual(candidate,account.passwordHash))return json({ok:false,error:{code:'INVALID_LOGIN',message:'Email or password is incorrect.'}},401);
     if(account.suspended)return json({ok:false,error:{code:'ACCOUNT_SUSPENDED',message:'Account is suspended.'}},403);
+    if(this.emailVerificationRequired()&&account.emailVerified===false)return json({ok:false,error:{code:'EMAIL_NOT_VERIFIED',message:'Verify your email before logging in.',email:account.email}},403);
     const locationChanged=this.applyCoarseLocation(account,request),dailyAwarded=await this.awardDaily(account,request);await this.prepareNotices(account);if(locationChanged&&!dailyAwarded)await this.storage.put(`account:${account.id}`,account);const session=await this.createSession(account);await this.recordConnection(account,request,'login');
     return json({ok:true,account:publicAccount(account),session,awards:{dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});
   }
@@ -255,7 +323,7 @@ export class AccountStore{
 
   async directoryProfiles({requesterAccountId=null,accountIds=null,query=''}={}){
     await this.ensureOutcomeHistoryRepair();
-    const needle=String(query||'').trim().toLowerCase(),wanted=Array.isArray(accountIds)?new Set(accountIds.map(String)):null,month=utcMonth(this.now()),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
+    const needle=String(query||'').trim().toLowerCase(),wanted=Array.isArray(accountIds)?new Set(accountIds.map(String)):null,month=utcMonth(this.now()),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended&&account?.emailVerified!==false);
     const global=rankRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0})));
     const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES,accountId:account.id};})),monthlyById=new Map(monthly.map(row=>[String(row.accountId),row]));
     let players=global.filter(row=>(!wanted||wanted.has(String(row.accountId)))&&(!needle||String(row.nickname||'').toLowerCase().includes(needle)));
@@ -266,7 +334,7 @@ export class AccountStore{
 
   async leaderboard(){
     await this.ensureOutcomeHistoryRepair();
-    const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()];
+    const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>account?.emailVerified!==false);
     const global=rankRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account))));
     const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES};}));
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
@@ -332,7 +400,7 @@ export class AccountStore{
     await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'force-quit',amount:-penalty,gameId,createdAt:this.now()});await this.storage.put(`forceQuit:${gameId}`,{...body,gameId,penaltyCoins:penalty,recordedAt:this.now()});return json({ok:true,penaltyCoins:penalty,account:publicAccount(account)});
   }
 
-  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account?.suspended)return json({ok:true,account:null});if(account){if(this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,request.headers.get('x-gostop-event')||'game-resolve');}return json({ok:true,account:account?publicAccount(account):null});}
+  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account?.suspended||this.emailVerificationRequired()&&account?.emailVerified===false)return json({ok:true,account:null});if(account){if(this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,request.headers.get('x-gostop-event')||'game-resolve');}return json({ok:true,account:account?publicAccount(account):null});}
 
   async registerRoom(request){const body=await request.json().catch(()=>({})),roomCode=String(body.roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(roomCode))return json({ok:false,error:{code:'INVALID_ROOM_CODE',message:'Room code is invalid.'}},400);const record={roomCode,mode:body.mode==='solo'?'solo':body.mode==='free'?'free':'online',createdAt:body.createdAt||this.now()};await this.storage.put(`roomRegistry:${roomCode}`,record);return json({ok:true,room:record});}
 
@@ -340,6 +408,8 @@ export class AccountStore{
     const path=new URL(request.url).pathname;
     try{
       if(request.method==='POST'&&path==='/register')return await this.register(request);
+      if(request.method==='POST'&&path==='/verify-email')return await this.verifyEmail(request);
+      if(request.method==='POST'&&path==='/resend-verification')return await this.resendVerification(request);
       if(request.method==='POST'&&path==='/login')return await this.login(request);
       if(request.method==='POST'&&path==='/logout')return await this.logout(request);
       if(request.method==='POST'&&path==='/notices/ack')return await this.acknowledgeNotice(request);
