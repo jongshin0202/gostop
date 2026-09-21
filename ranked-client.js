@@ -522,7 +522,7 @@
     if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;autoMatchCandidate=null;const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}syncAutoMatchControls();closeRequestDialog(autoMatchCandidateDialog);showOutgoingRequest(message);return;}
     if(message.type==='challengeDelivered'){return;}
     if(message.type==='playRequest'){
-      pendingRequest=message;lobbySend({type:'challengeReceipt',requestId:message.requestId});void showPlayRequestNotification(message);const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=Number.isFinite(Number(from.globalRank??from.rank))?Number(from.globalRank??from.rank):0;
+      if(!leaderboardScreen.hidden)closeLeaderboard(true);pendingRequest=message;lobbySend({type:'challengeReceipt',requestId:message.requestId});void showPlayRequestNotification(message);const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=Number.isFinite(Number(from.globalRank??from.rank))?Number(from.globalRank??from.rank):0;
       $('requestPlayerName').textContent=`${flagEmoji(from.countryCode)} ${rt('wantsPlay',{name})}`;
       $('requestPlayerStats').innerHTML=`${escapeHtml(rt('rankHeading'))}: ${rankNumberHtml(rank)} · ${escapeHtml(rt('score'))} ${fmtScore(from.coinsPerGame??from.score)} · ${Number(from.gamesPlayed)||0} ${escapeHtml(rt('games'))} · ${escapeHtml(coinText(from.walletCoins))}`;
       $('requestAccept').disabled=false;$('requestDecline').disabled=false;

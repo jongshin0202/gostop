@@ -226,6 +226,18 @@ test('pending play request is redelivered to a refreshed recipient tab and recei
   const challenge=lobby.challenges.get(first.requestId);assert.ok(challenge.deliveryReceipts.has(refreshed.clientId));assert.ok(me.socket.messages.some(message=>message.type==='challengeDelivered'&&message.requestId===first.requestId));
 });
 
+test('unacknowledged play request retries before timeout and stops after receipt',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),me=client('me','Jong',1000),sono=client('sono','Sonogong',1000);add(lobby,me,sono);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'sono'}));
+  const first=sono.socket.messages.find(message=>message.type==='playRequest');assert.ok(first?.requestId);
+  assert.equal(sono.socket.messages.filter(message=>message.type==='playRequest').length,1);
+  assert.equal(lobby.retryChallengeDelivery(first.requestId),true);
+  assert.equal(sono.socket.messages.filter(message=>message.type==='playRequest').length,2);
+  await lobby.handle(sono,JSON.stringify({type:'challengeReceipt',requestId:first.requestId}));
+  assert.equal(lobby.retryChallengeDelivery(first.requestId),false);
+  assert.equal(sono.socket.messages.filter(message=>message.type==='playRequest').length,2);
+});
+
 test('searching a player before Auto Match does not suppress candidate preview or request delivery',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),directory=[{accountId:'sono',nickname:'Sonogong',walletCoins:1000,score:10.05,gamesPlayed:100,wins:50,losses:50,totalCoins:1000,rank:2,globalRank:2,countryCode:'US'}],lobby=makeLobby(rows,directory);
   const me=client('me','Jong',1000),sonoFront=client('sono','Sonogong',1000),sonoAway=client('sono','Sonogong',1000,{foreground:false});add(lobby,me,sonoFront,sonoAway);
