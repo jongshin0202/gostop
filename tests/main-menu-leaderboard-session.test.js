@@ -26,6 +26,19 @@ test('saved authenticated sessions restore automatically and transient refresh f
   assert.match(source,/authRestorePromise=refreshAccount\(\)/);
 });
 
+test('Create ID requires email verification before session and Coin rewards in production',()=>{
+  assert.match(worker,/\/api\/auth\/verify-email/);assert.match(worker,/\/api\/auth\/resend-verification/);
+  assert.match(accountStoreSource,/EMAIL_VERIFICATION_REQUIRED/);assert.match(accountStoreSource,/emailVerified:!verificationRequired/);
+  assert.match(accountStoreSource,/walletCoins:verificationRequired\?0:100/);
+  assert.match(accountStoreSource,/async verifyEmail\(request\)/);assert.match(accountStoreSource,/async resendVerification\(request\)/);
+  assert.match(accountStoreSource,/emailVerificationTokenHash/);assert.match(accountStoreSource,/EMAIL_VERIFY_TTL_MS=1000\*60\*60\*24/);
+  assert.match(accountStoreSource,/signupAwardedAt/);assert.match(accountStoreSource,/account\.emailVerified===false/);
+  assert.match(source,/id="verificationTitle">Verify Your Email</);assert.match(source,/id="verificationResend"/);
+  assert.match(source,/api\('\/api\/auth\/resend-verification'/);assert.match(source,/error\?\.code==='EMAIL_NOT_VERIFIED'/);
+  assert.match(source,/verificationToken=inviteUrl\.searchParams\.get\('verify'\)/);assert.match(source,/api\('\/api\/auth\/verify-email'/);
+  assert.match(source,/if\(validVerificationToken\)\{await launchEmailVerification\(\);return;\}/);
+});
+
 test('worker accepts first-party origins and forwards Cloudflare timezone for local daily rewards',async()=>{
   const {isAllowedOrigin}=await import('../server/worker.mjs');
   const env={ALLOWED_ORIGINS:''};
