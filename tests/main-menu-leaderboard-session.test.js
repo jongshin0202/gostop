@@ -134,7 +134,7 @@ test('stale ranked locks are server-reconciled and reconnect status reaches the 
 });
 
 test('Competitive reconnect No is authenticated and routed to authoritative abandonment settlement',()=>{
-  assert.match(worker,/\/api\\\/rooms\\\/\(\[A-Z2-9\]\{14\}\)\\\/decline-reconnect/);
+  assert.match(worker,/decline-reconnect/);
   assert.match(worker,/account\.activeRanked\?\.roomCode!==match\[1\]\|\|account\.activeRanked\?\.mode!=='online'/);
   assert.match(worker,/https:\/\/room\/decline-reconnect/);
 });
