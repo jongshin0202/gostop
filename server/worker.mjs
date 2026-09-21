@@ -101,7 +101,7 @@ export default {async fetch(request,env){
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/decline-reconnect$/))&&request.method==='POST'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
-      if(account.activeRanked?.roomCode!==match[1]||account.activeRanked?.mode!=='online')return withCors(json({ok:false,error:{code:'RECONNECT_NOT_PENDING',message:'There is no active Competitive reconnect for this room.'}},409),origin);
+      if(account.activeRanked?.roomCode!==match[1]||!['solo','online'].includes(account.activeRanked?.mode))return withCors(json({ok:false,error:{code:'RECONNECT_NOT_PENDING',message:'There is no active Competitive reconnect for this room.'}},409),origin);
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1])),response=await stub.fetch(new Request('https://room/decline-reconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:account.activeRanked.sessionId})}));return withCors(response,origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/ws$/))&&request.method==='GET'){
