@@ -136,12 +136,28 @@ export class RankedRoomCore extends RoomCore{
     if(this.room.sessionFlow?.ended||this.room.status==='ended'||!this.room.sessionId)return {active:false,reason:'room-ended'};
     if(sessionId&&this.room.sessionId!==sessionId)return {active:false,reason:'session-mismatch'};
     const participant=this.room.participants.find(item=>item.accountId===accountId&&!item.bot);if(!participant)return {active:false,reason:'participant-missing'};
+    if(await this.resolveExpiredDisconnects(this.nowMs()))return {active:false,reason:'disconnect-timeout'};
     if(this.sockets.has(participant.playerId)){if(this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId]){delete this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId];await this.persist();await this.scheduleAlarm();}return {active:true,connected:true};}
     const reconnectUntil=this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0;if(reconnectUntil)return {active:true,connected:false,reconnectUntil};
     let orphanUntil=this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId]||0;
     if(!orphanUntil){orphanUntil=this.nowMs()+RUNTIME_ORPHAN_GRACE_MS;this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId]=orphanUntil;await this.persist();await this.scheduleAlarm();}
     if(this.nowMs()>=orphanUntil)return this.endRuntimeOrphan(participant.playerId);
     return {active:true,connected:false,runtimeOrphanUntil:orphanUntil};
+  }
+  async declineReconnect(accountId,sessionId){
+    await this.load();
+    if(!this.room||this.room.sessionFlow?.ended||this.room.status==='ended'||!this.room.sessionId)return {ok:true,ended:true,reason:'room-ended'};
+    if(this.isSolo()||!this.isRanked())throw new RoomError('RECONNECT_DECLINE_NOT_AVAILABLE','Reconnect decline is only available for Competitive Online Play.',409);
+    if(sessionId&&this.room.sessionId!==sessionId)throw new RoomError('SESSION_MISMATCH','The active Competitive session changed.',409);
+    const participant=this.room.participants.find(item=>item.accountId===accountId&&!item.bot);if(!participant)throw new RoomError('NOT_AUTHENTICATED','This account is not part of the Competitive game.',401);
+    if(this.sockets.has(participant.playerId))throw new RoomError('PLAYER_CONNECTED','This player is already connected to the game.',409);
+    const deadline=this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0;
+    if(!deadline){if(await this.resolveExpiredDisconnects(this.nowMs()))return {ok:true,ended:true,reason:'disconnect-timeout'};throw new RoomError('RECONNECT_NOT_PENDING','There is no active reconnect window for this player.',409);}
+    const timedOut=this.nowMs()>=deadline;
+    if(this.isBeforeFirstTurn(participant.playerId))await this.endPreFirstTurnDisconnect(participant.playerId);
+    else await this.abandon(participant.playerId,timedOut?'disconnect-timeout':'reconnect-declined');
+    await this.scheduleAlarm();
+    return {ok:true,ended:true,reason:timedOut?'disconnect-timeout':'reconnect-declined'};
   }
   engineState(){return this.room?.matchId?this.authority.readTrustedState(this.room.matchId):null;}
   calculateDisconnectSettlement(playerId){
