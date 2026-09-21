@@ -194,6 +194,16 @@ test('Free Play With Friend is link-only with no manual Room ID join controls',(
   assert.match(begin,/anonymous\?t\('waitingForOpponent'\):t\('roomWaitingOpponent'/);
 });
 
+test('active Competitive game can continue on a second device and reconnect countdown is conditional',()=>{
+  const flow=client.slice(client.indexOf('async function settleInitialReconnectDecision'),client.indexOf('function clearVerificationTokenFromUrl'));
+  assert.match(flow,/\['solo','online'\]\.includes\(mode\)/);
+  assert.match(flow,/activeElsewhere=active\?\.connected===true/);
+  assert.match(flow,/reconnecting=active\?\.connected===false&&reconnectUntil>Date\.now\(\)/);
+  assert.match(flow,/joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
+  assert.match(flow,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
+  assert.match(flow,/if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
+});
+
 test('Competitive direct link requires Log In or Create ID first and resumes intent after either flow',()=>{
   assert.match(client,/inviteMode=inviteUrl\.searchParams\.get\('mode'\)==='free'\?'free':'competitive'/);
   const invite=client.slice(client.indexOf('async function launchInviteRoom'),client.indexOf('globalThis.GoStopRanked'));
@@ -224,7 +234,8 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
-  assert.match(index,/ranked-client\.js\?v=20260921-1/);
+  assert.match(index,/styles\.css\?v=20260921-1/);
+  assert.match(index,/ranked-client\.js\?v=20260921-2/);
   assert.match(index,/app\.js\?v=20260920-6/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
