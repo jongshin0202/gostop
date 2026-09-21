@@ -121,12 +121,22 @@ test('orphaned ranked lock gets a short runtime recovery grace then ends without
   assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
 });
 
-test('closing a displaced same-seat socket does not create a false reconnect deadline',async()=>{
-  const {core,a,sa,sb}=await onlineRoom(),replacement=new Socket();
-  await core.connect(a.credential,replacement);assert.equal(core.sockets.get(a.playerId),replacement);
-  const disconnected=await core.disconnect(sa);assert.equal(disconnected,false);assert.equal(core.sockets.get(a.playerId),replacement);
-  assert.equal(core.room.rankFlow.disconnectDeadlines[a.playerId],undefined);
-  assert.equal(sb.last('snapshot').snapshot.sessionFlow.opponentReconnectUntil,null);
+test('same ranked seat can stay connected on multiple devices and only the final disconnect starts reconnect grace',async()=>{
+  const {core,a,sa,sb}=await onlineRoom(),secondDevice=new Socket();
+  const resumed=await core.join(null,account('a','Alpha'));assert.equal(resumed.resumedByAccount,true);
+  await core.connect(resumed.credential,secondDevice);
+  const sockets=core.sockets.get(a.playerId);assert.ok(sockets instanceof Set);assert.equal(sockets.size,2);assert.ok(sockets.has(sa));assert.ok(sockets.has(secondDevice));
+  core.broadcastSnapshots();assert.ok(sa.last('snapshot'));assert.ok(secondDevice.last('snapshot'));
+  const firstDisconnect=await core.disconnect(sa);assert.equal(firstDisconnect,false);assert.equal(core.sockets.get(a.playerId).size,1);
+  assert.equal(core.room.rankFlow.disconnectDeadlines[a.playerId],undefined);assert.equal(sb.last('snapshot').snapshot.sessionFlow.opponentReconnectUntil,null);
+  const finalDisconnect=await core.disconnect(secondDevice);assert.equal(finalDisconnect,true);assert.ok(core.room.rankFlow.disconnectDeadlines[a.playerId]);
+});
+
+test('active ranked reconciliation exposes the abandonment deadline to another signed-in device',async()=>{
+  const {core,a}=await onlineRoom(),start=Date.parse(now());
+  core.room.rankFlow.inactivity={playerId:a.playerId,phase:'warning',nudgeAt:start-60000,warningAt:start,abandonAt:start+30000,penaltyCoins:7};
+  const status=await core.reconcileActiveRanked('a',core.room.sessionId);
+  assert.equal(status.active,true);assert.equal(status.connected,true);assert.equal(status.abandonmentUntil,start+30000);
 });
 
 test('sync request after reconnect deadline resolves the session instead of leaving 0:00 stuck',async()=>{
