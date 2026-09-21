@@ -190,7 +190,9 @@ test('same authenticated account can reclaim its full ranked room seat from a se
   assert.equal((await core.authenticate(first.credential)).playerId,first.playerId);
   assert.equal((await core.authenticate(secondDevice.credential)).playerId,first.playerId);
   const pc=new Socket(),mobile=new Socket();await core.connect(first.credential,pc);await core.connect(secondDevice.credential,mobile);
-  assert.equal(pc.closed,true);assert.equal(mobile.__playerId,first.playerId);
+  assert.equal(pc.closed,false);assert.equal(mobile.__playerId,first.playerId);
+  const live=core.sockets.get(first.playerId);assert.ok(live instanceof Set);assert.equal(live.size,2);
+  core.broadcastSnapshots();assert.ok(pc.last('snapshot'));assert.ok(mobile.last('snapshot'));
 });
 
 test('session milestone telemetry records exactly the third Go declaration',()=>{
