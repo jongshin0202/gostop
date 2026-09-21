@@ -35,7 +35,7 @@ test('normal in-game header has one red Quit Game action and continues to use qu
 
 test('quit requester waiting dialog hides Accept and Decline while opponent still receives them',()=>{
   const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
-  assert.match(ranked,/#rankedQuitActions\[hidden\],#returnGameActions\[hidden\],#returnGameOk\[hidden\]\{display:none!important\}/);
+  assert.match(ranked,/#rankedQuitActions\[hidden\],#returnGameActions\[hidden\],#returnGameOk\[hidden\],#verificationResend\[hidden\]\{display:none!important\}/);
   const flow=ranked.slice(ranked.indexOf('const quit=flow.quitRequest'),ranked.indexOf('if(flow.scheduledQuitByYou)'));
   assert.match(flow,/rankedQuitActions'\)\.hidden=quit\.requestedByYou/);
   assert.match(flow,/rankedQuitActions'\)\.style\.display=quit\.requestedByYou\?'none':''/);
