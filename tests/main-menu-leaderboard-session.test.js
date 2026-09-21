@@ -259,15 +259,19 @@ test('main menu owns Language and Enable Notifications while legacy Room code Jo
   assert.match(source,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
 });
 
-test('main menu separates Training, Free Gaming, Competitive Gaming, and Leaderboards',()=>{
+test('main menu separates Training, Friendly Gaming, Competitive Gaming, and Leaderboards with coin and leaderboard guidance',()=>{
   assert.match(source,/trainingBtn\.textContent='Training Mode'/);
-  assert.match(source,/freeGroup\.dataset\.label='FREE GAMING'/);
+  assert.match(source,/freeGroup\.dataset\.label='FRIENDLY GAMING'/);
+  assert.match(source,/freeGroupNote\.textContent='No coins or leaderboards involved'/);
   assert.match(source,/freeFriendBtn\.textContent='Play With Friend'/);
   assert.match(source,/rankedGroup\.className='menu-mode-group ranked-menu-group'/);
+  assert.match(source,/rankedGroupNote\.textContent='Coins and leaderboards involved'/);
   assert.match(source,/leaderboardBtn\.textContent='Leaderboards'/);
   assert.match(source,/trainingBtn\.textContent=rt\('training'\)/);
   assert.match(source,/freeGroup\.dataset\.label=rt\('freeGaming'\)/);
+  assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);
   assert.match(source,/rankedGroup\.dataset\.label=rt\('competitiveGaming'\)/);
+  assert.match(source,/rankedGroupNote\.textContent=rt\('competitiveGamingNote'\)/);
   assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
 });
 
