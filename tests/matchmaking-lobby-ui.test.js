@@ -127,7 +127,7 @@ test('manual Play shows Waiting immediately while Auto Match waits until the can
   const autoStart=client.slice(client.indexOf("\$('autoMatchBtn').addEventListener"),client.indexOf("\$('autoMatchCandidateAccept').addEventListener"));
   assert.doesNotMatch(autoStart,/showOutgoingRequest/);assert.match(autoStart,/type:'autoMatchStart'/);
   const auto=client.slice(client.indexOf("\$('autoMatchCandidateAccept').addEventListener"),client.indexOf("function roomShareUrl"));
-  assert.match(auto,/autoMatchCandidateAccept[^]*button\.disabled=true[^]*type:'autoMatchAccept'/);assert.doesNotMatch(auto,/showOutgoingRequest/);
+  assert.match(auto,/autoMatchCandidateAccept[^]*button\.disabled=true[^]*type:'autoMatchAccept',accountId:autoMatchCandidate\.accountId/);assert.doesNotMatch(auto,/showOutgoingRequest/);
   assert.match(client,/message\.type==='playRequest'[^]*type:'challengeReceipt'/);assert.match(server,/message\.type==='challengeReceipt'/);assert.match(server,/deliverPendingChallenge\(client\)/);assert.match(client,/message\.type==='playRequest'[^]*closeLeaderboard\(true\)/);assert.match(server,/CHALLENGE_DELIVERY_RETRY_MS=1500/);assert.match(server,/retryChallengeDelivery\(id\)/);
   const cancel=client.slice(client.indexOf("\$('cancelOutgoingRequest').addEventListener"),client.indexOf("\$('declinedDialogOk').addEventListener"));
   assert.match(cancel,/type:'challengeCancel'/);assert.match(cancel,/type:'autoMatchCancel'/);assert.match(server,/message\.type==='challengeCancel'/);
@@ -193,7 +193,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-10/);
+  assert.match(index,/ranked-client\.js\?v=20260920-11/);
   assert.match(index,/app\.js\?v=20260920-3/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
