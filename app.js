@@ -2484,7 +2484,7 @@
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
-      if(flow.ended){presentation.locked=true;if(flow.pauseResolution){setDialog(els.opponentEndedDialog,false);return;}if(flow.disconnectCancelled||flow.endedByYou)returnOnlineToMenu();if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=onlineAnonymousMode&&flow.forceEnded?t('friendForceEnded'):t('opponentEnded');setDialog(els.opponentEndedDialog,true);return;}
+      if(flow.ended){presentation.locked=true;if(flow.pauseResolution||flow.abandonment){setDialog(els.opponentEndedDialog,false);return;}if(flow.disconnectCancelled||flow.endedByYou)returnOnlineToMenu();if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=onlineAnonymousMode&&flow.forceEnded?t('friendForceEnded'):t('opponentEnded');setDialog(els.opponentEndedDialog,true);return;}
       const request=flow.newGameRequest;
       setDialog(els.newGameWaitingDialog,!!request?.requestedByYou);
       setDialog(els.incomingNewGameDialog,!!request&&!request.requestedByYou);
