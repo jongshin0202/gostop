@@ -107,7 +107,7 @@ test('pause UI resumes requester, confirms opponent quit in both phases, and rec
   assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
   assert.match(source,/pauseResolutionChanged/);
   assert.match(source,/returnEndedOnlineSessionToMenu/);
-  assert.match(appSource,/if\(flow\.pauseResolution\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
+  assert.match(appSource,/if\(flow\.pauseResolution\|\|flow\.abandonment\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
   const snapshotHandler=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
   assert.match(snapshotHandler,/sessionFlow\?\.ended[\s\S]*reconcileOnlineFlow\(event\.detail\.snapshot\)[\s\S]*gostop-online-snapshot/);
   assert.match(appSource,/dialog\[open\]:not\(\.ranked-flow-dialog\)/);
@@ -321,11 +321,17 @@ test('root URL offers a timed Yes/No return dialog only for a saved Competitive 
   assert.match(boot,/function promptTechnicalReconnectIfNeeded\(\)/);
   assert.match(boot,/active\?\.mode!=='online'\|\|!active\.roomCode\|\|active\.connected!==false\|\|reconnectUntil<=Date\.now\(\)\|\|!savedCompetitiveRoom\(active\.roomCode\)/);
   assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
-  assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode\)/);
+  assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
   assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',[\s\S]*finishReconnectAsAbandonment/);
   assert.match(boot,/function showReconnectAbandonmentOutcome\(result\)[\s\S]*returnGameDialog\.dataset\.outcome='1'[\s\S]*returnGameCountdown'\)\.hidden=true[\s\S]*returnGameActions'\)\.hidden=true[\s\S]*returnGameOk'\)\.hidden=false/);
   assert.match(boot,/\$\('returnGameText'\)\.textContent=result\?\.normalQuit\?rt\('pauseDrawText'\):rt\('abandonedYou'/);
   assert.match(boot,/\$\('returnGameOk'\)\.addEventListener\('click',async\(\)=>[\s\S]*closeReturnGameDialog\(\);await refreshAccount\(\);revealCurrentMainMenu\(\)/);
   assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
   assert.match(boot,/if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
+  assert.match(appSource,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);
+  assert.match(appSource,/const beginOnline=async \(room,\{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null,resumeExisting=false\}=\{\}\)=>/);
+  assert.match(appSource,/onlineSkipInitialOpening=!!resumeExisting/);
+  const transition=appSource.slice(appSource.indexOf('async function presentOnlineTransition'),appSource.indexOf('async function submitOnlineCardPlay'));
+  assert.match(transition,/if\(!onlineSkipInitialOpening\)\{await presentOpeningSequence\(state\.startingPlayerId,true\)/);
+  assert.match(transition,/onlineSkipInitialOpening=false/);
 });

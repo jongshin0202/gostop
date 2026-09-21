@@ -152,7 +152,7 @@ test('decline always sends requester a dedicated Request Declined dialog with OK
 });
 
 test('accepted challenge uses explicit app bridge and stays active until second player joins same room',()=>{
-  assert.match(app,/async createCompetitiveRoom\(\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode\)/);
+  assert.match(app,/async createCompetitiveRoom\(\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);
   const handler=client.slice(client.indexOf('async function createAcceptedChallengeRoom'),client.indexOf('async function prepareToAcceptMultiplayerChallenge'));
   assert.match(handler,/bridge\.createCompetitiveRoom\(\)/);assert.match(handler,/bridge\.joinCompetitiveRoom\(message\.roomCode\)/);
   assert.doesNotMatch(handler,/createRoom\?\.click\(\)|joinForm\.requestSubmit\(\)/);
@@ -173,7 +173,7 @@ test('Share Link creates a direct URL with Copy URL while direct-link joining re
   assert.match(client,/id="freeShareLink"/);assert.match(client,/id="competitiveShareLink"/);assert.match(client,/id="freeCopyLinkBtn"/);assert.match(client,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
   assert.match(client,/function roomShareUrl\(roomCode,mode\)/);assert.match(client,/searchParams\.set\('room'/);assert.match(client,/searchParams\.set\('mode',mode==='free'\?'free':'competitive'\)/);
   assert.match(client,/function showRoomShareLink\(roomCode,mode\)/);assert.match(client,/navigator\.clipboard\.writeText\(link\.href\)/);
-  assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode\)/);
+  assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);
 });
 
 
@@ -219,7 +219,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
-  assert.match(index,/ranked-client\.js\?v=20260920-16/);
-  assert.match(index,/app\.js\?v=20260920-5/);
+  assert.match(index,/ranked-client\.js\?v=20260920-17/);
+  assert.match(index,/app\.js\?v=20260920-6/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
