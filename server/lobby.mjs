@@ -1,4 +1,5 @@
 const CHALLENGE_TTL_MS=30000;
+const CHALLENGE_DELIVERY_RETRY_MS=1500;
 const ACCEPTED_CHALLENGE_TTL_MS=120000;
 const REQUEST_COOLDOWN_MS=5000;
 const PRESENCE_AWAY_MS=300000;
@@ -87,19 +88,23 @@ export class Lobby{
   challengeParticipantsAvailable(challenge){const from=this.clientById(challenge.fromClientId),to=challenge.toClientId?this.clientById(challenge.toClientId):null;return !!from&&!from.twoPlayer&&this.clientCanReceiveChallenge(from)&&this.accountAvailable(challenge.to)&&(!to||!to.twoPlayer&&this.clientCanReceiveChallenge(to));}
   clearChallengeTimer(challenge){if(challenge?.expiryTimer){clearTimeout(challenge.expiryTimer);challenge.expiryTimer=null;}}
   armChallengeExpiry(challenge){if(!challenge)return;this.clearChallengeTimer(challenge);const delay=Math.max(0,Number(challenge.expiresAt||0)-Date.now());challenge.expiryTimer=setTimeout(()=>{void this.expireChallenge(challenge.id);},delay);challenge.expiryTimer?.unref?.();}
+  clearChallengeDeliveryTimer(challenge){if(challenge?.deliveryTimer){clearTimeout(challenge.deliveryTimer);challenge.deliveryTimer=null;}}
+  armChallengeDeliveryRetry(challenge){if(!challenge||challenge.status!=='pending'||challenge.deliveryReceipts?.size)return;this.clearChallengeDeliveryTimer(challenge);const remaining=Number(challenge.expiresAt||0)-Date.now();if(remaining<=100)return;const delay=Math.min(CHALLENGE_DELIVERY_RETRY_MS,Math.max(100,remaining-50));challenge.deliveryTimer=setTimeout(()=>{this.retryChallengeDelivery(challenge.id);},delay);challenge.deliveryTimer?.unref?.();}
+  retryChallengeDelivery(id){const challenge=this.challenges.get(id);if(!challenge||challenge.status!=='pending'||Number(challenge.expiresAt||0)<=Date.now()||challenge.deliveryReceipts?.size){this.clearChallengeDeliveryTimer(challenge);return false;}this.sendToAccount(challenge.to,this.challengeRequestMessage(challenge));this.armChallengeDeliveryRetry(challenge);return true;}
   startChallenge(creator,target,rows,{automatic=false,toProfileOverride=null}={}){
     if(!creator||!target||creator.account.id===target.account.id||!this.clientCanReceiveChallenge(creator)||!this.clientCanReceiveChallenge(target)||this.accountTwoPlayerBusy(creator.account.id)||this.accountTwoPlayerBusy(target.account.id)||this.activeChallengeFor(creator.account.id)||this.activeChallengeFor(target.account.id))return null;
-    const now=Date.now(),id=randomId(this.crypto,'challenge'),fromProfile=this.profile(creator,rows),baseToProfile=this.profile(target,rows),toProfile=toProfileOverride?{...baseToProfile,...toProfileOverride,...this.presenceForAccount(target.account.id)}:baseToProfile,challenge={id,from:creator.account.id,to:target.account.id,fromClientId:creator.clientId,toClientId:null,status:'pending',automatic,createdAt:now,expiresAt:now+CHALLENGE_TTL_MS,fromProfile:clone(fromProfile),toProfile:clone(toProfile),deliveryReceipts:new Set(),deliveryNotified:false,expiryTimer:null};this.challenges.set(id,challenge);creator.autoMatching=!!automatic;if(automatic){creator.autoMatchTried=creator.autoMatchTried instanceof Set?creator.autoMatchTried:new Set();creator.autoMatchTried.add(target.account.id);}
+    const now=Date.now(),id=randomId(this.crypto,'challenge'),fromProfile=this.profile(creator,rows),baseToProfile=this.profile(target,rows),toProfile=toProfileOverride?{...baseToProfile,...toProfileOverride,...this.presenceForAccount(target.account.id)}:baseToProfile,challenge={id,from:creator.account.id,to:target.account.id,fromClientId:creator.clientId,toClientId:null,status:'pending',automatic,createdAt:now,expiresAt:now+CHALLENGE_TTL_MS,fromProfile:clone(fromProfile),toProfile:clone(toProfile),deliveryReceipts:new Set(),deliveryNotified:false,deliveryTimer:null,expiryTimer:null};this.challenges.set(id,challenge);creator.autoMatching=!!automatic;if(automatic){creator.autoMatchTried=creator.autoMatchTried instanceof Set?creator.autoMatchTried:new Set();creator.autoMatchTried.add(target.account.id);}
     this.sendToAccount(target.account.id,this.challengeRequestMessage(challenge));
+    this.armChallengeDeliveryRetry(challenge);
     this.send(creator.socket,{type:'challengeSent',requestId:id,automatic,expiresInSeconds:Math.round(CHALLENGE_TTL_MS/1000),createdAt:now,to:toProfile});
     this.armChallengeExpiry(challenge);
     return challenge;
   }
-  releaseChallenge(challenge){if(!challenge)return;this.clearChallengeTimer(challenge);for(const client of this.clientsForAccount(challenge.from))client.autoMatching=false;for(const client of this.clientsForAccount(challenge.to))client.autoMatching=false;}
+  releaseChallenge(challenge){if(!challenge)return;this.clearChallengeTimer(challenge);this.clearChallengeDeliveryTimer(challenge);for(const client of this.clientsForAccount(challenge.from))client.autoMatching=false;for(const client of this.clientsForAccount(challenge.to))client.autoMatching=false;}
   async expireChallenge(id){
     const challenge=this.challenges.get(id);if(!challenge)return false;
     const remaining=Number(challenge.expiresAt||0)-Date.now();if(remaining>5){this.armChallengeExpiry(challenge);return false;}
-    this.clearChallengeTimer(challenge);this.lastRequestAt.delete(challenge.from);
+    this.clearChallengeTimer(challenge);this.clearChallengeDeliveryTimer(challenge);this.lastRequestAt.delete(challenge.from);
     if(challenge.status==='pending'){
       const creator=this.clientById(challenge.fromClientId),missed={type:'challengeMissed',requestId:challenge.id,automatic:!!challenge.automatic,createdAt:challenge.createdAt,from:challenge.fromProfile||{accountId:challenge.from,nickname:'Player'}};
       this.sendToAccount(challenge.to,missed);this.challenges.delete(challenge.id);
@@ -182,13 +187,13 @@ export class Lobby{
     }
     if(message.type==='challengeReceipt'){
       const challenge=this.challenges.get(message.requestId);if(!challenge||challenge.status!=='pending'||challenge.to!==client.account.id)return;
-      challenge.deliveryReceipts=challenge.deliveryReceipts instanceof Set?challenge.deliveryReceipts:new Set();challenge.deliveryReceipts.add(client.clientId);
+      challenge.deliveryReceipts=challenge.deliveryReceipts instanceof Set?challenge.deliveryReceipts:new Set();challenge.deliveryReceipts.add(client.clientId);this.clearChallengeDeliveryTimer(challenge);
       if(!challenge.deliveryNotified){challenge.deliveryNotified=true;const challenger=this.clientById(challenge.fromClientId);if(challenger)this.send(challenger.socket,{type:'challengeDelivered',requestId:challenge.id,automatic:!!challenge.automatic});}
       return;
     }
     if(message.type==='challengeResponse'){
       const challenge=this.challenges.get(message.requestId);if(!challenge||challenge.status!=='pending'||challenge.to!==client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request has expired.'});
-      challenge.toClientId=client.clientId;
+      challenge.toClientId=client.clientId;this.clearChallengeDeliveryTimer(challenge);
       const challenger=this.clientById(challenge.fromClientId);if(!challenger){this.cancelPendingChallenge(challenge,'The requesting player is no longer online.');await this.broadcastRecommendations();return;}
       if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});await this.broadcastRecommendations();return;}
       if(!this.challengeParticipantsAvailable(challenge)){this.cancelPendingChallenge(challenge,'One of the players is already in a two-player game.');await this.broadcastRecommendations();return;}
