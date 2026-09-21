@@ -227,6 +227,20 @@ test('Auto Match Accept survives requester lobby reconnect by carrying the selec
   assert.equal(sent?.to?.accountId,'sono');assert.equal(request?.from?.accountId,'me');assert.equal(request?.automatic,true);
 });
 
+test('reconnected requester processes availability before queued Auto Match Accept',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),lobby=makeLobby(rows),original=client('me','Jong',1000),sono=client('sono','Sonogong',1000);add(lobby,original,sono);
+  original.autoMatching=true;assert.equal(await lobby.tryAutoMatch(original),true);
+  const preview=original.socket.messages.find(message=>message.type==='autoMatchCandidate');assert.equal(preview?.candidate?.accountId,'sono');
+  lobby.clients.delete(original.socket);
+  const reconnected=client('me','Jong',1000,{available:false,foreground:false});add(lobby,reconnected);reconnected.messageQueue=Promise.resolve();
+  const availability=JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu',foreground:true,lastActivityAt:Date.now(),notificationsEnabled:false});
+  const accept=JSON.stringify({type:'autoMatchAccept',accountId:'sono'});
+  await Promise.all([lobby.enqueueClientMessage(reconnected,availability),lobby.enqueueClientMessage(reconnected,accept)]);
+  assert.equal(reconnected.available,true);
+  assert.ok(reconnected.socket.messages.some(message=>message.type==='challengeSent'&&message.to?.accountId==='sono'));
+  assert.ok(sono.socket.messages.some(message=>message.type==='playRequest'&&message.from?.accountId==='me'));
+});
+
 test('pending play request is redelivered to a refreshed recipient tab and receipt is acknowledged',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),me=client('me','Jong',1000),oldTab=client('sono','Sonogong',1000);add(lobby,me,oldTab);
   await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'sono'}));
