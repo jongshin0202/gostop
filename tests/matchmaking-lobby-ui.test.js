@@ -89,7 +89,7 @@ test('notification button toggles app notifications, lights green when enabled, 
   assert.match(client,/function disablePlayNotifications\(\)/);assert.match(client,/function togglePlayNotifications\(\)/);assert.match(client,/setNotificationPreference\(false\)/);
   assert.match(client,/Notification\.requestPermission\(\)/);assert.match(client,/serviceWorker\.register\('\.\/gostop-notifications-sw\.js\?v=20260920-1'\)/);
   assert.match(client,/showPlayRequestNotification\(message\)/);assert.match(client,/showNotification\('GoStop Live! Play Request'/);
-  assert.match(server,/notifyable=away&&client\.notificationsEnabled===true&&heartbeatFresh/);
+  assert.match(server,/const available=heartbeatFresh&&!client\.twoPlayer&&client\.available!==false/);assert.match(server,/notifyable=away&&client\.notificationsEnabled===true/);
   assert.match(server,/state\.active\|\|state\.away/);assert.match(server,/status:'away'/);assert.match(server,/challengeable:!this\.pendingChallengeFor\(accountId\)/);
 });
 
@@ -175,8 +175,8 @@ test('Competitive direct link requires Log In or Create ID first and resumes int
   assert.match(client,/registrationOk'\)\.addEventListener[^]*continueAfterAccount\(\)/);
 });
 
-test('same-account tabs are excluded and any two-player tab makes account busy',()=>{
-  assert.match(server,/id===client\.account\.id/);assert.match(server,/accountTwoPlayerBusy\(id\)/);assert.match(server,/this\.clientsForAccount\(accountId\)\.some\(client=>!!client\.twoPlayer\)/);
+test('same-account tabs are excluded and any fresh two-player tab makes account busy',()=>{
+  assert.match(server,/id===client\.account\.id/);assert.match(server,/accountTwoPlayerBusy\(id\)/);assert.match(server,/this\.clientsForAccount\(accountId\)\.some\(client=>!!client\.twoPlayer&&this\.clientPresence\(client\)\.heartbeatFresh\)/);
 });
 
 test('Competitive Solo handoff route ends authoritative Solo session before multiplayer acceptance',()=>{
