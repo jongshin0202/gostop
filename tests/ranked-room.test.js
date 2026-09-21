@@ -146,6 +146,13 @@ test('live ranked socket survives account reconciliation and clears any orphan d
   assert.equal(status.active,true);assert.equal(status.connected,true);assert.equal(core.room.rankFlow.runtimeOrphanDeadlines[a.playerId],undefined);
 });
 
+
+test('disconnected Competitive seat reconciliation exposes the active reconnect deadline',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,sa}=await onlineRoom({now:clock});
+  await core.disconnect(sa);
+  const deadline=core.room.rankFlow.disconnectDeadlines[a.playerId],status=await core.reconcileActiveRanked('a',core.room.sessionId);
+  assert.ok(deadline>Date.parse(instant));assert.equal(status.active,true);assert.equal(status.connected,false);assert.equal(status.reconnectUntil,deadline);
+});
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
   assert.equal(core.room.sessionFlow.ended,false);
