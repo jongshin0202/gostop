@@ -114,16 +114,29 @@ export class RoomCore{
   }
   async connect(credential,socket){
     const participant=await this.authenticate(credential);if(!participant)throw new RoomError('INVALID_CREDENTIAL','Room credential is invalid.',401);
-    const old=this.sockets.get(participant.playerId);if(old&&old!==socket){try{old.close(4001,'Reconnected elsewhere');}catch(_){}}
+    const existing=this.sockets.get(participant.playerId);
+    if(participant.accountId){
+      const sockets=existing instanceof Set?existing:new Set(existing?[existing]:[]),wasConnected=sockets.size>0;
+      sockets.add(socket);this.sockets.set(participant.playerId,sockets);participant.connected=true;socket.__playerId=participant.playerId;await this.persist();
+      this.send(socket,envelope('connected',{...this.publicRoom(),playerId:participant.playerId,seatId:participant.seatId,profile:this.participantProfile(participant)}));
+      if(this.room.matchId)this.send(socket,envelope('snapshot',{snapshot:this.snapshotFor(participant),events:[]}));
+      if(!wasConnected)this.broadcastPresence(participant.playerId,true);return participant;
+    }
+    if(existing&&existing!==socket){try{existing.close(4001,'Reconnected elsewhere');}catch(_){}}
     this.sockets.set(participant.playerId,socket);participant.connected=true;socket.__playerId=participant.playerId;await this.persist();
     this.send(socket,envelope('connected',{...this.publicRoom(),playerId:participant.playerId,seatId:participant.seatId,profile:this.participantProfile(participant)}));
     if(this.room.matchId)this.send(socket,envelope('snapshot',{snapshot:this.snapshotFor(participant),events:[]}));
     this.broadcastPresence(participant.playerId,true);return participant;
   }
   send(socket,message){socket.send(JSON.stringify(message));}
-  sendTo(playerId,message){const socket=this.sockets.get(playerId);if(socket)this.send(socket,message);}
+  sendTo(playerId,message){const live=this.sockets.get(playerId);if(live instanceof Set){for(const socket of [...live])this.send(socket,message);return;}if(live)this.send(live,message);}
   broadcastPresence(playerId,connected){for(const participant of this.room.participants)if(participant.playerId!==playerId)this.sendTo(participant.playerId,envelope(connected?'opponentConnected':'opponentDisconnected',{}));}
-  async disconnect(socket){const playerId=socket.__playerId;if(!playerId||this.sockets.get(playerId)!==socket)return false;this.sockets.delete(playerId);const participant=this.room.participants.find(item=>item.playerId===playerId);if(participant)participant.connected=false;await this.persist();this.broadcastPresence(playerId,false);return true;}
+  async disconnect(socket){
+    const playerId=socket.__playerId;if(!playerId)return false;const live=this.sockets.get(playerId);
+    if(live instanceof Set){if(!live.delete(socket))return false;if(live.size>0)return false;this.sockets.delete(playerId);}
+    else{if(live!==socket)return false;this.sockets.delete(playerId);}
+    const participant=this.room.participants.find(item=>item.playerId===playerId);if(participant)participant.connected=false;await this.persist();this.broadcastPresence(playerId,false);return true;
+  }
   async handle(socket,input){
     let message;try{message=parseClientMessage(input);}catch(error){const response=protocolError(error.code||'MALFORMED_MESSAGE',error.message);this.send(socket,response);return response;}
     const participant=this.room?.participants.find(item=>item.playerId===socket.__playerId);if(!participant){const response=protocolError('NOT_AUTHENTICATED','Socket is not authenticated.');this.send(socket,response);return response;}
