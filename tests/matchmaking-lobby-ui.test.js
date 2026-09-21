@@ -211,7 +211,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
   const rankedRoom=fs.readFileSync(new URL('../server/ranked-room-core.mjs',import.meta.url),'utf8');
   assert.match(worker,/\/api\/solo\/leave-for-challenge/);assert.match(worker,/leave-solo-for-challenge/);assert.match(gameRoom,/url\.pathname==='\/leave-solo-for-challenge'/);
   assert.match(rankedRoom,/async leaveSoloForChallenge\(accountId\)/);assert.match(rankedRoom,/endRankedSession\('accepted-multiplayer-challenge'\)/);
-  const handoff=rankedRoom.slice(rankedRoom.indexOf('async leaveSoloForChallenge'),rankedRoom.indexOf('async connect',rankedRoom.indexOf('async leaveSoloForChallenge')));
+  const handoff=rankedRoom.slice(rankedRoom.indexOf('async leaveSoloForChallenge'),rankedRoom.indexOf('async join',rankedRoom.indexOf('async leaveSoloForChallenge')));
   assert.doesNotMatch(handoff,/force-quit|abandon\(/);
 });
 
