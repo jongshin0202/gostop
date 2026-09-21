@@ -6,6 +6,11 @@ const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf
 const server=fs.readFileSync(new URL('../server/lobby.mjs',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 
+test('connection protection signup notice stays short and action-focused',()=>{
+  assert.match(client,/signupPolicyText:'If you disconnect during a Coin game, you have 1 minute to return\\n\\nYour first forced disconnect each month is protected, so no Coins are deducted\. After that, a disconnect may count as a loss if your opponent was ahead\.\\n\\nPress OK to continue\.'/);
+  assert.doesNotMatch(client,/Sometimes a ranked game can be interrupted by a Wi-Fi/);
+});
+
 test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and Share Link sections',()=>{
   const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
   assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.match(panel,/data-online-section="share"/);
@@ -219,7 +224,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
-  assert.match(index,/ranked-client\.js\?v=20260920-19/);
+  assert.match(index,/ranked-client\.js\?v=20260921-1/);
   assert.match(index,/app\.js\?v=20260920-6/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
