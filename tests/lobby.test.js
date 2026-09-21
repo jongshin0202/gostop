@@ -215,6 +215,17 @@ test('Auto Match previews the closest skill match with rich history before sendi
   assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(request?.automatic,true);
 });
 
+test('pending play request is redelivered to a refreshed recipient tab and receipt is acknowledged',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),me=client('me','Jong',1000),oldTab=client('sono','Sonogong',1000);add(lobby,me,oldTab);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'sono'}));
+  const first=oldTab.socket.messages.find(message=>message.type==='playRequest');assert.ok(first?.requestId);
+  const refreshed=client('sono','Sonogong',1000);add(lobby,refreshed);
+  await lobby.handle(refreshed,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu',foreground:true,lastActivityAt:Date.now(),notificationsEnabled:false}));
+  const redelivered=refreshed.socket.messages.find(message=>message.type==='playRequest'&&message.requestId===first.requestId);assert.ok(redelivered);
+  await lobby.handle(refreshed,JSON.stringify({type:'challengeReceipt',requestId:first.requestId}));
+  const challenge=lobby.challenges.get(first.requestId);assert.ok(challenge.deliveryReceipts.has(refreshed.clientId));assert.ok(me.socket.messages.some(message=>message.type==='challengeDelivered'&&message.requestId===first.requestId));
+});
+
 test('searching a player before Auto Match does not suppress candidate preview or request delivery',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),directory=[{accountId:'sono',nickname:'Sonogong',walletCoins:1000,score:10.05,gamesPlayed:100,wins:50,losses:50,totalCoins:1000,rank:2,globalRank:2,countryCode:'US'}],lobby=makeLobby(rows,directory);
   const me=client('me','Jong',1000),sonoFront=client('sono','Sonogong',1000),sonoAway=client('sono','Sonogong',1000,{foreground:false});add(lobby,me,sonoFront,sonoAway);
