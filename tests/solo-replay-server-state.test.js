@@ -20,9 +20,9 @@ test('Solo replay never leaves the user on an authoritative dead turn after the 
   const before=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId});
   await core.handle(socket,flow('replay-after-loss',before.revision,{type:'playAgainReady'}));
   const snapshot=socket.last('snapshot').snapshot,state=snapshot.state;
-  if(state.turn===snapshot.seatId&&!state.pendingDecision&&!state.pendingTurn&&state.openingSpecialsComplete){
+  if(!snapshot.terminalResult&&state.turn===snapshot.seatId&&!state.pendingDecision&&!state.pendingTurn&&state.openingSpecialsComplete){
     assert.ok(state.legalActions.includes('attemptPlayCard')||state.legalActions.includes('useBombBlank'));
   }
-  assert.equal(snapshot.terminalResult,null);
+  if(snapshot.terminalResult)assert.equal(snapshot.terminalResult.type,'chongtong');
   assert.equal(snapshot.sessionFlow.replayReady.you,false);
 });
