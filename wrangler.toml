@@ -10,7 +10,7 @@ ABANDONMENT_COUNTDOWN_SECONDS = "30"
 PAUSE_DURATION_SECONDS = "180"
 EMAIL_VERIFICATION_REQUIRED = "true"
 EMAIL_VERIFY_BASE_URL = "https://gostoplive.com"
-EMAIL_FROM = "GoStop Live <verify@gostoplive.com>"
+EMAIL_FROM = "GoStop Live <noreply@gostoplive.com>"
 
 [[durable_objects.bindings]]
 name = "GAME_ROOMS"
