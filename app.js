@@ -2497,7 +2497,7 @@
     function returnOnlineToMenu(){
       onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);publishPlayerActivity(false,'menu');
       const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);if(!onlineAnonymousMode){try{localStorage.removeItem('gostop-active-ranked-room');}catch(_){}}
-      document.getElementById('onlineRoomCode').value='';if(document.getElementById('freeRoomCode'))document.getElementById('freeRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;
+      document.getElementById('onlineRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;
       globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;onlineAnonymousMode=false;activeOnlineStatus=onlineStatus;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
     }
     globalThis.GoStopGameBridge=Object.freeze({
@@ -2666,8 +2666,8 @@
       const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter;
       onlineMode=true;
       refreshModeLocalizedLabels();
-      sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));if(!anonymous){try{localStorage.setItem('gostop-active-ranked-room',JSON.stringify(room));}catch(_){}}activeOnlineStatus.textContent=t('roomWaitingConnection',{roomCode:room.roomCode});
-      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready)enterOnlineMatchView(anonymous);activeOnlineStatus.textContent=ready?t('matchReady'):t('roomWaitingOpponent',{roomCode:room.roomCode});});
+      sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));if(!anonymous){try{localStorage.setItem('gostop-active-ranked-room',JSON.stringify(room));}catch(_){}}activeOnlineStatus.textContent=anonymous?t('waitingForOpponent'):t('roomWaitingConnection',{roomCode:room.roomCode});
+      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready)enterOnlineMatchView(anonymous);activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
@@ -2703,13 +2703,8 @@
     joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();if(onlineJoinInFlight)return;onlineJoinInFlight=true;try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:true,roomCode:room.roomCode}}));}catch(error){activeOnlineStatus.textContent=error.message;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:false}}));}finally{onlineJoinInFlight=false;}});
     addEventListener('gostop-free-online-create',async()=>{
       if(!freeOnlineStatus)return;
-      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
+      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('waitingForOpponent');await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
       catch(error){activeOnlineStatus.textContent=error.message;}
-    });
-    addEventListener('gostop-free-online-join',async event=>{
-      if(!freeOnlineStatus||onlineJoinInFlight)return;const code=String(event.detail?.roomCode||'').toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))return;
-      onlineJoinInFlight=true;try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
-      catch(error){activeOnlineStatus.textContent=error.message;}finally{onlineJoinInFlight=false;}
     });
   }
   if(typeof globalThis.CustomEvent==='function')globalThis.dispatchEvent?.(new CustomEvent('gostop-app-ready'));
