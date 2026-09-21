@@ -100,6 +100,17 @@ export class RankedRoomCore extends RoomCore{
     await this.persist();if(this.room.matchId)this.broadcastSnapshots();await this.scheduleAlarm();
     return {ok:true,roomCode:this.room.roomCode};
   }
+  async join(presentedCredential,account=null){
+    await this.load();
+    if(this.room&&!this.room.sessionFlow?.ended&&this.room.status!=='ended'&&account?.id){
+      const participant=this.room.participants.find(item=>item.accountId===account.id&&!item.bot),deadline=participant?this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0:0;
+      if(participant&&deadline&&!this.sockets.has(participant.playerId)&&this.nowMs()>=deadline){
+        if(this.isBeforeFirstTurn(participant.playerId))await this.endPreFirstTurnDisconnect(participant.playerId);else await this.abandon(participant.playerId,'disconnect-timeout');
+        await this.scheduleAlarm();throw new RoomError('ROOM_NOT_FOUND','Room does not exist or has expired.',404);
+      }
+    }
+    return super.join(presentedCredential,account);
+  }
   async connect(credential,socket){
     const participant=await super.connect(credential,socket);await this.load();
     if(this.room.rankFlow.disconnectDeadlines[participant.playerId])delete this.room.rankFlow.disconnectDeadlines[participant.playerId];
