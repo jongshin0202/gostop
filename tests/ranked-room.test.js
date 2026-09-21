@@ -153,6 +153,25 @@ test('disconnected Competitive seat reconciliation exposes the active reconnect 
   const deadline=core.room.rankFlow.disconnectDeadlines[a.playerId],status=await core.reconcileActiveRanked('a',core.room.sessionId);
   assert.ok(deadline>Date.parse(instant));assert.equal(status.active,true);assert.equal(status.connected,false);assert.equal(status.reconnectUntil,deadline);
 });
+
+test('returning Competitive player can choose No and immediately apply normal disconnect abandonment rules',async()=>{
+  const {core,a,b,sa,sb,accountStore}=await onlineRoom(),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.account.id,sessionId=core.room.sessionId;
+  await core.disconnect(socket);assert.ok(core.room.rankFlow.disconnectDeadlines[quitter.playerId]);
+  const result=await core.declineReconnect(accountId,sessionId);
+  assert.equal(result.ok,true);assert.equal(result.ended,true);assert.equal(result.reason,'reconnect-declined');
+  assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,quitter.playerId);assert.equal(core.room.status,'ended');
+  assert.equal(core.room.rankFlow.abandonment.playerId,quitter.playerId);assert.equal(core.room.rankFlow.abandonment.reason,'reconnect-declined');
+  const forceQuit=accountStore.calls.findLast(call=>call.path==='/internal/force-quit');assert.ok(forceQuit);assert.equal(forceQuit.body.accountId,accountId);assert.equal(forceQuit.body.reason,'reconnect-declined');
+});
+
+test('expired reconnect reconciliation settles the disconnect before returning account status',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb;
+  await core.disconnect(socket);instant='2026-09-15T04:46:01.000Z';
+  const status=await core.reconcileActiveRanked(quitter.account.id,core.room.sessionId);
+  assert.equal(status.active,false);assert.equal(status.reason,'disconnect-timeout');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
+});
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
   assert.equal(core.room.sessionFlow.ended,false);
