@@ -252,10 +252,13 @@ test('main menu separates Training, Free Gaming, Competitive Gaming, and Leaderb
   assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
 });
 
-test('Free Play With Friend launches through a separate non-ranked room flow',()=>{
+test('Free Play With Friend launches through a separate link-only non-ranked room flow',()=>{
   assert.match(source,/freePanel\.id='freeFriendPanel'/);
   assert.match(source,/gostop-free-online-create/);
-  assert.match(source,/gostop-free-online-join/);
+  assert.doesNotMatch(source,/gostop-free-online-join/);
+  assert.doesNotMatch(source,/id="freeRoomCode"|id="freeJoinForm"|id="freeJoinBtn"/);
+  assert.match(source,/id="freeShareLink"/);
+  assert.match(source,/id="freeCopyLinkBtn"/);
   assert.match(source,/freePanel\.hidden/);
   const snapshot=source.slice(source.indexOf("globalThis.addEventListener('gostop-online-snapshot'"),source.indexOf("globalThis.addEventListener('gostop-online-message'"));
   assert.match(snapshot,/if\(!snapshot\.ranked\)\{currentSnapshot=null/);
@@ -277,12 +280,14 @@ test('switching modes clears stale Free and Competitive lobby panels before game
 });
 
 
-test('Free Play With Friend makes manual Join a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
+test('Free Play With Friend direct link joins a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
   const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
   assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);\}/);
   const handoff=appSource.slice(appSource.indexOf('function enterOnlineMatchView'),appSource.indexOf('const beginOnline=async'));
   assert.match(handoff,/if\(anonymous\)\{if\(freeFriendPanel\)freeFriendPanel\.hidden=true;\}/);
-  const freeJoin=appSource.slice(appSource.indexOf("addEventListener('gostop-free-online-join'"),appSource.lastIndexOf('  }\n})();'));
+  const invite=source.slice(source.indexOf('async function launchInviteRoom'),source.indexOf('globalThis.GoStopRanked'));
+  assert.match(invite,/if\(inviteMode==='free'\)[^]*bridge=>bridge\.joinFreeRoom\(code\)/);
+  const freeJoin=appSource.slice(appSource.indexOf('async joinFreeRoom(roomCode)'),appSource.indexOf('    });',appSource.indexOf('async joinFreeRoom(roomCode)')));
   assert.match(freeJoin,/sessionStorage\.removeItem\(`gostop-room-\$\{code\}`\)/);
   assert.match(freeJoin,/const room=await adapter\.join\(code\)/);
   assert.doesNotMatch(freeJoin,/adapter\.join\(code,existing\?\.credential\)/);
