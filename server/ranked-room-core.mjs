@@ -158,7 +158,7 @@ export class RankedRoomCore extends RoomCore{
   async declineReconnect(accountId,sessionId){
     await this.load();
     if(!this.room||this.room.sessionFlow?.ended||this.room.status==='ended'||!this.room.sessionId)return {ok:true,ended:true,reason:'room-ended'};
-    if(this.isSolo()||!this.isRanked())throw new RoomError('RECONNECT_DECLINE_NOT_AVAILABLE','Reconnect decline is only available for Competitive Online Play.',409);
+    if(!this.isRanked())throw new RoomError('RECONNECT_DECLINE_NOT_AVAILABLE','Reconnect decline is only available for Competitive play.',409);
     if(sessionId&&this.room.sessionId!==sessionId)throw new RoomError('SESSION_MISMATCH','The active Competitive session changed.',409);
     const participant=this.room.participants.find(item=>item.accountId===accountId&&!item.bot);if(!participant)throw new RoomError('NOT_AUTHENTICATED','This account is not part of the Competitive game.',401);
     if(this.sockets.has(participant.playerId))throw new RoomError('PLAYER_CONNECTED','This player is already connected to the game.',409);
