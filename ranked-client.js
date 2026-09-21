@@ -682,7 +682,7 @@
   $('returnGameYes').addEventListener('click',async()=>{
     if(returnReconnectBusy)return;const active=returnReconnectState;if(!active?.roomCode)return;
     returnReconnectBusy=true;stopReturnReconnectTimer();closeRequestDialog(returnGameDialog);setRankedEntryPending('online');stopAttractForGameLaunch();playerTwoPlayerActive=true;playerPresenceMode='competitive-online';syncLobbyAvailability();showMatchHandoff(rt('startingMatch'));
-    try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
+    try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode,{resumeExisting:true}));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
     catch(error){returnReconnectState=null;returnReconnectBusy=false;closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);await refreshAccount();revealCurrentMainMenu();}
   });
   $('returnGameNo').addEventListener('click',()=>{void finishReconnectAsAbandonment();});
