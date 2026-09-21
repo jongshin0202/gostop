@@ -655,6 +655,19 @@
   function savedCompetitiveRoom(roomCode){
     try{const saved=JSON.parse(localStorage.getItem(ACTIVE_RANKED_ROOM_KEY)||'null');return saved?.roomCode===roomCode&&saved?.credential?saved:null;}catch(_){return null;}
   }
+  async function settleInitialReconnectDecision(){
+    const initial=account?.activeRanked,roomCode=initial?.roomCode;
+    if(validRoomParam||initial?.mode!=='online'||!roomCode||initial.connected===false||!savedCompetitiveRoom(roomCode)||globalThis.goStopOnlineSession)return;
+    for(const waitMs of [120,220,350,500]){
+      await new Promise(resolve=>setTimeout(resolve,waitMs));
+      const current=account?.activeRanked;
+      if(globalThis.goStopOnlineSession||current?.mode!=='online'||current.roomCode!==roomCode||current.connected===false)return;
+      try{const data=await api('/api/me');captureAccountPayload(data);renderAccountBox();patchGameIdentity();}
+      catch(_){return;}
+      const refreshed=account?.activeRanked;
+      if(refreshed?.mode!=='online'||refreshed.roomCode!==roomCode||refreshed.connected===false)return;
+    }
+  }
   let returnReconnectTimer=null,returnReconnectState=null,returnReconnectBusy=false;
   function stopReturnReconnectTimer(){if(returnReconnectTimer){clearInterval(returnReconnectTimer);returnReconnectTimer=null;}}
   function resetReturnGameDialog(){
@@ -704,5 +717,5 @@
 
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity});
   new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
-  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(async()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}if(promptTechnicalReconnectIfNeeded())return;revealCurrentMainMenu();});
+  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(async()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}await settleInitialReconnectDecision();if(promptTechnicalReconnectIfNeeded())return;revealCurrentMainMenu();});
 })();
