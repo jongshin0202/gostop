@@ -24,6 +24,15 @@ const verificationTokenFrom=sent=>{
   assert.ok(match,'verification email should contain a 64-character token');return match[1];
 };
 
+test('verification email transport preserves standalone fetch invocation required by Worker runtime',async()=>{
+  const storage=new MemoryStorage(),env={EMAIL_VERIFICATION_REQUIRED:'true',RESEND_API_KEY:'re_test',EMAIL_FROM:'GoStop Live <noreply@gostoplive.com>',EMAIL_VERIFY_BASE_URL:'https://gostoplive.com'};
+  let receiver='not-called';
+  async function fetchApi(){receiver=this;return new Response(JSON.stringify({id:'email-1'}),{status:200,headers:{'content-type':'application/json'}});}
+  const store=new AccountStore({storage},env,{cryptoApi:globalThis.crypto,now:()=> '2026-09-15T03:30:00.000Z',fetchApi});
+  const response=await store.fetch(post('/register',{email:'binding@example.com',nickname:'BindingTest',password:'BetterPass9',confirmPassword:'BetterPass9'}));
+  assert.equal(response.status,202);assert.equal(receiver,undefined);
+});
+
 test('verification-enabled registration reserves identity but grants no Coins or session until email is verified',async()=>{
   const {store,sent}=makeVerificationStore();
   const response=await store.fetch(post('/register',{email:'verify@example.com',nickname:'VerifyPlayer',password:'BetterPass9',confirmPassword:'BetterPass9'}));
