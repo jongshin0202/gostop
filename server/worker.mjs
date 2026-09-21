@@ -25,7 +25,7 @@ async function reconcileActiveRanked(env,account){
   try{
     const room=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(active.roomCode)),response=await room.fetch(new Request('https://room/reconcile-active',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:active.sessionId})}));
     if(!response.ok)return account;const status=await response.json();
-    if(status.active!==false)return {...account,activeRanked:{...active,connected:status.connected!==false,reconnectUntil:Number(status.reconnectUntil)||null,runtimeOrphanUntil:Number(status.runtimeOrphanUntil)||null}};
+    if(status.active!==false)return {...account,activeRanked:{...active,connected:status.connected!==false,reconnectUntil:Number(status.reconnectUntil)||null,abandonmentUntil:Number(status.abandonmentUntil)||null,runtimeOrphanUntil:Number(status.runtimeOrphanUntil)||null}};
     const cleared=await accountStub(env).fetch(new Request('https://accounts/internal/active-ranked/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:active.sessionId})}));
     if(!cleared.ok)return account;return (await cleared.json()).account||account;
   }catch(_){return account;}
