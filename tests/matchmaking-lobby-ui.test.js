@@ -103,12 +103,11 @@ test('notification button toggles app notifications, lights green when enabled, 
   assert.match(server,/state\.active\|\|state\.away/);assert.match(server,/status:'away'/);assert.match(server,/challengeable:!this\.pendingChallengeFor\(accountId\)/);
 });
 
-test('blocked browser notifications show a recovery dialog instead of silently doing nothing',()=>{
-  assert.match(client,/id="notificationBlockedTitle">Notifications Blocked/);assert.match(client,/id="notificationBlockedReady"/);assert.match(client,/id="notificationBlockedRetry"/);assert.match(client,/id="notificationBlockedCancel"/);
-  assert.match(client,/notificationBlockedText:'Notifications are blocked for this site/);assert.match(client,/notificationBlockedSteps:'Use the site controls next to the address bar/);
-  assert.match(client,/notificationChangedCheck:'I changed Notifications for this site to Allow'/);assert.match(client,/recheckNotifications:'Check Again & Enable'/);
-  assert.match(client,/if\(permission==='denied'\)[^]*showNotificationBlockedDialog\(\)/);
-  assert.match(client,/notificationBlockedReady'\)\.addEventListener\('change'/);assert.match(client,/retryBlockedNotifications/);
+test('blocked browser notifications explain browser settings and recheck without a misleading checkbox',()=>{
+  assert.match(client,/id="notificationBlockedTitle">Notifications Blocked/);assert.doesNotMatch(client,/id="notificationBlockedReady"/);assert.match(client,/id="notificationBlockedRetry"/);assert.match(client,/id="notificationBlockedCancel"/);
+  assert.match(client,/notificationBlockedText:'Notifications are blocked in your browser\. GoStop Live cannot change this permission for you\.'/);assert.match(client,/notificationBlockedSteps:'If you are using Incognito or Private browsing, open GoStop Live in a normal browser window\. Otherwise, use the site controls next to the address bar, open Site settings, change Notifications to Allow, then return here and click Check Again\.'/);
+  assert.match(client,/recheckNotifications:'Check Again'/);assert.match(client,/notificationStillBlocked:'Notifications are still blocked\. Change Notifications to Allow in your browser settings, then try again\.'/);
+  assert.match(client,/if\(permission==='denied'\)[^]*showNotificationBlockedDialog\(\)/);assert.match(client,/retryBlockedNotifications/);
   assert.match(client,/navigator\.permissions\.query\(\{name:'notifications'\}\)/);assert.match(client,/notificationEnablePending/);
 });
 
@@ -219,7 +218,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
-  assert.match(index,/ranked-client\.js\?v=20260920-19/);
+  assert.match(index,/ranked-client\.js\?v=20260921-1/);
   assert.match(index,/app\.js\?v=20260920-6/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
