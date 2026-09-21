@@ -71,6 +71,20 @@ test('Free Play With Friend forced tab close shows Friend forcefully ended the g
   assert.match(app,/els\.opponentEndedOkBtn\.addEventListener\('click',returnOnlineToMenu\)/);
 });
 
+test('ranked abandonment Game Ended owns the final dialog and OK returns directly to menu',()=>{
+  const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/flow\.pauseResolution\|\|flow\.abandonment/);
+  assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,false\);return/);
+  const start=ranked.indexOf("\$('rankedAbandonmentOk').addEventListener");
+  const end=ranked.indexOf('[pauseDialog,pauseQuitConfirmDialog',start);
+  const handler=ranked.slice(start,end);
+  assert.match(handler,/abandonmentDialog\.close\(\)/);
+  assert.match(handler,/refreshAccount\(\)/);
+  assert.match(handler,/refreshLeaderboardData\(true\)/);
+  assert.match(handler,/returnEndedOnlineSessionToMenu/);
+});
+
 test('Free Play With Friend quit bypasses presentation queue and ends both views immediately',()=>{
   const onlineState=app.slice(app.indexOf('let activeOnlineStatus=onlineStatus'),app.indexOf('onlineSubmit=function'));
   assert.match(onlineState,/onlinePresentationEpoch=0/);
