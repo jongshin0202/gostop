@@ -136,6 +136,31 @@ test('different browser tabs remain independent and a real second two-player tab
   assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
 });
 
+
+test('fresh tab-aware lobby client suppresses legacy no-tab busy residue for matchmaking',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),legacy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:null}),modern=client('jong','Jong',1000,{available:true,twoPlayer:false,mode:'menu',lastPresenceAt:now,tabId:'tab-modern'});
+  add(lobby,legacy,modern);
+  assert.deepEqual(lobby.effectiveClientsForAccount('jong'),[modern]);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),false);
+  assert.equal(lobby.presenceForAccount('jong').status,'available');
+  assert.equal(lobby.clientByAccountId('jong',{challengeableOnly:true}),modern);
+});
+
+test('legacy no-tab clients remain authoritative only until a fresh tab-aware client exists',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),legacy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:null});
+  add(lobby,legacy);
+  assert.deepEqual(lobby.effectiveClientsForAccount('jong'),[legacy]);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+});
+
+test('play-request fanout ignores legacy no-tab sockets once a modern tab is live',()=>{
+  const rows=rowsFor([['Sonogong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),legacy=client('sono','Sonogong',1000,{lastPresenceAt:now,tabId:null}),modern=client('sono','Sonogong',1000,{lastPresenceAt:now,tabId:'tab-modern'});
+  add(lobby,legacy,modern);
+  lobby.sendToAccount('sono',{type:'playRequest',requestId:'req-1'});
+  assert.equal(legacy.socket.messages.length,0);
+  assert.equal(modern.socket.messages.length,1);
+  assert.equal(modern.socket.messages[0].type,'playRequest');
+});
 test('same-tab takeover preserves challenge ownership on the new socket',()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10,100,1000,2]]),lobby=makeLobby(rows),now=Date.now(),old=client('jong','Jong',1000,{lastPresenceAt:now,tabId:'tab-a'}),fresh=client('jong','Jong',1000,{lastPresenceAt:now}),sono=client('sono','Sonogong',1000,{lastPresenceAt:now});
   add(lobby,old,fresh,sono);

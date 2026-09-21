@@ -185,8 +185,11 @@ test('Competitive direct link requires Log In or Create ID first and resumes int
   assert.match(client,/registrationOk'\)\.addEventListener[^]*continueAfterAccount\(\)/);
 });
 
-test('same-account tabs are excluded and any fresh two-player tab makes account busy',()=>{
-  assert.match(server,/id===client\.account\.id/);assert.match(server,/accountTwoPlayerBusy\(id\)/);assert.match(server,/this\.clientsForAccount\(accountId\)\.some\(client=>!!client\.twoPlayer&&this\.clientPresence\(client\)\.heartbeatFresh\)/);
+test('same-account tabs are excluded and fresh tab-aware clients supersede legacy lobby residue',()=>{
+  assert.match(server,/id===client\.account\.id/);assert.match(server,/accountTwoPlayerBusy\(id\)/);
+  assert.match(server,/effectiveClientsForAccount\(accountId\)/);
+  assert.match(server,/freshModern\.length\?clients\.filter\(client=>client\.tabId\):clients/);
+  assert.match(server,/this\.effectiveClientsForAccount\(accountId\)\.some\(client=>!!client\.twoPlayer&&this\.clientPresence\(client\)\.heartbeatFresh\)/);
 });
 
 test('Competitive Solo handoff route ends authoritative Solo session before multiplayer acceptance',()=>{
