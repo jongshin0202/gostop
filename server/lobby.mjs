@@ -62,7 +62,7 @@ export class Lobby{
     const available=heartbeatFresh&&!client.twoPlayer&&client.available!==false,active=available&&foreground&&recent,away=available&&(!foreground||!recent),notifyable=away&&client.notificationsEnabled===true;
     return {active,away,notifyable,recent,foreground,heartbeatFresh};
   }
-  clientCanReceiveChallenge(client){const state=this.clientPresence(client);return !client?.twoPlayer&&client.available!==false&&state.heartbeatFresh&&(state.active||state.away);}
+  clientCanReceiveChallenge(client){if(!client||!this.effectiveClientsForAccount(client.account.id).includes(client))return false;const state=this.clientPresence(client);return !client.twoPlayer&&client.available!==false&&state.heartbeatFresh&&(state.active||state.away);}
   clientByAccountId(accountId,{challengeableOnly=false,activeOnly=false}={}){
     const clients=this.effectiveClientsForAccount(accountId).slice().sort((a,b)=>{const ap=this.clientPresence(a),bp=this.clientPresence(b),ar=ap.active?0:ap.away?1:2,br=bp.active?0:bp.away?1:2;return ar-br||(Number(b.lastActivityAt)||0)-(Number(a.lastActivityAt)||0);});
     if(activeOnly)return clients.find(client=>this.clientPresence(client).active)||null;
