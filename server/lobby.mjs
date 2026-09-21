@@ -38,6 +38,20 @@ export class Lobby{
   send(socket,message){try{socket.send(JSON.stringify(message));}catch(_){}}
   clientsForAccount(accountId){return [...this.clients.values()].filter(client=>client.account.id===accountId);}
   clientById(clientId){for(const client of this.clients.values())if(client.clientId===clientId)return client;return null;}
+  claimTabInstance(client,tabId){
+    const id=String(tabId||'').trim().slice(0,96);
+    if(!id||!client)return;
+    client.tabId=id;
+    for(const [socket,other] of [...this.clients]){
+      if(other===client||other.account?.id!==client.account?.id||other.tabId!==id)continue;
+      for(const challenge of this.challenges.values()){
+        if(challenge.fromClientId===other.clientId)challenge.fromClientId=client.clientId;
+        if(challenge.toClientId===other.clientId)challenge.toClientId=client.clientId;
+      }
+      this.clients.delete(socket);
+      try{socket.close(4004,'Same tab reconnected');}catch(_){}
+    }
+  }
   clientPresence(client,now=Date.now()){
     if(!client)return {active:false,away:false,notifyable:false,heartbeatFresh:false};
     const last=Math.min(now,Number(client.lastActivityAt)||Number(client.connectedAt)||0),recent=last>0&&now-last<=PRESENCE_AWAY_MS,foreground=client.foreground===true,lastPresence=Math.min(now,Number(client.lastPresenceAt)||Number(client.connectedAt)||0),heartbeatFresh=lastPresence>0&&now-lastPresence<=PRESENCE_HEARTBEAT_STALE_MS;
@@ -162,6 +176,7 @@ export class Lobby{
     if(message.type==='autoMatchAccept'){await this.acceptAutoMatchCandidate(client,message.accountId);await this.broadcastRecommendations();return;}
     if(message.type==='autoMatchCancel'){const pending=this.pendingChallengeFor(client.account.id);if(pending?.automatic)this.cancelPendingChallenge(pending,'Auto Match was cancelled.');client.autoMatching=false;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchCancelled'});await this.broadcastRecommendations();return;}
     if(message.type==='setAvailability'){
+      this.claimTabInstance(client,message.tabId);
       client.available=message.available!==false;client.twoPlayer=!!message.twoPlayer;client.mode=String(message.mode||'menu').slice(0,32);client.foreground=message.foreground===true;client.notificationsEnabled=message.notificationsEnabled===true;client.lastPresenceAt=Date.now();const reported=Number(message.lastActivityAt);if(Number.isFinite(reported)&&reported>0)client.lastActivityAt=Math.min(Date.now(),reported);
       if(client.twoPlayer){client.autoMatching=false;client.autoMatchCandidateId=null;const pending=this.pendingChallengeFor(client.account.id);if(pending)this.cancelPendingChallenge(pending,'The player is no longer available.');}
       else if(this.clientCanReceiveChallenge(client)){this.deliverPendingChallenge(client);await this.tryWaitingAutoMatches();}
@@ -240,7 +255,7 @@ export class Lobby{
     if(request.method!=='GET'||url.pathname!=='/connect')return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     if(request.headers.get('Upgrade')!=='websocket')return json({ok:false,error:{code:'UPGRADE_REQUIRED',message:'WebSocket upgrade required.'}},426);
     const protocol=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(value=>value.trim()).find(value=>value.startsWith('gostop-auth.')),token=protocol?.slice('gostop-auth.'.length),geoHeaders={country:request.headers.get('x-gostop-country')||'',region:request.headers.get('x-gostop-region')||''},account=await this.resolveAccount(token,geoHeaders);if(!account)return json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401);
-    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',autoMatching:false,autoMatchTried:new Set(),autoMatchCandidateId:null,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false,messageQueue:Promise.resolve()};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.enqueueClientMessage(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
+    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',tabId:null,autoMatching:false,autoMatchTried:new Set(),autoMatchCandidateId:null,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false,messageQueue:Promise.resolve()};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.enqueueClientMessage(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
   }
 }
 

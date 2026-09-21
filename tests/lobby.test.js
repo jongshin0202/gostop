@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Lobby,distance,similarityPercent,MATCH_WEIGHTS,MAX_LOBBY_RESULTS} from '../server/lobby.mjs';
 
-const socket=()=>({messages:[],send(data){this.messages.push(JSON.parse(data));}});
+const socket=()=>({messages:[],closed:false,closeCode:null,send(data){this.messages.push(JSON.parse(data));},close(code){this.closed=true;this.closeCode=code;}});
 const account=(id,nickname,walletCoins)=>({id,nickname,walletCoins,countryCode:'US'});
 let clientSequence=0;
-const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu',foreground=true,lastActivityAt=Date.now(),lastPresenceAt=Date.now(),notificationsEnabled=false}={})=>({clientId:`test-client-${++clientSequence}`,socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,autoMatching,searchQuery:'',connectedAt:Date.now(),lastActivityAt,lastPresenceAt,foreground,notificationsEnabled});
+const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu',foreground=true,lastActivityAt=Date.now(),lastPresenceAt=Date.now(),notificationsEnabled=false,tabId=null}={})=>({clientId:`test-client-${++clientSequence}`,socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,tabId,autoMatching,searchQuery:'',connectedAt:Date.now(),lastActivityAt,lastPresenceAt,foreground,notificationsEnabled});
 const rowsFor=entries=>new Map(entries.map(([nickname,score,gamesPlayed,totalCoins,rank,wins=0,losses=Math.max(0,gamesPlayed-wins)])=>[
   nickname.toLowerCase(),
   {nickname,score,gamesPlayed,totalCoins,rank,wins,losses,provisional:gamesPlayed<10,countryCode:'US'}
@@ -112,7 +112,38 @@ test('fresh two-player sibling still blocks the account',()=>{
   assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
   assert.equal(lobby.presenceForAccount('jong').status,'in-game');
 });
-test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
+
+
+test('same browser tab reconnect replaces its older lobby socket immediately',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),old=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:'tab-a'}),fresh=client('jong','Jong',1000,{available:true,twoPlayer:false,mode:'menu',lastPresenceAt:now});
+  add(lobby,old,fresh);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+  lobby.claimTabInstance(fresh,'tab-a');
+  assert.equal(fresh.tabId,'tab-a');
+  assert.equal(lobby.clientsForAccount('jong').length,1);
+  assert.equal(lobby.clientsForAccount('jong')[0],fresh);
+  assert.equal(old.socket.closed,true);
+  assert.equal(old.socket.closeCode,4004);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),false);
+});
+
+test('different browser tabs remain independent and a real second two-player tab still blocks',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),game=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:'tab-game'}),menu=client('jong','Jong',1000,{available:true,twoPlayer:false,mode:'menu',lastPresenceAt:now});
+  add(lobby,game,menu);
+  lobby.claimTabInstance(menu,'tab-menu');
+  assert.equal(lobby.clientsForAccount('jong').length,2);
+  assert.equal(game.socket.closed,false);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+});
+
+test('same-tab takeover preserves challenge ownership on the new socket',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10,100,1000,2]]),lobby=makeLobby(rows),now=Date.now(),old=client('jong','Jong',1000,{lastPresenceAt:now,tabId:'tab-a'}),fresh=client('jong','Jong',1000,{lastPresenceAt:now}),sono=client('sono','Sonogong',1000,{lastPresenceAt:now});
+  add(lobby,old,fresh,sono);
+  const challenge=lobby.startChallenge(old,sono,rows,{automatic:true});assert.ok(challenge);assert.equal(challenge.fromClientId,old.clientId);
+  lobby.claimTabInstance(fresh,'tab-a');
+  assert.equal(challenge.fromClientId,fresh.clientId);
+  assert.equal(lobby.clientsForAccount('jong').includes(old),false);
+});test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Available',10.1,90,900,2],['Busy',10.2,80,800,3]]);
   const lobby=makeLobby(rows),me=client('me','Jong',1000),available=client('available','Available',900),busy=client('busy','Busy',800,{available:false,twoPlayer:true,mode:'competitive-online'});
   add(lobby,me,available,busy);

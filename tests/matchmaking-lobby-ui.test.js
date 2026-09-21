@@ -70,6 +70,16 @@ test('Browse and Search use separate result lists and refresh independently afte
   assert.match(transport,/browsePlayersActive\)requestRecommendations\(\)/);assert.match(transport,/lobbySearchActive/);assert.match(transport,/lobbySend\(\{type:'search',query\}\)/);
 });
 
+test('lobby presence carries a stable per-tab ID so refresh replaces only that tab connection',()=>{
+  assert.match(client,/const LOBBY_TAB_ID_KEY='gostop-lobby-tab-id'/);
+  assert.match(client,/sessionStorage\.getItem\(LOBBY_TAB_ID_KEY\)/);
+  assert.match(client,/sessionStorage\.setItem\(LOBBY_TAB_ID_KEY,value\)/);
+  assert.match(client,/type:'setAvailability',tabId:lobbyTabId/);
+  assert.match(server,/claimTabInstance\(client,tabId\)/);
+  assert.match(server,/other\.account\?\.id!==client\.account\?\.id\|\|other\.tabId!==id/);
+  assert.match(server,/socket\.close\(4004,'Same tab reconnected'\)/);
+});
+
 test('presence requires foreground activity within five minutes and publishes notification capability',()=>{
   assert.match(client,/const PRESENCE_AWAY_MS=300000/);assert.match(client,/const PRESENCE_HEARTBEAT_MS=30000/);
   assert.match(client,/function tabForeground\(\)/);assert.match(client,/document\.visibilityState==='visible'/);assert.match(client,/document\.hasFocus/);
@@ -193,7 +203,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-11/);
+  assert.match(index,/ranked-client\.js\?v=20260920-12/);
   assert.match(index,/app\.js\?v=20260920-3/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
