@@ -651,6 +651,16 @@
     if(globalThis.GoStopGameBridge)return Promise.resolve().then(()=>callback(globalThis.GoStopGameBridge));
     return new Promise((resolve,reject)=>globalThis.addEventListener('gostop-app-ready',()=>Promise.resolve(callback(globalThis.GoStopGameBridge)).then(resolve,reject),{once:true}));
   }
+  function savedCompetitiveRoom(roomCode){
+    try{const saved=JSON.parse(localStorage.getItem(ACTIVE_RANKED_ROOM_KEY)||'null');return saved?.roomCode===roomCode&&saved?.credential?saved:null;}catch(_){return null;}
+  }
+  async function resumeTechnicalReconnectIfNeeded(){
+    const active=account?.activeRanked,reconnectUntil=Number(active?.reconnectUntil)||0;
+    if(active?.mode!=='online'||!active.roomCode||active.connected!==false||reconnectUntil<=Date.now()||!savedCompetitiveRoom(active.roomCode)||globalThis.goStopOnlineSession)return false;
+    setRankedEntryPending('online');stopAttractForGameLaunch();playerTwoPlayerActive=true;playerPresenceMode='competitive-online';syncLobbyAvailability();showMatchHandoff(rt('startingMatch'));
+    try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode));clearRankedEntryPending();return true;}
+    catch(error){closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);revealCurrentMainMenu();return true;}
+  }
   async function launchInviteRoom(){
     if(!validRoomParam)return;const code=roomParam.toUpperCase();stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=true;
     if(inviteMode==='free'){
@@ -667,5 +677,5 @@
 
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity});
   new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
-  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}revealCurrentMainMenu();});
+  applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(async()=>{authRestorePromise=null;applyRankedLocale();if(validRoomParam){void launchInviteRoom();return;}if(await resumeTechnicalReconnectIfNeeded())return;revealCurrentMainMenu();});
 })();
