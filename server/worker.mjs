@@ -67,7 +67,7 @@ export default {async fetch(request,env){
     if(request.method==='POST'&&url.pathname==='/api/auth/register')return withCors(await forwardAccount(request,env,'/register'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/verify-email')return withCors(await forwardAccount(request,env,'/verify-email'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/resend-verification')return withCors(await forwardAccount(request,env,'/resend-verification'),origin);
-    if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/auth/login'){const response=await forwardAccount(request,env,'/login');if(!response.ok)return withCors(response,origin);const data=await response.json();if(data.account)data.account=await reconcileActiveRanked(env,data.account);return withCors(json(data,response.status),origin);}
     if(request.method==='POST'&&url.pathname==='/api/auth/logout')return withCors(await forwardAccount(request,env,'/logout'),origin);
     if(request.method==='GET'&&url.pathname==='/api/me'){const response=await forwardAccount(request,env,'/me');if(!response.ok)return withCors(response,origin);const data=await response.json();if(data.account)data.account=await reconcileActiveRanked(env,data.account);return withCors(json(data,response.status),origin);}
     if(request.method==='POST'&&url.pathname==='/api/account/notices/ack')return withCors(await forwardAccount(request,env,'/notices/ack'),origin);
