@@ -37,6 +37,10 @@ export class Lobby{
   }
   send(socket,message){try{socket.send(JSON.stringify(message));}catch(_){}}
   clientsForAccount(accountId){return [...this.clients.values()].filter(client=>client.account.id===accountId);}
+  effectiveClientsForAccount(accountId){
+    const clients=this.clientsForAccount(accountId),freshModern=clients.filter(client=>client.tabId&&this.clientPresence(client).heartbeatFresh);
+    return freshModern.length?clients.filter(client=>client.tabId):clients;
+  }
   clientById(clientId){for(const client of this.clients.values())if(client.clientId===clientId)return client;return null;}
   claimTabInstance(client,tabId){
     const id=String(tabId||'').trim().slice(0,96);
@@ -60,23 +64,23 @@ export class Lobby{
   }
   clientCanReceiveChallenge(client){const state=this.clientPresence(client);return !client?.twoPlayer&&client.available!==false&&state.heartbeatFresh&&(state.active||state.away);}
   clientByAccountId(accountId,{challengeableOnly=false,activeOnly=false}={}){
-    const clients=this.clientsForAccount(accountId).slice().sort((a,b)=>{const ap=this.clientPresence(a),bp=this.clientPresence(b),ar=ap.active?0:ap.away?1:2,br=bp.active?0:bp.away?1:2;return ar-br||(Number(b.lastActivityAt)||0)-(Number(a.lastActivityAt)||0);});
+    const clients=this.effectiveClientsForAccount(accountId).slice().sort((a,b)=>{const ap=this.clientPresence(a),bp=this.clientPresence(b),ar=ap.active?0:ap.away?1:2,br=bp.active?0:bp.away?1:2;return ar-br||(Number(b.lastActivityAt)||0)-(Number(a.lastActivityAt)||0);});
     if(activeOnly)return clients.find(client=>this.clientPresence(client).active)||null;
     if(challengeableOnly)return clients.find(client=>this.clientCanReceiveChallenge(client))||null;
     return clients[0]||null;
   }
-  sendToAccount(accountId,message){for(const client of this.clientsForAccount(accountId))this.send(client.socket,message);}
+  sendToAccount(accountId,message){for(const client of this.effectiveClientsForAccount(accountId))this.send(client.socket,message);}
   sendToChallengeClient(challenge,side,message){const client=this.clientById(side==='from'?challenge?.fromClientId:challenge?.toClientId);if(client)this.send(client.socket,message);else if(side==='to'&&challenge?.to)this.sendToAccount(challenge.to,message);}
   pendingChallengeFor(accountId){for(const challenge of this.challenges.values())if(challenge.status==='pending'&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
   pendingIncomingChallengeFor(accountId){for(const challenge of this.challenges.values())if(challenge.status==='pending'&&challenge.to===accountId)return challenge;return null;}
   challengeRequestMessage(challenge){return {type:'playRequest',requestId:challenge.id,automatic:!!challenge.automatic,expiresInSeconds:Math.max(0,Math.round(((Number(challenge.expiresAt)||Date.now())-Date.now())/1000)),createdAt:challenge.createdAt,from:challenge.fromProfile||{accountId:challenge.from,nickname:'Player'}};}
   deliverPendingChallenge(client){const challenge=this.pendingIncomingChallengeFor(client?.account?.id);if(!challenge||challenge.expiresAt<=Date.now())return false;challenge.deliveryReceipts=challenge.deliveryReceipts instanceof Set?challenge.deliveryReceipts:new Set();if(challenge.deliveryReceipts.has(client.clientId))return false;this.send(client.socket,this.challengeRequestMessage(challenge));return true;}
   activeChallengeFor(accountId){for(const challenge of this.challenges.values())if(['pending','accepted','room-ready'].includes(challenge.status)&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
-  accountTwoPlayerBusy(accountId){return this.clientsForAccount(accountId).some(client=>!!client.twoPlayer&&this.clientPresence(client).heartbeatFresh);}
-  accountAvailable(accountId){return !this.accountTwoPlayerBusy(accountId)&&this.clientsForAccount(accountId).some(client=>this.clientCanReceiveChallenge(client));}
-  onlineAccountCount(client){const ids=new Set();for(const item of this.clients.values())if(item.account.id!==client.account.id&&this.clientPresence(item).heartbeatFresh)ids.add(item.account.id);return ids.size;}
+  accountTwoPlayerBusy(accountId){return this.effectiveClientsForAccount(accountId).some(client=>!!client.twoPlayer&&this.clientPresence(client).heartbeatFresh);}
+  accountAvailable(accountId){return !this.accountTwoPlayerBusy(accountId)&&this.effectiveClientsForAccount(accountId).some(client=>this.clientCanReceiveChallenge(client));}
+  onlineAccountCount(client){const ids=new Set();for(const item of this.clients.values()){if(item.account.id===client.account.id)continue;const effective=this.effectiveClientsForAccount(item.account.id);if(effective.some(candidate=>this.clientPresence(candidate).heartbeatFresh))ids.add(item.account.id);}return ids.size;}
   presenceForAccount(accountId){
-    const clients=this.clientsForAccount(accountId),liveClients=clients.filter(client=>this.clientPresence(client).heartbeatFresh);if(!liveClients.length)return {online:false,challengeable:false,status:'offline',mode:'offline'};
+    const clients=this.effectiveClientsForAccount(accountId),liveClients=clients.filter(client=>this.clientPresence(client).heartbeatFresh);if(!liveClients.length)return {online:false,challengeable:false,status:'offline',mode:'offline'};
     const twoPlayer=liveClients.find(client=>client.twoPlayer);if(twoPlayer)return {online:true,challengeable:false,status:'in-game',mode:twoPlayer.mode||'two-player'};
     const active=liveClients.find(client=>this.clientPresence(client).active);if(active)return {online:true,challengeable:!this.pendingChallengeFor(accountId),status:'available',mode:active.mode||'menu'};
     const away=liveClients.slice().sort((a,b)=>(Number(b.lastActivityAt)||0)-(Number(a.lastActivityAt)||0)).find(client=>this.clientPresence(client).away),notifyable=liveClients.some(client=>this.clientPresence(client).notifyable);
@@ -84,7 +88,7 @@ export class Lobby{
     return {online:true,challengeable:false,status:'not-available',mode:liveClients[0]?.mode||'menu'};
   }
   profile(client,rows){const row=rows.get(String(client.account.nickname||'').toLowerCase())||{},gamesPlayed=finite(row.gamesPlayed),wins=finite(row.wins),totalCoinsEarned=finite(row.totalCoins),rate=Number.isFinite(Number(row.score))?Number(row.score):(gamesPlayed?totalCoinsEarned/gamesPlayed:0),presence=this.presenceForAccount(client.account.id),globalRank=Number.isFinite(Number(row.globalRank??row.rank))?Number(row.globalRank??row.rank):0;return {accountId:client.account.id,nickname:client.account.nickname,score:rate,coinsPerGame:rate,totalCoinsEarned,gamesPlayed,wins,losses:Number.isFinite(Number(row.losses))?Math.max(0,Number(row.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(client.account.walletCoins),rank:globalRank,globalRank,globalProvisional:!!(row.globalProvisional??row.provisional),monthlyRank:Number.isFinite(Number(row.monthlyRank))?Number(row.monthlyRank):0,monthlyProvisional:!!row.monthlyProvisional,headToHead:row.headToHead||null,countryCode:client.account.countryCode||row.countryCode||null,regionCode:client.account.regionCode||row.regionCode||null,...presence};}
-  candidateClients(client,{activeOnly=false}={}){const unique=new Map();for(const candidate of this.clients.values()){const id=candidate.account.id,presence=this.clientPresence(candidate);if(candidate===client||id===client.account.id||candidate.twoPlayer||this.accountTwoPlayerBusy(id)||this.activeChallengeFor(id))continue;if(activeOnly?!presence.active:!this.clientCanReceiveChallenge(candidate))continue;const prior=unique.get(id);if(!prior||this.clientPresence(candidate).active&&!this.clientPresence(prior).active||(Number(candidate.lastActivityAt)||0)>(Number(prior.lastActivityAt)||0))unique.set(id,candidate);}return [...unique.values()];}
+  candidateClients(client,{activeOnly=false}={}){const unique=new Map();for(const candidate of this.clients.values()){const id=candidate.account.id,presence=this.clientPresence(candidate);if(!this.effectiveClientsForAccount(id).includes(candidate)||candidate===client||id===client.account.id||candidate.twoPlayer||this.accountTwoPlayerBusy(id)||this.activeChallengeFor(id))continue;if(activeOnly?!presence.active:!this.clientCanReceiveChallenge(candidate))continue;const prior=unique.get(id);if(!prior||this.clientPresence(candidate).active&&!this.clientPresence(prior).active||(Number(candidate.lastActivityAt)||0)>(Number(prior.lastActivityAt)||0))unique.set(id,candidate);}return [...unique.values()];}
   rankedProfiles(client,rows,candidates=this.candidateClients(client)){const me=this.profile(client,rows);return candidates.map(candidate=>{const profile=this.profile(candidate,rows);return {...profile,similarity:similarityPercent(me,profile)};}).sort((a,b)=>distance(me,a)-distance(me,b)||b.gamesPlayed-a.gamesPlayed||a.nickname.localeCompare(b.nickname));}
   async recommendations(client,rows=null){
     rows=rows||await this.leaderboardRows();const ranked=this.rankedProfiles(client,rows).slice(0,MAX_LOBBY_RESULTS),details=await this.directoryProfiles(ranked.map(player=>player.accountId),client.account.id),byId=new Map(details.map(player=>[String(player.accountId),player]));
