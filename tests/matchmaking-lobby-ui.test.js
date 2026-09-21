@@ -105,7 +105,7 @@ test('notification button toggles app notifications, lights green when enabled, 
 
 test('blocked browser notifications explain browser settings and recheck without a misleading checkbox',()=>{
   assert.match(client,/id="notificationBlockedTitle">Notifications Blocked/);assert.doesNotMatch(client,/id="notificationBlockedReady"/);assert.match(client,/id="notificationBlockedRetry"/);assert.match(client,/id="notificationBlockedCancel"/);
-  assert.match(client,/notificationBlockedText:'Notifications are blocked in your browser\. GoStop Live cannot change this permission for you\.'/);assert.match(client,/notificationBlockedSteps:'Use the site controls next to the address bar, open Site settings, change Notifications to Allow, then return here and click Check Again\.'/);
+  assert.match(client,/notificationBlockedText:'Notifications are blocked in your browser\. GoStop Live cannot change this permission for you\.'/);assert.match(client,/notificationBlockedSteps:'If you are using Incognito or Private browsing, open GoStop Live in a normal browser window\. Otherwise, use the site controls next to the address bar, open Site settings, change Notifications to Allow, then return here and click Check Again\.'/);
   assert.match(client,/recheckNotifications:'Check Again'/);assert.match(client,/notificationStillBlocked:'Notifications are still blocked\. Change Notifications to Allow in your browser settings, then try again\.'/);
   assert.match(client,/if\(permission==='denied'\)[^]*showNotificationBlockedDialog\(\)/);assert.match(client,/retryBlockedNotifications/);
   assert.match(client,/navigator\.permissions\.query\(\{name:'notifications'\}\)/);assert.match(client,/notificationEnablePending/);
