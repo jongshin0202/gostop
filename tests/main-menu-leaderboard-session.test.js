@@ -217,7 +217,7 @@ test('legacy two-button shell stays hidden through auth restore before any recon
   assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
-  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
+  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}await settleInitialReconnectDecision\(\);if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
   assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
 });
 
@@ -306,6 +306,17 @@ test('Free Play With Friend uses Cancel while leaderboard and competitive lobby 
   assert.match(locale,/leaderboardScreen\.querySelector\('\.leaderboard-return'\)\.textContent=rt\('return'\)/);
 });
 
+
+test('first root visit waits briefly for the closed game socket to reconcile before revealing the menu',()=>{
+  const boot=source.slice(source.indexOf("const inviteUrl=new URL(location.href)"),source.lastIndexOf('})();'));
+  assert.match(boot,/async function settleInitialReconnectDecision\(\)/);
+  assert.match(boot,/initial\?\.mode!=='online'\|\|!roomCode\|\|initial\.connected===false\|\|!savedCompetitiveRoom\(roomCode\)/);
+  assert.match(boot,/for\(const waitMs of \[120,220,350,500\]\)/);
+  assert.match(boot,/await new Promise\(resolve=>setTimeout\(resolve,waitMs\)\)/);
+  assert.match(boot,/const data=await api\('\/api\/me'\);captureAccountPayload\(data\);renderAccountBox\(\);patchGameIdentity\(\)/);
+  assert.match(boot,/refreshed\?\.mode!=='online'\|\|refreshed\.roomCode!==roomCode\|\|refreshed\.connected===false/);
+  assert.match(boot,/await settleInitialReconnectDecision\(\);if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
+});
 
 test('root URL offers a timed Yes/No return dialog only for a saved Competitive seat in reconnect grace',()=>{
   const boot=source.slice(source.indexOf("const inviteUrl=new URL(location.href)"),source.lastIndexOf('})();'));
