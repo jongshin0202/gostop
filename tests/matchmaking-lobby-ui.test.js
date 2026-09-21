@@ -176,6 +176,19 @@ test('Share Link creates a direct URL with Copy URL while direct-link joining re
   assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode\)/);
 });
 
+
+test('Free Play With Friend is link-only with no manual Room ID join controls',()=>{
+  assert.match(client,/id="freeCreateRoomBtn"[^>]*>Create Room \/ Share Link</);
+  assert.match(client,/id="freeShareLinkBox"/);assert.match(client,/id="freeCopyLinkBtn"[^>]*>Copy Link</);
+  assert.doesNotMatch(client,/id="freeJoinForm"/);assert.doesNotMatch(client,/id="freeRoomCode"/);assert.doesNotMatch(client,/id="freeJoinBtn"/);
+  assert.doesNotMatch(client,/gostop-free-online-join/);
+  const freeCreate=app.slice(app.indexOf("addEventListener('gostop-free-online-create'"),app.indexOf("if(typeof globalThis.CustomEvent"));
+  assert.match(freeCreate,/t\('waitingForOpponent'\)/);assert.doesNotMatch(freeCreate,/shareRoomCode/);assert.doesNotMatch(freeCreate,/gostop-free-online-join/);
+  const begin=app.slice(app.indexOf('const beginOnline=async'),app.indexOf("addEventListener('gostop-online-snapshot'"));
+  assert.match(begin,/anonymous\?t\('waitingForOpponent'\):t\('roomWaitingConnection'/);
+  assert.match(begin,/anonymous\?t\('waitingForOpponent'\):t\('roomWaitingOpponent'/);
+});
+
 test('Competitive direct link requires Log In or Create ID first and resumes intent after either flow',()=>{
   assert.match(client,/inviteMode=inviteUrl\.searchParams\.get\('mode'\)==='free'\?'free':'competitive'/);
   const invite=client.slice(client.indexOf('async function launchInviteRoom'),client.indexOf('globalThis.GoStopRanked'));
@@ -206,7 +219,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-1/);
-  assert.match(index,/ranked-client\.js\?v=20260920-12/);
-  assert.match(index,/app\.js\?v=20260920-3/);
+  assert.match(index,/ranked-client\.js\?v=20260920-13/);
+  assert.match(index,/app\.js\?v=20260920-4/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
