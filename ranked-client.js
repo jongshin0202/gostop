@@ -693,7 +693,7 @@
   function returnGameDeadline(){
     if(!returnReconnectState)return 0;
     if(returnGameDialog.dataset.mode==='reconnect')return Number(returnReconnectState.reconnectUntil)||0;
-    return Number(returnReconnectState.abandonmentUntil)||Number(returnReconnectState.reconnectUntil)||0;
+    return Number(returnReconnectState.abandonmentUntil)||Number(returnReconnectState.reconnectUntil)||Number(returnReconnectState.runtimeOrphanUntil)||0;
   }
   function updateReturnReconnectCountdown(){
     const deadline=returnGameDeadline();
@@ -706,10 +706,10 @@
     }
   }
   function promptActiveRankedGameIfNeeded(){
-    const active=account?.activeRanked,reconnectUntil=Number(active?.reconnectUntil)||0,hasReconnect=reconnectUntil>Date.now();
+    const active=account?.activeRanked,reconnectUntil=Number(active?.reconnectUntil)||0,runtimeOrphanUntil=Number(active?.runtimeOrphanUntil)||0,hasReconnect=reconnectUntil>Date.now(),hasRuntimeRecovery=runtimeOrphanUntil>Date.now();
     if(!['online','solo'].includes(active?.mode)||!active.roomCode||globalThis.goStopOnlineSession)return false;
     const reconnectMode=active.mode==='online'&&active.connected===false&&hasReconnect;
-    const deviceMode=active.connected!==false||hasReconnect;
+    const deviceMode=active.connected!==false||hasReconnect||hasRuntimeRecovery;
     if(!reconnectMode&&!deviceMode)return false;
     revealCurrentMainMenu();returnReconnectState={...active};returnReconnectBusy=false;resetReturnGameDialog(reconnectMode?'reconnect':'device');applyRankedLocale();updateReturnReconnectCountdown();if(!returnGameDialog.open)returnGameDialog.showModal();stopReturnReconnectTimer();if(returnGameDeadline())returnReconnectTimer=setInterval(updateReturnReconnectCountdown,250);return true;
   }
