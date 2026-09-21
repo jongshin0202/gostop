@@ -85,7 +85,7 @@ function rankRows(rows){
 }
 
 export class AccountStore{
-  constructor(state,env,{cryptoApi=globalThis.crypto,now=()=>new Date().toISOString(),fetchApi=globalThis.fetch}={}){this.state=state;this.storage=state.storage;this.env=env||{};this.crypto=cryptoApi;this.now=now;this.fetchApi=fetchApi;}
+  constructor(state,env,{cryptoApi=globalThis.crypto,now=()=>new Date().toISOString(),fetchApi=globalThis.fetch}={}){this.state=state;this.storage=state.storage;this.env=env||{};this.crypto=cryptoApi;this.now=now;this.fetchApi=(...args)=>fetchApi(...args);}
   emailVerificationRequired(){return String(this.env.EMAIL_VERIFICATION_REQUIRED||'').toLowerCase()==='true';}
   emailVerificationConfigured(){return !!String(this.env.RESEND_API_KEY||'').trim()&&!!String(this.env.EMAIL_FROM||'').trim();}
   verificationBaseUrl(){return String(this.env.EMAIL_VERIFY_BASE_URL||'https://gostoplive.com').trim()||'https://gostoplive.com';}
