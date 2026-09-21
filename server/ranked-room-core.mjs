@@ -112,7 +112,15 @@ export class RankedRoomCore extends RoomCore{
   }
   async disconnect(socket){
     const playerId=socket.__playerId,disconnected=await super.disconnect(socket);if(!disconnected||!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return false;
-    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot||!this.isRanked())return disconnected;
+    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot)return disconnected;
+    if(!this.isRanked()){
+      const activeFreeFriendMatch=!this.isSolo()&&!!this.room.matchId&&this.room.participants.length===2;
+      if(activeFreeFriendMatch){
+        this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.sessionFlow.forceEnded=true;this.room.status='ended';this.room.updatedAt=this.now();
+        await this.persist();this.broadcastSnapshots();
+      }
+      return disconnected;
+    }
     if(this.room.rankFlow.runtimeOrphanDeadlines?.[playerId])delete this.room.rankFlow.runtimeOrphanDeadlines[playerId];
     this.room.rankFlow.disconnectSettlements[playerId]=this.calculateDisconnectSettlement(playerId);this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();return true;
   }

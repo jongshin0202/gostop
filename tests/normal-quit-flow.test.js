@@ -63,6 +63,14 @@ test('local quit cancels stale First Poop and delayed AI presentation work',()=>
 });
 
 
+test('Free Play With Friend forced tab close shows Friend forcefully ended the game and OK returns to menu',()=>{
+  assert.match(html,/id="opponentEndedTitle"[^>]*data-i18n="opponentEnded"/);
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/onlineAnonymousMode&&flow\.forceEnded\?t\('friendForceEnded'\):t\('opponentEnded'\)/);
+  assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,true\)/);
+  assert.match(app,/els\.opponentEndedOkBtn\.addEventListener\('click',returnOnlineToMenu\)/);
+});
+
 test('Free Play With Friend quit bypasses presentation queue and ends both views immediately',()=>{
   const onlineState=app.slice(app.indexOf('let activeOnlineStatus=onlineStatus'),app.indexOf('onlineSubmit=function'));
   assert.match(onlineState,/onlinePresentationEpoch=0/);
