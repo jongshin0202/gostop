@@ -9,7 +9,7 @@ const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof v
 const fingerprint=value=>JSON.stringify(canonical(value));
 const randomId=(cryptoApi,prefix,bytes=18)=>{const data=new Uint8Array(bytes);cryptoApi.getRandomValues(data);return `${prefix}_${Array.from(data,b=>b.toString(16).padStart(2,'0')).join('')}`;};
 const token=cryptoApi=>randomId(cryptoApi,'room',32);
-const freshFlow=()=>({replayReady:{playerA:false,playerB:false},newGameRequest:null,requestGeneration:0,ended:false,endedBy:null});
+const freshFlow=()=>({replayReady:{playerA:false,playerB:false},newGameRequest:null,requestGeneration:0,ended:false,endedBy:null,forceEnded:false});
 const freshSessionStats=()=>({gamesPlayed:0,coinsWonByAccount:{},coinsLostByAccount:{},milestonesByAccount:{}});
 async function tokenHash(cryptoApi,value){const digest=await cryptoApi.subtle.digest('SHA-256',encoder.encode(value));return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');}
 function safeEqual(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let difference=0;for(let i=0;i<a.length;i++)difference|=a.charCodeAt(i)^b.charCodeAt(i);return difference===0;}
@@ -33,7 +33,7 @@ export class RoomCore{
   isRanked(){return !!this.accountStore&&this.room.participants.length===2&&this.room.participants.every(item=>!!item.accountId);}
   participantProfile(participant){return {nickname:participant.nickname||null,walletCoins:Number.isFinite(participant.walletCoins)?participant.walletCoins:null};}
   publicRoom(){return {roomCode:this.room.roomCode,matchId:this.room.matchId,status:this.room.status,maxPlayers:this.room.maxPlayers,createdAt:this.room.createdAt,ranked:this.isRanked()};}
-  flowFor(participant){const flow=this.room.sessionFlow;return {replayReady:{you:!!flow.replayReady[participant.seatId],opponent:!!flow.replayReady[participant.seatId==='playerA'?'playerB':'playerA']},newGameRequest:flow.newGameRequest?{requestId:flow.newGameRequest.requestId,requestedByYou:flow.newGameRequest.requesterPlayerId===participant.playerId}:null,ended:flow.ended,endedByYou:flow.endedBy===participant.playerId};}
+  flowFor(participant){const flow=this.room.sessionFlow;return {replayReady:{you:!!flow.replayReady[participant.seatId],opponent:!!flow.replayReady[participant.seatId==='playerA'?'playerB':'playerA']},newGameRequest:flow.newGameRequest?{requestId:flow.newGameRequest.requestId,requestedByYou:flow.newGameRequest.requesterPlayerId===participant.playerId}:null,ended:flow.ended,endedByYou:flow.endedBy===participant.playerId,forceEnded:!!flow.forceEnded};}
   snapshotFor(participant){const opponent=this.room.participants.find(item=>item.playerId!==participant.playerId);return {...this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}),sessionFlow:this.flowFor(participant),ranked:this.isRanked(),youProfile:this.participantProfile(participant),opponentProfile:opponent?this.participantProfile(opponent):null};}
   broadcastSnapshots(events=[]){for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.snapshotFor(viewer),events}));}
   async accountRequest(path,body){if(!this.accountStore)return null;const response=await this.accountStore.fetch(new Request(`https://accounts${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}));if(!response.ok)throw new RoomError('ACCOUNT_SERVICE_ERROR','Account service could not complete ranked settlement.',503);return response.json();}
