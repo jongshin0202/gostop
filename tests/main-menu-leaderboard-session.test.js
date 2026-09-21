@@ -123,13 +123,20 @@ test('share-link room creator leaves Online Play overlay when the friend makes t
   assert.match(appSource,/adapter\.addEventListener\('snapshot'[\s\S]*event\.detail\.snapshot\?\.matchId[\s\S]*enterOnlineMatchView\(anonymous\)/);
 });
 
-test('stale ranked locks are server-reconciled and main menu rechecks them automatically',()=>{
+test('stale ranked locks are server-reconciled and reconnect status reaches the browser',()=>{
   assert.match(worker,/async function reconcileActiveRanked\(env,account\)/);
   assert.match(worker,/\/reconcile-active/);
+  assert.match(worker,/activeRanked:\{\.\.\.active,connected:status\.connected!==false,reconnectUntil:Number\(status\.reconnectUntil\)\|\|null/);
   assert.match(worker,/\/internal\/active-ranked\/clear/);
   assert.match(source,/activeRankedRefreshTimer/);
   assert.match(source,/function scheduleActiveRankedRecheck\(\)/);
   assert.match(source,/setTimeout\(\(\)=>\{activeRankedRefreshTimer=null;void refreshAccount\(\);\},20000\)/);
+});
+
+test('Competitive reconnect No is authenticated and routed to authoritative abandonment settlement',()=>{
+  assert.match(worker,/decline-reconnect/);
+  assert.match(worker,/account\.activeRanked\?\.roomCode!==match\[1\]\|\|account\.activeRanked\?\.mode!=='online'/);
+  assert.match(worker,/https:\/\/room\/decline-reconnect/);
 });
 
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
@@ -203,15 +210,14 @@ test('pending daily bonus never masks the authoritative Wallet or replays after 
 });
 
 
-test('legacy two-button shell is hidden until the current menu client has finished booting',()=>{
+test('legacy two-button shell stays hidden through auth restore before any reconnect choice is shown',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8'),css=fs.readFileSync(path.join(root,'styles.css'),'utf8');
   assert.match(html,/id="soloStartOverlay" class="solo-start-overlay" hidden data-current-menu-ready="false"/);
   assert.match(css,/\.solo-start-overlay\[hidden\]\{display:none!important\}/);
   assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
-  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}revealCurrentMainMenu\(\)/);
-  assert.doesNotMatch(boot,/resumeActiveRankedRoom\(/);
+  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
   assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
 });
 
@@ -301,15 +307,20 @@ test('Free Play With Friend uses Cancel while leaderboard and competitive lobby 
 });
 
 
-test('root URL never auto-resumes an active Competitive game before user chooses the mode, while explicit invite links do',()=>{
+test('root URL offers a timed Yes/No return dialog only for a saved Competitive seat in reconnect grace',()=>{
   const boot=source.slice(source.indexOf("const inviteUrl=new URL(location.href)"),source.lastIndexOf('})();'));
   assert.match(boot,/validRoomParam=!!roomParam/);
-  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}revealCurrentMainMenu\(\)/);
-  assert.match(boot,/inviteMode=inviteUrl\.searchParams\.get\('mode'\)==='free'\?'free':'competitive'/);
-  assert.doesNotMatch(source,/function resumeActiveRankedRoom\(/);
-  assert.doesNotMatch(source,/activeRoomResumeAttempted/);
-  const launches=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("function renderLeaderboard"));
-  assert.match(launches,/account\?\.activeRanked\?\.mode==='solo'&&account\.activeRanked\.roomCode/);
-  assert.match(launches,/account\?\.activeRanked\?\.mode==='online'&&account\.activeRanked\.roomCode/);
-  assert.match(launches,/launchRankedRoom\(account\.activeRanked\.roomCode\)/);
+  assert.match(boot,/function savedCompetitiveRoom\(roomCode\)/);
+  assert.match(boot,/saved\?\.roomCode===roomCode&&saved\?\.credential/);
+  assert.match(source,/id="returnGameTitle">Return to Game\?/);
+  assert.match(source,/id="returnGameCountdown" class="ranked-countdown">1:00/);
+  assert.match(source,/id="returnGameYes"[^>]*>Yes</);
+  assert.match(source,/id="returnGameNo"[^>]*>No</);
+  assert.match(boot,/function promptTechnicalReconnectIfNeeded\(\)/);
+  assert.match(boot,/active\?\.mode!=='online'\|\|!active\.roomCode\|\|active\.connected!==false\|\|reconnectUntil<=Date\.now\(\)\|\|!savedCompetitiveRoom\(active\.roomCode\)/);
+  assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
+  assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode\)/);
+  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',[\s\S]*finishReconnectAsAbandonment/);
+  assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
+  assert.match(boot,/if\(promptTechnicalReconnectIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
 });

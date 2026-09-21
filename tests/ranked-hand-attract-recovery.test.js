@@ -18,7 +18,7 @@ test('ranked hand remains blocked during active physical motion and session-flow
 
 test('ten-second main-menu attract eligibility ignores stale gameplay dialogs but blocks account warnings',()=>{
   assert.match(ranked,/const ATTRACT_IDLE_MS=10000/);
-  assert.match(ranked,/function mainMenuIdleEligible\(\)\{return !overlay\.hidden&&leaderboardScreen\.hidden&&onlinePanel\.hidden&&freePanel\.hidden&&!authDialog\.open&&!registrationPolicyDialog\.open&&!successDialog\.open&&!requestDialog\.open&&!accountNoticeDialog\.open;\}/);
+  assert.match(ranked,/function mainMenuIdleEligible\(\)\{return !overlay\.hidden&&leaderboardScreen\.hidden&&onlinePanel\.hidden&&freePanel\.hidden&&!authDialog\.open&&!registrationPolicyDialog\.open&&!successDialog\.open&&!requestDialog\.open&&!accountNoticeDialog\.open&&!returnGameDialog\.open;\}/);
   assert.doesNotMatch(ranked,/mainMenuIdleEligible\(\)[^\n]*document\.querySelector\('dialog\[open\]'\)/);
 });
 

@@ -211,7 +211,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
   const rankedRoom=fs.readFileSync(new URL('../server/ranked-room-core.mjs',import.meta.url),'utf8');
   assert.match(worker,/\/api\/solo\/leave-for-challenge/);assert.match(worker,/leave-solo-for-challenge/);assert.match(gameRoom,/url\.pathname==='\/leave-solo-for-challenge'/);
   assert.match(rankedRoom,/async leaveSoloForChallenge\(accountId\)/);assert.match(rankedRoom,/endRankedSession\('accepted-multiplayer-challenge'\)/);
-  const handoff=rankedRoom.slice(rankedRoom.indexOf('async leaveSoloForChallenge'),rankedRoom.indexOf('async connect',rankedRoom.indexOf('async leaveSoloForChallenge')));
+  const handoff=rankedRoom.slice(rankedRoom.indexOf('async leaveSoloForChallenge'),rankedRoom.indexOf('async join',rankedRoom.indexOf('async leaveSoloForChallenge')));
   assert.doesNotMatch(handoff,/force-quit|abandon\(/);
 });
 
@@ -219,7 +219,7 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
-  assert.match(index,/ranked-client\.js\?v=20260920-13/);
+  assert.match(index,/ranked-client\.js\?v=20260920-14/);
   assert.match(index,/app\.js\?v=20260920-5/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
