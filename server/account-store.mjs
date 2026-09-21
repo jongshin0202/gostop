@@ -231,7 +231,7 @@ export class AccountStore{
     await this.storage.put(`auth:${hash}`,{accountId:account.id,createdAt:this.now(),expiresAt});
     return {token,expiresAt};
   }
-  async requireAccount(request){const account=await this.accountFromToken(this.bearer(request));if(!account)throw Object.assign(new Error('Login required.'),{status:401,code:'AUTH_REQUIRED'});if(account.suspended)throw Object.assign(new Error('Account is suspended.'),{status:403,code:'ACCOUNT_SUSPENDED'});return account;}
+  async requireAccount(request){const account=await this.accountFromToken(this.bearer(request));if(!account)throw Object.assign(new Error('Login required.'),{status:401,code:'AUTH_REQUIRED'});if(account.suspended)throw Object.assign(new Error('Account is suspended.'),{status:403,code:'ACCOUNT_SUSPENDED'});if(this.emailVerificationRequired()&&account.emailVerified===false)throw Object.assign(new Error('Verify your email before using this account.'),{status:403,code:'EMAIL_NOT_VERIFIED'});return account;}
 
   async register(request){
     const body=await request.json().catch(()=>({}));
@@ -423,7 +423,7 @@ export class AccountStore{
     await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'force-quit',amount:-penalty,gameId,createdAt:this.now()});await this.storage.put(`forceQuit:${gameId}`,{...body,gameId,penaltyCoins:penalty,recordedAt:this.now()});return json({ok:true,penaltyCoins:penalty,account:publicAccount(account)});
   }
 
-  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account?.suspended)return json({ok:true,account:null});if(account){if(this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,request.headers.get('x-gostop-event')||'game-resolve');}return json({ok:true,account:account?publicAccount(account):null});}
+  async resolveSession(request){const account=await this.accountFromToken(this.bearer(request));if(account?.suspended||this.emailVerificationRequired()&&account?.emailVerified===false)return json({ok:true,account:null});if(account){if(this.applyCoarseLocation(account,request))await this.storage.put(`account:${account.id}`,account);await this.recordConnection(account,request,request.headers.get('x-gostop-event')||'game-resolve');}return json({ok:true,account:account?publicAccount(account):null});}
 
   async registerRoom(request){const body=await request.json().catch(()=>({})),roomCode=String(body.roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(roomCode))return json({ok:false,error:{code:'INVALID_ROOM_CODE',message:'Room code is invalid.'}},400);const record={roomCode,mode:body.mode==='solo'?'solo':body.mode==='free'?'free':'online',createdAt:body.createdAt||this.now()};await this.storage.put(`roomRegistry:${roomCode}`,record);return json({ok:true,room:record});}
 
