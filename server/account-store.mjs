@@ -197,8 +197,14 @@ export class AccountStore{
     let response;
     try{
       response=await this.fetchApi('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${this.env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:this.env.EMAIL_FROM,to:[account.email],subject:'Verify your GoStop Live account',html:`<div style="font-family:Arial,sans-serif;line-height:1.5;color:#24170f"><h2>Verify your GoStop Live account</h2><p>Hi ${safeNickname},</p><p>Confirm your email address to activate your account and receive your signup and daily Coin rewards.</p><p><a href="${safeUrl}" style="display:inline-block;padding:12px 18px;background:#8f2f22;color:#fff;text-decoration:none;border-radius:8px">Verify Email</a></p><p>This link expires in 24 hours and can be used only once.</p><p>If you did not create this account, you can ignore this email.</p></div>`})});
-    }catch(_){throw Object.assign(new Error('Account created, but the verification email could not be sent. Please try Resend Verification Email.'),{status:503,code:'EMAIL_SEND_FAILED',email:account.email});}
-    if(!response?.ok)throw Object.assign(new Error('Account created, but the verification email could not be sent. Please try Resend Verification Email.'),{status:503,code:'EMAIL_SEND_FAILED',email:account.email});
+    }catch(_){
+      await this.storage.delete(`verify:${tokenHash}`);delete account.emailVerificationTokenHash;delete account.emailVerificationSentAt;delete account.emailVerificationExpiresAt;await this.storage.put(`account:${account.id}`,account);
+      throw Object.assign(new Error('Account created, but the verification email could not be sent. Please try Resend Verification Email.'),{status:503,code:'EMAIL_SEND_FAILED',email:account.email});
+    }
+    if(!response?.ok){
+      await this.storage.delete(`verify:${tokenHash}`);delete account.emailVerificationTokenHash;delete account.emailVerificationSentAt;delete account.emailVerificationExpiresAt;await this.storage.put(`account:${account.id}`,account);
+      throw Object.assign(new Error('Account created, but the verification email could not be sent. Please try Resend Verification Email.'),{status:503,code:'EMAIL_SEND_FAILED',email:account.email});
+    }
     return {sent:true,email:account.email,expiresAt};
   }
   async verifyEmail(request){
@@ -346,7 +352,7 @@ export class AccountStore{
 
   async directoryProfiles({requesterAccountId=null,accountIds=null,query=''}={}){
     await this.ensureOutcomeHistoryRepair();
-    const needle=String(query||'').trim().toLowerCase(),wanted=Array.isArray(accountIds)?new Set(accountIds.map(String)):null,month=utcMonth(this.now()),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended);
+    const needle=String(query||'').trim().toLowerCase(),wanted=Array.isArray(accountIds)?new Set(accountIds.map(String)):null,month=utcMonth(this.now()),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>!account?.suspended&&account?.emailVerified!==false);
     const global=rankRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id,walletCoins:Number(account.walletCoins)||0})));
     const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES,accountId:account.id};})),monthlyById=new Map(monthly.map(row=>[String(row.accountId),row]));
     let players=global.filter(row=>(!wanted||wanted.has(String(row.accountId)))&&(!needle||String(row.nickname||'').toLowerCase().includes(needle)));
@@ -357,7 +363,7 @@ export class AccountStore{
 
   async leaderboard(){
     await this.ensureOutcomeHistoryRepair();
-    const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()];
+    const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>account?.emailVerified!==false);
     const global=rankRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account))));
     const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES};}));
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
