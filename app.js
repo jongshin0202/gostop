@@ -2462,7 +2462,7 @@
     els.trainingModeBtn?.addEventListener('click',()=>launchLocalGame(true));
     const onlineStatus=document.getElementById('onlineStatus'),freeOnlineStatus=document.getElementById('freeOnlineStatus'),freeFriendPanel=document.getElementById('freeFriendPanel'),createOnlineBtn=document.getElementById('createOnlineBtn'),joinOnlineForm=document.getElementById('joinOnlineForm');
     let activeOnlineStatus=onlineStatus,onlineAnonymousMode=false;
-    let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
+    let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlineSkipInitialOpening=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
     const isOnlinePresentationCurrent=epoch=>onlineMode&&epoch===onlinePresentationEpoch;
     onlineSubmit=function(action){
       if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
@@ -2495,7 +2495,7 @@
       if(!snapshot.terminalResult&&els.quitConfirmDialog.open&&onlineQuitFromResult)setDialog(els.quitConfirmDialog,false);
     }
     function returnOnlineToMenu(){
-      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);publishPlayerActivity(false,'menu');
+      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;onlineSkipInitialOpening=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);publishPlayerActivity(false,'menu');
       const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);if(!onlineAnonymousMode){try{localStorage.removeItem('gostop-active-ranked-room');}catch(_){}}
       document.getElementById('onlineRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=t('opponentEnded');
       globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;onlineAnonymousMode=false;activeOnlineStatus=onlineStatus;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
@@ -2514,11 +2514,11 @@
         const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();
         await beginOnline(room,{adapter});return room;
       },
-      async joinCompetitiveRoom(roomCode){
+      async joinCompetitiveRoom(roomCode,{resumeExisting=false}={}){
         const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
         const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');
         if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}
-        const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});return room;
+        const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter,resumeExisting});return room;
       },
       async createFreeRoom(){
         const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();
@@ -2567,7 +2567,7 @@
       const incomingMapped=onlineStateFromSnapshot(snapshot,events),presentationEvents=incomingMapped.events;
       reconcileOnlineFlow(snapshot);
       if(snapshot.sessionFlow?.ended)return;
-      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);if(!isOnlinePresentationCurrent(epoch))return;}await driveOnline(snapshot,onlineLastEvents);return;}
+      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;if(!onlineSkipInitialOpening){await presentOpeningSequence(state.startingPlayerId,true);if(!isOnlinePresentationCurrent(epoch))return;}onlineSkipInitialOpening=false;}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!presentationEvents.length){
         // Sync/flow snapshots carry no new physical action. Preserve any staged cards that
         // authority still owns in pendingTurn so the played card cannot disappear between
@@ -2652,7 +2652,7 @@
       else {const panel=document.getElementById('onlineLobbyPanel');if(panel)panel.hidden=true;}
       els.soloStartOverlay.hidden=true;
     }
-    const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
+    const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null,resumeExisting=false}={})=>{
       const twoPlayer=!!anonymous||room?.rankedMode!=='solo';
       publishPlayerActivity(true,anonymous?'free-friend':room?.rankedMode==='solo'?'competitive-solo':'competitive-online',twoPlayer);
       localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;beginGameplayPresentation();setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
@@ -2661,7 +2661,7 @@
       adapter.room=room;
       const generation=++onlineSessionGeneration,previous=globalThis.goStopOnlineSession;
       if(previous&&previous!==adapter){try{previous.close();}catch(_){}}
-      onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
+      onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlineSkipInitialOpening=!!resumeExisting;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
       globalThis.goStopOnlineSession=adapter;
       const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter;
       onlineMode=true;
