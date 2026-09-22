@@ -27,6 +27,8 @@ test('Friendly referral gives the verified new player 200 extra Coins immediatel
   assert.equal(guest.account.walletCoins,400);assert.equal(guest.awards.referralCoins,200);assert.equal(guest.referral.eligible,true);assert.equal(guest.referral.inviterRewardPending,true);
   const storedGuest=await accountStore.accountByEmail('guest@example.com');assert.equal(storedGuest.friendlyReferralQualification.qualifyingGamesPlayed,0);assert.equal(storedGuest.friendlyReferralQualification.gamesRequired,10);
   const host=await me(accountStore,inviter.session.token);assert.equal(host.account.walletCoins,200);
+  assert.equal(guest.account.friendlyReferralProgress.qualifyingGamesPlayed,0);assert.equal(guest.account.friendlyReferralProgress.gamesRequired,10);
+  assert.equal(host.account.friendlyReferralInvites.length,1);assert.equal(host.account.friendlyReferralInvites[0].friendNickname,'GuestPlayer');assert.equal(host.account.friendlyReferralInvites[0].qualifyingGamesPlayed,0);
   const notice=host.notices.find(item=>item.type==='friendly-referral-signup-complete');assert.ok(notice);assert.equal(notice.friendNickname,'GuestPlayer');assert.equal(notice.qualifyingGamesRequired,10);
   assert.equal(host.notices.some(item=>item.type==='friendly-referral-collect'),false);
 });
@@ -43,13 +45,13 @@ test('inviter earns the 200-Coin collect reward only after ten unique Competitiv
   stored=await accountStore.accountByEmail('qualifier-guest@example.com');assert.equal(stored.friendlyReferralQualification.qualifyingGamesPlayed,9);
   await accountStore.fetch(request('/force-quit',{body:{accountId:guestAccount.id,gameId:'forced-does-not-count',penaltyCoins:0}}));
   stored=await accountStore.accountByEmail('qualifier-guest@example.com');assert.equal(stored.friendlyReferralQualification.qualifyingGamesPlayed,9);
-  let host=await me(accountStore,inviter.session.token);assert.equal(host.account.walletCoins,200);assert.equal(host.notices.some(item=>item.type==='friendly-referral-collect'),false);
+  let host=await me(accountStore,inviter.session.token);assert.equal(host.account.walletCoins,200);assert.equal(host.notices.some(item=>item.type==='friendly-referral-collect'),false);assert.equal(host.account.friendlyReferralInvites[0].qualifyingGamesPlayed,9);assert.equal(host.account.friendlyReferralInvites[0].rewardReady,false);
   await settle(accountStore,'qualifying-10','solo',[guestAccount]);
   stored=await accountStore.accountByEmail('qualifier-guest@example.com');assert.equal(stored.friendlyReferralQualification.qualifyingGamesPlayed,10);assert.ok(stored.friendlyReferralQualification.inviterRewardReadyAt);
-  host=await me(accountStore,inviter.session.token);assert.equal(host.account.walletCoins,200);
+  host=await me(accountStore,inviter.session.token);assert.equal(host.account.walletCoins,200);assert.equal(host.account.friendlyReferralInvites[0].qualifyingGamesPlayed,10);assert.equal(host.account.friendlyReferralInvites[0].rewardReady,true);
   const ready=host.notices.find(item=>item.type==='friendly-referral-collect');assert.ok(ready);assert.equal(ready.qualifyingGamesPlayed,10);
   const collectedResponse=await accountStore.fetch(request('/referrals/collect',{body:{noticeId:ready.id},token:inviter.session.token}));assert.equal(collectedResponse.status,200);const collected=await collectedResponse.json();
-  assert.equal(collected.collectedCoins,200);assert.equal(collected.account.walletCoins,400);
+  assert.equal(collected.collectedCoins,200);assert.equal(collected.account.walletCoins,400);assert.equal(collected.account.friendlyReferralInvites[0].rewardCollected,true);
   const duplicate=await (await accountStore.fetch(request('/referrals/collect',{body:{noticeId:ready.id},token:inviter.session.token}))).json();assert.equal(duplicate.collectedCoins,0);assert.equal(duplicate.account.walletCoins,400);
 });
 
@@ -112,9 +114,15 @@ test('Friendly Play With Friend offers signup after game ten and session end, th
   assert.match(ranked,/You will earn 200 bonus Coins after they complete 10 Competitive games outside games played with you/);
   assert.match(ranked,/Your friend is signing up/);assert.match(ranked,/Your friend has declined signing up/);
   assert.match(ranked,/200 Bonus Coins Ready/);assert.match(ranked,/Collect 200 Bonus Coins/);assert.match(ranked,/You have collected 200 Bonus Coins!/);
+  assert.match(ranked,/id="freeShareBtn"[^>]*>Share Invite</);assert.match(ranked,/navigator\.share\(\{title:'GoStop Live!',text,url:link\.href\}\)/);assert.match(ranked,/No account needed to start/);
+  assert.match(ranked,/gostop-friendly-friend-joined/);assert.match(ranked,/Your friend joined! Have fun!/);
+  assert.match(ranked,/friendlyReferralProgressHtml/);assert.match(ranked,/Help your friend earn 200 Coins/);assert.match(ranked,/referral progress:/);
+  assert.match(ranked,/FRIENDLY_REFERRAL_PROGRESS_POLL_MS=15000/);assert.match(ranked,/syncFriendlyReferralProgressPoll/);
+  assert.match(ranked,/addEventListener\('storage'/);assert.match(ranked,/event\.key!==TOKEN_KEY/);assert.match(ranked,/showAccountSuccess\('verified',\{awards:\{referralCoins:200\}/);
+  assert.match(ranked,/id="registrationCompetitive"[^>]*hidden>Try Competitive Gaming</);assert.match(ranked,/focusCompetitiveGaming/);assert.match(ranked,/resumeFriendlyRoom\(context\.roomCode\)/);
   assert.match(ranked,/body\.referralToken=friendly\.token;body\.referralStage=friendly\.stage;body\.deviceId=friendlyDeviceId\(\)/);
   assert.match(ranked,/body:\{roomCode,deviceId:friendlyDeviceId\(\)\}/);
   assert.match(ranked,/url\.searchParams\.set\('ref',referralToken\)/);
-  assert.match(accountStoreSource,/progressFriendlyReferralForGame/);assert.match(accountStoreSource,/participants\.some\(item=>String\(item\?\.accountId\|\|''\)===String\(progress\.inviterAccountId\)\)/);
-  assert.match(app,/handleFriendlyTerminal\?\.\(snapshot\)/);assert.match(app,/handleFriendlySessionEnd\?\.\(snapshot\)/);assert.match(online,/sendFriendlyReferral\(status,stage\)/);
+  assert.match(accountStoreSource,/friendlyReferralInvites/);assert.match(accountStoreSource,/progressFriendlyReferralForGame/);assert.match(accountStoreSource,/participants\.some\(item=>String\(item\?\.accountId\|\|''\)===String\(progress\.inviterAccountId\)\)/);
+  assert.match(app,/resumeFriendlyRoom\(roomCode\)/);assert.match(app,/gostop-friendly-friend-joined/);assert.match(app,/handleFriendlyTerminal\?\.\(snapshot\)/);assert.match(app,/handleFriendlySessionEnd\?\.\(snapshot\)/);assert.match(online,/sendFriendlyReferral\(status,stage\)/);
 });
