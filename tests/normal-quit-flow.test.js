@@ -102,7 +102,7 @@ test('Free Play With Friend quit bypasses presentation queue and ends both views
   assert.match(snapshot,/clearOnlineGameplayPresentation\(\);reconcileOnlineFlow\(event\.detail\.snapshot\);globalThis\.dispatchEvent\(new CustomEvent\('gostop-online-snapshot'/);
   const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
   assert.match(reconcile,/flow\.ended/);
-  assert.match(reconcile,/flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\)/);
+  assert.match(reconcile,/flow\.disconnectCancelled\|\|flow\.endedByYou\)\{if\(onlineAnonymousMode&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd\?\.\(snapshot\)\)return;returnOnlineToMenu\(\);return;\}/);
   assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,true\)/);
   const transition=app.slice(app.indexOf('async function presentOnlineTransition'),app.indexOf('async function submitOnlineCardPlay'));
   assert.match(transition,/epoch=onlinePresentationEpoch/);
