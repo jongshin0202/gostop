@@ -245,6 +245,72 @@
   const toast=document.createElement('div');toast.className='ranked-status-toast';toast.hidden=true;document.body.appendChild(toast);
 
   function showToast(text,ms=4000){toast.textContent=text;toast.hidden=false;if(statusTimer)clearTimeout(statusTimer);statusTimer=setTimeout(()=>toast.hidden=true,ms);}
+  function readFriendlyReferralContext(){try{const value=JSON.parse(localStorage.getItem(FRIENDLY_REFERRAL_KEY)||'null');return value&&/^[a-f0-9]{64}$/i.test(String(value.token||''))?value:null;}catch(_){return null;}}
+  function writeFriendlyReferralContext(value){try{if(value)localStorage.setItem(FRIENDLY_REFERRAL_KEY,JSON.stringify(value));else localStorage.removeItem(FRIENDLY_REFERRAL_KEY);}catch(_){}return value;}
+  function clearFriendlyReferralContext(){writeFriendlyReferralContext(null);}
+  function friendlyReferralRoomCode(){return String(globalThis.goStopOnlineSession?.room?.roomCode||'').toUpperCase();}
+  function friendlyGuestContext(snapshot=null){const context=readFriendlyReferralContext(),roomCode=friendlyReferralRoomCode();if(!context||account||!roomCode||String(context.roomCode||'').toUpperCase()!==roomCode)return null;if(snapshot&&snapshot.seatId!=='playerB')return null;return context;}
+  function sendFriendlyReferralStatus(status,stage){try{return !!globalThis.goStopOnlineSession?.sendFriendlyReferral?.(status,stage);}catch(_){return false;}}
+  function stopFriendlyReferralPoll(){if(friendlyReferralPollTimer){clearInterval(friendlyReferralPollTimer);friendlyReferralPollTimer=null;}}
+  function friendlyReferralNotice(){return pendingAccountNotices.find(item=>item?.type==='friendly-referral-complete'||item?.type==='friendly-referral-collect')||null;}
+  function showFriendlyInviterDialog(title,text,action='ok',buttonText='OK'){
+    $('friendlyInviterTitle').textContent=title;$('friendlyInviterText').textContent=text;const button=$('friendlyInviterAction');button.dataset.action=action;button.textContent=buttonText;button.hidden=action==='waiting';button.disabled=false;if(!friendlyInviterDialog.open)friendlyInviterDialog.showModal();
+  }
+  function maybeShowFriendlyReferralNotice(){
+    if(!account)return false;const notice=friendlyReferralNotice();if(!notice)return false;stopFriendlyReferralPoll();friendlyInviterNoticeId=notice.id;const friend=notice.friendNickname||'your friend';
+    if(notice.type==='friendly-referral-complete'){
+      showFriendlyInviterDialog('Thank You!',`Thank you! Your friend has signed up. Your friend's ID is ${friend}. Both you and ${friend} will get 200 bonus Coins.`,'ack','OK');return true;
+    }
+    if(notice.collectedAt){
+      showFriendlyInviterDialog('200 Bonus Coins Collected','You have collected 200 Bonus Coins!','collected-ok','OK');return true;
+    }
+    showFriendlyInviterDialog('Friend Sign Up Bonus',`You have received 200 bonus Coins from ${friend} signing up. Thank you for inviting your friend!`,'collect','Collect 200 Bonus Coins');return true;
+  }
+  function startFriendlyReferralPoll(){
+    stopFriendlyReferralPoll();const check=async()=>{if(!account){stopFriendlyReferralPoll();return;}await refreshAccount();if(friendlyReferralNotice())stopFriendlyReferralPoll();};
+    void check();friendlyReferralPollTimer=setInterval(()=>void check(),FRIENDLY_REFERRAL_POLL_MS);
+  }
+  function handleFriendlyReferralMessage(message){
+    if(!account)return false;
+    if(message.status==='offerShown'){showFriendlyInviterDialog('Friend Sign Up Bonus','If your invited friend signs up now, we will give you and your friend 200 Coins each as a thank you.','ok','OK');return true;}
+    if(message.status==='signupStarted'){showFriendlyInviterDialog('Friend Sign Up','Your friend is signing up.','waiting','');startFriendlyReferralPoll();return true;}
+    if(message.status==='declined'){stopFriendlyReferralPoll();showFriendlyInviterDialog('Sign Up Declined','Your friend has declined signing up.','ok','OK');return true;}
+    return false;
+  }
+  function restoreFriendlyGameScreen(){
+    const result=document.getElementById('resultDialog');if(friendlyResumeResult&&result&&!result.open&&globalThis.goStopOnlineSession){try{result.showModal();}catch(_){}}friendlyResumeResult=false;
+  }
+  function showFriendlyDeclined(stage){
+    $('friendlyGuestMessage').textContent=stage==='session-end'?'Sign up offer was declined.':"Sign up offer was declined. At the end of the gaming session, you will get one more chance to sign up to get 200 bonus Coins for you and your friend. If you enjoyed your game, please consider signing up to enjoy competitive online gaming, it's free!";
+    friendlyGuestMessageDialog.dataset.stage=stage;if(!friendlyGuestMessageDialog.open)friendlyGuestMessageDialog.showModal();
+  }
+  function declineFriendlySignup(stage){
+    const context=readFriendlyReferralContext();if(context){context.signupStarted=false;context.registrationSubmitted=false;if(stage==='game10')context.game10Declined=true;else context.sessionEndDeclined=true;writeFriendlyReferralContext(context);}sendFriendlyReferralStatus('declined',stage);if(friendlySignupDialog.open)friendlySignupDialog.close();showFriendlyDeclined(stage);
+  }
+  function showFriendlySignupOffer(stage){
+    const context=readFriendlyReferralContext();if(!context||account)return false;context.stage=stage;if(stage==='game10')context.game10Offered=true;else context.sessionEndOffered=true;writeFriendlyReferralContext(context);
+    const result=document.getElementById('resultDialog');friendlyResumeResult=stage==='game10'&&!!result?.open;if(friendlyResumeResult)result.close();
+    friendlySignupDialog.dataset.stage=stage;$('friendlySignupText').textContent='Sign up now and you and the friend who invited you will each get 200 bonus Coins, in addition to your 100-Coin signup bonus and 100-Coin daily bonus.';sendFriendlyReferralStatus('offerShown',stage);if(!friendlySignupDialog.open)friendlySignupDialog.showModal();return true;
+  }
+  function handleFriendlyTerminal(snapshot){
+    const context=friendlyGuestContext(snapshot),games=Math.max(0,Number(snapshot?.sessionFlow?.friendlyGamesPlayed)||0);if(!context||context.game10Offered||context.signupStarted||games<10)return false;return showFriendlySignupOffer('game10');
+  }
+  function handleFriendlySessionEnd(snapshot){
+    const context=friendlyGuestContext(snapshot);if(!context||context.signupStarted||context.sessionEndOffered)return false;const result=document.getElementById('resultDialog');if(result?.open)result.close();return showFriendlySignupOffer('session-end');
+  }
+  function cancelFriendlySignupFromAuth(){
+    const context=readFriendlyReferralContext();if(!context?.signupStarted||context.registrationSubmitted||account)return false;const stage=context.stage==='session-end'?'session-end':'game10';declineFriendlySignup(stage);return true;
+  }
+  $('friendlySignupAccept').addEventListener('click',()=>{const context=readFriendlyReferralContext(),stage=friendlySignupDialog.dataset.stage==='session-end'?'session-end':'game10';if(!context)return;context.stage=stage;context.signupStarted=true;context.registrationSubmitted=false;writeFriendlyReferralContext(context);sendFriendlyReferralStatus('signupStarted',stage);friendlySignupDialog.close();openAuth('register');});
+  $('friendlySignupCancel').addEventListener('click',()=>declineFriendlySignup(friendlySignupDialog.dataset.stage==='session-end'?'session-end':'game10'));
+  friendlySignupDialog.addEventListener('cancel',event=>event.preventDefault());
+  friendlyGuestMessageDialog.addEventListener('cancel',event=>event.preventDefault());
+  $('friendlyGuestMessageOk').addEventListener('click',()=>{const stage=friendlyGuestMessageDialog.dataset.stage;friendlyGuestMessageDialog.close();if(stage==='session-end'){clearFriendlyReferralContext();globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}else restoreFriendlyGameScreen();});
+  friendlyInviterDialog.addEventListener('cancel',event=>event.preventDefault());
+  $('friendlyInviterAction').addEventListener('click',async()=>{const button=$('friendlyInviterAction'),action=button.dataset.action;if(action==='waiting')return;if(action==='ok'){friendlyInviterDialog.close();return;}if(!friendlyInviterNoticeId){friendlyInviterDialog.close();return;}button.disabled=true;try{
+    if(action==='collect'){const data=await api('/api/referrals/collect',{method:'POST',body:{noticeId:friendlyInviterNoticeId}});captureAccountPayload(data);renderAccountBox();patchGameIdentity();showFriendlyInviterDialog('200 Bonus Coins Collected','You have collected 200 Bonus Coins!','collected-ok','OK');return;}
+    if(action==='ack'||action==='collected-ok'){await acknowledgeAccountNotice(friendlyInviterNoticeId);friendlyInviterNoticeId=null;friendlyInviterDialog.close();renderAccountBox();patchGameIdentity();}
+  }catch(error){showToast(localizedError(error),6000);}finally{button.disabled=false;}});
   function applyRankedLocale(){
     trainingBtn.textContent=rt('training');playPractice.textContent=rt('solo');freeGroup.dataset.label=rt('freeGaming');freeGroupNote.textContent=rt('freeGamingNote');freeFriendBtn.textContent=rt('playWithFriend');rankedGroup.dataset.label=rt('competitiveGaming');rankedGroupNote.textContent=rt('competitiveGamingNote');syncRankedButtons();leaderboardBtn.textContent=rt('leaderboards');if(howTo)howTo.textContent=rt('howTo');
     $('freeFriendTitle').textContent=rt('playWithFriend');$('freeFriendHelp').textContent=rt('freeFriendHelp');$('freeRoomShareTitle').textContent=rt('roomShare');$('freeCreateRoomBtn').textContent=rt('createRoomShare');$('freeCopyLinkBtn').textContent=rt('copyLink');$('freeFriendClose').textContent=rt('cancel');
