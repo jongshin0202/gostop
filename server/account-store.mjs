@@ -7,11 +7,16 @@ const EMAIL_VERIFY_TTL_MS=1000*60*60*24;
 const EMAIL_VERIFY_RESEND_MS=1000*60;
 const FRIENDLY_REFERRAL_BONUS_COINS=200;
 const FRIENDLY_REFERRAL_TTL_MS=1000*60*60*24*7;
+const FRIENDLY_REFERRAL_QUALIFYING_GAMES=10;
+const FRIENDLY_REFERRAL_NETWORK_WINDOW_MS=1000*60*60*24*7;
+const FRIENDLY_REFERRAL_NETWORK_AWARD_LIMIT=3;
 
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const normalizeEmail=value=>String(value||'').trim().toLowerCase();
 const normalizeNickname=value=>String(value||'').trim().replace(/\s+/g,' ');
 const nicknameKey=value=>normalizeNickname(value).toLowerCase();
+const normalizeReferralDeviceId=value=>{const id=String(value||'').trim();return /^[A-Za-z0-9._:-]{8,128}$/.test(id)?id:'';};
+const canonicalReferralEmail=value=>{const email=normalizeEmail(value),at=email.lastIndexOf('@');if(at<=0)return email;let local=email.slice(0,at),domain=email.slice(at+1);if(domain==='gmail.com'||domain==='googlemail.com'){local=local.split('+')[0].replace(/\./g,'');domain='gmail.com';}return `${local}@${domain}`;};
 const utcDay=iso=>String(iso).slice(0,10);
 const utcMonth=iso=>String(iso).slice(0,7);
 const normalizeTimeZone=value=>{
