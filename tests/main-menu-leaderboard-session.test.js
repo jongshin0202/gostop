@@ -305,7 +305,7 @@ test('switching modes clears stale Free and Competitive lobby panels before game
 
 test('Friendly Play With Friend direct link joins a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
   const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
-  assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);\}/);
+  assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);announceFriendlyJoin\(\);\}/);
   const handoff=appSource.slice(appSource.indexOf('function enterOnlineMatchView'),appSource.indexOf('const beginOnline=async'));
   assert.match(handoff,/if\(anonymous\)\{if\(freeFriendPanel\)freeFriendPanel\.hidden=true;\}/);
   const invite=source.slice(source.indexOf('async function launchInviteRoom'),source.indexOf('globalThis.GoStopRanked'));
