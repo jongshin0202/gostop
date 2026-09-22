@@ -248,6 +248,7 @@ test('online quit decline schedules requester exit after current game',async()=>
 
 test('ranked Solo disconnect freezes the five-point settlement and stops the computer during grace',async()=>{
   const {core,user,socket}=await soloRoom(),bot=core.room.participants.find(item=>item.bot),record=core.authority.exportMatch(core.room.matchId),botSide=bot.seatId==='playerA'?'human':'ai';
+  record.state.terminalResult=null;record.state.winner=null;record.completedAt=null;core.room.terminalResult=null;core.room.status='ready';
   assert.equal(globalThis.GoStopEngine.scorePlayer(record.state[botSide]).total,0);record.state[botSide].firstPpeokPoints=5;record.state[botSide].go=0;record.state[botSide].shakes=0;record.state[botSide].shakeMultiplier=1;record.state.matchContext.nagariCarryPower=0;
   core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);await core.persist();assert.equal(core.calculateDisconnectSettlement(user.playerId).fairPoints,5);
   await core.disconnect(socket);assert.equal(core.room.rankFlow.disconnectSettlements[user.playerId].fairPoints,5);const before=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).revision;
