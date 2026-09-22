@@ -179,6 +179,14 @@ test('turn evaluation is server-owned and browsers do not submit handoff actions
 });
 
 
+test('authenticated host plus no-account invitee plays the shared room unranked',async()=>{
+  const core=makeRoom(),host={id:'acct-host',nickname:'Host',walletCoins:250};
+  await core.create('QWER2345TYUI67',host);
+  const guest=await core.join(null,null);
+  assert.equal(core.room.participants.length,2);assert.equal(guest.seatId,'playerB');assert.equal(core.room.participants[1].accountId,null);
+  assert.equal(core.isRanked(),false);assert.equal(guest.ranked,false);assert.equal(core.room.sessionId,null);
+});
+
 test('same authenticated account can reclaim its full ranked room seat from a second device without creating another seat',async()=>{
   const core=makeRoom(),accountA={id:'acct-a',nickname:'Alpha',walletCoins:250},accountB={id:'acct-b',nickname:'Beta',walletCoins:250};
   const first=await core.create('ABCDEFGHJK2388',accountA),other=await core.join(null,accountB);
