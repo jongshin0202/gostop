@@ -14,10 +14,18 @@ class MemoryStorage{
 const store=()=>new AccountStore({storage:new MemoryStorage()},{},{cryptoApi:globalThis.crypto,now:()=> '2026-09-21T23:00:00.000Z'});
 const request=(path,{method='POST',body,token,ip}={})=>new Request(`https://accounts${path}`,{method,headers:{...(body!==undefined?{'content-type':'application/json'}:{}),...(token?{authorization:`Bearer ${token}`}:{}),...(ip?{'x-gostop-ip':ip}:{})},body:body===undefined?undefined:JSON.stringify(body)});
 async function register(accountStore,email,nickname,extra={},options={}){const response=await accountStore.fetch(request('/register',{body:{email,nickname,password:'BetterPass9',confirmPassword:'BetterPass9',...extra},ip:options.ip}));assert.equal(response.status,201);return response.json();}
-async function registerFreeRoom(accountStore,roomCode){const response=await accountStore.fetch(request('/internal/room/register',{body:{roomCode,mode:'free'}}));assert.equal(response.status,200);}
+async function registerRoom(accountStore,roomCode,mode='free'){const response=await accountStore.fetch(request('/internal/room/register',{body:{roomCode,mode}}));assert.equal(response.status,200);}
+async function registerFreeRoom(accountStore,roomCode){return registerRoom(accountStore,roomCode,'free');}
 async function createReferral(accountStore,token,roomCode,{deviceId='host-device-0001',ip='198.51.100.10'}={}){const response=await accountStore.fetch(request('/referrals/create',{body:{roomCode,deviceId},token,ip}));assert.equal(response.status,200);const data=await response.json();assert.match(data.referralToken,/^[a-f0-9]{64}$/);return data.referralToken;}
 async function me(accountStore,token){return (await accountStore.fetch(request('/me',{method:'GET',token}))).json();}
 async function settle(accountStore,gameId,mode,participants){const response=await accountStore.fetch(request('/internal/game/settle',{body:{gameId,mode,winnerPlayerId:null,finalPoints:0,participants:participants.map(account=>({accountId:account.id,playerId:`player-${account.id}`,nickname:account.nickname,won:false,walletDelta:0,coinsWon:0,points:0,milestones:{}})),recordedAt:'2026-09-21T23:00:00.000Z'}}));assert.equal(response.status,200);return response.json();}
+
+test('shared online room can issue a referral token so a guest can play before signup',async()=>{
+  const accountStore=store(),inviter=await register(accountStore,'online-host@example.com','OnlineHost'),roomCode='ZXCV2345BNML67';
+  await registerRoom(accountStore,roomCode,'online');
+  const referralToken=await createReferral(accountStore,inviter.session.token,roomCode,{deviceId:'online-host-device'});
+  assert.match(referralToken,/^[a-f0-9]{64}$/);
+});
 
 test('Friendly referral gives the verified new player 200 extra Coins immediately while inviter reward stays pending',async()=>{
   const accountStore=store(),inviter=await register(accountStore,'host@example.com','HostPlayer'),roomCode='ABCD2345EFGH67';
