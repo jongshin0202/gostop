@@ -28,6 +28,20 @@ test('game-10 Friendly referral gives the new player 200 extra Coins and auto-cr
   const notice=host.notices.find(item=>item.type==='friendly-referral-complete');assert.ok(notice);assert.equal(notice.friendNickname,'GuestPlayer');assert.equal(notice.coins,200);assert.equal(notice.autoCredited,true);
 });
 
+test('email verification completes the production Friendly referral reward only after the invited player verifies',async()=>{
+  const sent=[],env={EMAIL_VERIFICATION_REQUIRED:'true',RESEND_API_KEY:'re_test',EMAIL_FROM:'GoStop Live <noreply@gostoplive.com>',EMAIL_VERIFY_BASE_URL:'https://gostoplive.com'};
+  const accountStore=new AccountStore({storage:new MemoryStorage()},env,{cryptoApi:globalThis.crypto,now:()=> '2026-09-21T23:00:00.000Z',fetchApi:async(url,options={})=>{sent.push({url,options});return new Response(JSON.stringify({id:`email-${sent.length}`}),{status:200,headers:{'content-type':'application/json'}});}});
+  const registerPending=async(email,nickname,extra={})=>{const response=await accountStore.fetch(request('/register',{body:{email,nickname,password:'BetterPass9',confirmPassword:'BetterPass9',...extra}}));assert.equal(response.status,202);return response.json();};
+  const tokenFromLastEmail=()=>{const html=JSON.parse(sent.at(-1).options.body).html,match=String(html).match(/#verify=([a-f0-9]{64})/i);assert.ok(match);return match[1];};
+  await registerPending('verifiedhost@example.com','VerifiedHost');const hostVerified=await (await accountStore.fetch(request('/verify-email',{body:{token:tokenFromLastEmail()}}))).json();
+  const roomCode='STUV2345WXYZ67';await registerFreeRoom(accountStore,roomCode);const referralToken=await createReferral(accountStore,hostVerified.session.token,roomCode);
+  await registerPending('verifiedguest@example.com','VerifiedGuest',{referralToken,referralStage:'game10'});
+  const pendingGuest=await accountStore.accountByEmail('verifiedguest@example.com');assert.equal(pendingGuest.walletCoins,0);assert.ok(pendingGuest.pendingFriendlyReferral);
+  const guestVerified=await (await accountStore.fetch(request('/verify-email',{body:{token:tokenFromLastEmail()}}))).json();
+  assert.equal(guestVerified.account.walletCoins,400);assert.equal(guestVerified.awards.referralCoins,200);
+  const host=await me(accountStore,hostVerified.session.token);assert.equal(host.account.walletCoins,400);assert.ok(host.notices.some(item=>item.type==='friendly-referral-complete'&&item.friendNickname==='VerifiedGuest'));
+});
+
 test('session-end Friendly referral holds inviter reward until Collect 200 Bonus Coins and collection is idempotent',async()=>{
   const accountStore=store(),inviter=await register(accountStore,'collector@example.com','Collector'),roomCode='JKLM2345NPQR67';
   await registerFreeRoom(accountStore,roomCode);const referralToken=await createReferral(accountStore,inviter.session.token,roomCode);
