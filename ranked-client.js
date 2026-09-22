@@ -817,7 +817,7 @@
   }
   function showLinkCopiedDialog(){
     if(linkCopiedTimer){clearTimeout(linkCopiedTimer);linkCopiedTimer=null;}if(!linkCopiedDialog.open)linkCopiedDialog.showModal();
-    linkCopiedTimer=setTimeout(()=>{linkCopiedTimer=null;if(linkCopiedDialog.open)linkCopiedDialog.close();},3000);
+    linkCopiedTimer=setTimeout(()=>{linkCopiedTimer=null;if(linkCopiedDialog.open)linkCopiedDialog.close();},1500);
   }
   async function copyShareLink(mode){
     const link=$(mode==='free'?'freeShareLink':'competitiveShareLink');if(!link?.href)return;try{await navigator.clipboard.writeText(link.href);showLinkCopiedDialog();}catch(_){showToast(link.href,5000);}
