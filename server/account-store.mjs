@@ -5,6 +5,8 @@ const SESSION_TTL_MS=1000*60*60*24*30;
 const PBKDF2_ITERATIONS=100000;
 const EMAIL_VERIFY_TTL_MS=1000*60*60*24;
 const EMAIL_VERIFY_RESEND_MS=1000*60;
+const FRIENDLY_REFERRAL_BONUS_COINS=200;
+const FRIENDLY_REFERRAL_TTL_MS=1000*60*60*24*7;
 
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const normalizeEmail=value=>String(value||'').trim().toLowerCase();
@@ -151,6 +153,59 @@ export class AccountStore{
     const createdAt=this.now();account.signupAwardedAt=createdAt;account.walletCoins=(Number(account.walletCoins)||0)+100;account.updatedAt=createdAt;
     await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'signup',amount:100,createdAt});return true;
   }
+  async referralFromToken(token){
+    const value=String(token||'').trim();if(!/^[a-f0-9]{64}$/i.test(value))return null;
+    const tokenHash=await hashToken(this.crypto,value),referral=await this.storage.get(`referral:${tokenHash}`);return referral?{tokenHash,referral}:null;
+  }
+  async createFriendlyReferral(request){
+    const inviter=await this.requireAccount(request),body=await request.json().catch(()=>({})),roomCode=String(body.roomCode||'').trim().toUpperCase();
+    if(!/^[A-Z2-9]{14}$/.test(roomCode))return json({ok:false,error:{code:'INVALID_ROOM_CODE',message:'Room code is invalid.'}},400);
+    const registry=await this.storage.get(`roomRegistry:${roomCode}`);
+    if(!registry||registry.mode!=='free')return json({ok:false,error:{code:'FRIENDLY_ROOM_REQUIRED',message:'Referral links can only be created for Friendly Play With Friend rooms.'}},409);
+    const token=randomHex(this.crypto,32),tokenHash=await hashToken(this.crypto,token),createdAt=this.now(),expiresAt=new Date(Date.parse(createdAt)+FRIENDLY_REFERRAL_TTL_MS).toISOString(),id=randomId(this.crypto,'ref');
+    await this.storage.put(`referral:${tokenHash}`,{id,inviterAccountId:inviter.id,roomCode,createdAt,expiresAt,usedByAccountId:null,usedAt:null});
+    return json({ok:true,referralToken:token,expiresAt});
+  }
+  async attachFriendlyReferral(account,token,stage){
+    const found=await this.referralFromToken(token),offerStage=stage==='session-end'?'session-end':stage==='game10'?'game10':null;
+    if(!found||!offerStage)return false;
+    const {tokenHash,referral}=found,nowMs=Date.parse(this.now());
+    if(referral.usedByAccountId||!Number.isFinite(Date.parse(referral.expiresAt))||Date.parse(referral.expiresAt)<=nowMs||referral.inviterAccountId===account.id)return false;
+    const inviter=await this.accountById(referral.inviterAccountId);
+    if(!inviter||inviter.suspended||inviter.emailVerified===false)return false;
+    account.pendingFriendlyReferral={tokenHash,referralId:referral.id,inviterAccountId:referral.inviterAccountId,roomCode:referral.roomCode,stage:offerStage,attachedAt:this.now()};
+    await this.storage.put(`account:${account.id}`,account);return true;
+  }
+  async completeFriendlyReferral(account){
+    const pending=account.pendingFriendlyReferral;if(!pending||account.friendlyReferralSignupAwardedAt)return null;
+    const referral=await this.storage.get(`referral:${pending.tokenHash}`),createdAt=this.now();
+    if(!referral||referral.id!==pending.referralId||referral.inviterAccountId!==pending.inviterAccountId||referral.usedByAccountId&&referral.usedByAccountId!==account.id||Date.parse(referral.expiresAt)<=Date.parse(createdAt)){delete account.pendingFriendlyReferral;await this.storage.put(`account:${account.id}`,account);return null;}
+    const inviter=await this.accountById(referral.inviterAccountId);
+    if(!inviter||inviter.id===account.id||inviter.suspended||inviter.emailVerified===false){delete account.pendingFriendlyReferral;await this.storage.put(`account:${account.id}`,account);return null;}
+    referral.usedByAccountId=account.id;referral.usedAt=createdAt;referral.stage=pending.stage;
+    const inviteeBefore=Number(account.walletCoins)||0;account.walletCoins=inviteeBefore+FRIENDLY_REFERRAL_BONUS_COINS;account.friendlyReferralSignupAwardedAt=createdAt;account.updatedAt=createdAt;delete account.pendingFriendlyReferral;
+    await this.storage.put(`referral:${pending.tokenHash}`,referral);await this.storage.put(`account:${account.id}`,account);
+    await this.appendLedger(account.id,{type:'friendly-referral-signup',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:referral.id,inviterAccountId:inviter.id,stage:pending.stage});
+    const noticeId=`friendly-referral:${referral.id}:${account.id}`,noticeBase={id:noticeId,coins:FRIENDLY_REFERRAL_BONUS_COINS,friendAccountId:account.id,friendNickname:account.nickname,referralId:referral.id,roomCode:referral.roomCode,stage:pending.stage,createdAt};
+    inviter.pendingNotices=Array.isArray(inviter.pendingNotices)?inviter.pendingNotices:[];
+    if(pending.stage==='game10'){
+      const walletBefore=Number(inviter.walletCoins)||0,walletAfter=walletBefore+FRIENDLY_REFERRAL_BONUS_COINS;inviter.walletCoins=walletAfter;inviter.updatedAt=createdAt;
+      inviter.pendingNotices.push({...noticeBase,type:'friendly-referral-complete',autoCredited:true,walletBefore,walletAfter});
+      await this.storage.put(`account:${inviter.id}`,inviter);await this.appendLedger(inviter.id,{type:'friendly-referral-invite',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:referral.id,friendAccountId:account.id,stage:pending.stage});
+    }else{
+      inviter.pendingNotices.push({...noticeBase,type:'friendly-referral-collect',autoCredited:false,collectedAt:null});
+      inviter.updatedAt=createdAt;await this.storage.put(`account:${inviter.id}`,inviter);
+    }
+    return {inviteeCoins:FRIENDLY_REFERRAL_BONUS_COINS,inviterAccountId:inviter.id,inviterNickname:inviter.nickname,friendAccountId:account.id,friendNickname:account.nickname,stage:pending.stage};
+  }
+  async collectFriendlyReferral(request){
+    const account=await this.requireAccount(request),body=await request.json().catch(()=>({})),noticeId=String(body.noticeId||''),notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],notice=notices.find(item=>item?.id===noticeId&&item?.type==='friendly-referral-collect');
+    if(!notice)return json({ok:false,error:{code:'REFERRAL_REWARD_NOT_FOUND',message:'This referral reward is no longer available.'}},404);
+    if(notice.collectedAt)return json({ok:true,duplicate:true,collectedCoins:0,account:publicAccount(account),notices:this.noticeList(account),notice});
+    const createdAt=this.now(),walletBefore=Number(account.walletCoins)||0,walletAfter=walletBefore+FRIENDLY_REFERRAL_BONUS_COINS;account.walletCoins=walletAfter;account.updatedAt=createdAt;notice.collectedAt=createdAt;notice.walletBefore=walletBefore;notice.walletAfter=walletAfter;
+    await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'friendly-referral-invite',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:notice.referralId,friendAccountId:notice.friendAccountId,stage:'session-end'});
+    return json({ok:true,collectedCoins:FRIENDLY_REFERRAL_BONUS_COINS,account:publicAccount(account),notices:this.noticeList(account),notice});
+  }
   async sendVerificationEmail(account,{bypassRateLimit=false}={}){
     if(!this.emailVerificationRequired())return {sent:false,disabled:true};
     if(!this.emailVerificationConfigured())throw Object.assign(new Error('Email verification is temporarily unavailable.'),{status:503,code:'EMAIL_SERVICE_NOT_CONFIGURED'});
@@ -189,8 +244,8 @@ export class AccountStore{
     if(!account||account.emailVerificationTokenHash!==tokenHash||normalizeEmail(account.email)!==normalizeEmail(record.email))return json({ok:false,error:{code:'INVALID_VERIFICATION_TOKEN',message:'This verification link is no longer valid.'}},400);
     account.emailVerified=true;account.emailVerifiedAt=this.now();delete account.emailVerificationTokenHash;delete account.emailVerificationExpiresAt;delete account.emailVerificationSentAt;account.updatedAt=this.now();
     await this.storage.put(`account:${account.id}`,account);await this.storage.delete(`verify:${tokenHash}`);
-    const signupAwarded=await this.awardSignup(account),dailyAwarded=await this.awardDaily(account,request),session=await this.createSession(account);await this.recordConnection(account,request,'verify-email');
-    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:signupAwarded?100:0,dailyCoins:dailyAwarded?100:0},notices:this.noticeList(account)});
+    const signupAwarded=await this.awardSignup(account),dailyAwarded=await this.awardDaily(account,request),referral=await this.completeFriendlyReferral(account),session=await this.createSession(account);await this.recordConnection(account,request,'verify-email');
+    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:signupAwarded?100:0,dailyCoins:dailyAwarded?100:0,referralCoins:referral?.inviteeCoins||0},referral,notices:this.noticeList(account)});
   }
   async resendVerification(request){
     if(!this.emailVerificationRequired())return json({ok:false,error:{code:'EMAIL_VERIFICATION_DISABLED',message:'Email verification is not enabled.'}},404);
@@ -212,7 +267,7 @@ export class AccountStore{
 
   async register(request){
     const body=await request.json().catch(()=>({}));
-    const email=normalizeEmail(body.email),nickname=normalizeNickname(body.nickname),password=String(body.password||''),confirm=String(body.confirmPassword??password);
+    const email=normalizeEmail(body.email),nickname=normalizeNickname(body.nickname),password=String(body.password||''),confirm=String(body.confirmPassword??password),referralToken=String(body.referralToken||''),referralStage=String(body.referralStage||'');
     if(!email||!nickname||!password||!confirm)return json({ok:false,error:{code:'INCOMPLETE_REGISTRATION',message:'Please fill out all registration information.'}},400);
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({ok:false,error:{code:'INVALID_EMAIL',message:'Enter a valid email address.'}},400);
     if(nickname.length<3||nickname.length>16||!/^[\p{L}\p{N}_ -]+$/u.test(nickname))return json({ok:false,error:{code:'INVALID_NICKNAME',message:'Nickname must be 3-16 letters, numbers, spaces, underscores, or hyphens.'}},400);
@@ -225,10 +280,11 @@ export class AccountStore{
     const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt),coarseLocation=locationFromRequest(request),verificationRequired=this.emailVerificationRequired();
     const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:!verificationRequired,walletCoins:verificationRequired?0:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},location:coarseLocation?{...coarseLocation,source:'edge-coarse',updatedAt:this.now()}:null,createdAt:this.now(),updatedAt:this.now()};
     await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
+    if(referralToken&&referralStage)await this.attachFriendlyReferral(account,referralToken,referralStage);
     if(verificationRequired){try{const sent=await this.sendVerificationEmail(account,{bypassRateLimit:true});return json({ok:true,verificationPending:true,email:account.email,emailSent:sent.sent,expiresAt:sent.expiresAt},202);}catch(error){return json({ok:false,error:{code:error.code||'EMAIL_SEND_FAILED',message:error.message,email:account.email}},error.status||503);}}
-    await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});account.signupAwardedAt=this.now();await this.storage.put(`account:${id}`,account);await this.awardDaily(account,request);
+    await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});account.signupAwardedAt=this.now();await this.storage.put(`account:${id}`,account);await this.awardDaily(account,request);const referral=await this.completeFriendlyReferral(account);
     const session=await this.createSession(account);await this.recordConnection(account,request,'register');
-    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100},notices:this.noticeList(account)},201);
+    return json({ok:true,account:publicAccount(account),session,awards:{signupCoins:100,dailyCoins:100,referralCoins:referral?.inviteeCoins||0},referral,notices:this.noticeList(account)},201);
   }
 
   async login(request){
@@ -413,6 +469,8 @@ export class AccountStore{
       if(request.method==='POST'&&path==='/login')return await this.login(request);
       if(request.method==='POST'&&path==='/logout')return await this.logout(request);
       if(request.method==='POST'&&path==='/notices/ack')return await this.acknowledgeNotice(request);
+      if(request.method==='POST'&&path==='/referrals/create')return await this.createFriendlyReferral(request);
+      if(request.method==='POST'&&path==='/referrals/collect')return await this.collectFriendlyReferral(request);
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
       if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
