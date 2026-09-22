@@ -40,7 +40,7 @@ async function allocateRoom(env,{solo=false,account=null}={}){
   return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
 }
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),adminRoute=/^\/api\/admin(?:\/|$)/.test(url.pathname),apiRoute=/^\/api\/(?:rooms|solo|auth|account|referrals|me|leaderboards|lobby|admin)(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),adminRoute=/^\/api\/admin(?:\/|$)/.test(url.pathname),apiRoute=/^\/api\/(?:rooms|solo|auth|account|referrals|social|me|leaderboards|lobby|admin)(?:\/|$)/.test(url.pathname);
   if(adminRoute&&origin&&!isAllowedAdminOrigin(origin,env))return json({ok:false,error:{code:'ADMIN_ORIGIN_NOT_ALLOWED',message:'Admin origin is not allowed.'}},403);
   if(apiRoute&&!adminRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
@@ -73,6 +73,11 @@ export default {async fetch(request,env){
     if(request.method==='POST'&&url.pathname==='/api/account/notices/ack')return withCors(await forwardAccount(request,env,'/notices/ack'),origin);
     if(request.method==='POST'&&url.pathname==='/api/referrals/create')return withCors(await forwardAccount(request,env,'/referrals/create'),origin);
     if(request.method==='POST'&&url.pathname==='/api/referrals/collect')return withCors(await forwardAccount(request,env,'/referrals/collect'),origin);
+    if(request.method==='GET'&&url.pathname==='/api/social')return withCors(await forwardAccount(request,env,'/social'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/search')return withCors(await forwardAccount(request,env,'/social/search'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/request')return withCors(await forwardAccount(request,env,'/social/request'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/respond')return withCors(await forwardAccount(request,env,'/social/respond'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/unfriend')return withCors(await forwardAccount(request,env,'/social/unfriend'),origin);
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
