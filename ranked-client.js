@@ -258,7 +258,7 @@
   function writeFriendlyReferralContext(value){try{if(value)localStorage.setItem(FRIENDLY_REFERRAL_KEY,JSON.stringify(value));else localStorage.removeItem(FRIENDLY_REFERRAL_KEY);}catch(_){}return value;}
   function clearFriendlyReferralContext(){writeFriendlyReferralContext(null);}
   function friendlyReferralRoomCode(){return String(globalThis.goStopOnlineSession?.room?.roomCode||'').toUpperCase();}
-  function friendlyGuestContext(snapshot=null){const context=readFriendlyReferralContext(),roomCode=friendlyReferralRoomCode();if(!context||account||!roomCode||String(context.roomCode||'').toUpperCase()!==roomCode)return null;if(snapshot&&snapshot.seatId!=='playerB')return null;return context;}
+  function friendlyGuestContext(snapshot=null){const context=readFriendlyReferralContext(),roomCode=friendlyReferralRoomCode();if(!context||account||!roomCode||String(context.roomCode||'').toUpperCase()!==roomCode)return null;return context;}
   function sendFriendlyReferralStatus(status,stage){try{return !!globalThis.goStopOnlineSession?.sendFriendlyReferral?.(status,stage);}catch(_){return false;}}
   function stopFriendlyReferralPoll(){if(friendlyReferralPollTimer){clearInterval(friendlyReferralPollTimer);friendlyReferralPollTimer=null;}}
   function syncFriendlyReferralProgressPoll(){if(friendlyReferralProgressTimer){clearTimeout(friendlyReferralProgressTimer);friendlyReferralProgressTimer=null;}const pending=Array.isArray(account?.friendlyReferralInvites)&&account.friendlyReferralInvites.some(item=>!item?.rewardCollected);if(!authToken||!pending)return;friendlyReferralProgressTimer=setTimeout(()=>{friendlyReferralProgressTimer=null;void refreshAccount();},FRIENDLY_REFERRAL_PROGRESS_POLL_MS);}
