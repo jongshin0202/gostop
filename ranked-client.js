@@ -150,7 +150,7 @@
     for(const item of daily){const itemTime=Date.parse(item?.createdAt||''),latestTime=Date.parse(latestDaily?.createdAt||'');if(!latestDaily||(Number.isFinite(itemTime)&&(!Number.isFinite(latestTime)||itemTime>latestTime))||(!Number.isFinite(itemTime)&&!Number.isFinite(latestTime)&&String(item?.id||'')>String(latestDaily?.id||'')))latestDaily=item;}
     return list.filter(item=>{if(item?.type==='daily-login'&&item!==latestDaily)return false;return !acknowledgedNoticeIds.has(String(item?.id||''));});
   }
-  function captureAccountPayload(data){if(data?.account){const nextAccountId=data.account.id;if(nextAccountId&&nextAccountId!==account?.id)readAcknowledgedNoticeCache(nextAccountId);account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=normalizeAccountNotices(data.notices);syncRankedButtons();scheduleActiveRankedRecheck();syncFriendlyReferralProgressPoll();setTimeout(()=>maybeShowFriendlyReferralNotice(),0);}
+  function captureAccountPayload(data){if(data?.account){const nextAccountId=data.account.id;if(nextAccountId&&nextAccountId!==account?.id)readAcknowledgedNoticeCache(nextAccountId);account=data.account;persistAccountCache();}if(Array.isArray(data?.notices))pendingAccountNotices=normalizeAccountNotices(data.notices);syncRankedButtons();syncFriendsButton();scheduleActiveRankedRecheck();syncFriendlyReferralProgressPoll();setTimeout(()=>maybeShowFriendlyReferralNotice(),0);}
   function pendingDailyNotice(){return pendingAccountNotices.find(item=>item.type==='daily-login')||null;}
   function displayedWalletCoins(){
     // Wallet is server-authoritative. A pending Daily Bonus notice must never make
@@ -327,7 +327,7 @@
     if(action==='ack'||action==='collected-ok'){await acknowledgeAccountNotice(friendlyInviterNoticeId);friendlyInviterNoticeId=null;friendlyInviterDialog.close();renderAccountBox();patchGameIdentity();if(friendlyInviterReturnToMenu){friendlyInviterReturnToMenu=false;globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}}
   }catch(error){showToast(localizedError(error),6000);}finally{button.disabled=false;}});
   function applyRankedLocale(){
-    trainingBtn.textContent=rt('training');playPractice.textContent=rt('solo');freeGroup.dataset.label=rt('freeGaming');freeGroupNote.textContent=rt('freeGamingNote');freeFriendBtn.textContent=rt('playWithFriend');rankedGroup.dataset.label=rt('competitiveGaming');rankedGroupNote.textContent=rt('competitiveGamingNote');syncRankedButtons();leaderboardBtn.textContent=rt('leaderboards');if(howTo)howTo.textContent=rt('howTo');
+    trainingBtn.textContent=rt('training');playPractice.textContent=rt('solo');freeGroup.dataset.label=rt('freeGaming');freeGroupNote.textContent=rt('freeGamingNote');freeFriendBtn.textContent=rt('playWithFriend');rankedGroup.dataset.label=rt('competitiveGaming');rankedGroupNote.textContent=rt('competitiveGamingNote');syncRankedButtons();syncFriendsButton();leaderboardBtn.textContent=rt('leaderboards');if(howTo)howTo.textContent=rt('howTo');
     $('freeFriendTitle').textContent=rt('playWithFriend');$('freeFriendHelp').textContent=rt('freeFriendHelp');$('freeRoomShareTitle').textContent=rt('roomShare');$('freeCreateRoomBtn').textContent=rt('createRoomShare');$('freeCopyLinkBtn').textContent=rt('copyLink');$('freeFriendClose').textContent=rt('cancel');
     const lobbyCard=onlinePanel.querySelector('.online-lobby-card'),methods=onlinePanel.querySelectorAll('.online-method');if(lobbyCard?.querySelector('h2'))lobbyCard.querySelector('h2').textContent=rt('online');if(methods[0]){methods[0].querySelector('strong').textContent=rt('findOnline');methods[0].querySelector('p').textContent=rt('findOnlineHelp');$('autoMatchBtn').textContent=rt('autoMatch');$('autoMatchCancelBtn').textContent=rt('cancelAutoMatch');$('browsePlayersBtn').textContent=rt('browsePlayers');syncNotificationButton();}if(methods[1]){methods[1].querySelector('strong').textContent=rt('searchPlayer');$('onlineNicknameSearch').placeholder=rt('nickname');$('onlineNicknameSearchBtn').textContent=rt('search');}if(methods[2]?.querySelector('strong'))methods[2].querySelector('strong').textContent=rt('roomShare');if(createRoom)createRoom.textContent=rt('createRoom');$('competitiveCopyLinkBtn').textContent=rt('copyUrl');$('onlineLobbyClose').textContent=rt('return');renderLobbyPresence(lastLobbyPlayers,lastLobbyOnlineCount);if(lobbySearchActive)renderPlayers(lastSearchPlayers,'searchPlayerResults');
     renderNotificationBlockedDialog();syncNotificationButton();
@@ -425,6 +425,11 @@
     autoMatchSearching=false;syncAutoMatchControls();if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'autoMatchCancel'});
     onlinePanel.hidden=true;$('lobbyStatus').textContent='';clearRankedEntryPending();resetAttractTimer();
   });
+  friendsBtn.addEventListener('click',()=>requireAccount(()=>{void openSocial('friends');}));
+  $('socialClose').addEventListener('click',closeSocial);$('socialCloseTop').addEventListener('click',closeSocial);
+  for(const button of socialScreen.querySelectorAll('[data-social-tab]'))button.addEventListener('click',()=>{socialTab=button.dataset.socialTab||'friends';renderSocial();if(socialTab==='search')$('socialSearchInput').focus();requestSocialPresence();});
+  $('socialSearchBtn').addEventListener('click',()=>{void searchSocial();});$('socialSearchInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();void searchSocial();}});
+
   createRoom?.addEventListener('click',()=>{if(!onlinePanel.hidden){playerTwoPlayerActive=true;syncLobbyAvailability();}},{capture:true});
   joinForm?.addEventListener('submit',()=>{if(!onlinePanel.hidden){playerTwoPlayerActive=true;syncLobbyAvailability();}},{capture:true});
   freeFriendBtn.addEventListener('click',()=>{stopAttractForGameLaunch();onlinePanel.hidden=true;freePanel.hidden=false;});
@@ -442,7 +447,7 @@
   }
   function closeLeaderboard(returnToMenu=false){leaderboardScreen.hidden=true;attractMode=false;if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;if(returnToMenu){onlinePanel.hidden=true;freePanel.hidden=true;overlay.hidden=false;}resetAttractTimer();}
   leaderboardBtn.addEventListener('click',event=>{event.stopPropagation();openLeaderboard(false);});leaderboardScreen.querySelector('.leaderboard-prev').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(-1);});leaderboardScreen.querySelector('.leaderboard-next').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(1);});leaderboardScreen.querySelector('.leaderboard-return').addEventListener('click',event=>{event.stopPropagation();closeLeaderboard(true);});leaderboardScreen.addEventListener('click',event=>{if(event.target.closest('button'))return;closeLeaderboard(true);});
-  function mainMenuIdleEligible(){return !overlay.hidden&&leaderboardScreen.hidden&&onlinePanel.hidden&&freePanel.hidden&&!authDialog.open&&!registrationPolicyDialog.open&&!successDialog.open&&!verificationDialog.open&&!requestDialog.open&&!accountNoticeDialog.open&&!returnGameDialog.open;}
+  function mainMenuIdleEligible(){return !overlay.hidden&&leaderboardScreen.hidden&&onlinePanel.hidden&&freePanel.hidden&&socialScreen.hidden&&!authDialog.open&&!registrationPolicyDialog.open&&!successDialog.open&&!verificationDialog.open&&!requestDialog.open&&!accountNoticeDialog.open&&!returnGameDialog.open;}
   let lastMenuActivityAt=Date.now();
   function stopAttractTimer(){lastMenuActivityAt=Date.now();}
   function stopAttractForGameLaunch(){lastMenuActivityAt=Date.now();attractMode=false;leaderboardScreen.hidden=true;if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;}
@@ -533,7 +538,7 @@
       lobbySocket=new WebSocket(lobbyUrl(),`gostop-auth.${authToken}`);
       lobbySocket.addEventListener('open',()=>{
         syncLobbyAvailability();
-        if(!onlinePanel.hidden&&browsePlayersActive)requestRecommendations();
+        if(!onlinePanel.hidden&&browsePlayersActive)requestRecommendations();if(!socialScreen.hidden)requestSocialPresence();
         if(!onlinePanel.hidden&&lobbySearchActive){const query=$('onlineNicknameSearch')?.value?.trim();if(query)lobbySend({type:'search',query});}
         if(pendingLobbyMessage){const message=pendingLobbyMessage;pendingLobbyMessage=null;lobbySend(message);}
       });
@@ -618,7 +623,7 @@
     catch(error){socialBusy=false;$('socialStatus').textContent=localizedError(error);}
   }
   async function openSocial(tab='friends'){
-    socialTab=tab;socialScreen.hidden=false;onlinePanel.hidden=true;freePanel.hidden=true;stopAttractMode();ensureLobbyPresence();renderSocial();await refreshSocial();
+    socialTab=tab;socialScreen.hidden=false;onlinePanel.hidden=true;freePanel.hidden=true;stopAttractForGameLaunch();ensureLobbyPresence();renderSocial();await refreshSocial();
   }
   function closeSocial(){socialScreen.hidden=true;socialSearchResults=[];revealCurrentMainMenu();}
   async function handleSocialAction(action,accountId,nickname){
@@ -686,7 +691,7 @@
     $('cancelOutgoingRequest').disabled=!message.requestId&&!message.automatic;
     if(!outgoingRequestDialog.open)outgoingRequestDialog.showModal();
   }
-  function showMatchHandoff(message=''){onlinePanel.hidden=true;$('matchHandoffTitle').textContent=rt('startingMatch');$('matchHandoffText').textContent=message;if(!matchHandoffDialog.open)matchHandoffDialog.showModal();}
+  function showMatchHandoff(message=''){onlinePanel.hidden=true;socialScreen.hidden=true;$('matchHandoffTitle').textContent=rt('startingMatch');$('matchHandoffText').textContent=message;if(!matchHandoffDialog.open)matchHandoffDialog.showModal();}
   async function createAcceptedChallengeRoom(message){
     pendingChallengeCreate=message.requestId;pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);showMatchHandoff(rt('acceptedCreating'));
     try{
@@ -709,6 +714,7 @@
   }
   function handleLobbyMessage(message){
     if(message.type==='connected'){if(message.account){account={...account,...message.account};persistAccountCache();renderAccountBox();patchGameIdentity();}$('lobbyStatus').textContent='';syncLobbyAvailability();maybeShowMissedRequests();return;}
+    if(message.type==='socialProfiles'){socialLiveProfiles=new Map((Array.isArray(message.players)?message.players:[]).map(player=>[String(player.accountId),player]));renderSocial();return;}
     if(message.type==='recommendations'){
       autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;
       lastLobbyPlayers=Array.isArray(message.players)?message.players:[];lastLobbyOnlineCount=Math.max(0,Number(message.onlineCount)||0);
@@ -850,7 +856,7 @@
   globalThis.addEventListener('gostop-friendly-friend-joined',()=>showToast('Your friend joined! Have fun!',3200));
 
   globalThis.addEventListener('gostop-player-activity',event=>{playerTwoPlayerActive=!!event.detail?.twoPlayer;playerPresenceMode=String(event.detail?.mode||'menu');syncLobbyAvailability();});
-  function revealCurrentMainMenu(){playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
+  function revealCurrentMainMenu(){playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';overlay.hidden=false;syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();}
   const inviteUrl=new URL(location.href),verificationHash=inviteUrl.hash.match(/^#verify=([a-f0-9]{64})$/i),verificationToken=verificationHash?.[1]||inviteUrl.searchParams.get('verify')||'',validVerificationToken=/^[a-f0-9]{64}$/i.test(verificationToken),roomParam=inviteUrl.searchParams.get('room'),inviteMode=inviteUrl.searchParams.get('mode')==='free'?'free':'competitive',referralParam=inviteUrl.searchParams.get('ref')||'',validReferralParam=/^[a-f0-9]{64}$/i.test(referralParam),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   function withGameBridge(callback){
     if(globalThis.GoStopGameBridge)return Promise.resolve().then(()=>callback(globalThis.GoStopGameBridge));
