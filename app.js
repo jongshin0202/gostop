@@ -2484,7 +2484,7 @@
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
-      if(flow.ended){presentation.locked=true;if(onlineAnonymousMode&&globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot)){setDialog(els.opponentEndedDialog,false);return;}if(flow.pauseResolution||flow.abandonment){setDialog(els.opponentEndedDialog,false);return;}if(flow.disconnectCancelled||flow.endedByYou)returnOnlineToMenu();if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=onlineAnonymousMode&&flow.forceEnded?t('friendForceEnded'):t('opponentEnded');setDialog(els.opponentEndedDialog,true);return;}
+      if(flow.ended){presentation.locked=true;if(onlineAnonymousMode&&!flow.forceEnded&&globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot)){setDialog(els.opponentEndedDialog,false);return;}if(flow.pauseResolution||flow.abandonment){setDialog(els.opponentEndedDialog,false);return;}if(flow.disconnectCancelled||flow.endedByYou){if(onlineAnonymousMode&&globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot))return;returnOnlineToMenu();return;}if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=onlineAnonymousMode&&flow.forceEnded?t('friendForceEnded'):t('opponentEnded');setDialog(els.opponentEndedDialog,true);return;}
       const request=flow.newGameRequest;
       setDialog(els.newGameWaitingDialog,!!request?.requestedByYou);
       setDialog(els.incomingNewGameDialog,!!request&&!request.requestedByYou);
@@ -2541,7 +2541,7 @@
         await beginOnline(room,{anonymous:true,statusElement:status,adapter,resumeExisting:true});return room;
       }
     });
-    els.opponentEndedOkBtn.addEventListener('click',returnOnlineToMenu);
+    els.opponentEndedOkBtn.addEventListener('click',()=>{const snapshot=latestOnlineSnapshot;if(els.opponentEndedDialog.open)els.opponentEndedDialog.close();if(onlineAnonymousMode&&snapshot?.sessionFlow?.ended&&globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot))return;returnOnlineToMenu();});
     [els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.opponentEndedDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
     async function driveOnline(snapshot,events=[]){
       if(!onlineMode)return;
