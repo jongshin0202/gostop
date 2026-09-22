@@ -174,11 +174,18 @@ test('Auto Match previews the best candidate, supports Someone Else, then sends 
   assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
 });
 
-test('Share Link creates a direct URL with Copy URL while direct-link joining remains supported',()=>{
+test('Share Link creates a direct URL with referral conversion tracking for Friendly and Competitive rooms',()=>{
   assert.match(client,/id="freeShareLink"/);assert.match(client,/id="competitiveShareLink"/);assert.match(client,/id="freeCopyLinkBtn"/);assert.match(client,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
-  assert.match(client,/function roomShareUrl\(roomCode,mode,referralToken=''/);assert.match(client,/searchParams\.set\('room'/);assert.match(client,/searchParams\.set\('mode',mode==='free'\?'free':'competitive'\)/);assert.match(client,/searchParams\.set\('ref',referralToken\)/);
-  assert.match(client,/async function showRoomShareLink\(roomCode,mode\)/);assert.match(client,/\/api\/referrals\/create/);assert.match(client,/navigator\.clipboard\.writeText\(link\.href\)/);
-  assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);
+  assert.match(client,/function roomShareUrl\(roomCode,mode,referralToken=''/);assert.match(client,/searchParams\.set\('room'/);assert.match(client,/searchParams\.set\('mode',mode==='free'\?'free':'competitive'\)/);assert.match(client,/if\(\/\^\[a-f0-9\]\{64\}\$\/i\.test\(String\(referralToken\|\|''\)\)\)url\.searchParams\.set\('ref',referralToken\)/);
+  assert.match(client,/async function showRoomShareLink\(roomCode,mode\)/);assert.match(client,/let referralToken='';if\(account\)/);assert.match(client,/\/api\/referrals\/create/);
+  assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);assert.match(app,/async joinGuestCompetitiveRoom\(roomCode\)/);
+});
+
+test('Copy Link confirms success with a transient Link Copied dialog for exactly three seconds',()=>{
+  assert.match(client,/linkCopiedDialog\.id='linkCopiedDialog'/);assert.match(client,/<h2>Link Copied<\/h2>/);
+  const copied=client.slice(client.indexOf('function showLinkCopiedDialog'),client.indexOf('async function shareFriendlyInvite'));
+  assert.match(copied,/navigator\.clipboard\.writeText\(link\.href\);showLinkCopiedDialog\(\)/);
+  assert.match(copied,/setTimeout\(\(\)=>\{[^]*linkCopiedDialog\.close\(\);\},3000\)/);
 });
 
 
@@ -204,13 +211,14 @@ test('active Competitive game can continue on a second device and reconnect coun
   assert.match(flow,/if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
 });
 
-test('Competitive direct link requires Log In or Create ID first and resumes intent after either flow',()=>{
+test('Competitive direct link lets a guest play first while logged-in invitees stay Competitive',()=>{
   assert.match(client,/inviteMode=inviteUrl\.searchParams\.get\('mode'\)==='free'\?'free':'competitive'/);
   const invite=client.slice(client.indexOf('async function launchInviteRoom'),client.indexOf('globalThis.GoStopRanked'));
-  assert.match(invite,/if\(inviteMode==='free'\)[^]*joinFreeRoom\(code\)/);assert.match(invite,/requireAccount\(async\(\)=>/);assert.match(invite,/joinCompetitiveRoom\(code\)/);
-  assert.match(client,/let .*accountContinuation=null/);assert.match(client,/function continueAfterAccount\(\)/);
-  assert.match(client,/saveSession\(data\);authDialog\.close\(\);continueAfterAccount\(\)/);
-  assert.match(client,/registrationOk'\)\.addEventListener[^]*continueAfterAccount\(\)/);
+  assert.match(invite,/if\(inviteMode==='free'\)[^]*joinFreeRoom\(code\)/);
+  assert.match(invite,/if\(!account\)\{[^]*writeFriendlyReferralContext[^]*joinGuestCompetitiveRoom\(code\)/);
+  assert.match(invite,/joinCompetitiveRoom\(code\)/);assert.doesNotMatch(invite,/requireAccount\(/);
+  const guestJoin=app.slice(app.indexOf('async joinGuestCompetitiveRoom'),app.indexOf('async createFreeRoom'));
+  assert.match(guestJoin,/OnlineSessionAdapter\(\{anonymous:true\}\)/);assert.match(guestJoin,/adapter\.join\(code\)/);assert.match(guestJoin,/beginOnline\(room,\{anonymous:true,statusElement:onlineStatus,adapter\}\)/);
 });
 
 test('same-account tabs are excluded and fresh tab-aware clients supersede legacy lobby residue',()=>{
