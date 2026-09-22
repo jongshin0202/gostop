@@ -162,53 +162,98 @@ export class AccountStore{
     const value=String(token||'').trim();if(!/^[a-f0-9]{64}$/i.test(value))return null;
     const tokenHash=await hashToken(this.crypto,value),referral=await this.storage.get(`referral:${tokenHash}`);return referral?{tokenHash,referral}:null;
   }
+  async activeFriendlyNetworkClaims(networkHash){
+    if(!networkHash)return [];
+    const key=`friendlyReferralNetwork:${networkHash}`,record=await this.storage.get(key),nowMs=Date.parse(this.now()),cutoff=nowMs-FRIENDLY_REFERRAL_NETWORK_WINDOW_MS,claims=(Array.isArray(record?.claims)?record.claims:[]).filter(item=>Number.isFinite(Date.parse(item?.createdAt))&&Date.parse(item.createdAt)>cutoff);
+    if((record?.claims?.length||0)!==claims.length)await this.storage.put(key,{claims,updatedAt:this.now()});
+    return claims;
+  }
+  async markFriendlyReferralFailure(account,reason){
+    delete account.pendingFriendlyReferral;account.pendingFriendlyReferralFailure={reason:String(reason||'REFERRAL_NOT_ELIGIBLE'),createdAt:this.now()};account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);
+    return {attached:false,reason:account.pendingFriendlyReferralFailure.reason};
+  }
   async createFriendlyReferral(request){
-    const inviter=await this.requireAccount(request),body=await request.json().catch(()=>({})),roomCode=String(body.roomCode||'').trim().toUpperCase();
+    const inviter=await this.requireAccount(request),body=await request.json().catch(()=>({})),roomCode=String(body.roomCode||'').trim().toUpperCase(),deviceId=normalizeReferralDeviceId(body.deviceId);
     if(!/^[A-Z2-9]{14}$/.test(roomCode))return json({ok:false,error:{code:'INVALID_ROOM_CODE',message:'Room code is invalid.'}},400);
+    if(!deviceId)return json({ok:false,error:{code:'REFERRAL_DEVICE_REQUIRED',message:'This device cannot create a referral bonus link.'}},400);
     const registry=await this.storage.get(`roomRegistry:${roomCode}`);
     if(!registry||registry.mode!=='free')return json({ok:false,error:{code:'FRIENDLY_ROOM_REQUIRED',message:'Referral links can only be created for Friendly Play With Friend rooms.'}},409);
+    const connection=connectionFromRequest(request),inviterDeviceHash=await hashToken(this.crypto,`device:${deviceId}`),inviterNetworkHash=connection?.ip?await hashToken(this.crypto,`network:${connection.ip}`):null;
     const token=randomHex(this.crypto,32),tokenHash=await hashToken(this.crypto,token),createdAt=this.now(),expiresAt=new Date(Date.parse(createdAt)+FRIENDLY_REFERRAL_TTL_MS).toISOString(),id=randomId(this.crypto,'ref');
-    await this.storage.put(`referral:${tokenHash}`,{id,inviterAccountId:inviter.id,roomCode,createdAt,expiresAt,usedByAccountId:null,usedAt:null});
+    await this.storage.put(`referral:${tokenHash}`,{id,inviterAccountId:inviter.id,roomCode,createdAt,expiresAt,inviterDeviceHash,inviterNetworkHash,usedByAccountId:null,usedAt:null,qualifyingGamesPlayed:0,qualifyingGamesRequired:FRIENDLY_REFERRAL_QUALIFYING_GAMES,inviterRewardReadyAt:null,inviterRewardCollectedAt:null});
     return json({ok:true,referralToken:token,expiresAt});
   }
-  async attachFriendlyReferral(account,token,stage){
+  async attachFriendlyReferral(account,token,stage,request,rawDeviceId){
     const found=await this.referralFromToken(token),offerStage=stage==='session-end'?'session-end':stage==='game10'?'game10':null;
-    if(!found||!offerStage)return false;
+    if(!found||!offerStage)return this.markFriendlyReferralFailure(account,'INVALID_REFERRAL');
     const {tokenHash,referral}=found,nowMs=Date.parse(this.now());
-    if(referral.usedByAccountId||!Number.isFinite(Date.parse(referral.expiresAt))||Date.parse(referral.expiresAt)<=nowMs||referral.inviterAccountId===account.id)return false;
+    if(referral.usedByAccountId||!Number.isFinite(Date.parse(referral.expiresAt))||Date.parse(referral.expiresAt)<=nowMs||referral.inviterAccountId===account.id)return this.markFriendlyReferralFailure(account,'REFERRAL_NOT_ELIGIBLE');
     const inviter=await this.accountById(referral.inviterAccountId);
-    if(!inviter||inviter.suspended||inviter.emailVerified===false)return false;
-    account.pendingFriendlyReferral={tokenHash,referralId:referral.id,inviterAccountId:referral.inviterAccountId,roomCode:referral.roomCode,stage:offerStage,attachedAt:this.now()};
-    await this.storage.put(`account:${account.id}`,account);return true;
+    if(!inviter||inviter.suspended||inviter.emailVerified===false)return this.markFriendlyReferralFailure(account,'REFERRAL_NOT_ELIGIBLE');
+    const deviceId=normalizeReferralDeviceId(rawDeviceId);if(!deviceId)return this.markFriendlyReferralFailure(account,'DEVICE_REQUIRED');
+    const connection=connectionFromRequest(request),inviteeDeviceHash=await hashToken(this.crypto,`device:${deviceId}`),inviteeNetworkHash=connection?.ip?await hashToken(this.crypto,`network:${connection.ip}`):null,inviteeEmailHash=await hashToken(this.crypto,`email:${canonicalReferralEmail(account.email)}`);
+    if(referral.inviterDeviceHash&&safeEqual(referral.inviterDeviceHash,inviteeDeviceHash))return this.markFriendlyReferralFailure(account,'SAME_DEVICE');
+    if(await this.storage.get(`friendlyReferralDevice:${inviteeDeviceHash}`))return this.markFriendlyReferralFailure(account,'DEVICE_ALREADY_REWARDED');
+    if(await this.storage.get(`friendlyReferralEmail:${inviteeEmailHash}`))return this.markFriendlyReferralFailure(account,'EMAIL_ALREADY_REWARDED');
+    const networkClaims=await this.activeFriendlyNetworkClaims(inviteeNetworkHash);
+    if(inviteeNetworkHash&&networkClaims.length>=FRIENDLY_REFERRAL_NETWORK_AWARD_LIMIT)return this.markFriendlyReferralFailure(account,'NETWORK_LIMIT');
+    delete account.pendingFriendlyReferralFailure;
+    account.pendingFriendlyReferral={tokenHash,referralId:referral.id,inviterAccountId:referral.inviterAccountId,roomCode:referral.roomCode,stage:offerStage,inviteeDeviceHash,inviteeNetworkHash,inviteeEmailHash,sameNetwork:!!inviteeNetworkHash&&!!referral.inviterNetworkHash&&safeEqual(inviteeNetworkHash,referral.inviterNetworkHash),attachedAt:this.now()};
+    await this.storage.put(`account:${account.id}`,account);return {attached:true};
   }
   async completeFriendlyReferral(account){
-    const pending=account.pendingFriendlyReferral;if(!pending||account.friendlyReferralSignupAwardedAt)return null;
-    const referral=await this.storage.get(`referral:${pending.tokenHash}`),createdAt=this.now();
-    if(!referral||referral.id!==pending.referralId||referral.inviterAccountId!==pending.inviterAccountId||referral.usedByAccountId&&referral.usedByAccountId!==account.id||Date.parse(referral.expiresAt)<=Date.parse(createdAt)){delete account.pendingFriendlyReferral;await this.storage.put(`account:${account.id}`,account);return null;}
-    const inviter=await this.accountById(referral.inviterAccountId);
-    if(!inviter||inviter.id===account.id||inviter.suspended||inviter.emailVerified===false){delete account.pendingFriendlyReferral;await this.storage.put(`account:${account.id}`,account);return null;}
-    referral.usedByAccountId=account.id;referral.usedAt=createdAt;referral.stage=pending.stage;
-    const inviteeBefore=Number(account.walletCoins)||0;account.walletCoins=inviteeBefore+FRIENDLY_REFERRAL_BONUS_COINS;account.friendlyReferralSignupAwardedAt=createdAt;account.updatedAt=createdAt;delete account.pendingFriendlyReferral;
-    await this.storage.put(`referral:${pending.tokenHash}`,referral);await this.storage.put(`account:${account.id}`,account);
-    await this.appendLedger(account.id,{type:'friendly-referral-signup',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:referral.id,inviterAccountId:inviter.id,stage:pending.stage});
-    const noticeId=`friendly-referral:${referral.id}:${account.id}`,noticeBase={id:noticeId,coins:FRIENDLY_REFERRAL_BONUS_COINS,friendAccountId:account.id,friendNickname:account.nickname,referralId:referral.id,roomCode:referral.roomCode,stage:pending.stage,createdAt};
-    inviter.pendingNotices=Array.isArray(inviter.pendingNotices)?inviter.pendingNotices:[];
-    if(pending.stage==='game10'){
-      const walletBefore=Number(inviter.walletCoins)||0,walletAfter=walletBefore+FRIENDLY_REFERRAL_BONUS_COINS;inviter.walletCoins=walletAfter;inviter.updatedAt=createdAt;
-      inviter.pendingNotices.push({...noticeBase,type:'friendly-referral-complete',autoCredited:true,walletBefore,walletAfter});
-      await this.storage.put(`account:${inviter.id}`,inviter);await this.appendLedger(inviter.id,{type:'friendly-referral-invite',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:referral.id,friendAccountId:account.id,stage:pending.stage});
-    }else{
-      inviter.pendingNotices.push({...noticeBase,type:'friendly-referral-collect',autoCredited:false,collectedAt:null});
-      inviter.updatedAt=createdAt;await this.storage.put(`account:${inviter.id}`,inviter);
+    const pending=account.pendingFriendlyReferral;
+    if(!pending){
+      const failure=account.pendingFriendlyReferralFailure;if(!failure)return null;delete account.pendingFriendlyReferralFailure;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);return {eligible:false,reason:failure.reason,inviteeCoins:0};
     }
-    return {inviteeCoins:FRIENDLY_REFERRAL_BONUS_COINS,inviterAccountId:inviter.id,inviterNickname:inviter.nickname,friendAccountId:account.id,friendNickname:account.nickname,stage:pending.stage};
+    if(account.friendlyReferralSignupAwardedAt)return null;
+    const referral=await this.storage.get(`referral:${pending.tokenHash}`),createdAt=this.now();
+    if(!referral||referral.id!==pending.referralId||referral.inviterAccountId!==pending.inviterAccountId||referral.usedByAccountId&&referral.usedByAccountId!==account.id||Date.parse(referral.expiresAt)<=Date.parse(createdAt)){await this.markFriendlyReferralFailure(account,'REFERRAL_NOT_ELIGIBLE');return {eligible:false,reason:'REFERRAL_NOT_ELIGIBLE',inviteeCoins:0};}
+    const inviter=await this.accountById(referral.inviterAccountId);
+    if(!inviter||inviter.id===account.id||inviter.suspended||inviter.emailVerified===false){await this.markFriendlyReferralFailure(account,'REFERRAL_NOT_ELIGIBLE');return {eligible:false,reason:'REFERRAL_NOT_ELIGIBLE',inviteeCoins:0};}
+    if(!pending.inviteeDeviceHash||await this.storage.get(`friendlyReferralDevice:${pending.inviteeDeviceHash}`)){await this.markFriendlyReferralFailure(account,'DEVICE_ALREADY_REWARDED');return {eligible:false,reason:'DEVICE_ALREADY_REWARDED',inviteeCoins:0};}
+    if(!pending.inviteeEmailHash||await this.storage.get(`friendlyReferralEmail:${pending.inviteeEmailHash}`)){await this.markFriendlyReferralFailure(account,'EMAIL_ALREADY_REWARDED');return {eligible:false,reason:'EMAIL_ALREADY_REWARDED',inviteeCoins:0};}
+    const networkClaims=await this.activeFriendlyNetworkClaims(pending.inviteeNetworkHash);
+    if(pending.inviteeNetworkHash&&networkClaims.length>=FRIENDLY_REFERRAL_NETWORK_AWARD_LIMIT){await this.markFriendlyReferralFailure(account,'NETWORK_LIMIT');return {eligible:false,reason:'NETWORK_LIMIT',inviteeCoins:0};}
+    referral.usedByAccountId=account.id;referral.usedAt=createdAt;referral.stage=pending.stage;referral.inviteeDeviceHash=pending.inviteeDeviceHash;referral.inviteeNetworkHash=pending.inviteeNetworkHash;referral.inviteeEmailHash=pending.inviteeEmailHash;referral.sameNetwork=!!pending.sameNetwork;referral.qualifyingGamesPlayed=0;referral.qualifyingGamesRequired=FRIENDLY_REFERRAL_QUALIFYING_GAMES;referral.inviterRewardReadyAt=null;referral.inviterRewardCollectedAt=null;
+    const inviteeBefore=Number(account.walletCoins)||0;account.walletCoins=inviteeBefore+FRIENDLY_REFERRAL_BONUS_COINS;account.friendlyReferralSignupAwardedAt=createdAt;account.friendlyReferralQualification={referralId:referral.id,tokenHash:pending.tokenHash,inviterAccountId:inviter.id,roomCode:referral.roomCode,sourceStage:pending.stage,signupAt:createdAt,qualifyingGamesPlayed:0,gamesRequired:FRIENDLY_REFERRAL_QUALIFYING_GAMES,inviterRewardReadyAt:null,inviterRewardCollectedAt:null};account.updatedAt=createdAt;delete account.pendingFriendlyReferral;delete account.pendingFriendlyReferralFailure;
+    await this.storage.put(`referral:${pending.tokenHash}`,referral);await this.storage.put(`account:${account.id}`,account);
+    await this.storage.put(`friendlyReferralDevice:${pending.inviteeDeviceHash}`,{accountId:account.id,referralId:referral.id,createdAt});
+    await this.storage.put(`friendlyReferralEmail:${pending.inviteeEmailHash}`,{accountId:account.id,referralId:referral.id,createdAt});
+    if(pending.inviteeNetworkHash){const claims=[...networkClaims,{accountId:account.id,referralId:referral.id,createdAt}];await this.storage.put(`friendlyReferralNetwork:${pending.inviteeNetworkHash}`,{claims,updatedAt:createdAt});}
+    await this.appendLedger(account.id,{type:'friendly-referral-signup',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:referral.id,inviterAccountId:inviter.id,stage:pending.stage});
+    const noticeId=`friendly-referral-signup:${referral.id}:${account.id}`,notice={id:noticeId,type:'friendly-referral-signup-complete',coins:FRIENDLY_REFERRAL_BONUS_COINS,friendAccountId:account.id,friendNickname:account.nickname,referralId:referral.id,roomCode:referral.roomCode,stage:pending.stage,qualifyingGamesPlayed:0,qualifyingGamesRequired:FRIENDLY_REFERRAL_QUALIFYING_GAMES,createdAt};
+    inviter.pendingNotices=[...(Array.isArray(inviter.pendingNotices)?inviter.pendingNotices:[]).filter(item=>item?.id!==noticeId),notice];inviter.updatedAt=createdAt;await this.storage.put(`account:${inviter.id}`,inviter);
+    return {eligible:true,inviteeCoins:FRIENDLY_REFERRAL_BONUS_COINS,inviterAccountId:inviter.id,inviterNickname:inviter.nickname,friendAccountId:account.id,friendNickname:account.nickname,stage:pending.stage,inviterRewardPending:true,qualifyingGamesRequired:FRIENDLY_REFERRAL_QUALIFYING_GAMES};
+  }
+  async progressFriendlyReferralForGame(account,game){
+    const progress=account?.friendlyReferralQualification;if(!progress||progress.inviterRewardReadyAt||progress.inviterRewardCollectedAt)return null;
+    if(!['solo','online'].includes(String(game?.mode||'')))return null;
+    if(Number.isFinite(Date.parse(progress.signupAt))&&Number.isFinite(Date.parse(game?.recordedAt))&&Date.parse(game.recordedAt)<Date.parse(progress.signupAt))return null;
+    const participants=Array.isArray(game?.participants)?game.participants:[];if(!participants.some(item=>String(item?.accountId||'')===String(account.id)))return null;
+    if(participants.some(item=>String(item?.accountId||'')===String(progress.inviterAccountId)))return null;
+    const gameId=String(game?.gameId||'');if(!gameId)return null;const countedKey=`friendlyReferralGame:${progress.referralId}:${gameId}`;if(await this.storage.get(countedKey))return null;
+    const createdAt=this.now(),required=Math.max(1,Number(progress.gamesRequired)||FRIENDLY_REFERRAL_QUALIFYING_GAMES);await this.storage.put(countedKey,{accountId:account.id,referralId:progress.referralId,gameId,createdAt});
+    progress.qualifyingGamesPlayed=Math.min(required,Math.max(0,Number(progress.qualifyingGamesPlayed)||0)+1);account.friendlyReferralQualification=progress;account.updatedAt=createdAt;
+    const referral=progress.tokenHash?await this.storage.get(`referral:${progress.tokenHash}`):null;if(referral){referral.qualifyingGamesPlayed=progress.qualifyingGamesPlayed;referral.qualifyingGamesRequired=required;}
+    if(progress.qualifyingGamesPlayed>=required){
+      progress.inviterRewardReadyAt=createdAt;if(referral)referral.inviterRewardReadyAt=createdAt;
+      const inviter=await this.accountById(progress.inviterAccountId);
+      if(inviter){const noticeId=`friendly-referral-ready:${progress.referralId}:${account.id}`,notice={id:noticeId,type:'friendly-referral-collect',coins:FRIENDLY_REFERRAL_BONUS_COINS,friendAccountId:account.id,friendNickname:account.nickname,referralId:progress.referralId,roomCode:progress.roomCode,stage:'qualification',qualifyingGamesPlayed:progress.qualifyingGamesPlayed,qualifyingGamesRequired:required,createdAt,collectedAt:null};inviter.pendingNotices=[...(Array.isArray(inviter.pendingNotices)?inviter.pendingNotices:[]).filter(item=>item?.id!==noticeId),notice];inviter.updatedAt=createdAt;await this.storage.put(`account:${inviter.id}`,inviter);}
+    }
+    await this.storage.put(`account:${account.id}`,account);if(referral)await this.storage.put(`referral:${progress.tokenHash}`,referral);return {qualifyingGamesPlayed:progress.qualifyingGamesPlayed,qualifyingGamesRequired:required,rewardReady:!!progress.inviterRewardReadyAt};
+  }
+  async progressFriendlyReferralsForGame(game){
+    const seen=new Set();for(const item of Array.isArray(game?.participants)?game.participants:[]){const accountId=String(item?.accountId||'');if(!accountId||seen.has(accountId))continue;seen.add(accountId);const account=await this.accountById(accountId);if(account)await this.progressFriendlyReferralForGame(account,game);}
   }
   async collectFriendlyReferral(request){
     const account=await this.requireAccount(request),body=await request.json().catch(()=>({})),noticeId=String(body.noticeId||''),notices=Array.isArray(account.pendingNotices)?account.pendingNotices:[],notice=notices.find(item=>item?.id===noticeId&&item?.type==='friendly-referral-collect');
     if(!notice)return json({ok:false,error:{code:'REFERRAL_REWARD_NOT_FOUND',message:'This referral reward is no longer available.'}},404);
     if(notice.collectedAt)return json({ok:true,duplicate:true,collectedCoins:0,account:publicAccount(account),notices:this.noticeList(account),notice});
+    if(Math.max(0,Number(notice.qualifyingGamesPlayed)||0)<Math.max(1,Number(notice.qualifyingGamesRequired)||FRIENDLY_REFERRAL_QUALIFYING_GAMES))return json({ok:false,error:{code:'REFERRAL_GAMES_REQUIRED',message:'Your friend has not completed the required games yet.'}},409);
     const createdAt=this.now(),walletBefore=Number(account.walletCoins)||0,walletAfter=walletBefore+FRIENDLY_REFERRAL_BONUS_COINS;account.walletCoins=walletAfter;account.updatedAt=createdAt;notice.collectedAt=createdAt;notice.walletBefore=walletBefore;notice.walletAfter=walletAfter;
-    await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'friendly-referral-invite',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:notice.referralId,friendAccountId:notice.friendAccountId,stage:'session-end'});
+    const friend=notice.friendAccountId?await this.accountById(notice.friendAccountId):null;if(friend?.friendlyReferralQualification?.referralId===notice.referralId){friend.friendlyReferralQualification.inviterRewardCollectedAt=createdAt;friend.updatedAt=createdAt;await this.storage.put(`account:${friend.id}`,friend);const tokenHash=friend.friendlyReferralQualification.tokenHash;if(tokenHash){const referral=await this.storage.get(`referral:${tokenHash}`);if(referral){referral.inviterRewardCollectedAt=createdAt;await this.storage.put(`referral:${tokenHash}`,referral);}}}
+    await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'friendly-referral-invite',amount:FRIENDLY_REFERRAL_BONUS_COINS,createdAt,referralId:notice.referralId,friendAccountId:notice.friendAccountId,stage:'qualification'});
     return json({ok:true,collectedCoins:FRIENDLY_REFERRAL_BONUS_COINS,account:publicAccount(account),notices:this.noticeList(account),notice});
   }
   async sendVerificationEmail(account,{bypassRateLimit=false}={}){
