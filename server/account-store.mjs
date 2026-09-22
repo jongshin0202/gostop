@@ -177,7 +177,7 @@ export class AccountStore{
     if(!/^[A-Z2-9]{14}$/.test(roomCode))return json({ok:false,error:{code:'INVALID_ROOM_CODE',message:'Room code is invalid.'}},400);
     if(!deviceId)return json({ok:false,error:{code:'REFERRAL_DEVICE_REQUIRED',message:'This device cannot create a referral bonus link.'}},400);
     const registry=await this.storage.get(`roomRegistry:${roomCode}`);
-    if(!registry||registry.mode!=='free')return json({ok:false,error:{code:'FRIENDLY_ROOM_REQUIRED',message:'Referral links can only be created for Friendly Play With Friend rooms.'}},409);
+    if(!registry||!['free','online'].includes(registry.mode))return json({ok:false,error:{code:'FRIENDLY_ROOM_REQUIRED',message:'Referral links can only be created for two-player share rooms.'}},409);
     const connection=connectionFromRequest(request),inviterDeviceHash=await hashToken(this.crypto,`device:${deviceId}`),inviterNetworkHash=connection?.ip?await hashToken(this.crypto,`network:${connection.ip}`):null;
     const token=randomHex(this.crypto,32),tokenHash=await hashToken(this.crypto,token),createdAt=this.now(),expiresAt=new Date(Date.parse(createdAt)+FRIENDLY_REFERRAL_TTL_MS).toISOString(),id=randomId(this.crypto,'ref');
     await this.storage.put(`referral:${tokenHash}`,{id,inviterAccountId:inviter.id,roomCode,createdAt,expiresAt,inviterDeviceHash,inviterNetworkHash,usedByAccountId:null,usedAt:null,qualifyingGamesPlayed:0,qualifyingGamesRequired:FRIENDLY_REFERRAL_QUALIFYING_GAMES,inviterRewardReadyAt:null,inviterRewardCollectedAt:null});
