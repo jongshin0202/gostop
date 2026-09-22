@@ -11,16 +11,15 @@ test('connection protection signup notice stays short and action-focused',()=>{
   assert.doesNotMatch(client,/Sometimes a ranked game can be interrupted by a Wi-Fi/);
 });
 
-test('Competitive Online Play has exactly Matchmaking Lobby, Search Player, and Share Link sections',()=>{
+test('Competitive Online Play has only Matchmaking Lobby and Search Player; share-link room creation stays Friendly-only',()=>{
   const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
-  assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.match(panel,/data-online-section="share"/);
-  assert.equal((panel.match(/data-online-section=/g)||[]).length,3);
+  assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.doesNotMatch(panel,/data-online-section="share"/);
+  assert.equal((panel.match(/data-online-section=/g)||[]).length,2);
   assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.doesNotMatch(panel,/id="enablePlayNotificationsBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
   assert.match(client,/notificationsBtn\.id='enablePlayNotificationsBtn'/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
   assert.match(panel,/id="onlineNicknameSearchBtn"/);assert.match(panel,/id="browsePlayerResults"/);assert.match(panel,/id="searchPlayerResults"/);
-  assert.doesNotMatch(panel,/onlineInviteEmail|Invite by Email|Send Invite/);
-  assert.match(panel,/id="competitiveShareLink"/);assert.match(panel,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
-  assert.match(client,/if\(createRoom\)\{createRoom\.textContent='Create Room';controls\.appendChild\(createRoom\);\}/);
+  assert.doesNotMatch(panel,/onlineInviteEmail|Invite by Email|Send Invite|competitiveShareLink|competitiveCopyLinkBtn|Share Link/);
+  assert.match(client,/if\(createRoom\)\{createRoom\.hidden=true;createRoom\.style\.display='none';\}/);
   assert.match(client,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
   assert.doesNotMatch(client,/controls\.appendChild\(onlineStatus\)/);
   assert.match(client,/onlineNicknameSearch'\)\.value='';\$\('lobbyStatus'\)\.textContent=''/);
@@ -174,14 +173,14 @@ test('Auto Match previews the best candidate, supports Someone Else, then sends 
   assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
 });
 
-test('Share Link creates a direct URL with referral conversion tracking for Friendly and Competitive rooms',()=>{
-  assert.match(client,/id="freeShareLink"/);assert.match(client,/id="competitiveShareLink"/);assert.match(client,/id="freeCopyLinkBtn"/);assert.match(client,/id="competitiveCopyLinkBtn"[^>]*>Copy URL</);
+test('Share Link creation and referral conversion tracking are exposed only by Friendly Play With Friend',()=>{
+  assert.match(client,/id="freeShareLink"/);assert.match(client,/id="freeCopyLinkBtn"/);assert.doesNotMatch(client,/id="competitiveShareLink"/);assert.doesNotMatch(client,/id="competitiveCopyLinkBtn"/);
   assert.match(client,/function roomShareUrl\(roomCode,mode,referralToken=''/);assert.match(client,/searchParams\.set\('room'/);assert.match(client,/searchParams\.set\('mode',mode==='free'\?'free':'competitive'\)/);assert.match(client,/if\(\/\^\[a-f0-9\]\{64\}\$\/i\.test\(String\(referralToken\|\|''\)\)\)url\.searchParams\.set\('ref',referralToken\)/);
-  assert.match(client,/async function showRoomShareLink\(roomCode,mode\)/);assert.match(client,/let referralToken='';if\(account\)/);assert.match(client,/\/api\/referrals\/create/);
-  assert.match(client,/gostop-online-room-created/);assert.match(app,/async joinFreeRoom\(roomCode\)/);assert.match(app,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);assert.match(app,/async joinGuestCompetitiveRoom\(roomCode\)/);
+  assert.match(client,/async function showRoomShareLink\(roomCode,mode\)\{\s*if\(mode!=='free'\)return/);assert.match(client,/let referralToken='';if\(account\)/);assert.match(client,/\/api\/referrals\/create/);
+  assert.match(client,/event\.detail\?\.adapter\?\.anonymous!==true\)return/);assert.match(client,/showRoomShareLink\(roomCode,'free'\)/);assert.match(app,/async joinFreeRoom\(roomCode\)/);
 });
 
-test('Copy Link confirms success with a transient Link Copied dialog for exactly three seconds',()=>{
+test('Copy Link confirms success with a transient Link Copied dialog for 1.5 seconds',()=>{
   assert.match(client,/linkCopiedDialog\.id='linkCopiedDialog'/);assert.match(client,/<h2>Link Copied<\/h2>/);
   const copied=client.slice(client.indexOf('function showLinkCopiedDialog'),client.indexOf('async function shareFriendlyInvite'));
   assert.match(copied,/navigator\.clipboard\.writeText\(link\.href\);showLinkCopiedDialog\(\)/);
