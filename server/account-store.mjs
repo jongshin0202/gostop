@@ -63,7 +63,7 @@ function locationFromRequest(request){
 }
 function publicAccount(account){
   const active=account.activeRanked&&typeof account.activeRanked==='object'?account.activeRanked:null,progress=account.friendlyReferralQualification&&typeof account.friendlyReferralQualification==='object'?account.friendlyReferralQualification:null,invites=Array.isArray(account.friendlyReferralInvites)?account.friendlyReferralInvites:[];
-  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null,activeRanked:active?{sessionId:active.sessionId||null,mode:active.mode||null,roomCode:active.roomCode||null,startedAt:active.startedAt||null}:null,friendlyReferralProgress:progress?{qualifyingGamesPlayed:Math.max(0,Number(progress.qualifyingGamesPlayed)||0),gamesRequired:Math.max(1,Number(progress.gamesRequired)||FRIENDLY_REFERRAL_QUALIFYING_GAMES),inviterRewardReady:!!progress.inviterRewardReadyAt,inviterRewardCollected:!!progress.inviterRewardCollectedAt}:null,friendlyReferralInvites:invites.slice(-10).map(item=>({referralId:item.referralId,friendNickname:item.friendNickname||'Friend',qualifyingGamesPlayed:Math.max(0,Number(item.qualifyingGamesPlayed)||0),gamesRequired:Math.max(1,Number(item.gamesRequired)||FRIENDLY_REFERRAL_QUALIFYING_GAMES),rewardReady:!!item.rewardReadyAt,rewardCollected:!!item.rewardCollectedAt,createdAt:item.createdAt||null}))};
+  return {id:account.id,email:account.email,nickname:account.nickname,walletCoins:account.walletCoins,forceQuits:account.forceQuits||0,computerBankruptcies:account.computerBankruptcies||0,createdAt:account.createdAt,emailVerified:account.emailVerified!==false,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null,activeRanked:active?{sessionId:active.sessionId||null,mode:active.mode||null,roomCode:active.roomCode||null,startedAt:active.startedAt||null}:null,friendlyReferralProgress:progress?{qualifyingGamesPlayed:Math.max(0,Number(progress.qualifyingGamesPlayed)||0),gamesRequired:Math.max(1,Number(progress.gamesRequired)||FRIENDLY_REFERRAL_QUALIFYING_GAMES),inviterRewardReady:!!progress.inviterRewardReadyAt,inviterRewardCollected:!!progress.inviterRewardCollectedAt}:null,friendlyReferralInvites:invites.slice(-10).map(item=>({referralId:item.referralId,friendNickname:item.friendNickname||'Friend',qualifyingGamesPlayed:Math.max(0,Number(item.qualifyingGamesPlayed)||0),gamesRequired:Math.max(1,Number(item.gamesRequired)||FRIENDLY_REFERRAL_QUALIFYING_GAMES),rewardReady:!!item.rewardReadyAt,rewardCollected:!!item.rewardCollectedAt,createdAt:item.createdAt||null})),friendCount:Array.isArray(account.friendIds)?account.friendIds.length:0,incomingFriendRequestCount:Array.isArray(account.friendRequestsIncoming)?account.friendRequestsIncoming.length:0};
 }
 function blankStats(){return {gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,milestones:{}};}
 function scoreFor(stats){return stats.gamesPlayed?stats.totalCoinsWon/stats.gamesPlayed:0;}
@@ -468,6 +468,89 @@ export class AccountStore{
     return json({ok:true,players});
   }
 
+  socialIds(account,key){return [...new Set((Array.isArray(account?.[key])?account[key]:[]).map(item=>typeof item==='string'?item:item?.accountId).filter(Boolean).map(String))];}
+  socialRequestEntries(account,key){return (Array.isArray(account?.[key])?account[key]:[]).map(item=>typeof item==='string'?{accountId:item,createdAt:null}:item).filter(item=>item?.accountId).map(item=>({accountId:String(item.accountId),createdAt:item.createdAt||null}));}
+  friendState(account,targetId){
+    const id=String(targetId||'');if(!id)return 'none';if(id===String(account?.id||''))return 'self';
+    if(this.socialIds(account,'friendIds').includes(id))return 'friend';
+    if(this.socialRequestEntries(account,'friendRequestsIncoming').some(item=>item.accountId===id))return 'incoming';
+    if(this.socialRequestEntries(account,'friendRequestsOutgoing').some(item=>item.accountId===id))return 'outgoing';
+    return 'none';
+  }
+  async socialHistory(accountId){
+    const result=new Map(),touch=(otherId,recordedAt,delta={})=>{const id=String(otherId||'');if(!id||id===String(accountId))return;let row=result.get(id);if(!row){row={accountId:id,gamesPlayedTogether:0,wins:0,losses:0,draws:0,coinsWon:0,coinsLost:0,lastPlayedAt:null};result.set(id,row);}row.gamesPlayedTogether+=Number(delta.game)||0;row.wins+=Number(delta.win)||0;row.losses+=Number(delta.loss)||0;row.draws+=Number(delta.draw)||0;row.coinsWon+=Math.max(0,Number(delta.coinsWon)||0);row.coinsLost+=Math.max(0,Number(delta.coinsLost)||0);if(recordedAt&&(!row.lastPlayedAt||Date.parse(recordedAt)>Date.parse(row.lastPlayedAt)))row.lastPlayedAt=recordedAt;};
+    const games=[...(await this.storage.list({prefix:'game:'})).values()];
+    for(const game of games){
+      const recordedAt=game?.recordedAt||null,participants=Array.isArray(game?.participants)?game.participants:[],mine=participants.find(item=>String(item?.accountId||'')===String(accountId));
+      if(mine&&participants.length>=2){
+        const winnerId=String(game.winnerPlayerId||''),hasWinner=!!winnerId||participants.some(item=>item?.won===true),mineWon=mine.won===true||!!winnerId&&String(mine.playerId||'')===winnerId;
+        for(const other of participants)if(other!==mine&&other?.accountId){const walletDelta=Number(mine.walletDelta)||0;touch(other.accountId,recordedAt,{game:1,win:mineWon?1:0,loss:hasWinner&&!mineWon?1:0,draw:hasWinner?0:1,coinsWon:walletDelta>0?walletDelta:0,coinsLost:walletDelta<0?Math.abs(walletDelta):0});}
+        continue;
+      }
+      if(game?.type==='abandonment'){
+        const quitter=String(game.accountId||''),opponent=String(game.opponentAccountId||'');if(!opponent)continue;
+        if(quitter===String(accountId))touch(opponent,recordedAt,{game:1,loss:game.settlementType==='nagari'?0:1,draw:game.settlementType==='nagari'?1:0,coinsLost:Math.max(0,Number(game.penaltyCoins)||0)});
+        else if(opponent===String(accountId))touch(quitter,recordedAt,{game:1,win:game.settlementType==='nagari'?0:1,draw:game.settlementType==='nagari'?1:0,coinsWon:Math.max(0,Number(game.opponentRewardCoins??game.fairPoints)||0)});
+      }
+    }
+    return [...result.values()].sort((a,b)=>Date.parse(b.lastPlayedAt||0)-Date.parse(a.lastPlayedAt||0)||b.gamesPlayedTogether-a.gamesPlayedTogether);
+  }
+  socialSkillSimilarity(a,b){
+    const aStats=canonicalGlobalStats(a),bStats=canonicalGlobalStats(b),rate=x=>{const g=Math.max(0,Number(x.gamesPlayed)||0);return g?(Number(x.totalCoinsWon)||0)/g:0;},gap=(x,y,floor)=>Math.abs(x-y)/Math.max(floor,Math.abs(x),Math.abs(y));
+    const d=gap(rate(aStats),rate(bStats),1)*.55+gap(Number(aStats.gamesPlayed)||0,Number(bStats.gamesPlayed)||0,10)*.25+gap(Number(a.walletCoins)||0,Number(b.walletCoins)||0,100)*.20;
+    return Math.max(0,Math.min(100,Math.round((1-d)*100)));
+  }
+  async socialProfileMap(account,ids){
+    const profiles=await this.directoryProfiles({requesterAccountId:account.id,accountIds:[...new Set(ids.map(String).filter(Boolean))]}),map=new Map(profiles.map(item=>[String(item.accountId),item]));
+    return map;
+  }
+  async socialSnapshot(request){
+    const account=await this.requireAccount(request),friends=this.socialIds(account,'friendIds'),incoming=this.socialRequestEntries(account,'friendRequestsIncoming'),outgoing=this.socialRequestEntries(account,'friendRequestsOutgoing'),history=await this.socialHistory(account.id);
+    const allAccounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(item=>item?.id&&item.id!==account.id&&!item.suspended&&item.emailVerified!==false),friendSet=new Set(friends),pendingSet=new Set([...incoming,...outgoing].map(item=>item.accountId)),myFriends=new Set(friends),historyById=new Map(history.map(item=>[item.accountId,item]));
+    const referralBoost=new Set([...(Array.isArray(account.friendlyReferralInvites)?account.friendlyReferralInvites:[]).map(item=>String(item.friendAccountId||'')),String(account.friendlyReferralQualification?.inviterAccountId||'')].filter(Boolean)),candidates=[];
+    for(const candidate of allAccounts){
+      if(friendSet.has(candidate.id)||pendingSet.has(candidate.id))continue;
+      const candidateFriends=new Set(this.socialIds(candidate,'friendIds')),mutualFriends=[...candidateFriends].filter(id=>myFriends.has(id)).length,h=historyById.get(candidate.id),similarity=this.socialSkillSimilarity(account,candidate),played=Math.min(20,Number(h?.gamesPlayedTogether)||0),recent=Number.isFinite(Date.parse(h?.lastPlayedAt))?Math.max(0,10-Math.floor((Date.parse(this.now())-Date.parse(h.lastPlayedAt))/(1000*60*60*24*7))):0,referral=referralBoost.has(candidate.id)?1:0,score=similarity*.5+Math.min(20,played*3)+Math.min(15,mutualFriends*5)+recent+referral*15;
+      let reason;if(referral)reason=account.friendlyReferralQualification?.inviterAccountId===candidate.id?'Invited you to GoStop Live':'You invited this player';else if(played)reason='Played '+played+' game'+(played===1?'':'s')+' together';else if(mutualFriends)reason=mutualFriends+' mutual friend'+(mutualFriends===1?'':'s');else reason=similarity+'% skill match';
+      candidates.push({accountId:candidate.id,recommendationScore:Math.round(score),similarity,mutualFriends,playedTogether:played,lastPlayedAt:h?.lastPlayedAt||null,reason});
+    }
+    candidates.sort((a,b)=>b.recommendationScore-a.recommendationScore||b.similarity-a.similarity);
+    const recommendationIds=candidates.slice(0,12).map(item=>item.accountId),ids=[...friends,...incoming.map(x=>x.accountId),...outgoing.map(x=>x.accountId),...history.slice(0,50).map(x=>x.accountId),...recommendationIds],profiles=await this.socialProfileMap(account,ids);
+    const decorate=(id,extra={})=>{const profile=profiles.get(String(id));return profile?{...profile,friendState:this.friendState(account,id),...extra}:null;};
+    return json({ok:true,friends:friends.map(id=>decorate(id)).filter(Boolean),incoming:incoming.map(item=>decorate(item.accountId,{requestCreatedAt:item.createdAt})).filter(Boolean),outgoing:outgoing.map(item=>decorate(item.accountId,{requestCreatedAt:item.createdAt})).filter(Boolean),history:history.slice(0,50).map(item=>decorate(item.accountId,item)).filter(Boolean),recommendations:candidates.slice(0,12).map(item=>decorate(item.accountId,item)).filter(Boolean)});
+  }
+  async socialSearch(request){
+    const account=await this.requireAccount(request),body=await request.json().catch(()=>({})),query=String(body.query||'').trim();if(!query)return json({ok:true,players:[]});
+    const players=(await this.directoryProfiles({requesterAccountId:account.id,query})).filter(item=>item.accountId!==account.id).slice(0,20).map(item=>({...item,friendState:this.friendState(account,item.accountId)}));return json({ok:true,players});
+  }
+  async sendFriendRequest(request){
+    const account=await this.requireAccount(request),body=await request.json().catch(()=>({})),targetId=String(body.accountId||''),target=await this.accountById(targetId);
+    if(!target||target.suspended||target.emailVerified===false)return json({ok:false,error:{code:'PLAYER_NOT_FOUND',message:'Player not found.'}},404);
+    if(target.id===account.id)return json({ok:false,error:{code:'FRIEND_SELF',message:'You cannot friend yourself.'}},400);
+    if(this.socialIds(account,'friendIds').includes(target.id))return json({ok:true,state:'friend',account:publicAccount(account)});
+    const now=this.now(),targetIncoming=this.socialRequestEntries(target,'friendRequestsIncoming'),targetOutgoing=this.socialRequestEntries(target,'friendRequestsOutgoing'),myIncoming=this.socialRequestEntries(account,'friendRequestsIncoming'),myOutgoing=this.socialRequestEntries(account,'friendRequestsOutgoing');
+    if(myIncoming.some(item=>item.accountId===target.id)||targetOutgoing.some(item=>item.accountId===account.id)){
+      account.friendIds=[...new Set([...this.socialIds(account,'friendIds'),target.id])];target.friendIds=[...new Set([...this.socialIds(target,'friendIds'),account.id])];
+      account.friendRequestsIncoming=myIncoming.filter(item=>item.accountId!==target.id);account.friendRequestsOutgoing=myOutgoing.filter(item=>item.accountId!==target.id);target.friendRequestsIncoming=targetIncoming.filter(item=>item.accountId!==account.id);target.friendRequestsOutgoing=targetOutgoing.filter(item=>item.accountId!==account.id);account.updatedAt=now;target.updatedAt=now;await this.storage.put('account:'+account.id,account);await this.storage.put('account:'+target.id,target);return json({ok:true,state:'friend',autoAccepted:true,account:publicAccount(account)});
+    }
+    if(!myOutgoing.some(item=>item.accountId===target.id))account.friendRequestsOutgoing=[...myOutgoing,{accountId:target.id,createdAt:now}].slice(-100);
+    if(!targetIncoming.some(item=>item.accountId===account.id))target.friendRequestsIncoming=[...targetIncoming,{accountId:account.id,createdAt:now}].slice(-100);
+    account.updatedAt=now;target.updatedAt=now;await this.storage.put('account:'+account.id,account);await this.storage.put('account:'+target.id,target);return json({ok:true,state:'outgoing',account:publicAccount(account)});
+  }
+  async respondFriendRequest(request){
+    const account=await this.requireAccount(request),body=await request.json().catch(()=>({})),targetId=String(body.accountId||''),accept=body.accept===true,target=await this.accountById(targetId),incoming=this.socialRequestEntries(account,'friendRequestsIncoming');
+    if(!target||!incoming.some(item=>item.accountId===targetId))return json({ok:false,error:{code:'FRIEND_REQUEST_NOT_FOUND',message:'Friend request not found.'}},404);
+    const now=this.now();account.friendRequestsIncoming=incoming.filter(item=>item.accountId!==targetId);target.friendRequestsOutgoing=this.socialRequestEntries(target,'friendRequestsOutgoing').filter(item=>item.accountId!==account.id);
+    if(accept){account.friendIds=[...new Set([...this.socialIds(account,'friendIds'),target.id])];target.friendIds=[...new Set([...this.socialIds(target,'friendIds'),account.id])];}
+    account.updatedAt=now;target.updatedAt=now;await this.storage.put('account:'+account.id,account);await this.storage.put('account:'+target.id,target);return json({ok:true,state:accept?'friend':'none',account:publicAccount(account)});
+  }
+  async unfriend(request){
+    const account=await this.requireAccount(request),body=await request.json().catch(()=>({})),targetId=String(body.accountId||''),target=await this.accountById(targetId);
+    account.friendIds=this.socialIds(account,'friendIds').filter(id=>id!==targetId);account.friendRequestsIncoming=this.socialRequestEntries(account,'friendRequestsIncoming').filter(item=>item.accountId!==targetId);account.friendRequestsOutgoing=this.socialRequestEntries(account,'friendRequestsOutgoing').filter(item=>item.accountId!==targetId);account.updatedAt=this.now();await this.storage.put('account:'+account.id,account);
+    if(target){target.friendIds=this.socialIds(target,'friendIds').filter(id=>id!==account.id);target.friendRequestsIncoming=this.socialRequestEntries(target,'friendRequestsIncoming').filter(item=>item.accountId!==account.id);target.friendRequestsOutgoing=this.socialRequestEntries(target,'friendRequestsOutgoing').filter(item=>item.accountId!==account.id);target.updatedAt=this.now();await this.storage.put('account:'+target.id,target);}
+    return json({ok:true,state:'none',account:publicAccount(account)});
+  }
+
   async clearActiveRanked(request){
     const body=await request.json().catch(()=>({})),account=await this.accountById(body.accountId);if(!account)return json({ok:false,error:{code:'ACCOUNT_NOT_FOUND',message:'Account not found.'}},404);
     const expected=String(body.sessionId||'');if(account.activeRanked&&(!expected||account.activeRanked.sessionId===expected)){account.activeRanked=null;account.updatedAt=this.now();await this.storage.put(`account:${account.id}`,account);}
@@ -529,6 +612,11 @@ export class AccountStore{
       if(request.method==='POST'&&path==='/notices/ack')return await this.acknowledgeNotice(request);
       if(request.method==='POST'&&path==='/referrals/create')return await this.createFriendlyReferral(request);
       if(request.method==='POST'&&path==='/referrals/collect')return await this.collectFriendlyReferral(request);
+      if(request.method==='GET'&&path==='/social')return await this.socialSnapshot(request);
+      if(request.method==='POST'&&path==='/social/search')return await this.socialSearch(request);
+      if(request.method==='POST'&&path==='/social/request')return await this.sendFriendRequest(request);
+      if(request.method==='POST'&&path==='/social/respond')return await this.respondFriendRequest(request);
+      if(request.method==='POST'&&path==='/social/unfriend')return await this.unfriend(request);
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
       if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
