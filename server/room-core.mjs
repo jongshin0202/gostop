@@ -33,7 +33,7 @@ export class RoomCore{
   isRanked(){return !!this.accountStore&&this.room.participants.length===2&&this.room.participants.every(item=>!!item.accountId);}
   participantProfile(participant){return {nickname:participant.nickname||null,walletCoins:Number.isFinite(participant.walletCoins)?participant.walletCoins:null};}
   publicRoom(){return {roomCode:this.room.roomCode,matchId:this.room.matchId,status:this.room.status,maxPlayers:this.room.maxPlayers,createdAt:this.room.createdAt,ranked:this.isRanked()};}
-  flowFor(participant){const flow=this.room.sessionFlow;return {replayReady:{you:!!flow.replayReady[participant.seatId],opponent:!!flow.replayReady[participant.seatId==='playerA'?'playerB':'playerA']},newGameRequest:flow.newGameRequest?{requestId:flow.newGameRequest.requestId,requestedByYou:flow.newGameRequest.requesterPlayerId===participant.playerId}:null,ended:flow.ended,endedByYou:flow.endedBy===participant.playerId,forceEnded:!!flow.forceEnded};}
+  flowFor(participant){const flow=this.room.sessionFlow;return {replayReady:{you:!!flow.replayReady[participant.seatId],opponent:!!flow.replayReady[participant.seatId==='playerA'?'playerB':'playerA']},newGameRequest:flow.newGameRequest?{requestId:flow.newGameRequest.requestId,requestedByYou:flow.newGameRequest.requesterPlayerId===participant.playerId}:null,ended:flow.ended,endedByYou:flow.endedBy===participant.playerId,forceEnded:!!flow.forceEnded,friendlyGamesPlayed:this.isRanked()?null:Math.max(0,Number(this.room.sessionStats?.gamesPlayed)||0)};}
   snapshotFor(participant){const opponent=this.room.participants.find(item=>item.playerId!==participant.playerId);return {...this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}),sessionFlow:this.flowFor(participant),ranked:this.isRanked(),youProfile:this.participantProfile(participant),opponentProfile:opponent?this.participantProfile(opponent):null};}
   broadcastSnapshots(events=[]){for(const viewer of this.room.participants)this.sendTo(viewer.playerId,envelope('snapshot',{snapshot:this.snapshotFor(viewer),events}));}
   async accountRequest(path,body){if(!this.accountStore)return null;const response=await this.accountStore.fetch(new Request(`https://accounts${path}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}));if(!response.ok)throw new RoomError('ACCOUNT_SERVICE_ERROR','Account service could not complete ranked settlement.',503);return response.json();}
@@ -61,12 +61,11 @@ export class RoomCore{
     if(!snapshot?.terminalResult)return null;
     const gameId=this.currentGameId();if(this.room.settledGameIds.includes(gameId))return null;
     const terminal=snapshot.terminalResult,winnerId=terminal.winnerId||null,points=Math.max(0,Math.trunc(Number(terminal.result?.score??terminal.result?.finalPoints??0))),milestones=this.milestonesForCurrentGame();
-    this.room.settledGameIds.push(gameId);
+    this.room.settledGameIds.push(gameId);this.room.sessionStats.gamesPlayed=(Number(this.room.sessionStats.gamesPlayed)||0)+1;
     if(!this.isRanked())return null;
     const participants=this.room.participants.map(item=>({accountId:item.accountId,playerId:item.playerId,nickname:item.nickname,won:!!winnerId&&item.playerId===winnerId,walletDelta:!winnerId?0:(item.playerId===winnerId?points:-points),coinsWon:item.playerId===winnerId?points:0,points:item.playerId===winnerId?points:0,milestones:milestones[item.playerId]||{}}));
     const response=await this.accountRequest('/internal/game/settle',{gameId,sessionId:this.room.sessionId,mode:'online',winnerPlayerId:winnerId,finalPoints:points,participants,recordedAt:this.now()});
     for(const settled of response?.game?.participants||[]){const participant=this.room.participants.find(item=>item.accountId===settled.accountId);if(participant&&Number.isFinite(settled.walletAfter))participant.walletCoins=settled.walletAfter;}
-    this.room.sessionStats.gamesPlayed++;
     for(const item of participants){const accountId=item.accountId;if(!accountId)continue;if(item.walletDelta>0)this.room.sessionStats.coinsWonByAccount[accountId]=(this.room.sessionStats.coinsWonByAccount[accountId]||0)+item.walletDelta;if(item.walletDelta<0)this.room.sessionStats.coinsLostByAccount[accountId]=(this.room.sessionStats.coinsLostByAccount[accountId]||0)+Math.abs(item.walletDelta);const target=this.room.sessionStats.milestonesByAccount[accountId]||(this.room.sessionStats.milestonesByAccount[accountId]={});for(const [name,count] of Object.entries(item.milestones||{}))target[name]=(target[name]||0)+count;}
     return response;
   }
@@ -141,6 +140,13 @@ export class RoomCore{
     let message;try{message=parseClientMessage(input);}catch(error){const response=protocolError(error.code||'MALFORMED_MESSAGE',error.message);this.send(socket,response);return response;}
     const participant=this.room?.participants.find(item=>item.playerId===socket.__playerId);if(!participant){const response=protocolError('NOT_AUTHENTICATED','Socket is not authenticated.');this.send(socket,response);return response;}
     if(message.type==='ping'){const response=envelope('pong',{nonce:message.nonce});this.send(socket,response);return response;}
+    if(message.type==='friendlyReferral'){
+      if(this.isRanked()){const response=protocolError('FRIENDLY_REFERRAL_NOT_AVAILABLE','Friendly signup offers are available only in Friendly Play With Friend rooms.');this.send(socket,response);return response;}
+      const opponent=this.room.participants.find(item=>item.playerId!==participant.playerId);
+      if(!opponent){const response=protocolError('OPPONENT_NOT_READY','Your friend has not joined yet.');this.send(socket,response);return response;}
+      this.sendTo(opponent.playerId,envelope('friendlyReferral',{status:message.status,stage:message.stage}));
+      const response=envelope('friendlyReferralAck',{status:message.status,stage:message.stage});this.send(socket,response);return response;
+    }
     if(!this.room.matchId){const response=protocolError('ROOM_NOT_READY','Waiting for a second player.');this.send(socket,response);return response;}
     if(message.type==='syncRequest'){
       const snapshot=this.snapshotFor(participant);
