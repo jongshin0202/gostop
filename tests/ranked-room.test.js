@@ -338,6 +338,18 @@ test('anonymous Free Gaming host stays connected while waiting for the second pl
 });
 
 
+test('Friendly Quit Game ends an unranked two-player room immediately instead of opening a Competitive quit request',async()=>{
+  const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});
+  const host=await core.create('FREEGAMEABC2348',null),friend=await core.join(null,null),hostSocket=new Socket(),friendSocket=new Socket();
+  await core.connect(host.credential,hostSocket);await core.connect(friend.credential,friendSocket);
+  const snapshot=hostSocket.last('snapshot').snapshot;
+  const result=await core.handle(hostSocket,flow('friendly-quit',snapshot.revision,{type:'quitGame'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.isRanked(),false);assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,host.playerId);assert.equal(core.room.rankFlow.quitRequest,null);assert.equal(core.room.status,'ended');
+  const hostFlow=hostSocket.last('snapshot').snapshot.sessionFlow,friendFlow=friendSocket.last('snapshot').snapshot.sessionFlow;
+  assert.equal(hostFlow.ended,true);assert.equal(hostFlow.endedByYou,true);assert.equal(friendFlow.ended,true);assert.equal(friendFlow.endedByYou,false);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit'||call.path==='/internal/game/settle').length,0);
+});
+
 test('anonymous Free Friend tab disconnect immediately ends the room for the surviving player',async()=>{
   const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});
   const host=await core.create('FREEGAMEABC2347',null),friend=await core.join(null,null),hostSocket=new Socket(),friendSocket=new Socket();
