@@ -9,6 +9,7 @@
   const NOTIFICATION_PREF_KEY='gostop-play-notifications-enabled';
   const LOBBY_TAB_ID_KEY='gostop-lobby-tab-id';
   const FRIENDLY_REFERRAL_KEY='gostop-friendly-referral';
+  const FRIENDLY_HOST_ROOM_PREFIX='gostop-friendly-host-referral-';
   const FRIENDLY_REFERRAL_POLL_MS=2500;
   const DEFAULT_SERVER_URL='https://gostop-authority.jwshin1.workers.dev';
   const LEADERBOARD_ROTATE_MS=5000;
@@ -18,7 +19,7 @@
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
   let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false;
-  let friendlyReferralPollTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null;
+  let friendlyReferralPollTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false;
   const lobbyTabId=(()=>{try{let value=sessionStorage.getItem(LOBBY_TAB_ID_KEY);if(!value){value=globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;sessionStorage.setItem(LOBBY_TAB_ID_KEY,value);}return value;}catch(_){return globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;}})();
   let missedRequestIndex=0;
   const acknowledgedNoticeIds=new Set();
@@ -258,6 +259,7 @@
   }
   function maybeShowFriendlyReferralNotice(){
     if(!account)return false;const notice=friendlyReferralNotice();if(!notice)return false;stopFriendlyReferralPoll();friendlyInviterNoticeId=notice.id;const friend=notice.friendNickname||'your friend';
+    friendlyInviterStage=notice.stage==='session-end'?'session-end':'game10';friendlyInviterReturnToMenu=friendlyInviterStage==='session-end';
     if(notice.type==='friendly-referral-complete'){
       showFriendlyInviterDialog('Thank You!',`Thank you! Your friend has signed up. Your friend's ID is ${friend}. Both you and ${friend} will get 200 bonus Coins.`,'ack','OK');return true;
     }
@@ -271,10 +273,10 @@
     void check();friendlyReferralPollTimer=setInterval(()=>void check(),FRIENDLY_REFERRAL_POLL_MS);
   }
   function handleFriendlyReferralMessage(message){
-    if(!account)return false;
-    if(message.status==='offerShown'){showFriendlyInviterDialog('Friend Sign Up Bonus','If your invited friend signs up now, we will give you and your friend 200 Coins each as a thank you.','ok','OK');return true;}
-    if(message.status==='signupStarted'){showFriendlyInviterDialog('Friend Sign Up','Your friend is signing up.','waiting','');startFriendlyReferralPoll();return true;}
-    if(message.status==='declined'){stopFriendlyReferralPoll();showFriendlyInviterDialog('Sign Up Declined','Your friend has declined signing up.','ok','OK');return true;}
+    if(!account)return false;if(friendlyHostEndTimer){clearTimeout(friendlyHostEndTimer);friendlyHostEndTimer=null;}friendlyInviterStage=message.stage==='session-end'?'session-end':'game10';
+    if(message.status==='offerShown'){friendlyInviterReturnToMenu=false;showFriendlyInviterDialog('Friend Sign Up Bonus','If your invited friend signs up now, we will give you and your friend 200 Coins each as a thank you.','ok','OK');return true;}
+    if(message.status==='signupStarted'){friendlyInviterReturnToMenu=false;showFriendlyInviterDialog('Friend Sign Up','Your friend is signing up.','waiting','');startFriendlyReferralPoll();return true;}
+    if(message.status==='declined'){stopFriendlyReferralPoll();friendlyInviterReturnToMenu=friendlyInviterStage==='session-end';showFriendlyInviterDialog('Sign Up Declined','Your friend has declined signing up.','ok','OK');return true;}
     return false;
   }
   function restoreFriendlyGameScreen(){
@@ -296,6 +298,8 @@
     const context=friendlyGuestContext(snapshot),games=Math.max(0,Number(snapshot?.sessionFlow?.friendlyGamesPlayed)||0);if(!context||context.game10Offered||context.signupStarted||games<10)return false;return showFriendlySignupOffer('game10');
   }
   function handleFriendlySessionEnd(snapshot){
+    const roomCode=friendlyReferralRoomCode();
+    if(account&&snapshot?.ranked===false&&snapshot?.seatId==='playerA'&&roomCode){let ownsReferral=false;try{ownsReferral=sessionStorage.getItem(FRIENDLY_HOST_ROOM_PREFIX+roomCode)==='1';}catch(_){}if(ownsReferral){if(!friendlyHostEndTimer)friendlyHostEndTimer=setTimeout(()=>{friendlyHostEndTimer=null;if(!friendlyInviterDialog.open)globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();},1800);return true;}}
     const context=friendlyGuestContext(snapshot);if(!context||context.signupStarted||context.sessionEndOffered)return false;const result=document.getElementById('resultDialog');if(result?.open)result.close();return showFriendlySignupOffer('session-end');
   }
   function cancelFriendlySignupFromAuth(){
@@ -307,9 +311,9 @@
   friendlyGuestMessageDialog.addEventListener('cancel',event=>event.preventDefault());
   $('friendlyGuestMessageOk').addEventListener('click',()=>{const stage=friendlyGuestMessageDialog.dataset.stage;friendlyGuestMessageDialog.close();if(stage==='session-end'){clearFriendlyReferralContext();globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}else restoreFriendlyGameScreen();});
   friendlyInviterDialog.addEventListener('cancel',event=>event.preventDefault());
-  $('friendlyInviterAction').addEventListener('click',async()=>{const button=$('friendlyInviterAction'),action=button.dataset.action;if(action==='waiting')return;if(action==='ok'){friendlyInviterDialog.close();return;}if(!friendlyInviterNoticeId){friendlyInviterDialog.close();return;}button.disabled=true;try{
+  $('friendlyInviterAction').addEventListener('click',async()=>{const button=$('friendlyInviterAction'),action=button.dataset.action;if(action==='waiting')return;if(action==='ok'){friendlyInviterDialog.close();if(friendlyInviterReturnToMenu){friendlyInviterReturnToMenu=false;globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}return;}if(!friendlyInviterNoticeId){friendlyInviterDialog.close();return;}button.disabled=true;try{
     if(action==='collect'){const data=await api('/api/referrals/collect',{method:'POST',body:{noticeId:friendlyInviterNoticeId}});captureAccountPayload(data);renderAccountBox();patchGameIdentity();showFriendlyInviterDialog('200 Bonus Coins Collected','You have collected 200 Bonus Coins!','collected-ok','OK');return;}
-    if(action==='ack'||action==='collected-ok'){await acknowledgeAccountNotice(friendlyInviterNoticeId);friendlyInviterNoticeId=null;friendlyInviterDialog.close();renderAccountBox();patchGameIdentity();}
+    if(action==='ack'||action==='collected-ok'){await acknowledgeAccountNotice(friendlyInviterNoticeId);friendlyInviterNoticeId=null;friendlyInviterDialog.close();renderAccountBox();patchGameIdentity();if(friendlyInviterReturnToMenu){friendlyInviterReturnToMenu=false;globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}}
   }catch(error){showToast(localizedError(error),6000);}finally{button.disabled=false;}});
   function applyRankedLocale(){
     trainingBtn.textContent=rt('training');playPractice.textContent=rt('solo');freeGroup.dataset.label=rt('freeGaming');freeGroupNote.textContent=rt('freeGamingNote');freeFriendBtn.textContent=rt('playWithFriend');rankedGroup.dataset.label=rt('competitiveGaming');rankedGroupNote.textContent=rt('competitiveGamingNote');syncRankedButtons();leaderboardBtn.textContent=rt('leaderboards');if(howTo)howTo.textContent=rt('howTo');
@@ -680,7 +684,7 @@
   }
   async function showRoomShareLink(roomCode,mode){
     const free=mode==='free',box=$(free?'freeShareLinkBox':'competitiveShareLinkBox'),link=$(free?'freeShareLink':'competitiveShareLink');if(!box||!link)return;
-    let referralToken='';if(free&&account){try{const data=await api('/api/referrals/create',{method:'POST',body:{roomCode}});referralToken=String(data.referralToken||'');}catch(error){showToast(localizedError(error),5000);}}
+    let referralToken='';if(free&&account){try{const data=await api('/api/referrals/create',{method:'POST',body:{roomCode}});referralToken=String(data.referralToken||'');if(referralToken)try{sessionStorage.setItem(`${FRIENDLY_HOST_ROOM_PREFIX}${String(roomCode).toUpperCase()}`,'1');}catch(_){}}catch(error){showToast(localizedError(error),5000);}}
     const url=roomShareUrl(roomCode,mode,referralToken);link.href=url;link.textContent=url;box.hidden=false;
   }
   async function copyShareLink(mode){
