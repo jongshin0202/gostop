@@ -21,7 +21,7 @@
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
   let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false,pendingSocialChangedIds=new Set();
-  let friendlyReferralPollTimer=null,friendlyReferralProgressTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false;
+  let friendlyReferralPollTimer=null,friendlyReferralProgressTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false,linkCopiedTimer=null;
   const lobbyTabId=(()=>{try{let value=sessionStorage.getItem(LOBBY_TAB_ID_KEY);if(!value){value=globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;sessionStorage.setItem(LOBBY_TAB_ID_KEY,value);}return value;}catch(_){return globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;}})();
   let missedRequestIndex=0;
   const acknowledgedNoticeIds=new Set();
@@ -234,6 +234,7 @@
   const outgoingRequestDialog=document.createElement('dialog');outgoingRequestDialog.className='gostop-request-dialog';outgoingRequestDialog.innerHTML=`<div class="dialog-card"><h2 id="outgoingRequestTitle">Waiting for Opponent to Respond</h2><p id="outgoingRequestText"></p><div id="outgoingOpponentProfile" class="outgoing-opponent-profile" hidden></div><button id="cancelOutgoingRequest" class="stop-btn" type="button">Cancel Request</button></div>`;document.body.appendChild(outgoingRequestDialog);
   const autoMatchCandidateDialog=document.createElement('dialog');autoMatchCandidateDialog.className='gostop-request-dialog';autoMatchCandidateDialog.innerHTML=`<div class="dialog-card"><h2 id="autoMatchCandidateTitle">Matched Opponent</h2><div id="autoMatchCandidateProfile" class="outgoing-opponent-profile"></div><div class="decision-actions auto-match-candidate-actions"><button id="autoMatchCandidateAccept" class="go-btn" type="button">Accept</button><button id="autoMatchCandidateNext" class="glass-btn" type="button">Someone Else</button><button id="autoMatchCandidateCancel" class="stop-btn" type="button">Cancel Auto Match</button></div></div>`;document.body.appendChild(autoMatchCandidateDialog);
   const declinedDialog=document.createElement('dialog');declinedDialog.className='gostop-request-dialog';declinedDialog.innerHTML=`<div class="dialog-card"><h2 id="declinedDialogTitle">Request Declined</h2><p id="declinedDialogText"></p><button id="declinedDialogOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(declinedDialog);
+  const linkCopiedDialog=document.createElement('dialog');linkCopiedDialog.id='linkCopiedDialog';linkCopiedDialog.className='gostop-request-dialog link-copied-dialog';linkCopiedDialog.innerHTML=`<div class="dialog-card link-copied-card"><h2>Link Copied</h2></div>`;document.body.appendChild(linkCopiedDialog);
   const missedRequestDialog=document.createElement('dialog');missedRequestDialog.className='gostop-request-dialog';missedRequestDialog.innerHTML=`<div class="dialog-card"><h2 id="missedRequestTitle">Missed Play Request</h2><p id="missedRequestText"></p><p id="missedRequestTime" class="account-help"></p><div class="decision-actions"><button id="missedRequestPrev" class="glass-btn" type="button" aria-label="Previous request">‹</button><button id="missedRequestOk" class="go-btn" type="button">OK</button><button id="missedRequestClearAll" class="stop-btn" type="button">Clear All</button><button id="missedRequestNext" class="glass-btn" type="button" aria-label="Next request">›</button></div></div>`;document.body.appendChild(missedRequestDialog);
   const matchHandoffDialog=document.createElement('dialog');matchHandoffDialog.className='gostop-request-dialog';matchHandoffDialog.innerHTML=`<div class="dialog-card"><h2 id="matchHandoffTitle">Starting Online Game…</h2><p id="matchHandoffText"></p></div>`;document.body.appendChild(matchHandoffDialog);
   const returnGameDialog=document.createElement('dialog');returnGameDialog.className='gostop-request-dialog';returnGameDialog.innerHTML=`<div class="dialog-card"><h2 id="returnGameTitle">Continue Active Game?</h2><span id="returnGameCountdown" class="ranked-countdown" hidden>1:00</span><p id="returnGameText">You already have an active Competitive game. Do you want to continue the same game on this device too?</p><div id="returnGameActions" class="decision-actions"><button id="returnGameYes" class="go-btn" type="button">Yes</button><button id="returnGameNo" class="stop-btn" type="button">No</button></div><button id="returnGameOk" class="go-btn" type="button" hidden>OK</button></div>`;document.body.appendChild(returnGameDialog);
@@ -321,6 +322,7 @@
   friendlySignupDialog.addEventListener('cancel',event=>event.preventDefault());
   friendlyGuestMessageDialog.addEventListener('cancel',event=>event.preventDefault());
   $('friendlyGuestMessageOk').addEventListener('click',()=>{const stage=friendlyGuestMessageDialog.dataset.stage;friendlyGuestMessageDialog.close();if(stage==='session-end'){clearFriendlyReferralContext();globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}else restoreFriendlyGameScreen();});
+  linkCopiedDialog.addEventListener('cancel',()=>{if(linkCopiedTimer){clearTimeout(linkCopiedTimer);linkCopiedTimer=null;}});
   friendlyInviterDialog.addEventListener('cancel',event=>event.preventDefault());
   $('friendlyInviterFriend').addEventListener('click',async()=>{const button=$('friendlyInviterFriend'),accountId=button.dataset.accountId;if(!accountId||button.disabled)return;button.disabled=true;try{await api('/api/social/request',{method:'POST',body:{accountId}});notifySocialChanged(accountId);button.textContent='Friend Request Sent';showToast('Friend Request sent.',2200);await refreshAccount();}catch(error){showToast(localizedError(error),5000);}finally{button.disabled=false;}});
   $('friendlyInviterAction').addEventListener('click',async()=>{const button=$('friendlyInviterAction'),action=button.dataset.action;if(action==='waiting')return;if(action==='ok'){friendlyInviterDialog.close();if(friendlyInviterReturnToMenu){friendlyInviterReturnToMenu=false;globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}return;}if(!friendlyInviterNoticeId){friendlyInviterDialog.close();return;}button.disabled=true;try{
@@ -806,15 +808,19 @@
   $('autoMatchCandidateCancel').addEventListener('click',()=>{autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();sendLobbyMessage({type:'autoMatchCancel'});});
   $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
   function roomShareUrl(roomCode,mode,referralToken=''){
-    const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('room',String(roomCode||'').toUpperCase());url.searchParams.set('mode',mode==='free'?'free':'competitive');if(mode==='free'&&/^[a-f0-9]{64}$/i.test(String(referralToken||'')))url.searchParams.set('ref',referralToken);return url.toString();
+    const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('room',String(roomCode||'').toUpperCase());url.searchParams.set('mode',mode==='free'?'free':'competitive');if(/^[a-f0-9]{64}$/i.test(String(referralToken||'')))url.searchParams.set('ref',referralToken);return url.toString();
   }
   async function showRoomShareLink(roomCode,mode){
     const free=mode==='free',box=$(free?'freeShareLinkBox':'competitiveShareLinkBox'),link=$(free?'freeShareLink':'competitiveShareLink');if(!box||!link)return;
-    let referralToken='';if(free&&account){try{const data=await api('/api/referrals/create',{method:'POST',body:{roomCode,deviceId:friendlyDeviceId()}});referralToken=String(data.referralToken||'');if(referralToken)try{sessionStorage.setItem(`${FRIENDLY_HOST_ROOM_PREFIX}${String(roomCode).toUpperCase()}`,'1');}catch(_){}}catch(error){showToast(localizedError(error),5000);}}
+    let referralToken='';if(account){try{const data=await api('/api/referrals/create',{method:'POST',body:{roomCode,deviceId:friendlyDeviceId()}});referralToken=String(data.referralToken||'');if(referralToken)try{sessionStorage.setItem(`${FRIENDLY_HOST_ROOM_PREFIX}${String(roomCode).toUpperCase()}`,'1');}catch(_){}}catch(error){showToast(localizedError(error),5000);}}
     const url=roomShareUrl(roomCode,mode,referralToken);link.href=url;link.textContent=url;box.hidden=false;
   }
+  function showLinkCopiedDialog(){
+    if(linkCopiedTimer){clearTimeout(linkCopiedTimer);linkCopiedTimer=null;}if(!linkCopiedDialog.open)linkCopiedDialog.showModal();
+    linkCopiedTimer=setTimeout(()=>{linkCopiedTimer=null;if(linkCopiedDialog.open)linkCopiedDialog.close();},3000);
+  }
   async function copyShareLink(mode){
-    const link=$(mode==='free'?'freeShareLink':'competitiveShareLink');if(!link?.href)return;try{await navigator.clipboard.writeText(link.href);showToast(rt('copied'),1800);}catch(_){showToast(link.href,5000);}
+    const link=$(mode==='free'?'freeShareLink':'competitiveShareLink');if(!link?.href)return;try{await navigator.clipboard.writeText(link.href);showLinkCopiedDialog();}catch(_){showToast(link.href,5000);}
   }
   async function shareFriendlyInvite(){
     const link=$('freeShareLink');if(!link?.href)return;const text='Come play GoStop with me on GoStop Live! No account needed to start.';
@@ -934,13 +940,16 @@
       if(validReferralParam&&!account)writeFriendlyReferralContext({token:referralParam,roomCode:code,createdAt:Date.now(),game10Offered:false,game10Declined:false,sessionEndOffered:false,signupStarted:false,registrationSubmitted:false});
       showMatchHandoff('Joining Friendly Game…');try{await withGameBridge(bridge=>bridge.joinFreeRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}return;
     }
-    requireAccount(async()=>{
-      showMatchHandoff(rt('startingMatch'));
-      try{
-        if(!(await withGameBridge(()=>prepareToAcceptMultiplayerChallenge()))){closeRequestDialog(matchHandoffDialog);showToast('Finish or leave your current 2-player game before joining this link.',6000);revealCurrentMainMenu();return;}
-        await withGameBridge(bridge=>bridge.joinCompetitiveRoom(code));
-      }catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}
-    },()=>{closeRequestDialog(matchHandoffDialog);revealCurrentMainMenu();});
+    if(!account){
+      if(validReferralParam)writeFriendlyReferralContext({token:referralParam,roomCode:code,createdAt:Date.now(),game10Offered:false,game10Declined:false,sessionEndOffered:false,signupStarted:false,registrationSubmitted:false});
+      showMatchHandoff('Joining Game…');
+      try{await withGameBridge(bridge=>bridge.joinGuestCompetitiveRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}return;
+    }
+    showMatchHandoff(rt('startingMatch'));
+    try{
+      if(!(await withGameBridge(()=>prepareToAcceptMultiplayerChallenge()))){closeRequestDialog(matchHandoffDialog);showToast('Finish or leave your current 2-player game before joining this link.',6000);revealCurrentMainMenu();return;}
+      await withGameBridge(bridge=>bridge.joinCompetitiveRoom(code));
+    }catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}
   }
 
   globalThis.addEventListener('storage',event=>{
