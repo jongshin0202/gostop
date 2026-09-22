@@ -62,6 +62,7 @@ test('Friends UI exposes Friends, Requests, History, Recommended, Search, Play, 
   assert.match(ranked,/data-social-action="play"/);assert.match(ranked,/data-social-action="add"/);assert.match(ranked,/data-social-action="unfriend"/);assert.match(ranked,/data-social-action="accept"/);assert.match(ranked,/data-social-action="decline"/);
   assert.match(ranked,/\/api\/social\/request/);assert.match(ranked,/\/api\/social\/respond/);assert.match(ranked,/\/api\/social\/unfriend/);assert.match(ranked,/\/api\/social\/search/);
   assert.match(worker,/\/api\/social/);assert.match(lobby,/message\.type==='socialProfiles'/);assert.match(ranked,/message\.type==='socialProfiles'/);
+  assert.match(lobby,/message\.type==='socialChanged'/);assert.match(ranked,/notifySocialChanged\(accountId\)/);assert.match(ranked,/message\.type==='socialChanged'/);assert.match(ranked,/refreshAccount\(\)\.then\(\(\)=>\{if\(!socialScreen\.hidden\)void refreshSocial\(\);\}\)/);
   assert.match(ranked,/Why recommended:/);assert.match(ranked,/People you have played before/);
   assert.match(ranked,/id="registrationAddFriend"/);assert.match(ranked,/id="friendlyInviterFriend"/);assert.match(ranked,/Add .* as Friend/);
 });
