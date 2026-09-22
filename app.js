@@ -2520,6 +2520,11 @@
         if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}
         const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter,resumeExisting});return room;
       },
+      async joinGuestCompetitiveRoom(roomCode){
+        const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
+        const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);
+        const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:onlineStatus,adapter});return room;
+      },
       async createFreeRoom(){
         const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();
         await beginOnline(room,{anonymous:true,statusElement:status,adapter});return room;
