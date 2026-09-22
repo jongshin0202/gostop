@@ -317,7 +317,7 @@ export class AccountStore{
 
   async register(request){
     const body=await request.json().catch(()=>({}));
-    const email=normalizeEmail(body.email),nickname=normalizeNickname(body.nickname),password=String(body.password||''),confirm=String(body.confirmPassword??password),referralToken=String(body.referralToken||''),referralStage=String(body.referralStage||'');
+    const email=normalizeEmail(body.email),nickname=normalizeNickname(body.nickname),password=String(body.password||''),confirm=String(body.confirmPassword??password),referralToken=String(body.referralToken||''),referralStage=String(body.referralStage||''),referralDeviceId=normalizeReferralDeviceId(body.deviceId);
     if(!email||!nickname||!password||!confirm)return json({ok:false,error:{code:'INCOMPLETE_REGISTRATION',message:'Please fill out all registration information.'}},400);
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({ok:false,error:{code:'INVALID_EMAIL',message:'Enter a valid email address.'}},400);
     if(nickname.length<3||nickname.length>16||!/^[\p{L}\p{N}_ -]+$/u.test(nickname))return json({ok:false,error:{code:'INVALID_NICKNAME',message:'Nickname must be 3-16 letters, numbers, spaces, underscores, or hyphens.'}},400);
@@ -330,7 +330,7 @@ export class AccountStore{
     const id=randomId(this.crypto,'acct'),salt=randomHex(this.crypto,16),passwordHash=await hashPassword(this.crypto,password,salt),coarseLocation=locationFromRequest(request),verificationRequired=this.emailVerificationRequired();
     const account={id,email,nickname,nicknameKey:nickKey,passwordSalt:salt,passwordHash,passwordIterations:PBKDF2_ITERATIONS,emailVerified:!verificationRequired,walletCoins:verificationRequired?0:100,lastDailyAwardDate:null,forceQuits:0,computerBankruptcies:0,stats:{global:blankStats(),monthly:{}},location:coarseLocation?{...coarseLocation,source:'edge-coarse',updatedAt:this.now()}:null,createdAt:this.now(),updatedAt:this.now()};
     await this.storage.put(`account:${id}`,account);await this.storage.put(`email:${email}`,id);await this.storage.put(`nickname:${nickKey}`,id);
-    if(referralToken&&referralStage)await this.attachFriendlyReferral(account,referralToken,referralStage);
+    if(referralToken&&referralStage)await this.attachFriendlyReferral(account,referralToken,referralStage,request,referralDeviceId);
     if(verificationRequired){try{const sent=await this.sendVerificationEmail(account,{bypassRateLimit:true});return json({ok:true,verificationPending:true,email:account.email,emailSent:sent.sent,expiresAt:sent.expiresAt},202);}catch(error){return json({ok:false,error:{code:error.code||'EMAIL_SEND_FAILED',message:error.message,email:account.email}},error.status||503);}}
     await this.appendLedger(id,{type:'signup',amount:100,createdAt:this.now()});account.signupAwardedAt=this.now();await this.storage.put(`account:${id}`,account);await this.awardDaily(account,request);const referral=await this.completeFriendlyReferral(account);
     const session=await this.createSession(account);await this.recordConnection(account,request,'register');
@@ -496,7 +496,7 @@ export class AccountStore{
       if(Number(item.computerBankruptcies)>0)account.computerBankruptcies=(account.computerBankruptcies||0)+Number(item.computerBankruptcies);
       account.updatedAt=recordedAt;await this.storage.put(`account:${account.id}`,account);await this.appendLedger(account.id,{type:'game',amount:walletDelta,gameId:body.gameId,createdAt:recordedAt});storedParticipants.push({...item,walletAfter:account.walletCoins,adminConnection:account.lastConnection?{...account.lastConnection}:null,adminLocation:account.location?{...account.location}:null});
     }
-    const game={...body,participants:storedParticipants,recordedAt};await this.storage.put(`game:${body.gameId}`,game);return json({ok:true,game});
+    const game={...body,participants:storedParticipants,recordedAt};await this.storage.put(`game:${body.gameId}`,game);await this.progressFriendlyReferralsForGame(game);return json({ok:true,game});
   }
 
   async forceQuit(request){
