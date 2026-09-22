@@ -5,10 +5,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#17110d" />
   <title>GoStop Live!</title>
+  <style id="gostopBootCloak">
+    html.gostop-boot-pending,html.gostop-boot-pending body{margin:0;background:#17110d}
+    html.gostop-boot-pending #appShell{visibility:hidden!important}
+    #gostopBootSplash{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#17110d;color:#f4e6cf;font-family:Arial,sans-serif}
+    #gostopBootSplash strong{font-size:clamp(36px,7vw,64px);letter-spacing:-2px;text-shadow:0 4px 18px rgba(0,0,0,.55)}
+    #gostopBootSplash em{font-style:italic}
+    html:not(.gostop-boot-pending) #gostopBootSplash{display:none!important}
+  </style>
   <link rel="stylesheet" href="styles.css?v=20260921-1" />
-  <style id="gostopBootCloak">html.gostop-boot-pending .topbar,html.gostop-boot-pending .game-stage{visibility:hidden!important}</style>
 </head>
 <body>
+  <div id="gostopBootSplash" aria-hidden="true"><strong>GoStop <em>Live!</em></strong></div>
   <div class="app-shell" id="appShell">
     <div class="ambient-room" aria-hidden="true"></div>
     <header class="topbar">
