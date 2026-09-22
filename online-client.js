@@ -40,6 +40,7 @@
     }
     submit(action){if(this.pendingActionId)throw new Error('An action is already awaiting the server.');if(!this.socket||this.socket.readyState!==this.WebSocketImpl.OPEN)throw new Error('The game is reconnecting.');const actionId=crypto.randomUUID();this.pendingActionId=actionId;this.socket.send(JSON.stringify({type:'action',protocolVersion:PROTOCOL_VERSION,actionId,expectedRevision:this.revision,action}));return actionId;}
     sync(){if(this.socket?.readyState===this.WebSocketImpl.OPEN)this.socket.send(JSON.stringify({type:'syncRequest',protocolVersion:PROTOCOL_VERSION,sinceRevision:this.revision}));}
+    sendFriendlyReferral(status,stage){if(!this.anonymous||!this.socket||this.socket.readyState!==this.WebSocketImpl.OPEN)return false;this.socket.send(JSON.stringify({type:'friendlyReferral',protocolVersion:PROTOCOL_VERSION,status,stage}));return true;}
     close(){this.explicitlyClosed=true;if(this.reconnectTimer){clearTimeout(this.reconnectTimer);this.reconnectTimer=null;}if(this.socket){this.socket.close();this.socket=null;}this.pendingActionId=null;this.room=null;}
     emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail}));}
   }
