@@ -2299,7 +2299,7 @@
     const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
     if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
     onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;beginGameplayPresentation();
-    await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
+    document.documentElement.classList.remove('gostop-boot-pending');await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
   }
 
 
@@ -2651,7 +2651,7 @@
     function enterOnlineMatchView(anonymous){
       if(anonymous){if(freeFriendPanel)freeFriendPanel.hidden=true;}
       else {const panel=document.getElementById('onlineLobbyPanel');if(panel)panel.hidden=true;}
-      els.soloStartOverlay.hidden=true;
+      document.documentElement.classList.remove('gostop-boot-pending');els.soloStartOverlay.hidden=true;
     }
     const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null,resumeExisting=false}={})=>{
       const twoPlayer=!!anonymous||room?.rankedMode!=='solo';
