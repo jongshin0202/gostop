@@ -242,7 +242,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
   assert.match(index,/styles\.css\?v=20260921-1/);
-  assert.match(index,/ranked-client\.js\?v=20260922-6/);
+  assert.match(index,/ranked-client\.js\?v=20260922-7/);
   assert.match(index,/app\.js\?v=20260922-3/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
