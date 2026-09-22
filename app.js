@@ -2528,6 +2528,12 @@
         const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
         const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);
         const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:status,adapter});return room;
+      },
+      async resumeFriendlyRoom(roomCode){
+        const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
+        const saved=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!saved?.credential)throw new Error('This Friendly game can no longer be resumed from this tab.');
+        const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.join(code,saved.credential);
+        await beginOnline(room,{anonymous:true,statusElement:status,adapter,resumeExisting:true});return room;
       }
     });
     els.opponentEndedOkBtn.addEventListener('click',returnOnlineToMenu);
@@ -2664,15 +2670,16 @@
       if(previous&&previous!==adapter){try{previous.close();}catch(_){}}
       onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlineSkipInitialOpening=!!resumeExisting;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
       globalThis.goStopOnlineSession=adapter;
-      const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter;
+      const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter,isFriendlyHost=!!anonymous&&room?.seatId==='playerA';let friendlyJoinAnnounced=false;
+      const announceFriendlyJoin=()=>{if(!isFriendlyHost||friendlyJoinAnnounced)return;friendlyJoinAnnounced=true;globalThis.dispatchEvent(new CustomEvent('gostop-friendly-friend-joined',{detail:{roomCode:room.roomCode}}));};
       onlineMode=true;
       refreshModeLocalizedLabels();
       sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));if(!anonymous){try{localStorage.setItem('gostop-active-ranked-room',JSON.stringify(room));}catch(_){}}activeOnlineStatus.textContent=anonymous?t('waitingForOpponent'):t('roomWaitingConnection',{roomCode:room.roomCode});
-      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready)enterOnlineMatchView(anonymous);activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
-      adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);});
-      adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);});
+      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready){enterOnlineMatchView(anonymous);announceFriendlyJoin();}activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
+      adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
+      adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
