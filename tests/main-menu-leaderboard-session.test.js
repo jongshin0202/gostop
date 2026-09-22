@@ -275,7 +275,7 @@ test('main menu separates Training, Friendly Gaming, Competitive Gaming, and Lea
   assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
 });
 
-test('Free Play With Friend launches through a separate link-only non-ranked room flow',()=>{
+test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
   assert.match(source,/freePanel\.id='freeFriendPanel'/);
   assert.match(source,/gostop-free-online-create/);
   assert.doesNotMatch(source,/gostop-free-online-join/);
@@ -303,7 +303,7 @@ test('switching modes clears stale Free and Competitive lobby panels before game
 });
 
 
-test('Free Play With Friend direct link joins a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
+test('Friendly Play With Friend direct link joins a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
   const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
   assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);\}/);
   const handoff=appSource.slice(appSource.indexOf('function enterOnlineMatchView'),appSource.indexOf('const beginOnline=async'));
@@ -316,7 +316,7 @@ test('Free Play With Friend direct link joins a new seat and closes the waiting 
   assert.doesNotMatch(freeJoin,/adapter\.join\(code,existing\?\.credential\)/);
 });
 
-test('Free Play With Friend uses Cancel while leaderboard and competitive lobby keep Return',()=>{
+test('Friendly Play With Friend uses Cancel while leaderboard and competitive lobby keep Return',()=>{
   const locale=source.slice(source.indexOf('function applyRankedLocale'),source.indexOf('function renderAccountBox'));
   assert.match(locale,/\$\('freeFriendClose'\)\.textContent=rt\('cancel'\)/);
   assert.match(locale,/\$\('onlineLobbyClose'\)\.textContent=rt\('return'\)/);
