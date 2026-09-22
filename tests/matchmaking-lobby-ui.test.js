@@ -185,7 +185,7 @@ test('Copy Link confirms success with a transient Link Copied dialog for exactly
   assert.match(client,/linkCopiedDialog\.id='linkCopiedDialog'/);assert.match(client,/<h2>Link Copied<\/h2>/);
   const copied=client.slice(client.indexOf('function showLinkCopiedDialog'),client.indexOf('async function shareFriendlyInvite'));
   assert.match(copied,/navigator\.clipboard\.writeText\(link\.href\);showLinkCopiedDialog\(\)/);
-  assert.match(copied,/setTimeout\(\(\)=>\{[^]*linkCopiedDialog\.close\(\);\},3000\)/);
+  assert.match(copied,/setTimeout\(\(\)=>\{[^]*linkCopiedDialog\.close\(\);\},1500\)/);
 });
 
 
