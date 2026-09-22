@@ -20,7 +20,7 @@
   const PRESENCE_HEARTBEAT_MS=30000;
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
-  let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false;
+  let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false,pendingSocialChangedIds=new Set();
   let friendlyReferralPollTimer=null,friendlyReferralProgressTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false;
   const lobbyTabId=(()=>{try{let value=sessionStorage.getItem(LOBBY_TAB_ID_KEY);if(!value){value=globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;sessionStorage.setItem(LOBBY_TAB_ID_KEY,value);}return value;}catch(_){return globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;}})();
   let missedRequestIndex=0;
@@ -158,7 +158,7 @@
     return account?account.walletCoins:null;
   }
   function saveSession(data){if(data?.session?.token){authToken=data.session.token;try{localStorage.setItem(TOKEN_KEY,authToken);}catch(_){}}captureAccountPayload(data);renderAccountBox();patchGameIdentity();refreshLeaderboardData(true);ensureLobbyPresence();}
-  function clearSession(){if(activeRankedRefreshTimer){clearTimeout(activeRankedRefreshTimer);activeRankedRefreshTimer=null;}if(friendlyReferralProgressTimer){clearTimeout(friendlyReferralProgressTimer);friendlyReferralProgressTimer=null;}authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];acknowledgedNoticeIds.clear();try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}lobbyShouldConnect=false;closeLobby();syncRankedButtons();renderAccountBox();patchGameIdentity();}
+  function clearSession(){if(activeRankedRefreshTimer){clearTimeout(activeRankedRefreshTimer);activeRankedRefreshTimer=null;}if(friendlyReferralProgressTimer){clearTimeout(friendlyReferralProgressTimer);friendlyReferralProgressTimer=null;}pendingSocialChangedIds.clear();authToken=null;account=null;leaderboardData=null;pendingAccountNotices=[];acknowledgedNoticeIds.clear();try{localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(ACCOUNT_CACHE_KEY);localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}lobbyShouldConnect=false;closeLobby();syncRankedButtons();renderAccountBox();patchGameIdentity();}
   let rankedEntryPending=null;
   function activeRankedMode(){const active=account?.activeRanked;return active?.roomCode&&(active.mode==='solo'||active.mode==='online')?active.mode:null;}
   function scheduleActiveRankedRecheck(){if(activeRankedRefreshTimer){clearTimeout(activeRankedRefreshTimer);activeRankedRefreshTimer=null;}if(!activeRankedMode()||globalThis.goStopOnlineSession)return;activeRankedRefreshTimer=setTimeout(()=>{activeRankedRefreshTimer=null;void refreshAccount();},20000);}
@@ -540,7 +540,7 @@
       lobbySocket=new WebSocket(lobbyUrl(),`gostop-auth.${authToken}`);
       lobbySocket.addEventListener('open',()=>{
         syncLobbyAvailability();
-        if(!onlinePanel.hidden&&browsePlayersActive)requestRecommendations();if(!socialScreen.hidden)requestSocialPresence();
+        flushPendingSocialChanges();if(!onlinePanel.hidden&&browsePlayersActive)requestRecommendations();if(!socialScreen.hidden)requestSocialPresence();
         if(!onlinePanel.hidden&&lobbySearchActive){const query=$('onlineNicknameSearch')?.value?.trim();if(query)lobbySend({type:'search',query});}
         if(pendingLobbyMessage){const message=pendingLobbyMessage;pendingLobbyMessage=null;lobbySend(message);}
       });
@@ -560,7 +560,8 @@
     syncAutoMatchControls();
   }
   function lobbySend(message){if(lobbySocket?.readyState!==WebSocket.OPEN)return false;lobbySocket.send(JSON.stringify(message));return true;}
-  function notifySocialChanged(accountId){const id=String(accountId||'').trim();if(!id)return false;const message={type:'socialChanged',accountId:id};if(lobbySend(message))return true;pendingLobbyMessage=message;connectLobby();return false;}
+  function notifySocialChanged(accountId){const id=String(accountId||'').trim();if(!id)return false;if(lobbySend({type:'socialChanged',accountId:id}))return true;pendingSocialChangedIds.add(id);connectLobby();return false;}
+  function flushPendingSocialChanges(){if(lobbySocket?.readyState!==WebSocket.OPEN||!pendingSocialChangedIds.size)return;for(const accountId of [...pendingSocialChangedIds])if(lobbySend({type:'socialChanged',accountId}))pendingSocialChangedIds.delete(accountId);}
   function sendLobbyMessage(message,statusKey='lobbyConnecting'){if(lobbySend(message))return true;pendingLobbyMessage=message;$('lobbyStatus').textContent=rt(statusKey);connectLobby();return false;}
   function requestRecommendations(){if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'recommendations'});}
   function playerStatusText(player){return !player.online?rt('statusNotOnline'):player.status==='away'?rt('statusAway'):player.status==='available'?rt('statusAvailableSimple'):rt('statusNotAvailable');}
