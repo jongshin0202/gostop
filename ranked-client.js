@@ -571,6 +571,77 @@
       if(sendLobbyMessage({type:'challenge',accountId:button.dataset.challengeAccountId}))$('lobbyStatus').textContent='';
     });
   }
+  function socialAllPlayers(){
+    if(!socialData)return [];const values=[...(socialData.friends||[]),...(socialData.incoming||[]),...(socialData.outgoing||[]),...(socialData.history||[]),...(socialData.recommendations||[]),...socialSearchResults],map=new Map();
+    for(const player of values)if(player?.accountId)map.set(String(player.accountId),player);return [...map.values()];
+  }
+  function socialProfile(player){
+    const live=socialLiveProfiles.get(String(player?.accountId||''));return live?{...player,...live,friendState:player.friendState||live.friendState}:player;
+  }
+  function requestSocialPresence(){
+    const ids=socialAllPlayers().map(player=>player.accountId).filter(Boolean);if(!ids.length)return;
+    const message={type:'socialProfiles',accountIds:ids};if(!lobbySend(message)){pendingLobbyMessage=message;connectLobby();}
+  }
+  function socialTabPlayers(){
+    if(!socialData)return [];
+    if(socialTab==='friends')return socialData.friends||[];
+    if(socialTab==='requests')return [...(socialData.incoming||[]).map(player=>({...player,requestDirection:'incoming'})),...(socialData.outgoing||[]).map(player=>({...player,requestDirection:'outgoing'}))];
+    if(socialTab==='history')return socialData.history||[];
+    if(socialTab==='recommendations')return socialData.recommendations||[];
+    return socialSearchResults;
+  }
+  function socialActionButtons(player){
+    const p=socialProfile(player),buttons=[],state=p.friendState||'none',challengeable=p.challengeable===true&&p.online!==false;
+    if(challengeable)buttons.push(`<button type="button" class="social-action primary" data-social-action="play" data-account-id="${escapeHtml(p.accountId)}" data-nickname="${escapeHtml(p.nickname||rt('playerFallback'))}">Play</button>`);
+    if(state==='friend')buttons.push(`<button type="button" class="social-action danger" data-social-action="unfriend" data-account-id="${escapeHtml(p.accountId)}" data-nickname="${escapeHtml(p.nickname||'Player')}">Unfriend</button>`);
+    else if(state==='incoming'||p.requestDirection==='incoming'){buttons.push(`<button type="button" class="social-action primary" data-social-action="accept" data-account-id="${escapeHtml(p.accountId)}">Accept</button>`);buttons.push(`<button type="button" class="social-action danger" data-social-action="decline" data-account-id="${escapeHtml(p.accountId)}">Decline</button>`);}
+    else if(state==='outgoing'||p.requestDirection==='outgoing')buttons.push(`<button type="button" class="social-action" data-social-action="cancel" data-account-id="${escapeHtml(p.accountId)}">Cancel Request</button>`);
+    else buttons.push(`<button type="button" class="social-action" data-social-action="add" data-account-id="${escapeHtml(p.accountId)}">Add Friend</button>`);
+    return buttons.join('');
+  }
+  function socialRowHtml(player){
+    const p=socialProfile(player),history=p.headToHead||{},last=p.lastPlayedAt||history.lastPlayedAt||null,played=Number(p.gamesPlayedTogether??p.playedTogether)||0,reason=p.reason||'',similarity=Math.max(0,Math.min(100,Number(p.similarity)||0)),rank=Number.isFinite(Number(p.globalRank??p.rank))?Number(p.globalRank??p.rank):0;
+    return `<article class="social-row" data-social-account-id="${escapeHtml(p.accountId)}"><div class="social-player"><strong>${flagEmoji(p.countryCode)} ${escapeHtml(p.nickname||rt('playerFallback'))}</strong><small class="player-status ${playerStatusClass(p)}">${escapeHtml(playerStatusText(p))}</small><small class="skill-match">${escapeHtml(rt('skillMatch',{percent:similarity}))}</small></div><div class="social-meta"><span>Global Rank: ${rankNumberHtml(rank)}</span><span>Games Played: ${Number(p.gamesPlayed)||0}</span><span>Your W/L: ${Number(history.wins??p.winsTogether??p.wins)||0} / ${Number(history.losses??p.lossesTogether??p.losses)||0}</span><span>Last Played: ${escapeHtml(formatLastPlayed(last))}</span>${played?`<span>Games Together: ${played}</span>`:''}${reason?`<span class="social-reason">Why recommended: ${escapeHtml(reason)}</span>`:''}</div><div class="social-actions">${socialActionButtons(p)}</div></article>`;
+  }
+  function syncFriendsButton(){
+    const incoming=Math.max(0,Number(account?.incomingFriendRequestCount)||Number(socialData?.incoming?.length)||0);friendsBtn.textContent=incoming?`Friends (${incoming})`:'Friends';const badge=$('friendRequestBadge');if(badge){badge.hidden=!incoming;badge.textContent=String(incoming);}
+  }
+  function renderSocial(){
+    if(socialScreen.hidden)return;syncFriendsButton();for(const button of socialScreen.querySelectorAll('[data-social-tab]'))button.classList.toggle('active',button.dataset.socialTab===socialTab);
+    $('socialSearchBox').hidden=socialTab!=='search';const list=$('socialList'),players=socialTabPlayers();$('socialSummary').textContent=socialTab==='friends'?'Your GoStop Live friends.':socialTab==='requests'?'Incoming and outgoing Friend Requests.':socialTab==='history'?'People you have played before, newest first.':socialTab==='recommendations'?'Players recommended from your game history, skill match, mutual friends, and invitations.':'Find any registered GoStop Live player and add them as a Friend.';
+    $('socialStatus').textContent=socialBusy?'Loading…':'';list.innerHTML=players.length?players.map(socialRowHtml).join(''):`<div class="social-empty">${socialTab==='search'?'Search for a player by nickname.':socialTab==='requests'?'No pending Friend Requests.':socialTab==='history'?'No player history yet. Play Competitive Online to build your history.':socialTab==='friends'?'No Friends yet. Use History, Recommended, or Search to add someone.':'No recommendations yet.'}</div>`;
+    for(const button of list.querySelectorAll('[data-social-action]'))button.addEventListener('click',()=>{void handleSocialAction(button.dataset.socialAction,button.dataset.accountId,button.dataset.nickname||'Player');});
+  }
+  async function refreshSocial(){
+    if(!account)return;socialBusy=true;renderSocial();
+    try{socialData=await api('/api/social');socialSearchResults=socialTab==='search'?socialSearchResults:[];account={...account,friendCount:(socialData.friends||[]).length,incomingFriendRequestCount:(socialData.incoming||[]).length};persistAccountCache();syncFriendsButton();socialBusy=false;renderSocial();requestSocialPresence();}
+    catch(error){socialBusy=false;$('socialStatus').textContent=localizedError(error);}
+  }
+  async function openSocial(tab='friends'){
+    socialTab=tab;socialScreen.hidden=false;onlinePanel.hidden=true;freePanel.hidden=true;stopAttractMode();ensureLobbyPresence();renderSocial();await refreshSocial();
+  }
+  function closeSocial(){socialScreen.hidden=true;socialSearchResults=[];revealCurrentMainMenu();}
+  async function handleSocialAction(action,accountId,nickname){
+    if(!accountId||socialBusy)return;
+    if(action==='play'){
+      socialScreen.hidden=true;const optimistic={requestId:null,automatic:false,to:{accountId,nickname}};showOutgoingRequest(optimistic);$('cancelOutgoingRequest').disabled=true;if(sendLobbyMessage({type:'challenge',accountId}))$('lobbyStatus').textContent='';return;
+    }
+    if(action==='unfriend'&&!globalThis.confirm(`Unfriend ${nickname}?`))return;
+    socialBusy=true;renderSocial();
+    try{
+      if(action==='add')await api('/api/social/request',{method:'POST',body:{accountId}});
+      else if(action==='accept')await api('/api/social/respond',{method:'POST',body:{accountId,accept:true}});
+      else if(action==='decline')await api('/api/social/respond',{method:'POST',body:{accountId,accept:false}});
+      else if(action==='unfriend'||action==='cancel')await api('/api/social/unfriend',{method:'POST',body:{accountId}});
+      await refreshAccount();await refreshSocial();showToast(action==='accept'?'Friend added.':action==='unfriend'?'Friend removed.':action==='decline'||action==='cancel'?'Friend Request removed.':'Friend Request sent.',2200);
+    }catch(error){socialBusy=false;renderSocial();showToast(localizedError(error),5000);}
+  }
+  async function searchSocial(){
+    const query=$('socialSearchInput').value.trim();if(!query){socialSearchResults=[];renderSocial();return;}socialBusy=true;renderSocial();
+    try{const data=await api('/api/social/search',{method:'POST',body:{query}});socialSearchResults=Array.isArray(data.players)?data.players:[];socialBusy=false;renderSocial();requestSocialPresence();}
+    catch(error){socialBusy=false;$('socialStatus').textContent=localizedError(error);}
+  }
+
   function closeRequestDialog(dialog){if(dialog?.open)dialog.close();}
   function missedRequestStorageKey(){return account?.id?`${MISSED_REQUESTS_KEY}:${account.id}`:null;}
   function readMissedRequests(){const key=missedRequestStorageKey();if(!key)return [];try{const parsed=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(parsed)?parsed.filter(item=>item&&item.requestId&&item.from):[];}catch(_){return [];}}
