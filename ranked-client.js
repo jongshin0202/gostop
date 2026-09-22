@@ -855,6 +855,17 @@
     },()=>{closeRequestDialog(matchHandoffDialog);revealCurrentMainMenu();});
   }
 
+  globalThis.addEventListener('storage',event=>{
+    if(event.key!==TOKEN_KEY)return;
+    if(!event.newValue){if(authToken)clearSession();return;}
+    if(event.newValue===authToken)return;
+    const friendly=readFriendlyReferralContext();authToken=event.newValue;
+    void refreshAccount().then(()=>{
+      if(!friendly?.signupStarted||!account?.friendlyReferralProgress)return;
+      if(verificationDialog.open)verificationDialog.close();if(authDialog.open)authDialog.close();if(registrationPolicyDialog.open)registrationPolicyDialog.close();
+      showAccountSuccess('verified',{awards:{referralCoins:200},referral:{stage:friendly.stage||'game10'}});
+    });
+  });
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity,handleFriendlyTerminal,handleFriendlySessionEnd});
   new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
   applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(async()=>{authRestorePromise=null;applyRankedLocale();if(validVerificationToken){await launchEmailVerification();return;}if(validRoomParam){void launchInviteRoom();return;}await settleInitialReconnectDecision();if(promptActiveRankedGameIfNeeded())return;revealCurrentMainMenu();});
