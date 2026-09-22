@@ -728,7 +728,12 @@
   async function copyShareLink(mode){
     const link=$(mode==='free'?'freeShareLink':'competitiveShareLink');if(!link?.href)return;try{await navigator.clipboard.writeText(link.href);showToast(rt('copied'),1800);}catch(_){showToast(link.href,5000);}
   }
-  $('freeCopyLinkBtn').addEventListener('click',()=>copyShareLink('free'));$('competitiveCopyLinkBtn').addEventListener('click',()=>copyShareLink('competitive'));
+  async function shareFriendlyInvite(){
+    const link=$('freeShareLink');if(!link?.href)return;const text='Come play GoStop with me on GoStop Live! No account needed to start.';
+    if(typeof navigator.share==='function'){try{await navigator.share({title:'GoStop Live!',text,url:link.href});return;}catch(error){if(error?.name==='AbortError')return;}}
+    try{await navigator.clipboard.writeText(`${text}\n${link.href}`);showToast('Invite copied. Send it to your friend!',2600);}catch(_){showToast(link.href,5000);}
+  }
+  $('freeShareBtn').addEventListener('click',()=>{void shareFriendlyInvite();});$('freeCopyLinkBtn').addEventListener('click',()=>copyShareLink('free'));$('competitiveCopyLinkBtn').addEventListener('click',()=>copyShareLink('competitive'));
   globalThis.addEventListener('gostop-online-room-created',event=>{const roomCode=event.detail?.room?.roomCode;if(!roomCode||pendingChallengeCreate)return;void showRoomShareLink(roomCode,event.detail?.adapter?.anonymous?'free':'competitive');});
 
   function gameRow(nickname){return rowFor(nickname,'global');}
