@@ -322,7 +322,7 @@ test('main menu is a compact two-column game lobby with visible title, player HU
   assert.match(source,/\.gostop-main-menu\{[^]*?width:min\(820px,92vw\)!important[^]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
   assert.match(source,/\.gostop-main-menu:before\{[^}]*content:"CHOOSE YOUR GAME"/);
-  assert.match(html,/ranked-client\.js\?v=20260922-13/);
+  assert.match(html,/ranked-client\.js\?v=20260923-1/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
