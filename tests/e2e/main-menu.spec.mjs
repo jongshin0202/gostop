@@ -153,3 +153,75 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
   await expect(page.locator('#playerInfoBody')).not.toContainText('Failed to fetch');
   expect(errors.map(error=>error.message)).toEqual([]);
 });
+
+
+test('Training Mode launches a real local game and Your Captured Cards opens the complete score breakdown',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#trainingModeBtn').click();
+  await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:12000});
+  await expect(page.locator('#table')).toBeVisible();
+  await expect(page.locator('[data-score-owner="player"]')).toBeVisible();
+  await page.locator('[data-score-owner="player"]').click();
+  await expect(page.locator('#scoreDialog')).toHaveJSProperty('open',true);
+  await expect(page.locator('#scoreBreakdownContent')).toContainText('Bright');
+  await expect(page.locator('#scoreBreakdownContent')).toContainText('Picture');
+  await expect(page.locator('#scoreBreakdownContent')).toContainText('Stripe');
+  await expect(page.locator('#scoreBreakdownContent')).toContainText('Single');
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('main menu keeps Hwatu decoration at wide, medium, and phone widths',async({page})=>{
+  const errors=await openMenu(page);
+  await page.setViewportSize({width:1440,height:900});
+  await expect(page.locator('.main-menu-card-fan.left')).toBeVisible();
+  await expect(page.locator('.main-menu-card-fan.right')).toBeVisible();
+
+  await page.setViewportSize({width:1000,height:900});
+  await expect(page.locator('.main-menu-card-fan.left')).toBeHidden();
+  await expect(page.locator('.main-menu-floor-cards')).toBeVisible();
+  await expect(page.locator('.main-menu-floor-card')).toHaveCount(7);
+
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.locator('.main-menu-floor-cards')).toBeVisible();
+  await expect(page.locator('.main-menu-floor-card')).toHaveCount(7);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('phone attract mode swipes Global to Monthly without exiting, while a normal tap returns to main menu',async({page})=>{
+  const errors=await openMenu(page,{mobile:true});
+  await expect(page.locator('.leaderboard-screen')).toBeVisible({timeout:13000});
+  await expect(page.locator('#leaderboardHeading')).toHaveText('Global Leaderboard');
+
+  await page.locator('.leaderboard-screen').evaluate(node=>{
+    const event=(type,points)=>{
+      const e=new Event(type,{bubbles:true,cancelable:true});
+      Object.defineProperty(e,type==='touchend'?'changedTouches':'touches',{value:points});
+      node.dispatchEvent(e);
+    };
+    event('touchstart',[{clientX:320,clientY:350}]);
+    event('touchend',[{clientX:120,clientY:350}]);
+  });
+  await expect(page.locator('#leaderboardHeading')).toHaveText('Monthly Leaderboard');
+  await expect(page.locator('.leaderboard-screen')).toBeVisible();
+
+  await page.waitForTimeout(700);
+  await page.locator('.leaderboard-title').click();
+  await expect(page.locator('.leaderboard-screen')).toBeHidden();
+  await expect(page.locator('.gostop-main-menu')).toBeVisible();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('mobile How to Play header remains inside the viewport and its close button does not overlap the navigation row',async({page})=>{
+  const errors=await openMenu(page,{mobile:true});
+  await page.locator('#howToBtn').click();
+  await expect(page.locator('#howToDialog')).toHaveJSProperty('open',true);
+  const dialog=await page.locator('#howToDialog .tutorial-card').boundingBox();
+  const header=await page.locator('#howToDialog .tutorial-header').boundingBox();
+  const close=await page.locator('#howToDialog .tutorial-close').boundingBox();
+  const nav=await page.locator('#howToDialog .tutorial-nav').boundingBox();
+  expect(dialog).not.toBeNull();expect(header).not.toBeNull();expect(close).not.toBeNull();expect(nav).not.toBeNull();
+  expect(dialog.y).toBeGreaterThanOrEqual(0);
+  expect(header.y).toBeGreaterThanOrEqual(dialog.y);
+  expect(close.y+close.height).toBeLessThanOrEqual(nav.y+1);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
