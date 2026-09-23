@@ -277,6 +277,20 @@ test('main menu separates Training, Friendly Gaming, Competitive Gaming, and Lea
   assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
 });
 
+test('main menu is a compact two-column game lobby with visible title, player HUD, and Hwatu decoration',()=>{
+  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  assert.match(source,/menuTitle\.classList\.add\('main-menu-title'\)/);
+  assert.match(source,/MATCH · CAPTURE · GO OR STOP/);
+  assert.match(source,/main-menu-hwatu-decor/);
+  assert.match(source,/addFan\('left',\['m1-1','m2-1','m3-1'\]\)/);
+  assert.match(source,/addFan\('right',\['m8-1','m9-1','m12-1'\]\)/);
+  assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
+  assert.match(source,/\.gostop-main-menu\{[^]*?width:min\(820px,92vw\)!important[^]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
+  assert.match(source,/\.gostop-main-menu:before\{[^}]*content:"CHOOSE YOUR GAME"/);
+  assert.match(html,/ranked-client\.js\?v=20260922-11/);
+});
+
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
   assert.match(source,/freePanel\.id='freeFriendPanel'/);
   assert.match(source,/gostop-free-online-create/);
