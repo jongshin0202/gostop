@@ -165,7 +165,8 @@
     const blockers=diagnoseBlockers();
     return [
       `${VERSION}  host=${location.hostname}`,
-      `uptime=${((now()-startedAt)/1000).toFixed(1)}s  runtimeError=${lastRuntimeError?lastRuntimeError.message:'none'}`,\n      `rankedBootComplete=${yes(!!globalThis.__gostopRankedBootComplete)} rankedApi=${yes(!!globalThis.GoStopRanked)} savedToken=${yes(!!localStorage.getItem('gostop-auth-token'))} savedAccountCache=${yes(!!localStorage.getItem('gostop-account-cache'))} account=${globalThis.GoStopRanked?.getAccount?.()?.nickname||'none'}`,
+      `uptime=${((now()-startedAt)/1000).toFixed(1)}s  runtimeError=${lastRuntimeError?lastRuntimeError.message:'none'}`,
+      `rankedBootComplete=${yes(!!globalThis.__gostopRankedBootComplete)} rankedApi=${yes(!!globalThis.GoStopRanked)} savedToken=${yes(!!localStorage.getItem('gostop-auth-token'))} savedAccountCache=${yes(!!localStorage.getItem('gostop-account-cache'))} account=${globalThis.GoStopRanked?.getAccount?.()?.nickname||'none'}`,
       '',
       'CARD INPUT',
       `hand cards=${card.count} enabled=${card.enabled} disabled=${card.disabled}`,
