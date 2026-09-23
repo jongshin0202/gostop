@@ -2413,8 +2413,13 @@ test('5-Birdies presentation flies exactly five birds with synchronized chirps a
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),i18n=require('../i18n.js');assert.equal(i18n.translate('en','birdies'),'5-BIRDIES!');assert.equal(i18n.translate('ko','birdies'),'고도리!');assert.equal(source.includes('for(let index=0;index<5;index++)'),true);assert.equal(source.includes('if(milestone.birds)playBirdSound()'),true);assert.equal(css.includes('animation:birdFly 2s'),true);const state=stateWith({ai:api.makePlayer({captured:cards('m2-1','m4-1','m8-2')})});api.setState(state);const event=api.detectNewMilestones('playerB')[0];assert.equal(event.cardIds.length,3);
 });
 
-test('tutorial dismissal distinguishes backdrop from content and keeps an outside sticky close control visible',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);assert.equal(css.includes('.tutorial-card>.dialog-close{position:sticky;top:0;float:right;transform:translate(22px,-22px)'),true);assert.equal(css.includes('max-height:90vh;overflow:auto'),true);
+test('tutorial keeps its header and navigation outside the scrolling lesson body on desktop and mobile',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);
+  assert.match(html,/class="tutorial-header"/);assert.match(html,/class="dialog-close tutorial-close"/);assert.match(html,/class="tutorial-sections"/);
+  assert.match(css,/\.tutorial-card\{[^}]*display:grid;grid-template-rows:auto auto minmax\(0,1fr\)[^}]*overflow:hidden/);
+  assert.match(css,/\.tutorial-sections\{[^}]*overflow-y:auto/);assert.match(css,/\.tutorial-header \.tutorial-close\{position:static/);
+  assert.match(css,/@media\(max-width:700px\)\{[^]*\.tutorial-dialog\{width:100vw;height:100dvh/);
 });
 
 test('status panels use four stable siblings and horizontal localized identity text',()=>{
@@ -2521,14 +2526,34 @@ test('normal staged and deck cards keep viewport-scaled canonical dimensions wit
   assert.match(css,/hand-card-slot\.is-hovered \.hand-card\{transform:translateY/);
 });
 
-test('tutorial derives category examples from canonical metadata and explains every 2-Single card',()=>{
+test('tutorial derives category examples from canonical metadata and explains every 2x Single card',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
   assert.match(source,/card\.type==='bright'/);assert.match(source,/card\.type==='animal'/);assert.match(source,/card\.type==='ribbon'/);assert.match(source,/card\.flags\.includes\('doublePi'\)/);assert.match(source,/card\.flags\.includes\('switchPi'\)/);
   assert.equal(extractedEngine.masterDeck.find(card=>card.month===11&&card.flags.includes('doublePi')).id,'m11-3');
   assert.equal(extractedEngine.masterDeck.find(card=>card.month===12&&card.flags.includes('doublePi')).id,'m12-4');
   assert.equal(extractedEngine.masterDeck.find(card=>card.flags.includes('switchPi')).id,'m9-1');
   assert.doesNotMatch(html,/m9-1,m11-2,m12-2/);
+  assert.equal(i18n.dictionaries.en.twoSingleCards,'2x Single Cards');
   for(const locale of Object.keys(i18n.dictionaries))for(const key of ['twoSingleCards','novemberDoubleHelp','decemberDoubleHelp','sakeCupHelp'])assert.ok(i18n.dictionaries[locale][key].trim());
+});
+
+test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, and rule-correct special examples',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
+  assert.match(i18n.dictionaries.en.scoringGate,/Seven points is the first eligibility gate/);
+  for(const text of ['1 Go','2 Go','3 Go','4 Go','5 Go','×2','×4','×8'])assert.ok(html.includes(text),text);
+  for(const text of ['3 Brights without the December Rain Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
+  assert.match(html,/data-card-ids="m6-4"/);assert.match(html,/data-card-ids="m6-3"/);
+  assert.doesNotMatch(html,/data-card-ids="m6-1,m7-2,m8-3"/);
+  assert.match(html,/data-card-ids="m5-1,m5-2"/);assert.match(html,/data-card-ids="m5-3"/);assert.match(html,/data-card-ids="m5-4"/);
+  assert.match(html,/data-card-ids="m1-2,m2-2,m3-2"/);assert.match(html,/data-card-ids="m4-2,m5-2,m7-2"/);assert.match(html,/data-card-ids="m6-2,m9-2,m10-2"/);
+  for(const key of ['shakeLong','bombLong','poopedLong','firstPoopLong','triplePoopLong','kissLong','flushLong','cleanSweepLong','conquerLong','birdiesLong','stripesLong','fiveBrightsLong','noWinnerLong'])assert.ok(i18n.translate('en',key).length>80,key);
+});
+
+test('match examples label zero, one, two, and deck-draw month matching instead of unexplained card rows',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.match(html,/One floor match → capture/);assert.match(html,/No floor match → stays on floor/);assert.match(html,/Two floor matches → choose one/);assert.match(html,/The deck card also matches by month/);
+  assert.match(html,/data-card-ids="m8-3"/);assert.match(html,/data-card-ids="m8-1,m8-2"/);
+  assert.doesNotMatch(html,/data-card-ids="m10-2,m11-3,m12-3"/);
 });
 
 test('normal gameplay semantic class leaves the approved card shell untouched',()=>{

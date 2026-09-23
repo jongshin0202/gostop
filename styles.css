@@ -667,3 +667,53 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 
 /* Captured-card title opens the same complete score breakdown as the Points pill. */
 .capture-summary-trigger{cursor:pointer;user-select:none}.capture-summary-trigger:hover,.capture-summary-trigger:focus-visible{color:#ffd677;text-decoration:underline;text-underline-offset:2px;outline:none}
+
+
+/* Beginner How To Play: stable header/nav chrome with only the lesson body scrolling. */
+.tutorial-dialog{width:min(1160px,calc(100vw - 24px));height:min(90dvh,920px);max-height:90dvh;overflow:hidden;padding:0}
+.tutorial-card{box-sizing:border-box;width:100%;height:100%;max-height:none;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr);padding:0;background:#21150f}
+.tutorial-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 22px 12px;border-bottom:1px solid #ffffff20;background:#21150f;z-index:6}
+.tutorial-header h2{margin:0;font-size:clamp(1.7rem,3vw,2.45rem)}.tutorial-eyebrow{margin:0 0 2px;color:#d8ac61;font-size:.72rem;font-weight:900;letter-spacing:.16em}
+.tutorial-header .tutorial-close{position:static;float:none;transform:none;margin:0;flex:0 0 auto;min-width:44px;min-height:44px;display:grid;place-items:center;font-size:2rem;line-height:1;z-index:auto}
+.tutorial-nav{position:relative;top:auto;z-index:5;width:100%;box-sizing:border-box;display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding:9px 18px;background:#2a1c14;border-bottom:1px solid #ffffff20;scrollbar-width:thin}
+.tutorial-nav a{flex:0 0 auto;white-space:nowrap}
+.tutorial-sections{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:4px 22px 28px;display:grid;gap:22px;scroll-behavior:smooth}
+.tutorial-sections section{scroll-margin-top:8px;border-top:1px solid #ffffff20;padding-top:16px}
+.tutorial-sections section:first-child{border-top:0}.tutorial-sections h3{font-size:clamp(1.55rem,2.4vw,2rem);margin:.15em 0 .55em}.tutorial-sections h4{margin:.2em 0 .55em}
+.tutorial-lead{font-size:1.05rem;line-height:1.55}.tutorial-muted{opacity:.82}.tutorial-important{padding:12px 14px;border-left:4px solid #e8b75f;background:#ffffff0b;font-weight:700}
+.tutorial-subhead{margin-top:20px!important}.tutorial-background{margin:12px 0;padding:10px 12px;border:1px solid #ffffff18;border-radius:10px;background:#ffffff08}.tutorial-background summary{cursor:pointer;font-weight:800;color:#f2cf8b}
+.tutorial-key-points,.tutorial-type-grid,.tutorial-rule-grid,.tutorial-go-choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}
+.tutorial-key-points article,.tutorial-rule-grid article,.tutorial-go-choice-grid article,.tutorial-type-grid article,.tutorial-special-grid article{padding:14px;border-radius:12px;background:#ffffff0b;border:1px solid #ffffff0d}
+.tutorial-key-points article p,.tutorial-rule-grid article p,.tutorial-special-grid article p{margin:.35em 0;line-height:1.48}
+.tutorial-type-grid{margin-top:12px}.tutorial-type-grid .tutorial-example{padding:14px}.tutorial-type-grid .tutorial-cards{margin:7px 0 10px}
+.tutorial-double-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}.tutorial-double-grid article{margin:0;padding:12px;background:#ffffff08;border-radius:10px}.tutorial-double-grid .tutorial-cards{margin-top:8px}
+.tutorial-steps{display:grid;gap:9px;padding-left:1.5rem}.tutorial-steps li{padding-left:4px;line-height:1.5}
+.tutorial-flow-card,.tutorial-example-row,.tutorial-split-visual{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:12px;border-radius:10px;background:#ffffff08}
+.tutorial-flow-card>div,.tutorial-example-row>div,.tutorial-split-visual>div{display:grid;gap:5px}.tutorial-label{font-size:.74rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#d8b67c}.tutorial-arrow{font-size:1.4rem;font-weight:900;color:#efc56f}
+.tutorial-special-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}.tutorial-special-grid article{min-width:0}.tutorial-special-grid h4{font-size:1.22rem}.tutorial-special-wide{grid-column:1/-1}
+.tutorial-benefit{margin-top:10px!important;padding-top:9px;border-top:1px solid #ffffff18;color:#edd2a3}.tutorial-rule-icon{display:inline-block;margin:6px 0 10px;padding:9px 12px;border:1px solid #c79243;border-radius:9px;color:#ffd677;font-weight:900;letter-spacing:.06em;background:#130d09}
+.tutorial-ribbon-sets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.tutorial-ribbon-sets>div{padding:9px;background:#0002;border-radius:9px}
+.tutorial-gate-callout{margin:8px 0 16px;padding:14px 16px;border:2px solid #d9a84e;border-radius:12px;background:#38250f}.tutorial-gate-callout>strong{display:block;color:#ffd677;font-size:1.12rem}.tutorial-gate-callout p{margin:.35em 0 0;line-height:1.5}
+.tutorial-table-wrap{max-width:100%;overflow-x:auto;margin:10px 0 18px;border:1px solid #ffffff18;border-radius:10px}
+.tutorial-score-table{width:100%;min-width:700px;border-collapse:collapse;background:#160f0b}.tutorial-score-table th,.tutorial-score-table td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid #ffffff14}.tutorial-score-table th{position:sticky;top:0;background:#3a281b;color:#ffd677;z-index:1}.tutorial-score-table tr:last-child td{border-bottom:0}
+.tutorial-score-visual{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 12px;padding:10px;border-radius:10px;background:#ffffff08}.tutorial-score-visual>span{font-weight:800;color:#d8b67c}
+.tutorial-stop-choice{border-color:#a84b3c!important}.tutorial-stop-choice h4{color:#ff9b83}.tutorial-go-choice{border-color:#36745c!important}.tutorial-go-choice h4{color:#8ee0b6}
+.tutorial-warning{margin:14px 0;padding:12px 14px;border-left:4px solid #d36c52;background:#351713}.tutorial-warning p{margin:.4em 0 0}
+.tutorial-example-equation{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px;border-radius:10px;background:#102d21}.tutorial-example-equation span{padding:5px 8px;border-radius:7px;background:#ffffff0d}.tutorial-example-equation b{color:#ffd677}.tutorial-example-equation strong{color:#a7f0c8}
+.tutorial-game-card{width:62px!important;height:auto!important;aspect-ratio:var(--card-aspect);pointer-events:none}.tutorial-card-back{flex:0 0 auto}
+.capture-summary-trigger{cursor:pointer;user-select:none}
+
+@media(max-width:700px){
+  .tutorial-dialog{width:100vw;height:100dvh;max-height:100dvh;margin:0}
+  .tutorial-card{height:100dvh;max-height:100dvh;border-radius:0;padding:0;overflow:hidden}
+  .tutorial-header{padding:max(10px,env(safe-area-inset-top)) 12px 9px}.tutorial-header h2{font-size:1.55rem}.tutorial-eyebrow{font-size:.62rem}
+  .tutorial-header .tutorial-close{min-width:42px;min-height:42px;font-size:1.8rem}
+  .tutorial-nav{padding:7px 10px;gap:6px}.tutorial-nav a{padding:7px 9px;font-size:.92rem}
+  .tutorial-sections{padding:2px 12px calc(24px + env(safe-area-inset-bottom));gap:18px}
+  .tutorial-special-grid,.tutorial-key-points,.tutorial-type-grid,.tutorial-rule-grid,.tutorial-go-choice-grid{grid-template-columns:1fr}
+  .tutorial-double-grid,.tutorial-ribbon-sets{grid-template-columns:1fr}
+  .tutorial-special-wide{grid-column:auto}
+  .tutorial-game-card,.tutorial-card-back{width:52px!important;height:auto!important;aspect-ratio:var(--card-aspect)}
+  .tutorial-flow-card,.tutorial-example-row,.tutorial-split-visual{gap:7px;padding:9px}
+  .tutorial-score-table{min-width:620px;font-size:.9rem}.tutorial-score-table th,.tutorial-score-table td{padding:8px}
+}

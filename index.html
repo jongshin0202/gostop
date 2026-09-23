@@ -13,7 +13,7 @@
     #gostopBootSplash em{font-style:italic}
     html:not(.gostop-boot-pending) #gostopBootSplash{display:none!important}
   </style>
-  <link rel="stylesheet" href="styles.css?v=20260921-1" />
+  <link rel="stylesheet" href="styles.css?v=20260922-2" />
 </head>
 <body>
   <div id="gostopBootSplash" aria-hidden="true"><strong>GoStop <em>Live!</em></strong></div>
@@ -91,20 +91,296 @@
 
   <dialog id="howToDialog" class="tutorial-dialog">
     <form method="dialog" class="dialog-card tutorial-card">
-      <button class="dialog-close" data-i18n-aria="close" aria-label="Close">×</button>
-      <h2>GoStop <em>Live!</em></h2>
+      <header class="tutorial-header">
+        <div>
+          <p class="tutorial-eyebrow">BEGINNER GUIDE</p>
+          <h2>GoStop <em>Live!</em></h2>
+        </div>
+        <button class="dialog-close tutorial-close" type="submit" data-i18n-aria="close" aria-label="Close">×</button>
+      </header>
       <nav class="tutorial-nav" aria-label="Tutorial sections">
-        <a href="#guide-overview" data-i18n="overview">Overview</a><a href="#guide-types" data-i18n="cardTypes">Card Types</a><a href="#guide-turn" data-i18n="turnBasics">Turn Basics</a><a href="#guide-matches" data-i18n="matchExamples">Match Examples</a><a href="#guide-specials" data-i18n="specialEvents">Special Events</a><a href="#guide-scoring" data-i18n="scoring">Scoring</a><a href="#guide-go" data-i18n="goStop">Go / Stop</a><a href="#guide-hands" data-i18n="exampleHands">Example Hands</a>
+        <a href="#guide-overview" data-i18n="overview">Overview</a>
+        <a href="#guide-types" data-i18n="cardTypes">Card Types</a>
+        <a href="#guide-turn" data-i18n="turnBasics">Turn Basics</a>
+        <a href="#guide-matches" data-i18n="matchExamples">Match Examples</a>
+        <a href="#guide-specials" data-i18n="specialEvents">Special Events</a>
+        <a href="#guide-scoring" data-i18n="scoring">Scoring</a>
+        <a href="#guide-go" data-i18n="goStop">Go / Stop</a>
+        <a href="#guide-hands" data-i18n="exampleHands">Example Hands</a>
       </nav>
       <div class="tutorial-sections">
-        <section id="guide-overview"><h3 data-i18n="overview">Overview</h3><p data-i18n="history"></p><p data-i18n="matchingGuide"></p><p data-i18n="tutorialCardTypes"></p><p data-i18n="tutorialOverview"></p><div id="monthGuide" class="month-guide"></div></section>
-        <section id="guide-types"><h3 data-i18n="cardTypes">Card Types</h3><p data-i18n="tutorialCardTypes"></p><div class="tutorial-example"><b data-i18n="brights">Brights</b><div class="tutorial-cards" data-tutorial-query="bright"></div></div><div class="tutorial-example"><b data-i18n="pictures">Pictures</b><div class="tutorial-cards" data-tutorial-query="animal"></div></div><div class="tutorial-example"><b data-i18n="stripes">Stripes</b><div class="tutorial-cards" data-tutorial-query="ribbon"></div></div><div class="tutorial-example"><b data-i18n="singles">Singles</b><div class="tutorial-cards" data-tutorial-query="single"></div></div><div class="tutorial-example two-single-examples"><b data-i18n="twoSingleCards">2-Single Cards</b><article><span data-i18n="novemberDoubleHelp"></span><div class="tutorial-cards" data-tutorial-query="doublePi-11"></div></article><article><span data-i18n="decemberDoubleHelp"></span><div class="tutorial-cards" data-tutorial-query="doublePi-12"></div></article><article><span data-i18n="sakeCupHelp"></span><div class="tutorial-cards" data-tutorial-query="switchPi"></div></article></div></section>
-        <section id="guide-turn"><h3 data-i18n="turnBasics">Turn Basics</h3><p data-i18n="tutorialTurn"></p><div class="tutorial-flow"><div class="tutorial-cards" data-card-ids="m4-3"></div><span>→</span><div class="tutorial-cards" data-card-ids="m4-4"></div><span>→</span><div class="tutorial-card-back"></div><span>→</span><div class="tutorial-cards" data-card-ids="m8-3"></div></div></section>
-        <section id="guide-matches"><h3 data-i18n="matchExamples">Match Examples</h3><p data-i18n="tutorialMatches"></p><div class="tutorial-grid"><div class="tutorial-cards" data-card-ids="m5-3,m5-4"></div><div class="tutorial-cards" data-card-ids="m6-3,m7-3"></div><div class="tutorial-cards" data-card-ids="m8-3,m8-2,m8-4"></div><div class="tutorial-cards" data-card-ids="m10-2,m11-3,m12-3"></div></div></section>
-        <section id="guide-specials"><h3 data-i18n="specialEvents">Special Events</h3><p data-i18n="tutorialSpecials"></p><div class="tutorial-special-grid"><article><b data-i18n="shake">Shake</b><div class="tutorial-cards" data-card-ids="m1-1,m1-2,m1-3"></div></article><article><b data-i18n="bomb">Bomb!</b><div class="tutorial-cards" data-card-ids="m2-1,m2-2,m2-3,m2-4"></div></article><article><b data-i18n="pooped">POOPED!</b><div class="tutorial-cards" data-card-ids="m3-2,m3-3,m3-4"></div></article><article><b data-i18n="firstPoop">FIRST POOP!</b><div class="tutorial-cards" data-card-ids="m3-2,m3-3,m3-4"></div></article><article><b data-i18n="kiss">KISS!</b><div class="tutorial-cards" data-card-ids="m4-3,m4-4"></div></article><article><b data-i18n="tapTap">FLUSH!</b><div class="tutorial-cards" data-card-ids="m5-1,m5-2,m5-3,m5-4"></div></article><article><b data-i18n="cleanSweep">CLEAN SWEEP!</b><div class="tutorial-cards" data-card-ids="m6-1,m7-2,m8-3"></div></article><article><b data-i18n="conquer">CONQUER!</b><div class="tutorial-cards" data-card-ids="m7-1,m7-2,m7-3,m7-4"></div></article><article><b data-i18n="birdies">5-BIRDIES!</b><div class="tutorial-cards" data-card-ids="m2-1,m4-1,m8-2"></div></article><article><b data-i18n="threeStripes">3-STRIPES!</b><div class="tutorial-cards" data-card-ids="m1-2,m2-2,m3-2"></div></article><article><b data-i18n="fiveBrights">5-BRIGHTS!</b><div class="tutorial-cards" data-card-ids="m1-1,m3-1,m8-1,m11-1,m12-1"></div></article><article><b data-i18n="noWinner">NO WINNER!</b><p data-i18n="noWinnerHelp"></p></article></div></section>
-        <section id="guide-scoring"><h3 data-i18n="scoring">Scoring</h3><p data-i18n="tutorialScoring"></p><div class="tutorial-cards" data-card-ids="m1-1,m3-1,m8-1,m2-1,m4-1,m8-2,m1-2,m2-2,m3-2,m9-1,m11-2,m12-4"></div></section>
-        <section id="guide-go"><h3 data-i18n="goStop">Go / Stop</h3><div class="tutorial-stop-example"><b data-i18n="currentGo" data-i18n-vars='{"count":1}'>Current: 1 Go</b><strong data-i18n="stopValue" data-i18n-vars='{"points":48}'>Stop : 48 Points</strong></div><p data-i18n="tutorialGoStop"></p></section>
-        <section id="guide-hands"><h3 data-i18n="exampleHands">Example Hands</h3><p data-i18n="tutorialExamples"></p><div class="tutorial-before-after"><div class="tutorial-cards" data-card-ids="m9-3,m10-3,m11-3"></div><span>→</span><div class="tutorial-cards" data-card-ids="m9-3,m9-4,m10-3,m10-4"></div></div></section>
+        <section id="guide-overview">
+          <h3 data-i18n="overview">Overview</h3>
+          <p class="tutorial-lead" data-i18n="tutorialQuickStart"></p>
+          <div class="tutorial-key-points">
+            <article><h4>How you win</h4><p data-i18n="scoringGate"></p></article>
+            <article><h4>The deal</h4><p data-i18n="tutorialDeal"></p></article>
+            <article><h4>Match first, score later</h4><p data-i18n="tutorialMatchingRule"></p></article>
+          </div>
+          <details class="tutorial-background"><summary>About the cards</summary><p data-i18n="history"></p><p data-i18n="matchingGuide"></p></details>
+          <h4 class="tutorial-subhead">The 12 month families</h4>
+          <p class="tutorial-muted">Every month has exactly four cards. You match by month, regardless of whether the cards are Brights, Pictures, Stripes, or Singles.</p>
+          <div id="monthGuide" class="month-guide"></div>
+        </section>
+
+        <section id="guide-types">
+          <h3 data-i18n="cardTypes">Card Types</h3>
+          <p data-i18n="tutorialCardTypes"></p>
+          <div class="tutorial-type-grid">
+            <article class="tutorial-example"><h4 data-i18n="brights">Brights</h4><div class="tutorial-cards" data-tutorial-query="bright"></div><p data-i18n="tutorialTypeBrightDetail"></p></article>
+            <article class="tutorial-example"><h4 data-i18n="pictures">Pictures</h4><div class="tutorial-cards" data-tutorial-query="animal"></div><p data-i18n="tutorialTypePictureDetail"></p></article>
+            <article class="tutorial-example"><h4 data-i18n="stripes">Stripes</h4><div class="tutorial-cards" data-tutorial-query="ribbon"></div><p data-i18n="tutorialTypeStripeDetail"></p></article>
+            <article class="tutorial-example"><h4 data-i18n="singles">Singles</h4><div class="tutorial-cards" data-tutorial-query="single"></div><p data-i18n="tutorialTypeSingleDetail"></p></article>
+          </div>
+          <div class="tutorial-example two-single-examples">
+            <h4 data-i18n="twoSingleCards">2x Single Cards</h4>
+            <p data-i18n="tutorialTypeDoubleDetail"></p>
+            <div class="tutorial-double-grid">
+              <article><b data-i18n="novemberDoubleHelp"></b><div class="tutorial-cards" data-tutorial-query="doublePi-11"></div></article>
+              <article><b data-i18n="decemberDoubleHelp"></b><div class="tutorial-cards" data-tutorial-query="doublePi-12"></div></article>
+              <article><b data-i18n="sakeCupHelp"></b><div class="tutorial-cards" data-tutorial-query="switchPi"></div><p class="tutorial-muted" data-i18n="tutorialTypeSakeDetail"></p></article>
+            </div>
+          </div>
+        </section>
+
+        <section id="guide-turn">
+          <h3 data-i18n="turnBasics">Turn Basics</h3>
+          <p class="tutorial-lead" data-i18n="tutorialTurn"></p>
+          <ol class="tutorial-steps">
+            <li><strong>Play one card from your hand.</strong> <span data-i18n="tutorialTurnStep1"></span></li>
+            <li><strong>Resolve that card against the floor.</strong> <span data-i18n="tutorialTurnStep2"></span></li>
+            <li><strong>Flip the top card of the draw pile.</strong> <span data-i18n="tutorialTurnStep3"></span></li>
+            <li><strong>Resolve the drawn card the same way.</strong> <span data-i18n="tutorialTurnStep4"></span></li>
+            <li><strong>Move captures to your four scoring groups.</strong> <span data-i18n="tutorialTurnStep5"></span></li>
+            <li><strong>Check for Go / Stop.</strong> <span data-i18n="tutorialTurnStep6"></span></li>
+          </ol>
+          <div class="tutorial-flow-card">
+            <div><span class="tutorial-label">Your hand</span><div class="tutorial-cards" data-card-ids="m4-3"></div></div>
+            <span class="tutorial-arrow">→</span>
+            <div><span class="tutorial-label">Same-month floor card</span><div class="tutorial-cards" data-card-ids="m4-4"></div></div>
+            <span class="tutorial-arrow">=</span>
+            <strong>Capture both</strong>
+          </div>
+          <div class="tutorial-flow-card">
+            <div><span class="tutorial-label">Then draw</span><div class="tutorial-card-back"></div></div>
+            <span class="tutorial-arrow">→</span>
+            <p>The drawn card gets its own matching resolution before the turn ends.</p>
+          </div>
+        </section>
+
+        <section id="guide-matches">
+          <h3 data-i18n="matchExamples">Match Examples</h3>
+          <p data-i18n="tutorialMatches"></p>
+          <div class="tutorial-rule-grid">
+            <article>
+              <h4>One floor match → capture</h4>
+              <p data-i18n="matchOneHelp"></p>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Your card</span><div class="tutorial-cards" data-card-ids="m5-3"></div></div><span>+</span><div><span class="tutorial-label">Floor</span><div class="tutorial-cards" data-card-ids="m5-4"></div></div><span>→</span><strong>Capture both</strong></div>
+            </article>
+            <article>
+              <h4>No floor match → stays on floor</h4>
+              <p data-i18n="matchNoneHelp"></p>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Your June card</span><div class="tutorial-cards" data-card-ids="m6-3"></div></div><span>≠</span><div><span class="tutorial-label">July floor card</span><div class="tutorial-cards" data-card-ids="m7-3"></div></div></div>
+            </article>
+            <article>
+              <h4>Two floor matches → choose one</h4>
+              <p data-i18n="matchTwoHelp"></p>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Your August card</span><div class="tutorial-cards" data-card-ids="m8-3"></div></div><span>+</span><div><span class="tutorial-label">Two August choices</span><div class="tutorial-cards" data-card-ids="m8-1,m8-2"></div></div></div>
+            </article>
+            <article>
+              <h4>The deck card also matches by month</h4>
+              <p data-i18n="matchDrawHelp"></p>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Drawn October</span><div class="tutorial-cards" data-card-ids="m10-3"></div></div><span>+</span><div><span class="tutorial-label">October on floor</span><div class="tutorial-cards" data-card-ids="m10-4"></div></div><span>→</span><strong>Capture both</strong></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="guide-specials">
+          <h3 data-i18n="specialEvents">Special Events</h3>
+          <p class="tutorial-lead" data-i18n="tutorialSpecials"></p>
+          <div class="tutorial-special-grid">
+            <article>
+              <h4 data-i18n="shake">Shake</h4>
+              <div class="tutorial-cards" data-card-ids="m1-1,m1-2,m1-3"></div>
+              <p data-i18n="shakeLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> a successful Shake increases the final settlement if you win.</p>
+            </article>
+            <article>
+              <h4 data-i18n="bomb">Bomb!</h4>
+              <div class="tutorial-split-visual"><div><span class="tutorial-label">3 in your hand</span><div class="tutorial-cards" data-card-ids="m2-1,m2-2,m2-3"></div></div><span>+</span><div><span class="tutorial-label">4th on floor</span><div class="tutorial-cards" data-card-ids="m2-4"></div></div></div>
+              <p data-i18n="bombLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> you take an entire month at once, steal a Single, and gain two blank-turn credits.</p>
+            </article>
+            <article>
+              <h4 data-i18n="pooped">POOPED!</h4>
+              <div class="tutorial-split-visual"><div><span class="tutorial-label">Floor</span><div class="tutorial-cards" data-card-ids="m3-2"></div></div><span>+</span><div><span class="tutorial-label">Played</span><div class="tutorial-cards" data-card-ids="m3-3"></div></div><span>+</span><div><span class="tutorial-label">Drawn</span><div class="tutorial-cards" data-card-ids="m3-4"></div></div></div>
+              <p data-i18n="poopedLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> the stack can become a valuable later capture, but the three cards are temporarily left on the floor.</p>
+            </article>
+            <article>
+              <h4 data-i18n="firstPoop">FIRST POOP!</h4>
+              <div class="tutorial-cards" data-card-ids="m3-2,m3-3,m3-4"></div>
+              <p data-i18n="firstPoopLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> +7 points immediately reaches the first Go / Stop gate.</p>
+            </article>
+            <article>
+              <h4 data-i18n="triplePoop">TRIPLE POOP!</h4>
+              <div class="tutorial-rule-icon">3× POOPED!</div>
+              <p data-i18n="triplePoopLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> the hand ends immediately with a 7-point base win before carry multipliers.</p>
+            </article>
+            <article>
+              <h4 data-i18n="kiss">KISS!</h4>
+              <div class="tutorial-split-visual"><div><span class="tutorial-label">Played, no floor match</span><div class="tutorial-cards" data-card-ids="m4-3"></div></div><span>+</span><div><span class="tutorial-label">Drawn same month</span><div class="tutorial-cards" data-card-ids="m4-4"></div></div></div>
+              <p data-i18n="kissLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> you turn what looked like a miss into a capture and steal one Single.</p>
+            </article>
+            <article>
+              <h4 data-i18n="tapTap">FLUSH!</h4>
+              <div class="tutorial-split-visual"><div><span class="tutorial-label">Two on floor</span><div class="tutorial-cards" data-card-ids="m5-1,m5-2"></div></div><span>+</span><div><span class="tutorial-label">Played</span><div class="tutorial-cards" data-card-ids="m5-3"></div></div><span>+</span><div><span class="tutorial-label">Drawn</span><div class="tutorial-cards" data-card-ids="m5-4"></div></div></div>
+              <p data-i18n="flushLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> you collect all four cards of that month in one turn and steal one Single.</p>
+            </article>
+            <article>
+              <h4 data-i18n="cleanSweep">CLEAN SWEEP!</h4>
+              <div class="tutorial-split-visual"><div><span class="tutorial-label">Last floor card</span><div class="tutorial-cards" data-card-ids="m6-4"></div></div><span>+</span><div><span class="tutorial-label">Matching capture</span><div class="tutorial-cards" data-card-ids="m6-3"></div></div><span>→</span><strong>Floor empty</strong></div>
+              <p data-i18n="cleanSweepLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> clearing the live floor earns an extra Single transfer from the opponent.</p>
+            </article>
+            <article>
+              <h4 data-i18n="conquer">CONQUER!</h4>
+              <div class="tutorial-cards" data-card-ids="m7-1,m7-2,m7-3,m7-4"></div>
+              <p data-i18n="conquerLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> this is an immediate opening win instead of normal turn play.</p>
+            </article>
+            <article>
+              <h4 data-i18n="birdies">5-BIRDIES!</h4>
+              <div class="tutorial-cards" data-card-ids="m2-1,m4-1,m8-2"></div>
+              <p data-i18n="birdiesLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> this exact three-card set adds 5 points on top of normal Picture scoring.</p>
+            </article>
+            <article class="tutorial-special-wide">
+              <h4 data-i18n="threeStripes">3-STRIPES!</h4>
+              <p data-i18n="stripesLong"></p>
+              <div class="tutorial-ribbon-sets">
+                <div><span class="tutorial-label">Red</span><div class="tutorial-cards" data-card-ids="m1-2,m2-2,m3-2"></div></div>
+                <div><span class="tutorial-label">Grass</span><div class="tutorial-cards" data-card-ids="m4-2,m5-2,m7-2"></div></div>
+                <div><span class="tutorial-label">Blue</span><div class="tutorial-cards" data-card-ids="m6-2,m9-2,m10-2"></div></div>
+              </div>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> every completed three-Stripe family adds 3 points and still counts toward your total number of Stripes.</p>
+            </article>
+            <article>
+              <h4 data-i18n="fiveBrights">5-BRIGHTS!</h4>
+              <div class="tutorial-cards" data-card-ids="m1-1,m3-1,m8-1,m11-1,m12-1"></div>
+              <p data-i18n="fiveBrightsLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> all five Brights score 15 points, the largest single base combination in the game.</p>
+            </article>
+            <article>
+              <h4 data-i18n="noWinner">NO WINNER!</h4>
+              <div class="tutorial-rule-icon">HAND EXHAUSTED</div>
+              <p data-i18n="noWinnerLong"></p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> no one is paid now, but the next completed hand becomes more valuable.</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="guide-scoring">
+          <h3 data-i18n="scoring">Scoring</h3>
+          <div class="tutorial-gate-callout"><strong>7 POINTS = FIRST GO / STOP GATE</strong><p data-i18n="scoringGate"></p></div>
+          <p data-i18n="tutorialScoring"></p>
+
+          <h4>Base scoring from captured cards</h4>
+          <div class="tutorial-score-visual"><div class="tutorial-cards" data-card-ids="m1-1,m3-1,m8-1,m11-1,m12-1"></div><span>Bright examples</span></div>
+          <div class="tutorial-table-wrap">
+            <table class="tutorial-score-table">
+              <thead><tr><th>Category</th><th>What scores</th><th>Points</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Brights</strong></td><td>3 Brights without the December Rain Bright</td><td>3</td></tr>
+                <tr><td>Brights</td><td>3 Brights including the December Rain Bright</td><td>2</td></tr>
+                <tr><td>Brights</td><td>4 Brights</td><td>4</td></tr>
+                <tr><td>Brights</td><td>All 5 Brights</td><td>15</td></tr>
+                <tr><td><strong>Pictures</strong></td><td>5 Pictures</td><td>1</td></tr>
+                <tr><td>Pictures</td><td>Each Picture after the 5th</td><td>+1 each</td></tr>
+                <tr><td>5-BIRDIES / Godori</td><td>February + April + August bird Pictures</td><td>+5</td></tr>
+                <tr><td><strong>Stripes</strong></td><td>5 Stripes</td><td>1</td></tr>
+                <tr><td>Stripes</td><td>Each Stripe after the 5th</td><td>+1 each</td></tr>
+                <tr><td>3-STRIPES family</td><td>Red, Grass, or Blue three-card set</td><td>+3 per set</td></tr>
+                <tr><td><strong>Singles</strong></td><td>10 effective Singles</td><td>1</td></tr>
+                <tr><td>Singles</td><td>Each effective Single after the 10th</td><td>+1 each</td></tr>
+                <tr><td>2x Single</td><td>Colored November Paulownia or December Rain Single</td><td>Counts as 2 Singles</td></tr>
+                <tr><td>Sake Cup</td><td>Choose Picture OR 2x Singles</td><td>Whichever mode you choose</td></tr>
+                <tr><td><strong>FIRST POOP!</strong></td><td>POOPED! on your first turn</td><td>+7 bonus</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Settlement multipliers and penalties</h4>
+          <p data-i18n="scoringSettlementIntro"></p>
+          <div class="tutorial-table-wrap">
+            <table class="tutorial-score-table">
+              <thead><tr><th>Condition</th><th>Effect in GoStop Live</th></tr></thead>
+              <tbody>
+                <tr><td>1 Go</td><td>+1 point before later multipliers</td></tr>
+                <tr><td>2 Go</td><td>+2 points before later multipliers</td></tr>
+                <tr><td>3 Go</td><td>×2</td></tr>
+                <tr><td>4 Go</td><td>×4</td></tr>
+                <tr><td>5 Go</td><td>×8</td></tr>
+                <tr><td>Each additional Go</td><td>Doubles again</td></tr>
+                <tr><td>Shake</td><td>Jan–Oct declaration ×2; Nov–Dec declaration ×4. Multiple Shakes compound.</td></tr>
+                <tr><td>Bright Penalty</td><td>×2 when winner has at least 3 Brights and loser has none</td></tr>
+                <tr><td>Picture Penalty</td><td>×2 when winner has at least 7 Pictures</td></tr>
+                <tr><td>Single Penalty</td><td>×2 when winner has at least 10 effective Singles and loser has 1–7</td></tr>
+                <tr><td>Go Penalty</td><td>×2 when the losing player had called Go and is caught without improving beyond that Go score</td></tr>
+                <tr><td>No Winner carry</td><td>Next completed hand ×2, then ×4, then ×8 maximum after consecutive no-winner hands</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="tutorial-important">These multipliers stack. The game first determines the base score and any 1-Go or 2-Go addition, then applies the active multipliers.</p>
+        </section>
+
+        <section id="guide-go">
+          <h3 data-i18n="goStop">Go / Stop</h3>
+          <div class="tutorial-gate-callout"><strong>7 POINTS DOES NOT AUTOMATICALLY END THE HAND</strong><p data-i18n="goStopGate"></p></div>
+          <div class="tutorial-go-choice-grid">
+            <article class="tutorial-stop-choice"><h4>STOP</h4><p data-i18n="goStopStop"></p></article>
+            <article class="tutorial-go-choice"><h4>GO</h4><p data-i18n="goStopGo"></p></article>
+          </div>
+          <p data-i18n="goStopAgain"></p>
+          <div class="tutorial-table-wrap">
+            <table class="tutorial-score-table tutorial-go-table">
+              <thead><tr><th>Go count</th><th>Effect if you later win</th><th>8-point base example</th></tr></thead>
+              <tbody>
+                <tr><td>0 Go</td><td>No Go adjustment</td><td>8</td></tr>
+                <tr><td>1 Go</td><td>+1</td><td>9</td></tr>
+                <tr><td>2 Go</td><td>+2</td><td>10</td></tr>
+                <tr><td>3 Go</td><td>×2</td><td>16</td></tr>
+                <tr><td>4 Go</td><td>×4</td><td>32</td></tr>
+                <tr><td>5 Go</td><td>×8</td><td>64</td></tr>
+                <tr><td>6 Go</td><td>×16</td><td>128</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tutorial-warning"><strong>The risk of GO</strong><p data-i18n="goStopRisk"></p></div>
+          <p data-i18n="goStopAuto"></p>
+        </section>
+
+        <section id="guide-hands">
+          <h3 data-i18n="exampleHands">Example Hands</h3>
+          <p data-i18n="tutorialExamples"></p>
+          <div class="tutorial-rule-grid">
+            <article>
+              <h4>A complete ordinary turn with two captures</h4>
+              <p data-i18n="exampleTurnHelp"></p>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Play</span><div class="tutorial-cards" data-card-ids="m9-3"></div></div><span>+</span><div><span class="tutorial-label">Floor</span><div class="tutorial-cards" data-card-ids="m9-4"></div></div><span>→</span><strong>Capture</strong></div>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Draw</span><div class="tutorial-cards" data-card-ids="m10-3"></div></div><span>+</span><div><span class="tutorial-label">Floor</span><div class="tutorial-cards" data-card-ids="m10-4"></div></div><span>→</span><strong>Capture</strong></div>
+            </article>
+            <article>
+              <h4>How separate scoring groups add together</h4>
+              <p data-i18n="exampleScoreHelp"></p>
+              <div class="tutorial-example-equation"><span>5 Pictures</span><b>1</b><span>+</span><span>5-BIRDIES</span><b>5</b><span>+</span><span>10 Singles</span><b>1</b><span>=</span><strong>7 points → Go / Stop gate</strong></div>
+            </article>
+          </div>
+        </section>
       </div>
     </form>
   </dialog>
@@ -242,14 +518,14 @@
   <script src="audio-ppeok.js"></script>
   <script src="audio-shake.js"></script>
   <script src="audio-fanfare.js"></script>
-  <script src="i18n.js?v=20260922-3"></script>
-  <script src="game-engine.js"></script>
+  <script src="i18n.js?v=20260922-4"></script>
+  <script src="game-engine.js?v=20260922-1"></script>
   <script src="session-authority.js"></script>
   <script src="runtime-config.js"></script>
   <script src="ranked-client.js?v=20260922-10"></script>
   <script src="online-client.js?v=20260921-1"></script>
   <script src="presentation-plan.js"></script>
-  <script src="app.js?v=20260922-5"></script>
+  <script src="app.js?v=20260922-6"></script>
   <script src="diagnostics.js"></script>
 </body>
 </html>

@@ -2167,7 +2167,8 @@
     if(TEST_MODE)return;
     document.querySelectorAll('.tutorial-cards[data-card-ids]').forEach(root=>{if(root.childElementCount)return;root.dataset.cardIds.split(',').map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
     const tutorialQueries={bright:card=>card.type==='bright',animal:card=>card.type==='animal',ribbon:card=>card.type==='ribbon',single:card=>card.type==='pi'&&!card.flags.includes('doublePi'),'doublePi-11':card=>card.month===11&&card.flags.includes('doublePi'),'doublePi-12':card=>card.month===12&&card.flags.includes('doublePi'),switchPi:card=>card.flags.includes('switchPi')};
-    document.querySelectorAll('.tutorial-cards[data-tutorial-query]').forEach(root=>{root.replaceChildren();MASTER_DECK.filter(tutorialQueries[root.dataset.tutorialQuery]||(()=>false)).slice(0,['bright','animal','ribbon','single'].includes(root.dataset.tutorialQuery)?3:1).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
+    const tutorialQueryLimits={bright:5,animal:5,ribbon:5,single:5,'doublePi-11':1,'doublePi-12':1,switchPi:1};
+    document.querySelectorAll('.tutorial-cards[data-tutorial-query]').forEach(root=>{root.replaceChildren();MASTER_DECK.filter(tutorialQueries[root.dataset.tutorialQuery]||(()=>false)).slice(0,tutorialQueryLimits[root.dataset.tutorialQuery]||1).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
     const monthGuide=document.getElementById('monthGuide');
     if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>{const item=document.createElement('span');item.className='tutorial-month-card';item.appendChild(createCardEl(card,'card tutorial-game-card'));const label=document.createElement('small');label.textContent=t(card.id==='m9-1'?'sakeCup':card.flags.includes('doublePi')?'doubleSingle':card.type==='bright'?'brights':card.type==='animal'?'pictures':card.type==='ribbon'?'stripes':'singles');item.appendChild(label);cards.appendChild(item);});article.append(heading,cards,description);monthGuide.appendChild(article);}}
   }
@@ -2315,7 +2316,8 @@
     trigger.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;open(event);});
   });
   if(els.scoreDialog)els.scoreDialog.addEventListener('click',event=>{if(event.target===els.scoreDialog)els.scoreDialog.close();});
-  els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
+  els.howToBtn.addEventListener('click',()=>{const sections=els.howToDialog.querySelector('.tutorial-sections');if(sections)sections.scrollTop=0;els.howToDialog.showModal();});
+  els.howToDialog.querySelector('.tutorial-nav')?.addEventListener('click',event=>{const link=event.target.closest('a[href^="#guide-"]');if(!link)return;const target=els.howToDialog.querySelector(link.getAttribute('href'));if(!target)return;event.preventDefault();target.scrollIntoView({block:'start',behavior:'smooth'});});
   els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});
   if(els.shakeReviewDialog)els.shakeReviewDialog.addEventListener('click',()=>els.shakeReviewDialog.close());
   if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
