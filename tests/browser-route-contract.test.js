@@ -4,6 +4,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const {webcrypto}=require('node:crypto');
 
 const root=path.join(__dirname,'..');
 const ranked=fs.readFileSync(path.join(root,'ranked-client.js'),'utf8');
@@ -46,4 +47,33 @@ test('release click contract: main-menu and reusable nickname links carry accoun
   assert.match(ranked,/openPlayerInfo\(target\.dataset\.playerInfoAccountId,target\.dataset\.playerInfoNickname/);
   assert.match(ranked,/renderAccountBox/);
   assert.match(ranked,/playerNicknameHtml\(\{accountId:account\.id,nickname:account\.nickname,countryCode:account\.countryCode\}\)/);
+});
+
+
+class MemoryStorage{
+  constructor(){this.map=new Map();}
+  async get(key){return structuredClone(this.map.get(key));}
+  async put(key,value){this.map.set(key,structuredClone(value));}
+  async delete(key){this.map.delete(key);}
+  async list({prefix=''}={}){return new Map([...this.map].filter(([key])=>key.startsWith(prefix)).map(([key,value])=>[key,structuredClone(value)]));}
+}
+
+test('release route integration: main-menu Player Info succeeds through the actual Worker and AccountStore path',async()=>{
+  const module=await import('../server/worker.mjs');
+  const store=new module.AccountStore({storage:new MemoryStorage()},{EMAIL_VERIFICATION_REQUIRED:'false'},{cryptoApi:webcrypto,now:()=> '2026-09-23T05:00:00.000Z'});
+  const binding={idFromName:name=>name,get:()=>({fetch:request=>store.fetch(request)})};
+  const env={ACCOUNT_STORE:binding,EMAIL_VERIFICATION_REQUIRED:'false'};
+  const origin='https://gostoplive.com';
+  const registration=await module.default.fetch(new Request('https://worker/api/auth/register',{method:'POST',headers:{Origin:origin,'content-type':'application/json'},body:JSON.stringify({email:'route-profile@example.com',nickname:'RouteProfile',password:'StrongPass9',confirmPassword:'StrongPass9'})}),env);
+  assert.equal(registration.status,201);const registered=await registration.json();assert.ok(registered.session?.token);
+  const profileResponse=await module.default.fetch(new Request('https://worker/api/player-profile',{method:'POST',headers:{Origin:origin,'content-type':'application/json',authorization:`Bearer ${registered.session.token}`},body:JSON.stringify({accountId:registered.account.id})}),env);
+  assert.equal(profileResponse.status,200);assert.equal(profileResponse.headers.get('access-control-allow-origin'),origin);
+  const profile=await profileResponse.json();assert.equal(profile.player.accountId,registered.account.id);assert.equal(profile.player.nickname,'RouteProfile');
+});
+
+test('release transport contract: Online room HTTP uses same-origin production proxy but room WebSocket stays direct',()=>{
+  assert.match(online,/requestUrl\(path\)/);
+  assert.match(online,/gostoplive\.com/);
+  assert.match(online,/fetch\(this\.requestUrl\(path\)/);
+  assert.match(online,/new URL\(\`\$\{this\.baseUrl\}\/api\/rooms\/\$\{room\.roomCode\}\/ws\`\)/);
 });
