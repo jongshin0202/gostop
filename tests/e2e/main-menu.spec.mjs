@@ -387,3 +387,68 @@ test('Player Info network failure shows friendly app copy instead of a raw brows
   await expect(page.locator('#playerInfoBody')).not.toContainText(/Failed to fetch|NetworkError|Load failed/i);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
+
+
+test('Friendly Solo Play launches a real local game without account or matchmaking UI',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#playSoloBtn').click();
+  await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:12000});
+  await expect(page.locator('#table')).toBeVisible();
+  await expect(page.locator('#onlineLobbyPanel')).toBeHidden();
+  await expect(page.locator('#freeFriendPanel')).toBeHidden();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('Create ID browser flow requires Connection Protection acknowledgement before registration and reaches success UI',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#accountLogoutBtn').click();
+  await page.locator('#accountCreateBtn').click();
+  await expect(page.locator('#accountDialog')).toHaveJSProperty('open',true);
+  await expect(page.locator('#registerForm')).toBeVisible();
+  await page.locator('#registerForm input[name="email"]').fill('new@example.com');
+  await page.locator('#registerForm input[name="nickname"]').fill('NewPlayer');
+  await page.locator('#registerForm input[name="password"]').fill('StrongPass9');
+  await page.locator('#registerForm input[name="confirmPassword"]').fill('StrongPass9');
+  const registerRequest=page.waitForRequest(request=>request.url().includes('/api/auth/register')&&request.method()==='POST');
+  await page.locator('#registerForm button[type="submit"]').click();
+  await expect(page.locator('#registrationPolicyTitle')).toHaveText('Connection Protection');
+  await expect(page.locator('#registrationPolicyDialog')).toHaveJSProperty('open',true);
+  let resolved=false;registerRequest.then(()=>{resolved=true;});
+  await page.waitForTimeout(150);
+  expect(resolved).toBe(false);
+  await page.locator('#registrationPolicyOk').click();
+  await registerRequest;
+  await expect(page.getByRole('heading',{name:'Account Registered Successfully'})).toBeVisible();
+  await page.locator('#registrationOk').click();
+  await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toContainText('Jong');
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('Player Info dismisses by OK and by clicking the dialog backdrop after a successful self-profile load',async({page})=>{
+  const errors=await openMenu(page);
+  const trigger=page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]');
+  await trigger.click();
+  await expect(page.locator('.player-info-dialog')).toHaveJSProperty('open',true);
+  await page.locator('#playerInfoOk').click();
+  await expect(page.locator('.player-info-dialog')).toHaveJSProperty('open',false);
+  await trigger.click();
+  await expect(page.locator('.player-info-dialog')).toHaveJSProperty('open',true);
+  await page.locator('.player-info-dialog').click({position:{x:3,y:3}});
+  await expect(page.locator('.player-info-dialog')).toHaveJSProperty('open',false);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('every Friends tab is reachable and can return without stale overlays or browser errors',async({page})=>{
+  const snapshot={ok:true,friends:[{...otherPlayer,friendState:'friend'}],incoming:[],outgoing:[],history:[otherPlayer],recommendations:[otherPlayer]};
+  const errors=await openMenu(page,{socialSnapshot:snapshot});
+  await page.locator('#friendsMenuBtn').click();
+  for(const tab of ['friends','requests','history','recommendations','search']){
+    await page.locator(`[data-social-tab="${tab}"]`).click();
+    await expect(page.locator(`[data-social-tab="${tab}"]`)).toHaveClass(/active/);
+    await expect(page.locator('#socialScreen')).toBeVisible();
+  }
+  await page.locator('#socialCloseTop').click();
+  await expect(page.locator('#socialScreen')).toBeHidden();
+  await expect(page.locator('.gostop-main-menu')).toBeVisible();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
