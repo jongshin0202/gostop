@@ -31,7 +31,7 @@ const profileFor=id=>id==='acct-other'?{
   headToHead:{sessionsPlayedTogether:0,gamesPlayedTogether:0,wins:0,losses:0,coinsWon:0,coinsLost:0,netCoins:0}
 };
 
-async function installHarness(page){
+async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null}={}){
   await page.addInitScript(({account,other})=>{
     localStorage.setItem('gostop-auth-token','e2e-token');
     localStorage.setItem('gostop-account-cache',JSON.stringify(account));
@@ -64,11 +64,11 @@ async function installHarness(page){
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
     let body={ok:true};
     if(path==='/api/me')body={ok:true,account:selfAccount,notices:[]};
-    else if(path==='/api/leaderboards')body={ok:true,month:'2026-09',global:globalRows,monthly:monthlyRows};
+    else if(path==='/api/leaderboards')body={ok:true,month:'2026-09',global:boards.global,monthly:boards.monthly};
     else if(path==='/api/player-profile'){
       const posted=request.postDataJSON?.()||JSON.parse(request.postData()||'{}');
       body={ok:true,player:profileFor(posted.accountId)};
-    }else if(path==='/api/social')body={ok:true,friends:[],incoming:[],outgoing:[],history:[],recommendations:[otherPlayer]};
+    }else if(path==='/api/social')body=socialSnapshot||{ok:true,friends:[],incoming:[],outgoing:[],history:[],recommendations:[otherPlayer]};
     else if(path==='/api/social/search')body={ok:true,players:[{...otherPlayer,friendState:'none'}]};
     else if(path==='/api/social/request')body={ok:true,state:'outgoing',accountId:'acct-other'};
     else if(path==='/api/social/respond')body={ok:true,state:'friend'};
@@ -82,10 +82,10 @@ async function installHarness(page){
   });
 }
 
-async function openMenu(page,{mobile=false}={}){
+async function openMenu(page,{mobile=false,boards,socialSnapshot}={}){
   if(mobile)await page.setViewportSize({width:390,height:844});
   const pageErrors=[];page.on('pageerror',error=>pageErrors.push(error));
-  await installHarness(page);
+  await installHarness(page,{boards,socialSnapshot});
   await page.goto('/',{waitUntil:'domcontentloaded'});
   await expect(page.locator('.main-menu-title')).toContainText('GoStop');
   await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toBeVisible();
