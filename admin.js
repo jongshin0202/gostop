@@ -92,7 +92,16 @@
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${currentExportName}.csv`;a.click();URL.revokeObjectURL(url);
   }
   function setBusy(busy){$('refreshBtn').disabled=busy;$('serverStatus').textContent=busy?'● Loading…':'● Connected';}
-  function fail(error){$('serverStatus').textContent='● Error';$('serverStatus').style.color='#ff8f8f';console.error(error);alert(error.message||String(error));}
+  function showAdminNotice(title,message,{error=false}={}){
+    let overlay=document.getElementById('adminNoticeOverlay');
+    if(!overlay){
+      overlay=document.createElement('div');overlay.id='adminNoticeOverlay';overlay.className='failure-overlay';
+      overlay.innerHTML='<section class="failure-card" role="dialog" aria-modal="true" aria-labelledby="adminNoticeTitle"><div class="dialog-head"><h2 id="adminNoticeTitle">Admin Update</h2></div><div class="failure-body"><p id="adminNoticeMessage"></p><div class="dialog-actions"><button id="adminNoticeOk" class="primary" type="button">OK</button></div></div></section>';
+      document.body.appendChild(overlay);overlay.querySelector('#adminNoticeOk').addEventListener('click',()=>{overlay.hidden=true;});
+    }
+    overlay.querySelector('#adminNoticeTitle').textContent=title||'Admin Update';const body=overlay.querySelector('#adminNoticeMessage');body.textContent=message||'';body.classList.toggle('error',!!error);overlay.hidden=false;overlay.style.display='grid';
+  }
+  function fail(error){$('serverStatus').textContent='● Error';$('serverStatus').style.color='#ff8f8f';console.error(error);showAdminNotice('Admin Action Failed',error?.message||String(error),{error:true});}
   function resetStatus(){$('serverStatus').style.color='';}
   function ensureFailureOverlay(){
     let overlay=document.getElementById('failureOverlay');
@@ -253,10 +262,7 @@
   }
 
   async function systemResetAction(mode){
-    const full=mode==='full',question=full
-      ?'This will back up the entire system and then delete ALL system data and ALL player accounts. Are you sure you want to continue?'
-      :'This will back up the entire system and then clear all system activity while keeping complete player account records. Are you sure you want to continue?';
-    if(!window.confirm(question))return;
+    const full=mode==='full';
     const form=await actionPrompt({
       title:full?'Confirm Full System Reset':'Confirm Reset — Keep Accounts',
       fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize this destructive reset.'}],
@@ -265,13 +271,12 @@
     });if(!form)return;
     try{
       setBusy(true);const result=await api('/system-reset',{method:'POST',body:{mode,confirmPassword:form.adminPassword,reason:form.reason}});
-      alert(full?'Full system reset completed. A restore point was saved first.':`System data reset completed. ${fmt(result.accountsPreserved)} account records were preserved and a restore point was saved first.`);
+      showAdminNotice('System Reset Completed',full?'Full system reset completed. A restore point was saved first.':`System data reset completed. ${fmt(result.accountsPreserved)} account records were preserved and a restore point was saved first.`);
       await loadSystemReset();
     }catch(error){fail(error);}finally{setBusy(false);}
   }
 
   async function restorePreviousResetPoint(){
-    if(!window.confirm('Restore the entire system from the previous reset point? The current system will first be saved as a safety backup so this restore can be reversed.'))return;
     const form=await actionPrompt({
       title:'Restore Data from Previous Reset Point',
       fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize the restore.'}],
@@ -280,7 +285,7 @@
     });if(!form)return;
     try{
       setBusy(true);await api('/system-restore',{method:'POST',body:{confirmPassword:form.adminPassword,reason:form.reason}});
-      alert('System restore completed successfully. The state from before this restore is now the available reset point.');
+      showAdminNotice('System Restore Completed','System restore completed successfully. The state from before this restore is now the available reset point.');
       await loadSystemReset();
     }catch(error){fail(error);}finally{setBusy(false);}
   }
@@ -461,7 +466,7 @@
       else if(kind==='suspend'){const suspended=button.dataset.suspended!=='1',form=await actionPrompt({title:suspended?'Suspend Player':'Unsuspend Player',fields:suspended?[{name:'suspensionReason',label:'Suspension reason'}]:[]});if(!form)return;await api(`/players/${encodeURIComponent(id)}/profile`,{method:'POST',body:{suspended,suspensionReason:form.suspensionReason,reason:form.reason}});await showPlayer(id);}
       else if(kind==='disconnect'){const month=new Date().toISOString().slice(0,7),form=await actionPrompt({title:'Reset Monthly Disconnect Allowance',fields:[{name:'month',label:'Month (YYYY-MM)',value:month}]});if(!form)return;await api(`/players/${encodeURIComponent(id)}/disconnect-reset`,{method:'POST',body:{month:form.month,reason:form.reason}});await showPlayer(id);}
       else if(kind==='player-global'||kind==='player-month'){const month=$('leaderboardMonth').value||new Date().toISOString().slice(0,7),form=await actionPrompt({title:kind==='player-global'?'Reset Player Global Leaderboard':'Reset Player Monthly Leaderboard',fields:kind==='player-month'?[{name:'month',label:'Month',type:'month',value:month}]:[]});if(!form)return;await api('/leaderboards/reset',{method:'POST',body:{scope:kind,accountId:id,month:form.month||month,reason:form.reason}});await showPlayer(id);}
-      else if(kind==='game-correct'){const correction=await gameCorrectionPrompt(id);if(!correction)return;if(!Object.keys(correction.patch).length&&!correction.walletAdjustments.length){alert('No values were changed.');return;}await api(`/games/${encodeURIComponent(id)}/correct`,{method:'POST',body:correction});await showGame(id);}
+      else if(kind==='game-correct'){const correction=await gameCorrectionPrompt(id);if(!correction)return;if(!Object.keys(correction.patch).length&&!correction.walletAdjustments.length){showAdminNotice('No Changes','No values were changed.');return;}await api(`/games/${encodeURIComponent(id)}/correct`,{method:'POST',body:correction});await showGame(id);}
       else if(kind==='delete-player'){
         const form=await actionPrompt({title:'Delete Account & All Records',fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize permanent account deletion.'}],confirmText:'Delete Account',intro:'This permanently removes the account, login sessions, games, sessions, ledgers, connection history and other records that reference this player. This cannot be undone from the server. Existing system backups are also purged so they cannot restore the deleted account.'});if(!form)return;
         await api(`/players/${encodeURIComponent(id)}/delete`,{method:'POST',body:{confirmPassword:form.adminPassword,reason:form.reason}});

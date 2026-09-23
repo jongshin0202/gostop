@@ -577,6 +577,7 @@
   const autoMatchCandidateDialog=document.createElement('dialog');autoMatchCandidateDialog.className='gostop-request-dialog';autoMatchCandidateDialog.innerHTML=`<div class="dialog-card"><h2 id="autoMatchCandidateTitle">Matched Opponent</h2><div id="autoMatchCandidateProfile" class="outgoing-opponent-profile"></div><div class="decision-actions auto-match-candidate-actions"><button id="autoMatchCandidateAccept" class="go-btn" type="button">Accept</button><button id="autoMatchCandidateNext" class="glass-btn" type="button">Someone Else</button><button id="autoMatchCandidateCancel" class="stop-btn" type="button">Cancel Auto Match</button></div></div>`;document.body.appendChild(autoMatchCandidateDialog);
   const declinedDialog=document.createElement('dialog');declinedDialog.className='gostop-request-dialog';declinedDialog.innerHTML=`<div class="dialog-card"><h2 id="declinedDialogTitle">Request Declined</h2><p id="declinedDialogText"></p><button id="declinedDialogOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(declinedDialog);
   const friendRequestSentDialog=document.createElement('dialog');friendRequestSentDialog.className='gostop-request-dialog';friendRequestSentDialog.innerHTML=`<div class="dialog-card"><h2>Friend Request Sent</h2><p id="friendRequestSentText"></p><button id="friendRequestSentOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(friendRequestSentDialog);
+  const unfriendConfirmDialog=document.createElement('dialog');unfriendConfirmDialog.className='gostop-request-dialog';unfriendConfirmDialog.innerHTML=`<div class="dialog-card"><h2>Remove Friend?</h2><p id="unfriendConfirmText"></p><div class="decision-actions"><button id="unfriendConfirmYes" class="stop-btn" type="button">Yes</button><button id="unfriendConfirmNo" class="go-btn" type="button">No</button></div></div>`;document.body.appendChild(unfriendConfirmDialog);
   const playerInfoDialog=document.createElement('dialog');playerInfoDialog.className='gostop-request-dialog player-info-dialog';playerInfoDialog.innerHTML=`<div class="dialog-card"><h2 id="playerInfoTitle" class="player-info-heading">Player Info</h2><div id="playerInfoBody"><p class="account-help">Loading…</p></div><div class="decision-actions"><button id="playerInfoOk" class="go-btn" type="button">OK</button></div></div>`;document.body.appendChild(playerInfoDialog);
   const linkCopiedDialog=document.createElement('dialog');linkCopiedDialog.id='linkCopiedDialog';linkCopiedDialog.className='gostop-request-dialog link-copied-dialog';linkCopiedDialog.innerHTML=`<div class="dialog-card link-copied-card"><h2>Link Copied</h2></div>`;document.body.appendChild(linkCopiedDialog);
   const missedRequestDialog=document.createElement('dialog');missedRequestDialog.className='gostop-request-dialog';missedRequestDialog.innerHTML=`<div class="dialog-card"><h2 id="missedRequestTitle">Missed Play Request</h2><p id="missedRequestText"></p><p id="missedRequestTime" class="account-help"></p><div class="decision-actions"><button id="missedRequestPrev" class="glass-btn" type="button" aria-label="Previous request">‹</button><button id="missedRequestOk" class="go-btn" type="button">OK</button><button id="missedRequestClearAll" class="stop-btn" type="button">Clear All</button><button id="missedRequestNext" class="glass-btn" type="button" aria-label="Next request">›</button></div></div>`;document.body.appendChild(missedRequestDialog);
@@ -979,6 +980,17 @@
   function showFriendRequestSentDialog(nickname){
     $('friendRequestSentText').textContent=`Your Friend Request was sent to ${nickname||'this player'}.`;if(!friendRequestSentDialog.open)friendRequestSentDialog.showModal();
   }
+  function confirmUnfriend(nickname){
+    return new Promise(resolve=>{
+      $('unfriendConfirmText').textContent=`Remove ${nickname||'this player'} from your Friends list?`;
+      const yes=$('unfriendConfirmYes'),no=$('unfriendConfirmNo');
+      let settled=false;
+      const finish=value=>{if(settled)return;settled=true;yes.removeEventListener('click',accept);no.removeEventListener('click',decline);unfriendConfirmDialog.removeEventListener('cancel',cancel);if(unfriendConfirmDialog.open)unfriendConfirmDialog.close();resolve(value);};
+      const accept=()=>finish(true),decline=()=>finish(false),cancel=event=>{event.preventDefault();finish(false);};
+      yes.addEventListener('click',accept);no.addEventListener('click',decline);unfriendConfirmDialog.addEventListener('cancel',cancel,{once:true});
+      if(!unfriendConfirmDialog.open)unfriendConfirmDialog.showModal();
+    });
+  }
   function playerStatusText(player){return !player.online?rt('statusNotOnline'):player.status==='away'?rt('statusAway'):player.status==='available'?rt('statusAvailableSimple'):rt('statusNotAvailable');}
   function playerStatusClass(player){return !player.online?'offline':player.status==='available'?'available':'unavailable';}
   function formatLastPlayed(value){if(!value)return rt('neverPlayed');const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):rt('neverPlayed');}
@@ -1050,7 +1062,7 @@
     if(action==='play'){
       socialScreen.hidden=true;const optimistic={requestId:null,automatic:false,to:{accountId,nickname}};showOutgoingRequest(optimistic);$('cancelOutgoingRequest').disabled=true;if(sendLobbyMessage({type:'challenge',accountId}))$('lobbyStatus').textContent='';return;
     }
-    if(action==='unfriend'&&!globalThis.confirm(`Unfriend ${nickname}?`))return;
+    if(action==='unfriend'&&!await confirmUnfriend(nickname))return;
     socialBusy=true;renderSocial();
     try{
       let result=null;

@@ -315,3 +315,11 @@ test('session admin summarizes players, wins, Coins and milestones with player a
   assert.match(adminJs,/Click any Game ID for the full authoritative settlement, events, cards, and stored game history/);
   assert.match(adminJs,/data-session-player/);assert.match(adminJs,/data-game/);
 });
+
+test('admin UI avoids browser-native blocking alert and confirm dialogs for normal dashboard actions',()=>{
+  assert.doesNotMatch(adminSource,/\bwindow\.confirm\s*\(/);
+  assert.doesNotMatch(adminSource,/\b(?:window\.)?alert\s*\(/);
+  assert.match(adminSource,/function showAdminNotice\(/);
+  assert.match(adminSource,/System Reset Completed/);
+  assert.match(adminSource,/System Restore Completed/);
+});

@@ -93,3 +93,10 @@ test('Friends request confirmation and reusable clickable Player Info are wired 
   assert.match(ranked,/renderLeaderboard\(\)/);assert.match(ranked,/playerNicknameHtml\(row\)/);assert.match(ranked,/playerNicknameHtml\(p\)/);assert.match(ranked,/playerNicknameHtml\(player\)/);assert.match(ranked,/humanName\.innerHTML=playerNicknameHtml/);assert.match(ranked,/opponentName\.innerHTML=.*playerNicknameHtml/);
   assert.match(worker,/\/api\/player-profile/);assert.match(accountStore,/async playerProfile\(request\)/);assert.match(accountStore,/async playerSessionCounts/);assert.match(accountStore,/async playerLastLoginAt/);
 });
+
+test('unfriend confirmation uses an in-app dialog instead of blocking browser confirm',()=>{
+  assert.match(rankedSource,/const unfriendConfirmDialog=document\.createElement\('dialog'\)/);
+  assert.match(rankedSource,/function confirmUnfriend\(nickname\)/);
+  assert.match(rankedSource,/await confirmUnfriend\(nickname\)/);
+  assert.doesNotMatch(rankedSource,/globalThis\.confirm\s*\(/);
+});
