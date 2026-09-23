@@ -2235,9 +2235,8 @@ test('visual beginner guide covers every section with canonical GoStop Card evid
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   for(const section of ['guide-overview','guide-types','guide-turn','guide-matches','guide-specials','guide-scoring','guide-go','guide-hands'])assert.match(html,new RegExp(`id="${section}"`));
   for(const query of ['bright','animal','ribbon','single','doublePi-11','doublePi-12','switchPi'])assert.equal(html.includes(`data-tutorial-query="${query}"`),true);
-  for(const cards of ['m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3,m2-4'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
-  assert.equal(html.includes('data-i18n-vars=\'{"count":1}\''),true);
-  assert.equal(html.includes('data-i18n-vars=\'{"points":48}\''),true);
+  for(const cards of ['m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3','m2-4','m2-1,m4-1,m8-2'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
+  for(const go of ['<td>1 Go</td><td>+1</td>','<td>3 Go</td><td>×2</td>','<td>5 Go</td><td>×8</td>'])assert.equal(html.includes(go),true);
   assert.equal(fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8').includes("createCardEl(card,'card tutorial-game-card')"),true);
 });
 
@@ -2417,7 +2416,7 @@ test('tutorial keeps its header and navigation outside the scrolling lesson body
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);
   assert.match(html,/class="tutorial-header"/);assert.match(html,/class="dialog-close tutorial-close"/);assert.match(html,/class="tutorial-sections"/);
-  assert.match(css,/\.tutorial-card\{[^}]*display:grid;grid-template-rows:auto auto minmax\(0,1fr\)[^}]*overflow:hidden/);
+  const tutorialCardRule=css.slice(css.lastIndexOf('.tutorial-card{'),css.indexOf('}',css.lastIndexOf('.tutorial-card{'))+1);assert.match(tutorialCardRule,/display:grid/);assert.match(tutorialCardRule,/grid-template-rows:auto auto minmax\(0,1fr\)/);assert.match(tutorialCardRule,/overflow:hidden/);
   assert.match(css,/\.tutorial-sections\{[^}]*overflow-y:auto/);assert.match(css,/\.tutorial-header \.tutorial-close\{position:static/);
   assert.match(css,/@media\(max-width:700px\)\{[^]*\.tutorial-dialog\{width:100vw;height:100dvh/);
 });
@@ -2539,7 +2538,7 @@ test('tutorial derives category examples from canonical metadata and explains ev
 
 test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, and rule-correct special examples',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
-  assert.match(i18n.dictionaries.en.scoringGate,/Seven points is the first eligibility gate/);
+  assert.match(i18n.translate('en','scoringGate'),/Seven points is the first eligibility gate/);
   for(const text of ['1 Go','2 Go','3 Go','4 Go','5 Go','×2','×4','×8'])assert.ok(html.includes(text),text);
   for(const text of ['3 Brights without the December Rain Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
   assert.match(html,/data-card-ids="m6-4"/);assert.match(html,/data-card-ids="m6-3"/);
@@ -2547,6 +2546,7 @@ test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, 
   assert.match(html,/data-card-ids="m5-1,m5-2"/);assert.match(html,/data-card-ids="m5-3"/);assert.match(html,/data-card-ids="m5-4"/);
   assert.match(html,/data-card-ids="m1-2,m2-2,m3-2"/);assert.match(html,/data-card-ids="m4-2,m5-2,m7-2"/);assert.match(html,/data-card-ids="m6-2,m9-2,m10-2"/);
   for(const key of ['shakeLong','bombLong','poopedLong','firstPoopLong','triplePoopLong','kissLong','flushLong','cleanSweepLong','conquerLong','birdiesLong','stripesLong','fiveBrightsLong','noWinnerLong'])assert.ok(i18n.translate('en',key).length>80,key);
+  assert.equal(Object.keys(i18n.dictionaries.en).includes('shakeLong'),false,'expanded tutorial detail copy stays outside the canonical localized UI dictionary');
 });
 
 test('match examples label zero, one, two, and deck-draw month matching instead of unexplained card rows',()=>{
