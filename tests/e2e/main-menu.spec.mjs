@@ -479,3 +479,25 @@ test('blocked Notifications uses the in-app recovery flow and never silently fai
   await expect(page.locator('#notificationBlockedDialog')).toHaveJSProperty('open',false);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
+
+test('all static HTML and CSS asset references resolve to real repository files',async()=>{
+  const fs=await import('node:fs');
+  const path=await import('node:path');
+  const {fileURLToPath}=await import('node:url');
+  const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+  const candidates=['index.html','admin.html','styles.css','admin.css','mobile-fullscreen.css'];
+  const missing=[];
+  for(const relative of candidates){
+    const source=fs.readFileSync(path.join(root,relative),'utf8');
+    const refs=[
+      ...[...source.matchAll(/(?:src|href)=["']([^"'#?]+)(?:\?[^"']*)?["']/g)].map(match=>match[1]),
+      ...[...source.matchAll(/url\(["']?([^"')?#]+)(?:\?[^"')]*)?["']?\)/g)].map(match=>match[1])
+    ];
+    for(const raw of refs){
+      if(!raw||/^(?:https?:|data:|blob:|mailto:|javascript:|#|\/\/)/i.test(raw))continue;
+      const clean=raw.replace(/^\//,'');
+      if(!fs.existsSync(path.join(root,clean)))missing.push(`${relative} -> ${raw}`);
+    }
+  }
+  expect(missing).toEqual([]);
+});
