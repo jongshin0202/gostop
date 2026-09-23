@@ -126,7 +126,7 @@
   function persistAccountCache(){try{if(authToken&&account)localStorage.setItem(ACCOUNT_CACHE_KEY,JSON.stringify(account));else localStorage.removeItem(ACCOUNT_CACHE_KEY);}catch(_){}}
   try{authToken=localStorage.getItem(TOKEN_KEY)||null;const cached=JSON.parse(localStorage.getItem(ACCOUNT_CACHE_KEY)||'null');if(authToken&&cached&&typeof cached==='object'&&cached.nickname){account=cached;readAcknowledgedNoticeCache(account.id);}}catch(_){ }
   const productionSameOriginRest=typeof location!=='undefined'&&/^(?:www\.)?gostoplive\.com$/i.test(location.hostname);
-  const apiUrl=path=>productionSameOriginRest&&String(path||'').startsWith('/api/')?`${location.origin}${path}`:`${baseUrl}${path}`;
+  const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'&&String(path||'').startsWith('/api/')?`${location.origin}${path}`:`${baseUrl}${path}`;
   const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[char]));
   const fmtScore=value=>Number(value||0).toFixed(2).replace(/\.00$/,'');
   const flagEmoji=country=>{const code=String(country||'').toUpperCase();return /^[A-Z]{2}$/.test(code)?String.fromCodePoint(...[...code].map(char=>127397+char.charCodeAt(0))):'🌐';};
@@ -134,7 +134,7 @@
   async function api(path,{method='GET',body,auth=true}={}){
     if(!baseUrl)throw new Error(rt('serverUnavailable'));
     const headers={};if(body!==undefined)headers['content-type']='application/json';if(auth&&authToken)headers.authorization=`Bearer ${authToken}`;
-    const response=await fetch(apiUrl(path),{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json().catch(()=>({}));
+    const response=await fetch(apiUrl(path,method),{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json().catch(()=>({}));
     if(!response.ok){const error=Object.assign(new Error(data.error?.message||rt('requestFailed')),data.error||{});error.status=response.status;error.message=localizedError(error);throw error;}return data;
   }
   function getAuthToken(){return authToken;}
