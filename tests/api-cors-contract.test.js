@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import worker from '../server/worker.mjs';
 
 const origin='https://gostoplive.com';
@@ -101,4 +102,20 @@ test('Player Info POST is forwarded through the public Worker with auth, JSON bo
   assert.deepEqual(JSON.parse(seen.body),{accountId:'acct-self'});
   const data=await response.json();
   assert.equal(data.player.nickname,'SelfPlayer');
+});
+
+
+test('all literal player API paths used by browser clients are recognized by the Worker CORS classifier',async()=>{
+  const sourceFiles=['ranked-client.js','online-client.js','app.js'];
+  const paths=new Set();
+  for(const file of sourceFiles){
+    const source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
+    for(const match of source.matchAll(/['"`](\/api\/[^'"`\\s?$\\{]+)/g))paths.add(match[1]);
+  }
+  assert.ok(paths.size>=10,'expected a substantial browser API surface');
+  for(const path of [...paths].sort()){
+    const response=await preflight(path,'POST');
+    assert.equal(response.status,204,path);
+    assert.equal(response.headers.get('access-control-allow-origin'),origin,path);
+  }
 });
