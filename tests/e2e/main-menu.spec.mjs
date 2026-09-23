@@ -340,3 +340,24 @@ test('Friendly Create Room produces a shareable guest link with referral token b
   await expect(page.locator('#freeOnlineStatus')).toContainText(/Waiting|waiting/i);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
+
+
+test('signed-in player outside Top 10 is appended as highlighted row 11 with the real rank',async({page})=>{
+  const top=Array.from({length:10},(_,index)=>({
+    accountId:'top-'+(index+1),nickname:'Top'+(index+1),countryCode:'US',rank:index+1,
+    score:20-index,totalCoins:1000-index*10,gamesPlayed:30-index,wins:20-index,losses:10,walletCoins:500
+  }));
+  const selfOutside={accountId:'acct-self',nickname:'Jong',countryCode:'US',rank:42,score:1.2,totalCoins:445,gamesPlayed:39,wins:20,losses:19,walletCoins:2021};
+  const errors=await openMenu(page,{boards:{global:[...top,selfOutside],monthly:[...top,selfOutside]}});
+  await page.locator('#leaderboardMenuBtn').click();
+  await expect(page.locator('#leaderboardBody tr')).toHaveCount(11);
+  const own=page.locator('#leaderboardBody tr').last();
+  await expect(own).toHaveClass(/leaderboard-current-player/);
+  await expect(own).toHaveClass(/leaderboard-current-outside-top/);
+  await expect(own.locator('td').first()).toContainText('42');
+  await expect(own).toContainText('Jong');
+  await page.locator('.leaderboard-next').click();
+  await expect(page.locator('#leaderboardBody tr')).toHaveCount(11);
+  await expect(page.locator('#leaderboardBody tr').last()).toContainText('42');
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
