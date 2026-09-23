@@ -110,7 +110,7 @@ test('all literal player API paths used by browser clients are recognized by the
   const paths=new Set();
   for(const file of sourceFiles){
     const source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
-    for(const match of source.matchAll(/['"`](\/api\/[^'"`\\s?$\\{]+)/g))paths.add(match[1]);
+    for(const match of source.matchAll(/['"`](\/api\/[^'"`\s?$\{]+)/g))paths.add(match[1]);
   }
   assert.ok(paths.size>=10,'expected a substantial browser API surface');
   for(const path of [...paths].sort()){
