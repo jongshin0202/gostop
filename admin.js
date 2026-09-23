@@ -463,9 +463,12 @@
       else if(kind==='player-global'||kind==='player-month'){const month=$('leaderboardMonth').value||new Date().toISOString().slice(0,7),form=await actionPrompt({title:kind==='player-global'?'Reset Player Global Leaderboard':'Reset Player Monthly Leaderboard',fields:kind==='player-month'?[{name:'month',label:'Month',type:'month',value:month}]:[]});if(!form)return;await api('/leaderboards/reset',{method:'POST',body:{scope:kind,accountId:id,month:form.month||month,reason:form.reason}});await showPlayer(id);}
       else if(kind==='game-correct'){const correction=await gameCorrectionPrompt(id);if(!correction)return;if(!Object.keys(correction.patch).length&&!correction.walletAdjustments.length){alert('No values were changed.');return;}await api(`/games/${encodeURIComponent(id)}/correct`,{method:'POST',body:correction});await showGame(id);}
       else if(kind==='delete-player'){
-        if(!window.confirm('Delete this account and every stored record associated with this player ID? This cannot be undone except through a system backup that predates the deletion.'))return;
-        const form=await actionPrompt({title:'Delete Account & All Records',fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize permanent account deletion.'}],confirmText:'Delete Account',intro:'This removes the account, login sessions, games, sessions, ledgers, connection history and other records that reference this player. Existing system backups are also purged so they cannot restore the deleted account.'});if(!form)return;
-        await api(`/players/${encodeURIComponent(id)}/delete`,{method:'POST',body:{confirmPassword:form.adminPassword,reason:form.reason}});if($('detailDialog').open)$('detailDialog').close();alert('Player account and associated records were deleted.');
+        const form=await actionPrompt({title:'Delete Account & All Records',fields:[{name:'adminPassword',label:'Admin password',type:'password',full:true,help:'Re-enter the admin password to authorize permanent account deletion.'}],confirmText:'Delete Account',intro:'This permanently removes the account, login sessions, games, sessions, ledgers, connection history and other records that reference this player. This cannot be undone from the server. Existing system backups are also purged so they cannot restore the deleted account.'});if(!form)return;
+        await api(`/players/${encodeURIComponent(id)}/delete`,{method:'POST',body:{confirmPassword:form.adminPassword,reason:form.reason}});
+        if($('detailDialog').open)$('detailDialog').close();
+        await refreshCurrent();
+        $('detailTitle').textContent='Account Deleted';$('detailBody').innerHTML='<div class="empty">Player account and associated records were deleted.</div>';$('detailDialog').showModal();
+        return;
       }
       await refreshCurrent();
     }catch(error){fail(error);}

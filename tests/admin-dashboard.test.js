@@ -174,9 +174,12 @@ test('System Reset is the final admin section with two backup-first reset modes 
   assert.match(adminJs,/name:'adminPassword'.*type:'password'/);assert.match(adminApi,/requireConfirmationPassword/);assert.match(adminApi,/writeBackup\(store,'primary'/);assert.match(adminApi,/writeBackup\(store,'safety'/);assert.match(adminApi,/promote-safety/);
 });
 
-test('player detail includes password-confirmed complete account deletion',()=>{
+test('player detail includes password-confirmed complete account deletion without blocking browser dialogs',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
   assert.match(adminJs,/Delete Account & All Records/);assert.match(adminJs,/kind==='delete-player'/);assert.match(adminJs,/adminPassword/);
+  const start=adminJs.indexOf("else if(kind==='delete-player')"),end=adminJs.indexOf('async function leaderboardAction',start),flow=adminJs.slice(start,end);
+  assert.doesNotMatch(flow,/window\.confirm\(|alert\(/);
+  assert.match(flow,/await refreshCurrent\(\)/);assert.match(flow,/Account Deleted/);assert.match(flow,/detailDialog'\)\.showModal\(\)/);
   assert.match(adminApi,/deletePlayerCompletely/);assert.match(adminApi,/purge-account/);assert.match(adminApi,/entryReferencesAccount/);
 });
 
