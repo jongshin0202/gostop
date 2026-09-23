@@ -249,6 +249,13 @@ test('admin dashboard assets are no-store and expose a visible build stamp',()=>
 });
 
 
+test('Vercel has a same-origin player API rewrite',()=>{
+  const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  const rule=(vercel.rewrites||[]).find(item=>item.source==='/api/:path*');
+  assert.ok(rule);
+  assert.equal(rule.destination,'https://gostop-authority.jwshin1.workers.dev/api/:path*');
+});
+
 test('Vercel proxies admin APIs to Cloudflare authority on the same browser origin',()=>{
   const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
   assert.ok((vercel.rewrites||[]).some(rule=>rule.source==='/api/admin/:path*'&&rule.destination==='https://gostop-authority.jwshin1.workers.dev/api/admin/:path*'));
