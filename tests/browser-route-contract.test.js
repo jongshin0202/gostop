@@ -36,6 +36,8 @@ test('release route contract: production has a same-origin catch-all API proxy a
   assert.ok(proxy,'Production must proxy all /api REST traffic');
   assert.equal(proxy.destination,'https://gostop-authority.jwshin1.workers.dev/api/:path*');
   assert.match(ranked,/productionSameOriginRest/);
+  assert.match(ranked,/apiUrl=\(path,method='GET'\)=>productionSameOriginRest&&method!=='GET'/);
+  assert.match(ranked,/fetch\(apiUrl\(path,method\)/);
   assert.match(ranked,/startsWith\('\/api\/'\)/);
   assert.match(ranked,/api\('\/api\/player-profile',\{method:'POST'/);
 });
@@ -76,4 +78,11 @@ test('release transport contract: Online room HTTP uses same-origin production p
   assert.ok(online.includes('gostoplive\\.com'));
   assert.match(online,/fetch\(this\.requestUrl\(path\)/);
   assert.match(online,/new URL\(\`\$\{this\.baseUrl\}\/api\/rooms\/\$\{room\.roomCode\}\/ws\`\)/);
+});
+
+
+test('release transport contract: player GET reads remain on direct Worker CORS path',()=>{
+  assert.match(ranked,/apiUrl=\(path,method='GET'\)=>productionSameOriginRest&&method!=='GET'/);
+  assert.match(ranked,/refreshLeaderboardData[^]*api\('\/api\/leaderboards',\{auth:false\}\)/);
+  assert.match(ranked,/refreshAccount[^]*api\('\/api\/me'\)/);
 });
