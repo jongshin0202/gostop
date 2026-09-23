@@ -95,8 +95,9 @@ test('Friends request confirmation and reusable clickable Player Info are wired 
 });
 
 test('unfriend confirmation uses an in-app dialog instead of blocking browser confirm',()=>{
-  assert.match(rankedSource,/const unfriendConfirmDialog=document\.createElement\('dialog'\)/);
-  assert.match(rankedSource,/function confirmUnfriend\(nickname\)/);
-  assert.match(rankedSource,/await confirmUnfriend\(nickname\)/);
-  assert.doesNotMatch(rankedSource,/globalThis\.confirm\s*\(/);
+  const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
+  assert.match(ranked,/const unfriendConfirmDialog=document\.createElement\('dialog'\)/);
+  assert.match(ranked,/function confirmUnfriend\(nickname\)/);
+  assert.match(ranked,/await confirmUnfriend\(nickname\)/);
+  assert.doesNotMatch(ranked,/globalThis\.confirm\s*\(/);
 });
