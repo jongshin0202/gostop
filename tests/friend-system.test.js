@@ -66,3 +66,30 @@ test('Friends UI exposes Friends, Requests, History, Recommended, Search, Play, 
   assert.match(ranked,/Why recommended:/);assert.match(ranked,/People you have played before/);
   assert.match(ranked,/id="registrationAddFriend"/);assert.match(ranked,/id="friendlyInviterFriend"/);assert.match(ranked,/Add .* as Friend/);
 });
+
+
+test('public Player Info returns career, login, session, head-to-head and signed Coin data',async()=>{
+  const db=store(),viewer=await register(db,'profile-viewer@example.com','ProfileViewer'),opponent=await register(db,'profile-opponent@example.com','ProfileOpponent');
+  await action(db,'/internal/session/start',viewer.session.token,{sessionId:'profile-session-1',mode:'online',accountIds:[viewer.account.id,opponent.account.id],roomCode:'ABCDEFGHJK2345'});
+  await settle(db,'profile-game-1',viewer,opponent,viewer);
+  await settle(db,'profile-game-2',viewer,opponent,opponent);
+  await action(db,'/internal/session/end',viewer.session.token,{sessionId:'profile-session-1'});
+  await action(db,'/internal/session/start',viewer.session.token,{sessionId:'profile-session-2',mode:'online',accountIds:[viewer.account.id,opponent.account.id],roomCode:'BCDEFGHJKM2345'});
+  await settle(db,'profile-game-3',viewer,opponent,viewer);
+  const response=await db.fetch(req('/player-profile',{token:viewer.session.token,body:{accountId:opponent.account.id}}));assert.equal(response.status,200);const data=await response.json(),player=data.player;
+  assert.equal(player.accountId,opponent.account.id);assert.equal(player.nickname,'ProfileOpponent');assert.ok(Number.isInteger(player.globalRank));assert.ok(Number.isInteger(player.monthlyRank));
+  assert.equal(player.sessionsPlayed,2);assert.equal(player.gamesPlayed,3);assert.equal(player.wins,1);assert.equal(player.losses,2);assert.ok(player.lastLoginAt);
+  assert.equal(player.headToHead.sessionsPlayedTogether,2);assert.equal(player.headToHead.gamesPlayedTogether,3);assert.equal(player.headToHead.wins,2);assert.equal(player.headToHead.losses,1);assert.equal(player.headToHead.netCoins,3);
+  assert.equal(typeof player.walletCoins,'number');
+  const board=await (await db.fetch(req('/leaderboards',{method:'GET'}))).json();assert.equal(board.global.find(row=>row.nickname==='ProfileOpponent').accountId,opponent.account.id);assert.equal(board.monthly.find(row=>row.nickname==='ProfileOpponent').accountId,opponent.account.id);
+});
+
+test('Friends request confirmation and reusable clickable Player Info are wired through all major nickname surfaces',()=>{
+  const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8'),worker=fs.readFileSync(new URL('../server/worker.mjs',import.meta.url),'utf8'),accountStore=fs.readFileSync(new URL('../server/account-store.mjs',import.meta.url),'utf8');
+  assert.match(ranked,/Friend Request Sent/);assert.match(ranked,/showFriendRequestSentDialog\(nickname\)/);assert.match(ranked,/result\?\.state==='outgoing'/);
+  assert.match(ranked,/playerInfoDialog/);assert.match(ranked,/\/api\/player-profile/);assert.match(ranked,/data-player-info-account-id/);assert.match(ranked,/player-nickname-link/);
+  for(const label of ['Global Rank','Monthly Rank','Sessions Played','Games Played','Games Won','Games Lost','Last Logged In','Sessions With You','Games With You','Your Wins','Your Losses','Coins vs This Player','Wallet Coins'])assert.match(ranked,new RegExp(label));
+  assert.match(ranked,/playerInfoDialog\.addEventListener\('click',closePlayerInfoDialog\)/);assert.match(ranked,/playerInfoOk'\)\.addEventListener\('click',closePlayerInfoDialog\)/);
+  assert.match(ranked,/renderLeaderboard\(\)/);assert.match(ranked,/playerNicknameHtml\(row\)/);assert.match(ranked,/playerNicknameHtml\(p\)/);assert.match(ranked,/playerNicknameHtml\(player\)/);assert.match(ranked,/humanName\.innerHTML=playerNicknameHtml/);assert.match(ranked,/opponentName\.innerHTML=.*playerNicknameHtml/);
+  assert.match(worker,/\/api\/player-profile/);assert.match(accountStore,/async playerProfile\(request\)/);assert.match(accountStore,/async playerSessionCounts/);assert.match(accountStore,/async playerLastLoginAt/);
+});

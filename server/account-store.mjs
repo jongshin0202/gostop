@@ -449,8 +449,8 @@ export class AccountStore{
   async leaderboard(){
     await this.ensureOutcomeHistoryRepair();
     const now=this.now(),month=utcMonth(now),accounts=[...(await this.storage.list({prefix:'account:'})).values()].filter(account=>account?.emailVerified!==false);
-    const global=rankRows(accounts.map(account=>leaderboardRow(account,canonicalGlobalStats(account))));
-    const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES};}));
+    const global=rankRows(accounts.map(account=>({...leaderboardRow(account,canonicalGlobalStats(account)),accountId:account.id})));
+    const monthly=rankRows(accounts.map(account=>{const lifetime=canonicalGlobalStats(account),row=leaderboardRow(account,account.stats?.monthly?.[month]||blankStats());return {...row,accountId:account.id,provisional:(Number(lifetime.gamesPlayed)||0)<PROVISIONAL_GAMES};}));
     return json({ok:true,generatedAt:now,month,provisionalGames:PROVISIONAL_GAMES,global,monthly});
   }
 
@@ -466,6 +466,45 @@ export class AccountStore{
     if(!ids.length)return json({ok:true,players:[]});
     const players=await this.directoryProfiles({requesterAccountId:body.requesterAccountId||null,accountIds:ids});
     return json({ok:true,players});
+  }
+
+  async playerLastLoginAt(account){
+    if(!account?.id)return null;
+    let latest=null;
+    const connections=await this.storage.list({prefix:`connection:${account.id}:`});
+    for(const item of connections.values()){
+      if(!['login','register','verify-email'].includes(String(item?.kind||'')))continue;
+      const at=item?.recordedAt;if(!Number.isFinite(Date.parse(at)))continue;
+      if(!latest||Date.parse(at)>Date.parse(latest))latest=at;
+    }
+    return latest||account.createdAt||null;
+  }
+
+  async playerSessionCounts(accountId,requesterAccountId=null){
+    let sessionsPlayed=0,sessionsPlayedTogether=0;
+    const target=String(accountId||''),requester=String(requesterAccountId||'');
+    for(const session of (await this.storage.list({prefix:'gameSession:'})).values()){
+      const ids=new Set([
+        ...(Array.isArray(session?.accountIds)?session.accountIds:[]),
+        session?.accountId,
+        session?.opponent?.accountId
+      ].filter(Boolean).map(String));
+      if(!ids.has(target))continue;
+      sessionsPlayed++;
+      if(requester&&requester!==target&&ids.has(requester))sessionsPlayedTogether++;
+    }
+    return {sessionsPlayed,sessionsPlayedTogether};
+  }
+
+  async playerProfile(request){
+    const body=await request.json().catch(()=>({})),accountId=String(body.accountId||'').trim(),target=await this.accountById(accountId);
+    if(!target||target.suspended||target.emailVerified===false)return json({ok:false,error:{code:'PLAYER_NOT_FOUND',message:'Player not found.'}},404);
+    const requester=await this.accountFromToken(this.bearer(request)),requesterAccountId=requester?.id||null;
+    const profiles=await this.directoryProfiles({requesterAccountId,accountIds:[accountId]}),profile=profiles[0];
+    if(!profile)return json({ok:false,error:{code:'PLAYER_NOT_FOUND',message:'Player not found.'}},404);
+    const [lastLoginAt,sessionCounts]=await Promise.all([this.playerLastLoginAt(target),this.playerSessionCounts(accountId,requesterAccountId)]);
+    const history=profile.headToHead||{},gamesPlayedTogether=(Number(history.wins)||0)+(Number(history.losses)||0)+(Number(history.draws)||0),netCoins=(Number(history.coinsWon)||0)-(Number(history.coinsLost)||0);
+    return json({ok:true,player:{...profile,sessionsPlayed:sessionCounts.sessionsPlayed,lastLoginAt,headToHead:{...history,sessionsPlayedTogether:sessionCounts.sessionsPlayedTogether,gamesPlayedTogether,netCoins}}});
   }
 
   socialIds(account,key){return [...new Set((Array.isArray(account?.[key])?account[key]:[]).map(item=>typeof item==='string'?item:item?.accountId).filter(Boolean).map(String))];}
@@ -619,6 +658,7 @@ export class AccountStore{
       if(request.method==='POST'&&path==='/social/unfriend')return await this.unfriend(request);
       if(request.method==='GET'&&path==='/me')return await this.me(request);
       if(request.method==='GET'&&path==='/leaderboards')return await this.leaderboard();
+      if(request.method==='POST'&&path==='/player-profile')return await this.playerProfile(request);
       if(request.method==='POST'&&path==='/internal/player-search')return await this.playerSearch(request);
       if(request.method==='POST'&&path==='/internal/player-profiles')return await this.playerProfiles(request);
       if(request.method==='POST'&&path==='/internal/active-ranked/clear')return await this.clearActiveRanked(request);

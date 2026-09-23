@@ -78,6 +78,7 @@ export default {async fetch(request,env){
     if(request.method==='POST'&&url.pathname==='/api/social/request')return withCors(await forwardAccount(request,env,'/social/request'),origin);
     if(request.method==='POST'&&url.pathname==='/api/social/respond')return withCors(await forwardAccount(request,env,'/social/respond'),origin);
     if(request.method==='POST'&&url.pathname==='/api/social/unfriend')return withCors(await forwardAccount(request,env,'/social/unfriend'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/player-profile')return withCors(await forwardAccount(request,env,'/player-profile'),origin);
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
