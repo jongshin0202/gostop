@@ -72,14 +72,18 @@ test('phone attract-mode leaderboards swipe horizontally while ordinary taps sti
   assert.match(board,/Math\.abs\(dx\)<Math\.abs\(dy\)\*1\.15/);
   assert.match(board,/nextLeaderboard\(dx<0\?1:-1\)/);
   assert.match(source,/Date\.now\(\)<attractSwipeSuppressClickUntil/);
+  assert.match(source,/leaderboardScreen\.classList\.toggle\('attract-mode',attractMode\)/);
+  assert.match(source,/leaderboardScreen\.classList\.remove\('attract-mode'\)/);
+  assert.match(source,/\.leaderboard-screen\.attract-mode \.leaderboard-title:after/);
   assert.match(source,/Swipe left or right to switch leaderboards/);
+  assert.doesNotMatch(source,/calc\(abs\(/);
 });
 
 test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
   const block=source.slice(source.indexOf('function restartLeaderboardTimer'),source.indexOf('function lobbyUrl'));
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;freePanel\.hidden=true;overlay\.hidden=false;\}/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
-  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
+  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(Date\.now\(\)<attractSwipeSuppressClickUntil\)[^]*?if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return/);
   assert.doesNotMatch(block,/if\(attractMode\)\{closeLeaderboard\(true\);return;\}nextLeaderboard\(1\)/);
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);

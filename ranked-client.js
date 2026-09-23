@@ -481,42 +481,46 @@
       pointer-events:none;filter:drop-shadow(0 18px 18px rgba(0,0,0,.48));
     }
     .main-menu-floor-card{
-      --floor-index:0;position:absolute;left:50%;bottom:6px;width:72px;height:auto;aspect-ratio:76/123;object-fit:contain;
-      border-radius:7px;border:2px solid rgba(173,42,31,.86);background:#f3ede2;box-shadow:0 9px 18px rgba(0,0,0,.32);
-      transform-origin:50% 115%;
-      transform:
-        translateX(calc((-3 + var(--floor-index)) * 46px - 36px))
-        translateY(calc(abs(3 - var(--floor-index)) * 4px))
-        rotate(calc((-3 + var(--floor-index)) * 7deg));
+      position:absolute;left:50%;bottom:6px;width:72px;height:auto;aspect-ratio:76/123;object-fit:contain;
+      border-radius:7px;border:2px solid rgba(173,42,31,.86);background:#f3ede2;box-shadow:0 9px 18px rgba(0,0,0,.32);transform-origin:50% 115%;
     }
+    .main-menu-floor-card:nth-child(1){transform:translateX(-174px) translateY(12px) rotate(-21deg)}
+    .main-menu-floor-card:nth-child(2){transform:translateX(-128px) translateY(8px) rotate(-14deg)}
+    .main-menu-floor-card:nth-child(3){transform:translateX(-82px) translateY(4px) rotate(-7deg)}
+    .main-menu-floor-card:nth-child(4){transform:translateX(-36px) translateY(0) rotate(0)}
+    .main-menu-floor-card:nth-child(5){transform:translateX(10px) translateY(4px) rotate(7deg)}
+    .main-menu-floor-card:nth-child(6){transform:translateX(56px) translateY(8px) rotate(14deg)}
+    .main-menu-floor-card:nth-child(7){transform:translateX(102px) translateY(12px) rotate(21deg)}
     @media(max-width:1280px){
       .main-menu-card-fan{display:none!important}
       .main-menu-floor-cards{display:block}
     }
     @media(max-width:760px){
       .main-menu-floor-cards{display:block!important;width:min(94vw,520px);height:118px;margin:5px auto 18px}
-      .main-menu-floor-card{
-        width:58px;
-        transform:
-          translateX(calc((-3 + var(--floor-index)) * 36px - 29px))
-          translateY(calc(abs(3 - var(--floor-index)) * 3px))
-          rotate(calc((-3 + var(--floor-index)) * 7deg));
-      }
+      .main-menu-floor-card{width:58px}
+      .main-menu-floor-card:nth-child(1){transform:translateX(-137px) translateY(9px) rotate(-21deg)}
+      .main-menu-floor-card:nth-child(2){transform:translateX(-101px) translateY(6px) rotate(-14deg)}
+      .main-menu-floor-card:nth-child(3){transform:translateX(-65px) translateY(3px) rotate(-7deg)}
+      .main-menu-floor-card:nth-child(4){transform:translateX(-29px) translateY(0) rotate(0)}
+      .main-menu-floor-card:nth-child(5){transform:translateX(7px) translateY(3px) rotate(7deg)}
+      .main-menu-floor-card:nth-child(6){transform:translateX(43px) translateY(6px) rotate(14deg)}
+      .main-menu-floor-card:nth-child(7){transform:translateX(79px) translateY(9px) rotate(21deg)}
       .leaderboard-screen{touch-action:pan-y}
-      .leaderboard-title:after{
+      .leaderboard-screen.attract-mode .leaderboard-title:after{
         content:"Swipe left or right to switch leaderboards";display:block;margin-top:4px;color:rgba(232,199,133,.72);
         font:700 9px/1.2 system-ui,sans-serif;letter-spacing:.035em;
       }
     }
     @media(max-width:420px){
       .main-menu-floor-cards{height:102px;margin-top:3px}
-      .main-menu-floor-card{
-        width:50px;
-        transform:
-          translateX(calc((-3 + var(--floor-index)) * 30px - 25px))
-          translateY(calc(abs(3 - var(--floor-index)) * 2px))
-          rotate(calc((-3 + var(--floor-index)) * 7deg));
-      }
+      .main-menu-floor-card{width:50px}
+      .main-menu-floor-card:nth-child(1){transform:translateX(-115px) translateY(6px) rotate(-21deg)}
+      .main-menu-floor-card:nth-child(2){transform:translateX(-85px) translateY(4px) rotate(-14deg)}
+      .main-menu-floor-card:nth-child(3){transform:translateX(-55px) translateY(2px) rotate(-7deg)}
+      .main-menu-floor-card:nth-child(4){transform:translateX(-25px) translateY(0) rotate(0)}
+      .main-menu-floor-card:nth-child(5){transform:translateX(5px) translateY(2px) rotate(7deg)}
+      .main-menu-floor-card:nth-child(6){transform:translateX(35px) translateY(4px) rotate(14deg)}
+      .main-menu-floor-card:nth-child(7){transform:translateX(65px) translateY(6px) rotate(21deg)}
     }
   `;document.head.appendChild(style);
 
@@ -802,12 +806,12 @@
   function nextLeaderboard(delta=1){leaderboardPage=(leaderboardPage+delta+2)%2;renderLeaderboard();restartLeaderboardTimer();}
   function restartLeaderboardTimer(){if(leaderboardTimer)clearTimeout(leaderboardTimer);leaderboardTimer=null;if(leaderboardScreen.hidden||!attractMode)return;leaderboardTimer=setTimeout(()=>{if(leaderboardScreen.hidden||!attractMode)return;if(leaderboardPage===1){closeLeaderboard(true);return;}nextLeaderboard(1);},LEADERBOARD_ROTATE_MS);}
   async function openLeaderboard(isAttract=false){
-    attractMode=isAttract;leaderboardPage=0;leaderboardLoadFailed=false;overlay.hidden=true;leaderboardScreen.hidden=false;renderLeaderboard();restartLeaderboardTimer();
+    attractMode=isAttract;leaderboardScreen.classList.toggle('attract-mode',attractMode);leaderboardPage=0;leaderboardLoadFailed=false;overlay.hidden=true;leaderboardScreen.hidden=false;renderLeaderboard();restartLeaderboardTimer();
     const data=await refreshLeaderboardData();
     if(leaderboardScreen.hidden||attractMode!==isAttract)return;
     leaderboardLoadFailed=!data;renderLeaderboard();
   }
-  function closeLeaderboard(returnToMenu=false){leaderboardScreen.hidden=true;attractMode=false;if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;if(returnToMenu){onlinePanel.hidden=true;freePanel.hidden=true;overlay.hidden=false;}resetAttractTimer();}
+  function closeLeaderboard(returnToMenu=false){leaderboardScreen.hidden=true;attractMode=false;leaderboardScreen.classList.remove('attract-mode');leaderboardTouchStart=null;if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;if(returnToMenu){onlinePanel.hidden=true;freePanel.hidden=true;overlay.hidden=false;}resetAttractTimer();}
   let leaderboardTouchStart=null,attractSwipeSuppressClickUntil=0;
   function attractSwipeEnabled(){return attractMode&&!leaderboardScreen.hidden&&globalThis.matchMedia?.('(max-width:760px)').matches;}
   leaderboardScreen.addEventListener('touchstart',event=>{if(!attractSwipeEnabled()||event.touches.length!==1){leaderboardTouchStart=null;return;}const touch=event.touches[0];leaderboardTouchStart={x:touch.clientX,y:touch.clientY,at:Date.now()};},{passive:true});
