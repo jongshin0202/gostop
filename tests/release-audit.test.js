@@ -111,7 +111,7 @@ function driveFullMatch(seed){
       if(next.type==='chooseFloorTarget'){
         assert.ok(next.legalTargetIds.length>0,'target choice must expose at least one legal target');
         action={type:'chooseFloorTarget',source:next.source,targetId:next.legalTargetIds[Math.floor(random()*next.legalTargetIds.length)]};
-      }else action={type:next.type};
+      }else action={...next};
       snapshot=send(seat,action);
       continue;
     }
