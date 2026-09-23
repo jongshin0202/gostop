@@ -383,7 +383,7 @@ test('Player Info network failure shows friendly app copy instead of a raw brows
   const errors=await openMenu(page,{profileFailure:true});
   await page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]').click();
   await expect(page.locator('.player-info-dialog')).toHaveJSProperty('open',true);
-  await expect(page.locator('#playerInfoBody')).toContainText('The play request could not be completed.');
+  await expect(page.locator('#playerInfoBody')).toContainText('The request could not be completed.');
   await expect(page.locator('#playerInfoBody')).not.toContainText(/Failed to fetch|NetworkError|Load failed/i);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
