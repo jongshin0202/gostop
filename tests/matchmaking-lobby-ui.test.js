@@ -38,7 +38,7 @@ test('rank zero displays Not Yet Ranked with a transient hover or focus explanat
   assert.match(client,/notYetRanked:'Not Yet Ranked'/);assert.match(client,/rankAfterTen:'User will be ranked after first 10 games played'/);
   assert.match(client,/function notYetRankedHtml\(\)/);assert.match(client,/class="not-yet-ranked" tabindex="0"/);assert.match(client,/class="rank-tooltip" role="tooltip"/);
   assert.match(client,/\.not-yet-ranked:hover \.rank-tooltip/);assert.match(client,/\.not-yet-ranked:focus \.rank-tooltip/);
-  const board=client.slice(client.indexOf('function renderLeaderboard'),client.indexOf('function nextLeaderboard'));
+  const board=client.slice(client.indexOf('function leaderboardRowHtml'),client.indexOf('function nextLeaderboard'));
   assert.match(board,/rankNumberHtml\(row\.rank\)/);assert.doesNotMatch(board,/\?['"]P /);
 });
 
