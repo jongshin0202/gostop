@@ -316,7 +316,7 @@
   function handleFriendlySessionEnd(snapshot){
     const roomCode=friendlyReferralRoomCode();
     if(account&&snapshot?.ranked===false&&snapshot?.seatId==='playerA'&&roomCode){let ownsReferral=false;try{ownsReferral=sessionStorage.getItem(FRIENDLY_HOST_ROOM_PREFIX+roomCode)==='1';}catch(_){}if(ownsReferral){if(!friendlyHostEndTimer)friendlyHostEndTimer=setTimeout(()=>{friendlyHostEndTimer=null;if(!friendlyInviterDialog.open)globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();},1800);return true;}}
-    const context=friendlyGuestContext(snapshot);if(!context||context.signupStarted||context.sessionEndOffered)return false;const result=document.getElementById('resultDialog');if(result?.open)result.close();return showFriendlySignupOffer('session-end');
+    const context=friendlyGuestContext(snapshot);if(!context)return false;if(context.signupStarted||context.sessionEndOffered)return friendlySignupDialog.open||friendlyGuestMessageDialog.open||authDialog.open||verificationDialog.open||successDialog.open;const result=document.getElementById('resultDialog');if(result?.open)result.close();return showFriendlySignupOffer('session-end');
   }
   function cancelFriendlySignupFromAuth(){
     const context=readFriendlyReferralContext();if(!context?.signupStarted||context.registrationSubmitted||account)return false;const stage=context.stage==='session-end'?'session-end':'game10';declineFriendlySignup(stage);return true;
