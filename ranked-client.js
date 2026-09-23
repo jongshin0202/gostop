@@ -475,6 +475,49 @@
       .gostop-main-menu{padding:9px!important}
       .leaderboard-table{min-width:610px}
     }
+
+    .main-menu-floor-cards{
+      display:none;position:relative;z-index:4;width:min(700px,90vw);height:142px;margin:8px auto 18px;
+      pointer-events:none;filter:drop-shadow(0 18px 18px rgba(0,0,0,.48));
+    }
+    .main-menu-floor-card{
+      --floor-index:0;position:absolute;left:50%;bottom:6px;width:72px;height:auto;aspect-ratio:76/123;object-fit:contain;
+      border-radius:7px;border:2px solid rgba(173,42,31,.86);background:#f3ede2;box-shadow:0 9px 18px rgba(0,0,0,.32);
+      transform-origin:50% 115%;
+      transform:
+        translateX(calc((-3 + var(--floor-index)) * 46px - 36px))
+        translateY(calc(abs(3 - var(--floor-index)) * 4px))
+        rotate(calc((-3 + var(--floor-index)) * 7deg));
+    }
+    @media(max-width:1280px){
+      .main-menu-card-fan{display:none!important}
+      .main-menu-floor-cards{display:block}
+    }
+    @media(max-width:760px){
+      .main-menu-floor-cards{display:block!important;width:min(94vw,520px);height:118px;margin:5px auto 18px}
+      .main-menu-floor-card{
+        width:58px;
+        transform:
+          translateX(calc((-3 + var(--floor-index)) * 36px - 29px))
+          translateY(calc(abs(3 - var(--floor-index)) * 3px))
+          rotate(calc((-3 + var(--floor-index)) * 7deg));
+      }
+      .leaderboard-screen{touch-action:pan-y}
+      .leaderboard-title:after{
+        content:"Swipe left or right to switch leaderboards";display:block;margin-top:4px;color:rgba(232,199,133,.72);
+        font:700 9px/1.2 system-ui,sans-serif;letter-spacing:.035em;
+      }
+    }
+    @media(max-width:420px){
+      .main-menu-floor-cards{height:102px;margin-top:3px}
+      .main-menu-floor-card{
+        width:50px;
+        transform:
+          translateX(calc((-3 + var(--floor-index)) * 30px - 25px))
+          translateY(calc(abs(3 - var(--floor-index)) * 2px))
+          rotate(calc((-3 + var(--floor-index)) * 7deg));
+      }
+    }
   `;document.head.appendChild(style);
 
   const overlay=$('soloStartOverlay'),playPractice=$('playSoloBtn'),createRoom=$('createOnlineBtn'),joinForm=$('joinOnlineForm'),howTo=$('howToBtn'),onlineStatus=$('onlineStatus');if(!overlay||!playPractice)return;
@@ -506,6 +549,9 @@
   const friendsBtn=document.createElement('button');friendsBtn.type='button';friendsBtn.className='menu-secondary';friendsBtn.textContent='Friends';friendsBtn.id='friendsMenuBtn';
   const leaderboardBtn=document.createElement('button');leaderboardBtn.type='button';leaderboardBtn.className='menu-secondary';leaderboardBtn.textContent='Leaderboards';leaderboardBtn.id='leaderboardMenuBtn';if(howTo){howTo.className='menu-secondary';howTo.textContent='How to Play';}
   freeGroup.append(freeGroupNote,playPractice,freeFriendBtn);rankedGroup.append(rankedGroupNote,rankedSolo,onlinePlay);menu.append(rankedGroup,freeGroup,trainingBtn,friendsBtn,leaderboardBtn);if(howTo)menu.append(howTo);overlay.appendChild(menu);
+  const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
+  ['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'].forEach((id,index)=>{const card=deck.find(item=>item.id===id);if(!card)return;const img=document.createElement('img');img.className='main-menu-floor-card';img.alt='';img.decoding='async';img.src=cardFaceUrl(card.file);img.style.setProperty('--floor-index',String(index));floorCards.appendChild(img);});
+  overlay.appendChild(floorCards);
 
   const freePanel=document.createElement('section');freePanel.id='freeFriendPanel';freePanel.className='online-lobby-panel';freePanel.hidden=true;freePanel.innerHTML=`<div class="online-lobby-card"><h2 id="freeFriendTitle">Play With Friend</h2><p id="freeFriendHelp" class="account-help">Create a room and send your friend the share link. Friendly Gaming never uses Wallet Coins or leaderboards.</p><div class="online-method"><strong id="freeRoomShareTitle">Share Link</strong><div class="online-existing-controls"><button id="freeCreateRoomBtn" class="glass-btn strong" type="button">Create Room / Share Link</button><div id="freeShareLinkBox" class="room-share-link" hidden><a id="freeShareLink" target="_blank" rel="noopener"></a><div class="friendly-share-actions"><button id="freeShareBtn" type="button">Share Invite</button><button id="freeCopyLinkBtn" type="button">Copy Link</button></div></div><p id="freeOnlineStatus" class="online-status" role="status" aria-live="polite"></p></div></div><div class="online-lobby-actions"><button id="freeFriendClose" type="button">Return</button></div></div>`;document.body.appendChild(freePanel);
 
@@ -762,7 +808,11 @@
     leaderboardLoadFailed=!data;renderLeaderboard();
   }
   function closeLeaderboard(returnToMenu=false){leaderboardScreen.hidden=true;attractMode=false;if(leaderboardTimer)clearInterval(leaderboardTimer);leaderboardTimer=null;if(returnToMenu){onlinePanel.hidden=true;freePanel.hidden=true;overlay.hidden=false;}resetAttractTimer();}
-  leaderboardBtn.addEventListener('click',event=>{event.stopPropagation();openLeaderboard(false);});leaderboardScreen.querySelector('.leaderboard-prev').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(-1);});leaderboardScreen.querySelector('.leaderboard-next').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(1);});leaderboardScreen.querySelector('.leaderboard-return').addEventListener('click',event=>{event.stopPropagation();closeLeaderboard(true);});leaderboardScreen.addEventListener('click',event=>{if(event.target.closest('button'))return;closeLeaderboard(true);});
+  let leaderboardTouchStart=null,attractSwipeSuppressClickUntil=0;
+  function attractSwipeEnabled(){return attractMode&&!leaderboardScreen.hidden&&globalThis.matchMedia?.('(max-width:760px)').matches;}
+  leaderboardScreen.addEventListener('touchstart',event=>{if(!attractSwipeEnabled()||event.touches.length!==1){leaderboardTouchStart=null;return;}const touch=event.touches[0];leaderboardTouchStart={x:touch.clientX,y:touch.clientY,at:Date.now()};},{passive:true});
+  leaderboardScreen.addEventListener('touchend',event=>{if(!leaderboardTouchStart||!attractSwipeEnabled()){leaderboardTouchStart=null;return;}const touch=event.changedTouches?.[0],start=leaderboardTouchStart;leaderboardTouchStart=null;if(!touch)return;const dx=touch.clientX-start.x,dy=touch.clientY-start.y,elapsed=Date.now()-start.at;if(elapsed>900||Math.abs(dx)<48||Math.abs(dx)<Math.abs(dy)*1.15)return;event.preventDefault();attractSwipeSuppressClickUntil=Date.now()+650;nextLeaderboard(dx<0?1:-1);},{passive:false});
+  leaderboardBtn.addEventListener('click',event=>{event.stopPropagation();openLeaderboard(false);});leaderboardScreen.querySelector('.leaderboard-prev').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(-1);});leaderboardScreen.querySelector('.leaderboard-next').addEventListener('click',event=>{event.stopPropagation();nextLeaderboard(1);});leaderboardScreen.querySelector('.leaderboard-return').addEventListener('click',event=>{event.stopPropagation();closeLeaderboard(true);});leaderboardScreen.addEventListener('click',event=>{if(Date.now()<attractSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}if(event.target.closest('button'))return;closeLeaderboard(true);});
   function mainMenuIdleEligible(){return !overlay.hidden&&leaderboardScreen.hidden&&onlinePanel.hidden&&freePanel.hidden&&socialScreen.hidden&&!authDialog.open&&!registrationPolicyDialog.open&&!successDialog.open&&!verificationDialog.open&&!requestDialog.open&&!friendRequestSentDialog.open&&!playerInfoDialog.open&&!settingsDialog.open&&!accountNoticeDialog.open&&!returnGameDialog.open;}
   let lastMenuActivityAt=Date.now();
   function stopAttractTimer(){lastMenuActivityAt=Date.now();}
@@ -778,7 +828,7 @@
   function resetAttractTimer(){lastMenuActivityAt=Date.now();startAttractWatcher();}
   new MutationObserver(records=>{if(!records.some(record=>record.attributeName==='hidden'))return;lastMenuActivityAt=Date.now();patchGameIdentity();startAttractWatcher();}).observe(overlay,{attributes:true,attributeFilter:['hidden']});
   for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('close',()=>{if(!overlay.hidden)resetAttractTimer();});
-  document.addEventListener('pointerdown',event=>{if(event.isTrusted&&!attractMode&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});document.addEventListener('click',event=>{if(!attractMode||leaderboardScreen.hidden||globalThis.goStopOnlineSession)return;event.preventDefault();event.stopPropagation();closeLeaderboard(true);},{capture:true});document.addEventListener('keydown',event=>{if(attractMode&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(event.isTrusted&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});
+  document.addEventListener('pointerdown',event=>{if(event.isTrusted&&!attractMode&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});document.addEventListener('click',event=>{if(!attractMode||leaderboardScreen.hidden||globalThis.goStopOnlineSession)return;if(Date.now()<attractSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();closeLeaderboard(true);},{capture:true});document.addEventListener('keydown',event=>{if(attractMode&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(event.isTrusted&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});
   document.addEventListener('pointerdown',markPlayerActivity,{capture:true,passive:true});document.addEventListener('keydown',markPlayerActivity,{capture:true});document.addEventListener('touchstart',markPlayerActivity,{capture:true,passive:true});document.addEventListener('wheel',markPlayerActivity,{capture:true,passive:true});document.addEventListener('visibilitychange',syncLobbyAvailability);globalThis.addEventListener('focus',syncLobbyAvailability);globalThis.addEventListener('blur',syncLobbyAvailability);
 
   function lobbyUrl(){const url=new URL(`${baseUrl}/api/lobby/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';return url;}

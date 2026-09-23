@@ -63,6 +63,18 @@ test('leaderboards are public, render immediately, and page controls work even i
   assert.doesNotMatch(source,/\.leaderboard-nav\{position:absolute/);
 });
 
+test('phone attract-mode leaderboards swipe horizontally while ordinary taps still return to the menu',()=>{
+  const board=source.slice(source.indexOf('let leaderboardTouchStart'),source.indexOf('function mainMenuIdleEligible'));
+  assert.match(board,/function attractSwipeEnabled\(\)\{return attractMode&&!leaderboardScreen\.hidden&&globalThis\.matchMedia\?\.\('\(max-width:760px\)'\)\.matches;\}/);
+  assert.match(board,/leaderboardScreen\.addEventListener\('touchstart'/);
+  assert.match(board,/leaderboardScreen\.addEventListener\('touchend'/);
+  assert.match(board,/Math\.abs\(dx\)<48/);
+  assert.match(board,/Math\.abs\(dx\)<Math\.abs\(dy\)\*1\.15/);
+  assert.match(board,/nextLeaderboard\(dx<0\?1:-1\)/);
+  assert.match(source,/Date\.now\(\)<attractSwipeSuppressClickUntil/);
+  assert.match(source,/Swipe left or right to switch leaderboards/);
+});
+
 test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
   const block=source.slice(source.indexOf('function restartLeaderboardTimer'),source.indexOf('function lobbyUrl'));
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;freePanel\.hidden=true;overlay\.hidden=false;\}/);
@@ -299,11 +311,14 @@ test('main menu is a compact two-column game lobby with visible title, player HU
   assert.match(source,/main-menu-hwatu-decor/);
   assert.match(source,/addFan\('left',\['m1-1','m2-1','m3-1'\]\)/);
   assert.match(source,/addFan\('right',\['m8-1','m9-1','m12-1'\]\)/);
+  assert.match(source,/main-menu-floor-cards/);
+  assert.match(source,/\['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'\]/);
+  assert.match(source,/@media\(max-width:1280px\)\{[^]*?\.main-menu-card-fan\{display:none!important\}[^]*?\.main-menu-floor-cards\{display:block\}/);
   assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
   assert.match(source,/\.gostop-main-menu\{[^]*?width:min\(820px,92vw\)!important[^]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
   assert.match(source,/\.gostop-main-menu:before\{[^}]*content:"CHOOSE YOUR GAME"/);
-  assert.match(html,/ranked-client\.js\?v=20260922-12/);
+  assert.match(html,/ranked-client\.js\?v=20260922-13/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
