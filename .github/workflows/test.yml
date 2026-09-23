@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,3 +45,9 @@ jobs:
           node --check server/worker.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
+      - name: Install browser test runner
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Browser end-to-end smoke tests
+        run: npx playwright test
