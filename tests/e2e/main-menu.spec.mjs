@@ -361,3 +361,18 @@ test('signed-in player outside Top 10 is appended as highlighted row 11 with the
   await expect(page.locator('#leaderboardBody tr').last()).toContainText('42');
   expect(errors.map(error=>error.message)).toEqual([]);
 });
+
+
+test('removing a Friend uses the in-app confirmation and No leaves the friend intact',async({page})=>{
+  const snapshot={ok:true,friends:[{...otherPlayer,friendState:'friend'}],incoming:[],outgoing:[],history:[],recommendations:[]};
+  const errors=await openMenu(page,{socialSnapshot:snapshot});
+  await page.locator('#friendsMenuBtn').click();
+  await expect(page.locator('#socialList')).toContainText('Jjineeland');
+  await page.locator('#socialList [data-social-action="unfriend"]').click();
+  await expect(page.getByRole('heading',{name:'Remove Friend?'})).toBeVisible();
+  await expect(page.locator('#unfriendConfirmText')).toContainText('Jjineeland');
+  await page.locator('#unfriendConfirmNo').click();
+  await expect(page.getByRole('heading',{name:'Remove Friend?'})).toBeHidden();
+  await expect(page.locator('#socialList')).toContainText('Jjineeland');
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
