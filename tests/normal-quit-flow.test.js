@@ -66,11 +66,20 @@ test('local quit cancels stale First Poop and delayed AI presentation work',()=>
 test('Free Play With Friend forced tab close shows Friend forcefully ended the game and OK then offers referral signup before menu',()=>{
   assert.match(html,/id="opponentEndedTitle"[^>]*data-i18n="opponentEnded"/);
   const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
-  assert.match(reconcile,/onlineAnonymousMode&&!flow\.forceEnded&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd/);
-  assert.match(reconcile,/onlineAnonymousMode&&flow\.forceEnded\?t\('friendForceEnded'\):t\('opponentEnded'\)/);
+  assert.match(reconcile,/onlineAnonymousMode\?\(flow\.forceEnded\?t\('friendForceEnded'\):t\('friendEnded'\)\):t\('opponentEnded'\)/);
   assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,true\)/);
   const ok=app.slice(app.indexOf("els.opponentEndedOkBtn.addEventListener"),app.indexOf("[els.replayWaitingDialog",app.indexOf("els.opponentEndedOkBtn.addEventListener")));
-  assert.match(ok,/opponentEndedDialog\.close\(\)/);assert.match(ok,/snapshot\?\.sessionFlow\?\.ended/);assert.match(ok,/handleFriendlySessionEnd\?\.\(snapshot\)/);assert.match(ok,/returnOnlineToMenu\(\)/);
+  assert.match(ok,/opponentEndedDialog\.close\(\)/);assert.match(ok,/dataset\.acknowledged='1'/);assert.match(ok,/snapshot\?\.sessionFlow\?\.ended/);assert.match(ok,/handleFriendlySessionEnd\?\.\(snapshot\)/);assert.match(ok,/returnOnlineToMenu\(\)/);
+});
+
+test('normal Friendly quit tells the guest their friend ended the game before the signup offer',()=>{
+  const i18n=fs.readFileSync(new URL('../i18n.js',import.meta.url),'utf8');
+  assert.match(i18n,/friendEnded:'Your friend has ended the game\.'/);
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/flow\.endedByYou/);assert.match(reconcile,/flow\.forceEnded\?t\('friendForceEnded'\):t\('friendEnded'\)/);
+  assert.doesNotMatch(reconcile,/onlineAnonymousMode&&!flow\.forceEnded&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd/);
+  const ok=app.slice(app.indexOf("els.opponentEndedOkBtn.addEventListener"),app.indexOf("[els.replayWaitingDialog",app.indexOf("els.opponentEndedOkBtn.addEventListener")));
+  assert.ok(ok.indexOf("dataset.acknowledged='1'")<ok.indexOf('handleFriendlySessionEnd?.(snapshot)'));
 });
 
 test('ranked abandonment Game Ended owns the final dialog and OK returns directly to menu',()=>{

@@ -15,8 +15,8 @@ test('Competitive Online Play has only Matchmaking Lobby and Search Player; shar
   const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
   assert.match(panel,/data-online-section="matchmaking"/);assert.match(panel,/data-online-section="search"/);assert.doesNotMatch(panel,/data-online-section="share"/);
   assert.equal((panel.match(/data-online-section=/g)||[]).length,2);
-  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.doesNotMatch(panel,/id="enablePlayNotificationsBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
-  assert.match(client,/notificationsBtn\.id='enablePlayNotificationsBtn'/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
+  assert.match(panel,/id="autoMatchBtn"/);assert.match(panel,/id="browsePlayersBtn"/);assert.match(panel,/id="searchPlayersBtn"/);assert.doesNotMatch(panel,/id="enablePlayNotificationsBtn"/);assert.match(panel,/id="onlinePlayerCount"/);
+  assert.match(client,/notificationsBtn\.id='enablePlayNotificationsBtn'/);assert.match(client,/settingsControlsHost/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
   assert.match(panel,/id="onlineNicknameSearchBtn"/);assert.match(panel,/id="browsePlayerResults"/);assert.match(panel,/id="searchPlayerResults"/);
   assert.doesNotMatch(panel,/onlineInviteEmail|Invite by Email|Send Invite|competitiveShareLink|competitiveCopyLinkBtn|Share Link/);
   assert.match(client,/if\(createRoom\)\{createRoom\.hidden=true;createRoom\.style\.display='none';\}/);
@@ -25,10 +25,11 @@ test('Competitive Online Play has only Matchmaking Lobby and Search Player; shar
   assert.match(client,/onlineNicknameSearch'\)\.value='';\$\('lobbyStatus'\)\.textContent=''/);
 });
 
-test('Language and notification controls live under the main-menu account box instead of the game or Online Play panel',()=>{
+test('Language and notification controls live in Settings instead of the main menu or Online Play panel',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.doesNotMatch(index,/id="languageBtn"/);assert.doesNotMatch(index,/id="languageMenu"/);
-  assert.match(client,/languageBtn\.id='languageBtn'/);assert.match(client,/languageMenu\.id='languageMenu'/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
+  assert.match(client,/settingsDialog\.id='settingsDialog'/);assert.match(client,/languageBtn\.id='languageBtn'/);assert.match(client,/languageMenu\.id='languageMenu'/);assert.match(client,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);assert.match(client,/settingsControlsHost'\)\.appendChild\(accountMenuControls\)/);
+  assert.match(client,/accountSettingsBtn/);assert.match(client,/settingsOk/);
   const panel=client.slice(client.indexOf("const onlinePanel=document.createElement"),client.indexOf("const authDialog=document.createElement"));
   assert.doesNotMatch(panel,/enablePlayNotificationsBtn/);
 });
@@ -62,14 +63,15 @@ test('Search is a registered-player directory lookup and overlays current online
   assert.match(client,/statusNotOnline:'Not Online'/);assert.match(client,/statusNotAvailable:'Online - Not Available'/);assert.match(client,/statusAway:'Online - Away'/);assert.match(client,/statusAvailableSimple:'Online - Available'/);
 });
 
-test('Browse and Search use separate result lists and refresh independently after reconnect',()=>{
-  assert.match(client,/browsePlayerResults" class="online-player-list" hidden/);assert.match(client,/searchPlayerResults" class="online-player-list" hidden/);
+test('Browse Top 10 and Search Player replace one another and refresh independently after reconnect',()=>{
+  assert.match(client,/browsePlayerResults" class="online-player-list" hidden/);assert.match(client,/data-online-section="search" hidden/);assert.match(client,/searchPlayerResults" class="online-player-list" hidden/);
   const render=client.slice(client.indexOf('function renderLobbyPresence'),client.indexOf('function connectLobby'));
   assert.match(render,/list=\$\('browsePlayerResults'\)/);assert.match(render,/list\.hidden=!browsePlayersActive/);
-  const browse=client.slice(client.indexOf("\$('browsePlayersBtn').addEventListener"),client.indexOf("\$('onlineNicknameSearchBtn').addEventListener"));
-  assert.match(browse,/browsePlayersActive=true/);assert.match(browse,/browsePlayerResults/);assert.match(browse,/type:'recommendations'/);
+  const browse=client.slice(client.indexOf("\$('browsePlayersBtn').addEventListener"),client.indexOf("\$('enablePlayNotificationsBtn').addEventListener"));
+  assert.match(browse,/browsePlayersActive=true/);assert.match(browse,/lobbySearchActive=false/);assert.match(browse,/searchSection\.hidden=true/);assert.match(browse,/searchPlayerResults'\)\.hidden=true/);assert.match(browse,/type:'recommendations'/);
+  assert.match(browse,/searchPlayersBtn/);assert.match(browse,/browsePlayersActive=false/);assert.match(browse,/searchSection\.hidden=false/);assert.match(browse,/browsePlayerResults'\)\.hidden=true/);
   const search=client.slice(client.indexOf("\$('onlineNicknameSearchBtn').addEventListener"),client.indexOf("\$('autoMatchBtn').addEventListener"));
-  assert.match(search,/lobbySearchActive=!!query/);assert.match(search,/searchPlayerResults/);assert.match(search,/type:'search',query/);
+  assert.match(search,/browsePlayersActive=false/);assert.match(search,/lobbySearchActive=!!query/);assert.match(search,/searchPlayerResults/);assert.match(search,/type:'search',query/);
   const transport=client.slice(client.indexOf('function connectLobby'),client.indexOf('function closeLobby'));
   assert.match(transport,/browsePlayersActive\)requestRecommendations\(\)/);assert.match(transport,/lobbySearchActive/);assert.match(transport,/lobbySend\(\{type:'search',query\}\)/);
 });
@@ -168,6 +170,7 @@ test('Auto Match previews the best candidate, supports Someone Else, then sends 
   assert.match(client,/message\.type==='autoMatchCandidate'/);assert.match(client,/showAutoMatchCandidate\(message\.candidate\|\|null\)/);
   assert.match(client,/function renderOpponentProfile\(rootId,player\)/);assert.match(client,/player\.headToHead/);assert.match(client,/player\.gamesPlayed/);assert.match(client,/player\.wins/);assert.match(client,/player\.losses/);assert.match(client,/player\.totalCoinsEarned/);assert.match(client,/neverPlayedBefore/);
   assert.match(client,/autoMatchCandidateNext[^]*type:'autoMatchNext'/);assert.match(client,/autoMatchCandidateAccept[^]*type:'autoMatchAccept'/);assert.match(client,/autoMatchCandidateCancel[^]*type:'autoMatchCancel'/);
+  assert.match(client,/function showAutoMatchWaiting\(\)/);assert.match(client,/Looking for Another Player/);assert.match(client,/No other available players right now/);assert.match(client,/message\.type==='autoMatchWaiting'[^]*showAutoMatchWaiting\(\)/);
   assert.match(server,/type:'autoMatchCandidate',candidate:toProfile/);assert.match(server,/message\.type==='autoMatchNext'/);assert.match(server,/message\.type==='autoMatchAccept'/);assert.match(server,/acceptAutoMatchCandidate\(client,message\.accountId\)/);assert.match(server,/enqueueClientMessage\(client,data\)/);assert.match(server,/messageQueue:Promise\.resolve\(\)/);assert.match(server,/addEventListener\('message',event=>\{void this\.enqueueClientMessage\(client,event\.data\);\}\)/);
   assert.match(server,/startChallenge\(client,target,rows,\{automatic:true,toProfileOverride:toProfile\}\)/);assert.match(server,/challengeRequestMessage\(challenge\)/);assert.match(server,/sendToAccount\(target\.account\.id,this\.challengeRequestMessage\(challenge\)\)/);
   assert.match(server,/type:'challengeAcceptedCreateRoom'/);assert.match(server,/type:'challengeAcceptedWaiting'/);
@@ -240,9 +243,9 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.match(index,/i18n\.js\?v=20260920-2/);
+  assert.match(index,/i18n\.js\?v=20260922-3/);
   assert.match(index,/styles\.css\?v=20260921-1/);
-  assert.match(index,/ranked-client\.js\?v=20260922-9/);
-  assert.match(index,/app\.js\?v=20260922-4/);
+  assert.match(index,/ranked-client\.js\?v=20260922-10/);
+  assert.match(index,/app\.js\?v=20260922-5/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });

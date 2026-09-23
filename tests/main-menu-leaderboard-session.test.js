@@ -155,7 +155,7 @@ test('Competitive reconnect No is authenticated and routed to authoritative aban
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
   assert.match(source,/totalCoins:'Total Coins Earned'/);
   const identity=source.slice(source.indexOf('function patchGameIdentity'),source.indexOf('playPractice.addEventListener'));
-  assert.match(identity,/if\(account\)\{humanName\.textContent=account\.nickname;/);
+  assert.match(identity,/if\(account\)\{humanName\.innerHTML=playerNicknameHtml\(\{accountId:account\.id,nickname:account\.nickname/);
   assert.doesNotMatch(identity,/humanName\.textContent=`\$\{rt\('you'\)\} \(\$\{account\.nickname\}\)/);
 });
 
@@ -251,10 +251,11 @@ test('Coin mode buttons reflect the account-wide active ranked game and resume t
 });
 
 
-test('main menu owns Language and Enable Notifications while legacy Room code Join Game is visually removed',()=>{
+test('Settings dialog owns Language and Notifications while legacy Room code Join Game is visually removed',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
   assert.match(source,/languageBtn\.id='languageBtn'/);assert.match(source,/languageMenu\.id='languageMenu'/);assert.match(source,/notificationsBtn\.id='enablePlayNotificationsBtn'/);
-  assert.match(source,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
+  assert.match(source,/settingsDialog\.id='settingsDialog'/);assert.match(source,/settingsControlsHost/);assert.match(source,/accountSettingsBtn/);assert.match(source,/settingsOk/);
+  assert.match(source,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);assert.match(source,/settingsControlsHost'\)\.appendChild\(accountMenuControls\)/);
   assert.doesNotMatch(html,/id="languageBtn"/);assert.match(html,/id="joinOnlineForm"[^>]*hidden[^>]*display:none!important/);
   assert.match(source,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
 });
@@ -267,6 +268,7 @@ test('main menu separates Training, Friendly Gaming, Competitive Gaming, and Lea
   assert.match(source,/rankedGroup\.className='menu-mode-group ranked-menu-group'/);
   assert.match(source,/rankedGroupNote\.textContent='Coins and leaderboards involved'/);
   assert.match(source,/leaderboardBtn\.textContent='Leaderboards'/);
+  assert.match(source,/menu\.append\(rankedGroup,freeGroup,trainingBtn,friendsBtn,leaderboardBtn\)/);
   assert.match(source,/trainingBtn\.textContent=rt\('training'\)/);
   assert.match(source,/freeGroup\.dataset\.label=rt\('freeGaming'\)/);
   assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);
