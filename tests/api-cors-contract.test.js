@@ -59,3 +59,46 @@ test('unknown API paths do not get silently whitelisted by the CORS classifier',
   const response=await preflight('/api/not-a-real-player-route','POST');
   assert.equal(response.status,404);
 });
+
+
+test('Player Info POST is forwarded through the public Worker with auth, JSON body, and CORS intact',async()=>{
+  let seen=null;
+  const env={
+    ACCOUNT_STORE:{
+      idFromName:name=>name,
+      get:()=>({
+        fetch:async request=>{
+          seen={
+            url:request.url,
+            method:request.method,
+            authorization:request.headers.get('authorization'),
+            contentType:request.headers.get('content-type'),
+            body:await request.text()
+          };
+          return new Response(JSON.stringify({ok:true,player:{accountId:'acct-self',nickname:'SelfPlayer'}}),{
+            status:200,
+            headers:{'content-type':'application/json'}
+          });
+        }
+      })
+    }
+  };
+  const response=await worker.fetch(new Request('https://gostop-authority.jwshin1.workers.dev/api/player-profile',{
+    method:'POST',
+    headers:{
+      Origin:origin,
+      Authorization:'Bearer self-token',
+      'content-type':'application/json'
+    },
+    body:JSON.stringify({accountId:'acct-self'})
+  }),env);
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('access-control-allow-origin'),origin);
+  assert.equal(seen.url,'https://accounts/player-profile');
+  assert.equal(seen.method,'POST');
+  assert.equal(seen.authorization,'Bearer self-token');
+  assert.equal(seen.contentType,'application/json');
+  assert.deepEqual(JSON.parse(seen.body),{accountId:'acct-self'});
+  const data=await response.json();
+  assert.equal(data.player.nickname,'SelfPlayer');
+});
