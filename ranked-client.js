@@ -227,11 +227,6 @@
       letter-spacing:-.045em;color:#ffd978!important;
       text-shadow:0 4px 0 rgba(105,43,18,.52),0 10px 28px rgba(0,0,0,.82),0 0 34px rgba(244,183,73,.16)!important;
     }
-    .main-menu-tagline{
-      position:relative;z-index:5;margin:-1px 0 2px;color:#e7c98d;
-      font:800 clamp(10px,1.2vw,13px)/1.15 system-ui,sans-serif;letter-spacing:.24em;text-align:center;
-      text-shadow:0 2px 10px #000;
-    }
     .account-menu-box{
       position:relative!important;z-index:5!important;width:min(820px,92vw)!important;
       margin:6px auto 0!important;padding:14px 18px 12px!important;
@@ -331,7 +326,6 @@
       .solo-start-overlay{padding:max(12px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))!important;gap:6px!important}
       .solo-start-overlay:after{width:96vw;height:70vh;top:55%;border-width:9px;opacity:.62}
       .main-menu-title{font-size:clamp(2.5rem,12vw,3.8rem)!important;line-height:.94!important}
-      .main-menu-tagline{font-size:9px;letter-spacing:.15em;margin-bottom:3px}
       .account-menu-box{width:min(94vw,560px)!important;padding:13px 13px 11px!important;margin-top:6px!important}
       #accountMenuIdentity{grid-template-columns:minmax(0,1fr) auto;gap:5px 10px}
       #accountMenuIdentity>strong{grid-column:1}#accountMenuIdentity>.wallet{grid-column:2}#accountMenuIdentity>.rank{grid-column:1}
@@ -350,6 +344,137 @@
       .main-menu-hwatu-card{animation:none!important}.menu-mode-group:after{transition:none!important}
       .gostop-main-menu>button,.menu-mode-group>button{transition:none!important}
     }
+
+    /* Leaderboards: top-ten board near the title, with the signed-in player's rank appended when outside Top 10. */
+    .leaderboard-screen{
+      overflow:hidden;
+      grid-template-rows:auto minmax(0,1fr) auto!important;
+      gap:8px!important;
+      padding:clamp(18px,2.3vw,32px) clamp(16px,4vw,54px) clamp(16px,2.5vw,28px)!important;
+      background:
+        radial-gradient(circle at 50% -8%,rgba(228,169,64,.26),transparent 28%),
+        radial-gradient(circle at 14% 42%,rgba(125,30,26,.30),transparent 33%),
+        radial-gradient(circle at 88% 36%,rgba(43,101,69,.26),transparent 35%),
+        linear-gradient(150deg,#160b08 0%,#2b160d 38%,#0c1711 70%,#080503 100%)!important;
+      isolation:isolate;
+    }
+    .leaderboard-screen:before{
+      content:"";position:absolute;inset:14px;z-index:0;pointer-events:none;border:1px solid rgba(226,182,91,.20);border-radius:24px;
+      box-shadow:inset 0 0 70px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.018);
+    }
+    .leaderboard-screen:after{
+      content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.22;
+      background:
+        radial-gradient(circle at 9% 15%,#e9bd63 0 2px,transparent 3px),
+        radial-gradient(circle at 92% 19%,#b84835 0 2px,transparent 3px),
+        radial-gradient(circle at 21% 85%,#c4523f 0 1.5px,transparent 2.5px),
+        radial-gradient(circle at 78% 81%,#e9bd63 0 1.5px,transparent 2.5px);
+      background-size:126px 126px,151px 151px,103px 103px,139px 139px;
+    }
+    .leaderboard-title,.leaderboard-table-wrap,.leaderboard-footer{position:relative;z-index:3}
+    .leaderboard-title{padding-top:2px}
+    .leaderboard-title h1{
+      font-size:clamp(34px,5vw,58px)!important;line-height:.95;margin:0!important;color:#ffe7b1;
+      text-shadow:0 3px 0 rgba(86,38,19,.75),0 10px 30px rgba(0,0,0,.60);
+    }
+    .leaderboard-title p{font-size:13px;margin-top:7px!important;color:#d9bc84!important}
+    .leaderboard-table-wrap{
+      align-self:start!important;width:min(1120px,94vw)!important;margin:14px auto 0!important;overflow:auto!important;
+      border:1px solid rgba(232,190,98,.62)!important;border-radius:16px!important;
+      background:linear-gradient(180deg,rgba(26,15,9,.94),rgba(14,10,7,.94))!important;
+      box-shadow:0 18px 50px rgba(0,0,0,.43),inset 0 1px rgba(255,255,255,.04)!important;
+    }
+    .leaderboard-table th{
+      height:42px;padding:8px 13px!important;background:linear-gradient(180deg,#4a2b18,#2d1a10)!important;
+      color:#ffd77c!important;font-size:13px;text-transform:uppercase;letter-spacing:.045em;
+    }
+    .leaderboard-table td{height:38px;padding:7px 13px!important;font-size:14px}
+    .leaderboard-table tbody tr:nth-child(odd):not(.leaderboard-empty-row){background:rgba(255,255,255,.018)}
+    .leaderboard-table tbody tr:hover:not(.leaderboard-empty-row){background:rgba(225,181,91,.07)}
+    .leaderboard-current-player{
+      background:linear-gradient(90deg,rgba(53,113,76,.30),rgba(212,164,68,.13))!important;
+      box-shadow:inset 4px 0 #7dd49a;
+    }
+    .leaderboard-current-player td{color:#fff2ce;font-weight:750}
+    .leaderboard-current-outside-top td{border-top:2px solid rgba(238,193,105,.70)!important}
+    .leaderboard-current-outside-top td:first-child{position:relative}
+    .leaderboard-current-outside-top td:first-child:after{
+      content:"YOU";display:inline-block;margin-left:8px;padding:2px 5px;border-radius:999px;background:#376f4c;color:#dff8e7;
+      font:800 8px/1 system-ui,sans-serif;letter-spacing:.08em;vertical-align:middle;
+    }
+    .leaderboard-empty-row{height:38px;color:rgba(215,195,159,.34);background:rgba(255,255,255,.008)}
+    .leaderboard-empty-row td:not(:first-child){color:transparent}
+    .leaderboard-empty-row td:first-child{color:rgba(224,200,157,.38)}
+    .leaderboard-loading-cell{text-align:center!important;height:420px!important}
+    .leaderboard-footer{align-self:end!important;margin-top:4px}
+    .leaderboard-decor{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+    .leaderboard-card-fan{position:absolute;top:92px;width:160px;height:190px;opacity:.30;filter:drop-shadow(0 15px 18px rgba(0,0,0,.50))}
+    .leaderboard-cards-left{left:max(20px,calc(50% - 690px));transform:rotate(-10deg)}
+    .leaderboard-cards-right{right:max(20px,calc(50% - 690px));transform:rotate(10deg)}
+    .leaderboard-hwatu-card{
+      position:absolute;left:47px;top:26px;width:66px;height:auto;aspect-ratio:76/123;object-fit:contain;border-radius:6px;
+      border:2px solid rgba(177,45,32,.80);background:#f4eee5;box-shadow:0 8px 17px rgba(0,0,0,.38);
+    }
+    .leaderboard-hwatu-card:first-child{transform:translateX(-26px) rotate(-13deg)}
+    .leaderboard-hwatu-card:last-child{transform:translateX(26px) rotate(13deg)}
+
+    /* Mobile main menu gets a deliberate game-lobby composition rather than a collapsed desktop page. */
+    @media(max-width:760px){
+      .solo-start-overlay{
+        min-height:100dvh!important;
+        background:
+          radial-gradient(circle at 50% 4%,rgba(239,185,73,.18),transparent 21%),
+          radial-gradient(circle at 6% 34%,rgba(159,39,29,.27),transparent 30%),
+          radial-gradient(circle at 95% 43%,rgba(58,122,77,.23),transparent 31%),
+          linear-gradient(180deg,#12281d 0%,#1c2d22 24%,#21130d 62%,#0c0806 100%)!important;
+      }
+      .main-menu-title{
+        margin-top:4px!important;font-size:clamp(2.75rem,13.5vw,4rem)!important;line-height:.90!important;
+        text-shadow:0 3px 0 rgba(95,38,15,.64),0 9px 22px rgba(0,0,0,.72)!important;
+      }
+      .account-menu-box{
+        border-radius:14px!important;background:linear-gradient(135deg,rgba(25,15,9,.97),rgba(46,27,15,.94))!important;
+        box-shadow:0 11px 28px rgba(0,0,0,.40),inset 0 1px rgba(255,255,255,.05)!important;
+      }
+      .gostop-main-menu{
+        border-radius:18px!important;padding:10px!important;gap:8px!important;
+        background:linear-gradient(180deg,rgba(14,10,7,.78),rgba(10,7,5,.91))!important;
+        box-shadow:0 18px 42px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.035)!important;
+      }
+      .gostop-main-menu:before{margin:1px 0 3px!important;color:#f2cf87!important}
+      .menu-mode-group{border-radius:15px!important;padding:11px 10px!important}
+      .ranked-menu-group{box-shadow:0 9px 24px rgba(129,79,18,.25),inset 0 1px rgba(255,244,197,.11)!important}
+      .free-menu-group{box-shadow:0 9px 24px rgba(24,87,43,.24),inset 0 1px rgba(217,255,221,.09)!important}
+      .gostop-main-menu>button,.menu-mode-group>button{border-radius:11px!important}
+      .main-menu-card-fan{display:block!important;top:105px!important;width:82px!important;height:112px!important;opacity:.23!important;filter:drop-shadow(0 7px 11px rgba(0,0,0,.48))!important}
+      .main-menu-card-fan.left{left:-7px!important;transform:rotate(-8deg) scale(.72)!important;transform-origin:left top}
+      .main-menu-card-fan.right{right:-7px!important;transform:rotate(8deg) scale(.72)!important;transform-origin:right top}
+      .main-menu-hwatu-card{width:54px!important;left:14px!important;top:14px!important}
+      .main-menu-hwatu-card:nth-child(1){transform:translate(-16px,5px) rotate(-14deg)!important}
+      .main-menu-hwatu-card:nth-child(2){transform:translate(0,-1px) rotate(0)!important}
+      .main-menu-hwatu-card:nth-child(3){transform:translate(16px,5px) rotate(14deg)!important}
+      .leaderboard-screen{padding:14px 10px 14px!important;gap:6px!important;overflow:hidden}
+      .leaderboard-title{padding-top:2px}
+      .leaderboard-title h1{font-size:clamp(29px,9vw,42px)!important}
+      .leaderboard-title p{font-size:11px!important;margin-top:4px!important}
+      .leaderboard-table-wrap{width:100%!important;margin:9px auto 0!important;border-radius:12px!important}
+      .leaderboard-table{min-width:660px}
+      .leaderboard-table th{height:35px!important;padding:6px 8px!important;font-size:10px!important}
+      .leaderboard-table td{height:31px!important;padding:5px 8px!important;font-size:11px!important}
+      .leaderboard-empty-row{height:31px!important}
+      .leaderboard-card-fan{top:54px;opacity:.13;transform:scale(.68)}
+      .leaderboard-cards-left{left:-35px}.leaderboard-cards-right{right:-35px}
+      .leaderboard-footer{margin-top:2px}
+      .leaderboard-attract-note{font-size:9px}
+    }
+    @media(max-width:420px){
+      .main-menu-card-fan{opacity:.16!important}
+      .account-menu-box:before{font-size:8px}
+      #accountMenuIdentity>strong{font-size:14px!important}
+      #accountMenuIdentity>.wallet{font-size:13px!important}
+      .gostop-main-menu{padding:9px!important}
+      .leaderboard-table{min-width:610px}
+    }
   `;document.head.appendChild(style);
 
   const overlay=$('soloStartOverlay'),playPractice=$('playSoloBtn'),createRoom=$('createOnlineBtn'),joinForm=$('joinOnlineForm'),howTo=$('howToBtn'),onlineStatus=$('onlineStatus');if(!overlay||!playPractice)return;
@@ -364,8 +489,7 @@
   accountMenuControls.append(accountLanguageControl,notificationsBtn);accountBox.append(accountIdentity);
   const settingsDialog=document.createElement('dialog');settingsDialog.id='settingsDialog';settingsDialog.className='gostop-account-dialog settings-dialog';settingsDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="settingsTitle">Settings</h2><div id="settingsControlsHost"></div><div class="decision-actions"><button id="settingsOk" class="go-btn" type="button">OK</button></div></div>`;document.body.appendChild(settingsDialog);$('settingsControlsHost').appendChild(accountMenuControls);
   const menuTitle=overlay.firstElementChild;
-  const menuTagline=document.createElement('div');menuTagline.className='main-menu-tagline';menuTagline.textContent='MATCH · CAPTURE · GO OR STOP';
-  if(menuTitle){menuTitle.classList.add('main-menu-title');menuTitle.after(menuTagline,accountBox);}else{overlay.prepend(menuTagline,accountBox);}
+  if(menuTitle){menuTitle.classList.add('main-menu-title');menuTitle.after(accountBox);}else{overlay.prepend(accountBox);}
   const menuDecor=document.createElement('div');menuDecor.className='main-menu-hwatu-decor';menuDecor.setAttribute('aria-hidden','true');
   const commons='https://commons.wikimedia.org/wiki/Special:Redirect/file/';
   const cardFaceUrl=filename=>commons+encodeURIComponent(filename).replace(/%2F/g,'/');
@@ -409,7 +533,9 @@
   const matchHandoffDialog=document.createElement('dialog');matchHandoffDialog.className='gostop-request-dialog';matchHandoffDialog.innerHTML=`<div class="dialog-card"><h2 id="matchHandoffTitle">Starting Online Game…</h2><p id="matchHandoffText"></p></div>`;document.body.appendChild(matchHandoffDialog);
   const returnGameDialog=document.createElement('dialog');returnGameDialog.className='gostop-request-dialog';returnGameDialog.innerHTML=`<div class="dialog-card"><h2 id="returnGameTitle">Continue Active Game?</h2><span id="returnGameCountdown" class="ranked-countdown" hidden>1:00</span><p id="returnGameText">You already have an active Competitive game. Do you want to continue the same game on this device too?</p><div id="returnGameActions" class="decision-actions"><button id="returnGameYes" class="go-btn" type="button">Yes</button><button id="returnGameNo" class="stop-btn" type="button">No</button></div><button id="returnGameOk" class="go-btn" type="button" hidden>OK</button></div>`;document.body.appendChild(returnGameDialog);
 
-  const leaderboardScreen=document.createElement('section');leaderboardScreen.className='leaderboard-screen';leaderboardScreen.hidden=true;leaderboardScreen.innerHTML=`<header class="leaderboard-title"><h1 id="leaderboardHeading">Global Leaderboard</h1><p id="leaderboardSubheading"></p></header><div class="leaderboard-table-wrap"><table class="leaderboard-table"><thead><tr><th>Rank</th><th>Nickname</th><th>Score</th><th>Total Coins Earned</th><th>Games Played</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div><footer class="leaderboard-footer"><p class="leaderboard-attract-note" id="leaderboardAttractNote"></p><div class="leaderboard-controls"><button class="leaderboard-nav leaderboard-prev" type="button" aria-label="Previous">‹</button><button class="leaderboard-return" type="button">Return</button><button class="leaderboard-nav leaderboard-next" type="button" aria-label="Next">›</button></div></footer>`;document.body.appendChild(leaderboardScreen);
+  const leaderboardScreen=document.createElement('section');leaderboardScreen.className='leaderboard-screen';leaderboardScreen.hidden=true;leaderboardScreen.innerHTML=`<div class="leaderboard-decor" aria-hidden="true"></div><header class="leaderboard-title"><h1 id="leaderboardHeading">Global Leaderboard</h1><p id="leaderboardSubheading"></p></header><div class="leaderboard-table-wrap"><table class="leaderboard-table"><thead><tr><th>Rank</th><th>Nickname</th><th>Score</th><th>Total Coins Earned</th><th>Games Played</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div><footer class="leaderboard-footer"><p class="leaderboard-attract-note" id="leaderboardAttractNote"></p><div class="leaderboard-controls"><button class="leaderboard-nav leaderboard-prev" type="button" aria-label="Previous">‹</button><button class="leaderboard-return" type="button">Return</button><button class="leaderboard-nav leaderboard-next" type="button" aria-label="Next">›</button></div></footer>`;document.body.appendChild(leaderboardScreen);
+  const leaderboardDecor=leaderboardScreen.querySelector('.leaderboard-decor');
+  [['leaderboard-cards-left',['m1-1','m3-1']],['leaderboard-cards-right',['m8-1','m12-1']]].forEach(([className,ids])=>{const fan=document.createElement('div');fan.className=`leaderboard-card-fan ${className}`;ids.forEach(id=>{const card=deck.find(item=>item.id===id);if(!card)return;const img=document.createElement('img');img.className='leaderboard-hwatu-card';img.alt='';img.decoding='async';img.src=cardFaceUrl(card.file);fan.appendChild(img);});leaderboardDecor.appendChild(fan);});
 
   const pauseDialog=document.createElement('dialog');pauseDialog.className='ranked-flow-dialog';pauseDialog.innerHTML=`<div class="dialog-card"><h2>PAUSE</h2><span id="rankedPauseCountdown" class="ranked-countdown">3:00</span><p id="rankedPauseText"></p><p id="rankedPauseRemaining" class="account-help"></p><button id="rankedPauseAction" class="go-btn" type="button">Cancel</button></div>`;document.body.appendChild(pauseDialog);
   const pauseQuitConfirmDialog=document.createElement('dialog');pauseQuitConfirmDialog.className='ranked-flow-dialog';pauseQuitConfirmDialog.innerHTML=`<div class="dialog-card"><h2 id="rankedPauseQuitConfirmTitle">Quit Game?</h2><p id="rankedPauseQuitConfirmText">Are you sure you want to quit this game? The current game and session will end as a draw. No Coins or points will be awarded.</p><div class="decision-actions"><button id="rankedPauseQuitYes" class="stop-btn" type="button">Yes</button><button id="rankedPauseQuitNo" class="go-btn" type="button">No</button></div></div>`;document.body.appendChild(pauseQuitConfirmDialog);
@@ -612,7 +738,21 @@
   $('freeFriendClose').addEventListener('click',()=>{freePanel.hidden=true;$('freeOnlineStatus').textContent='';resetAttractTimer();});
   $('freeCreateRoomBtn').addEventListener('click',()=>{stopAttractForGameLaunch();$('freeOnlineStatus').textContent='…';globalThis.dispatchEvent(new CustomEvent('gostop-free-online-create'));});
 
-  function renderLeaderboard(){const key=leaderboardPage===0?'global':'monthly',rows=leaderboardData?.[key]||[];$('leaderboardHeading').textContent=leaderboardPage===0?rt('global'):rt('monthly');$('leaderboardSubheading').textContent=leaderboardPage===0?rt('globalSub'):rt('monthToDate',{month:leaderboardData?.month||rt('currentMonth')});$('leaderboardAttractNote').textContent=attractMode?rt('attractNote'):rt('rotateNote');if(!leaderboardData){$('leaderboardBody').innerHTML=`<tr><td colspan="5" style="text-align:center">${leaderboardLoadFailed?escapeHtml(rt('requestFailed')):'…'}</td></tr>`;return;}$('leaderboardBody').innerHTML=rows.map(row=>`<tr class="${Number(row.rank)>0?'':'leaderboard-provisional'}"><td>${rankNumberHtml(row.rank)}</td><td>${flagEmoji(row.countryCode)} ${playerNicknameHtml(row)}</td><td>${fmtScore(row.score)}</td><td>${Number(row.totalCoins)||0}</td><td>${Number(row.gamesPlayed)||0}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center">${escapeHtml(rt('noRankedGames'))}</td></tr>`;}
+  function leaderboardRowIsCurrent(row){if(!account||!row)return false;if(account.id&&row.accountId)return String(account.id)===String(row.accountId);return String(account.nickname||'').toLowerCase()===String(row.nickname||'').toLowerCase();}
+  function leaderboardRowHtml(row,{current=false,outsideTop=false}={}){
+    const classes=[Number(row.rank)>0?'':'leaderboard-provisional',current?'leaderboard-current-player':'',outsideTop?'leaderboard-current-outside-top':''].filter(Boolean).join(' ');
+    return `<tr class="${classes}"><td>${rankNumberHtml(row.rank)}</td><td>${flagEmoji(row.countryCode)} ${playerNicknameHtml(row)}</td><td>${fmtScore(row.score)}</td><td>${Number(row.totalCoins)||0}</td><td>${Number(row.gamesPlayed)||0}</td></tr>`;
+  }
+  function emptyLeaderboardRow(position){return `<tr class="leaderboard-empty-row" aria-label="Empty rank ${position}"><td>${position}</td><td></td><td></td><td></td><td></td></tr>`;}
+  function renderLeaderboard(){
+    const key=leaderboardPage===0?'global':'monthly',rows=leaderboardData?.[key]||[];
+    $('leaderboardHeading').textContent=leaderboardPage===0?rt('global'):rt('monthly');$('leaderboardSubheading').textContent=leaderboardPage===0?rt('globalSub'):rt('monthToDate',{month:leaderboardData?.month||rt('currentMonth')});$('leaderboardAttractNote').textContent=attractMode?rt('attractNote'):rt('rotateNote');
+    if(!leaderboardData){$('leaderboardBody').innerHTML=`<tr><td colspan="5" class="leaderboard-loading-cell">${leaderboardLoadFailed?escapeHtml(rt('requestFailed')):'…'}</td></tr>`;return;}
+    const rankedRows=rows.filter(row=>Number(row.rank)>0),topTen=rankedRows.slice(0,10),ownRow=account?rows.find(leaderboardRowIsCurrent):null,ownInTop=!!ownRow&&topTen.some(leaderboardRowIsCurrent);
+    const rendered=[];for(let index=0;index<10;index++){const row=topTen[index];rendered.push(row?leaderboardRowHtml(row,{current:leaderboardRowIsCurrent(row)}):emptyLeaderboardRow(index+1));}
+    if(ownRow&&!ownInTop)rendered.push(leaderboardRowHtml(ownRow,{current:true,outsideTop:true}));
+    $('leaderboardBody').innerHTML=rendered.join('');
+  }
   function nextLeaderboard(delta=1){leaderboardPage=(leaderboardPage+delta+2)%2;renderLeaderboard();restartLeaderboardTimer();}
   function restartLeaderboardTimer(){if(leaderboardTimer)clearTimeout(leaderboardTimer);leaderboardTimer=null;if(leaderboardScreen.hidden||!attractMode)return;leaderboardTimer=setTimeout(()=>{if(leaderboardScreen.hidden||!attractMode)return;if(leaderboardPage===1){closeLeaderboard(true);return;}nextLeaderboard(1);},LEADERBOARD_ROTATE_MS);}
   async function openLeaderboard(isAttract=false){

@@ -152,6 +152,20 @@ test('Competitive reconnect No is authenticated and routed to authoritative aban
   assert.match(worker,/https:\/\/room\/decline-reconnect/);
 });
 
+test('Global and Monthly leaderboards always render ten rank slots and append the signed-in player only when outside Top 10',()=>{
+  const board=source.slice(source.indexOf('function leaderboardRowIsCurrent'),source.indexOf('function nextLeaderboard'));
+  assert.match(board,/rankedRows=rows\.filter\(row=>Number\(row\.rank\)>0\)/);
+  assert.match(board,/topTen=rankedRows\.slice\(0,10\)/);
+  assert.match(board,/for\(let index=0;index<10;index\+\+\)/);
+  assert.match(board,/emptyLeaderboardRow\(index\+1\)/);
+  assert.match(board,/ownRow=account\?rows\.find\(leaderboardRowIsCurrent\):null/);
+  assert.match(board,/if\(ownRow&&!ownInTop\)rendered\.push\(leaderboardRowHtml\(ownRow,\{current:true,outsideTop:true\}\)\)/);
+  assert.match(source,/leaderboard-current-outside-top/);
+  assert.match(source,/leaderboard-empty-row/);
+  assert.match(source,/leaderboard-decor/);assert.match(source,/leaderboard-card-fan/);
+  assert.match(source,/\.leaderboard-table-wrap\{[^]*?align-self:start!important[^]*?margin:14px auto 0!important/);
+});
+
 test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
   assert.match(source,/totalCoins:'Total Coins Earned'/);
   const identity=source.slice(source.indexOf('function patchGameIdentity'),source.indexOf('playPractice.addEventListener'));
@@ -280,7 +294,8 @@ test('main menu separates Training, Friendly Gaming, Competitive Gaming, and Lea
 test('main menu is a compact two-column game lobby with visible title, player HUD, and Hwatu decoration',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
   assert.match(source,/menuTitle\.classList\.add\('main-menu-title'\)/);
-  assert.match(source,/MATCH · CAPTURE · GO OR STOP/);
+  assert.doesNotMatch(source,/MATCH · CAPTURE · GO OR STOP/);
+  assert.doesNotMatch(source,/main-menu-tagline/);
   assert.match(source,/main-menu-hwatu-decor/);
   assert.match(source,/addFan\('left',\['m1-1','m2-1','m3-1'\]\)/);
   assert.match(source,/addFan\('right',\['m8-1','m9-1','m12-1'\]\)/);
@@ -288,7 +303,7 @@ test('main menu is a compact two-column game lobby with visible title, player HU
   assert.match(source,/\.gostop-main-menu\{[^]*?width:min\(820px,92vw\)!important[^]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
   assert.match(source,/\.gostop-main-menu:before\{[^}]*content:"CHOOSE YOUR GAME"/);
-  assert.match(html,/ranked-client\.js\?v=20260922-11/);
+  assert.match(html,/ranked-client\.js\?v=20260922-12/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
