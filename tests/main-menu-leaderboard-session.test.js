@@ -59,8 +59,10 @@ test('leaderboards are public, render immediately, and page controls work even i
   assert.match(block,/const key=leaderboardPage===0\?'global':'monthly'/);
   assert.match(block,/if\(!leaderboardData\).*leaderboardLoadFailed/s);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return;leaderboardTimer=setTimeout\(\(\)=>\{[\s\S]*if\(leaderboardPage===1\)\{closeLeaderboard\(true\);return;\}[\s\S]*nextLeaderboard\(1\)[\s\S]*LEADERBOARD_ROTATE_MS/);
-  assert.match(source,/class=\"leaderboard-controls\".*leaderboard-prev.*leaderboard-return.*leaderboard-next/s);
-  assert.doesNotMatch(source,/\.leaderboard-nav\{position:absolute/);
+  assert.match(source,/class="leaderboard-mode-tabs"/);
+  assert.match(source,/id="globalLeaderboardTab"/);assert.match(source,/id="monthlyLeaderboardTab"/);
+  assert.match(source,/class="leaderboard-return"/);
+  assert.doesNotMatch(source,/class="leaderboard-controls"/);
 });
 
 test('phone attract-mode leaderboards swipe horizontally while ordinary taps still return to the menu',()=>{
@@ -74,14 +76,15 @@ test('phone attract-mode leaderboards swipe horizontally while ordinary taps sti
   assert.match(source,/Date\.now\(\)<attractSwipeSuppressClickUntil/);
   assert.match(source,/leaderboardScreen\.classList\.toggle\('attract-mode',attractMode\)/);
   assert.match(source,/leaderboardScreen\.classList\.remove\('attract-mode'\)/);
-  assert.match(source,/\.leaderboard-screen\.attract-mode \.leaderboard-title:after/);
-  assert.match(source,/Swipe left or right to switch leaderboards/);
+  assert.doesNotMatch(source,/Swipe left or right to switch leaderboards/);
+  assert.doesNotMatch(source,/\.leaderboard-screen\.attract-mode \.leaderboard-title:after/);
   assert.doesNotMatch(source,/calc\(abs\(/);
 });
 
 test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
   const block=source.slice(source.indexOf('function restartLeaderboardTimer'),source.indexOf('function lobbyUrl'));
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;freePanel\.hidden=true;overlay\.hidden=false;\}/);
+  assert.match(block,/globalLeaderboardTab'\)\.addEventListener\('click'/);assert.match(block,/monthlyLeaderboardTab'\)\.addEventListener\('click'/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
   assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(Date\.now\(\)<attractSwipeSuppressClickUntil\)[^]*?if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return/);
@@ -290,21 +293,18 @@ test('Settings dialog owns Language and Notifications while legacy Room code Joi
   assert.match(source,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
 });
 
-test('main menu separates Training, Friendly Gaming, Competitive Gaming, and Leaderboards with coin and leaderboard guidance',()=>{
-  assert.match(source,/trainingBtn\.textContent='Training Mode'/);
-  assert.match(source,/freeGroup\.dataset\.label='FRIENDLY GAMING'/);
-  assert.match(source,/freeGroupNote\.textContent='No coins or leaderboards involved'/);
-  assert.match(source,/freeFriendBtn\.textContent='Play With Friend'/);
-  assert.match(source,/rankedGroup\.className='menu-mode-group ranked-menu-group'/);
-  assert.match(source,/rankedGroupNote\.textContent='Coins and leaderboards involved'/);
-  assert.match(source,/leaderboardBtn\.textContent='Leaderboards'/);
-  assert.match(source,/menu\.append\(rankedGroup,freeGroup,trainingBtn,friendsBtn,leaderboardBtn\)/);
-  assert.match(source,/trainingBtn\.textContent=rt\('training'\)/);
-  assert.match(source,/freeGroup\.dataset\.label=rt\('freeGaming'\)/);
-  assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);
-  assert.match(source,/rankedGroup\.dataset\.label=rt\('competitiveGaming'\)/);
-  assert.match(source,/rankedGroupNote\.textContent=rt\('competitiveGamingNote'\)/);
-  assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
+test('main menu uses two exclusive accordion choices with Training inside Friendly and compact utility navigation',()=>{
+  assert.match(source,/rankedToggle\.id='competitiveGamingBtn'/);assert.match(source,/freeToggle\.id='friendlyGamingBtn'/);
+  assert.match(source,/rankedSubmenu\.append\(rankedSolo,onlinePlay\)/);
+  assert.match(source,/freeSubmenu\.append\(playPractice,freeFriendBtn,trainingBtn\)/);
+  assert.match(source,/trainingBtn\.className='menu-training'/);
+  assert.match(source,/utilities\.className='main-menu-utilities'/);assert.match(source,/utilities\.append\(friendsBtn,leaderboardBtn\)/);
+  assert.match(source,/menu\.append\(rankedGroup,freeGroup,utilities\)/);
+  assert.match(source,/function setMenuSection\(section=null\)/);assert.match(source,/expandedMenuSection===section\?null:section/);
+  assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
+  assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
+  assert.match(source,/freeTitle\.textContent=rt\('freeGaming'\)/);assert.match(source,/rankedTitle\.textContent=rt\('competitiveGaming'\)/);
+  assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);assert.match(source,/rankedGroupNote\.textContent=rt\('competitiveGamingNote'\)/);
 });
 
 test('main menu is a compact two-column game lobby with visible title, player HUD, and Hwatu decoration',()=>{
@@ -319,10 +319,10 @@ test('main menu is a compact two-column game lobby with visible title, player HU
   assert.match(source,/\['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'\]/);
   assert.match(source,/@media\(max-width:1280px\)\{[^]*?\.main-menu-card-fan\{display:none!important\}[^]*?\.main-menu-floor-cards\{display:block\}/);
   assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
-  assert.match(source,/\.gostop-main-menu\{[^]*?width:min\(820px,92vw\)!important[^]*?grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(source,/\.gostop-main-menu\.main-menu-accordion\{[^]*?width:min\(720px,90vw\)!important[^]*?grid-template-columns:1fr!important/);
+  assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/\.gostop-main-menu:before\{[^}]*content:"CHOOSE YOUR GAME"/);
-  assert.match(html,/ranked-client\.js\?v=20260923-1/);
+  assert.match(html,/ranked-client\.js\?v=20260923-2/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{

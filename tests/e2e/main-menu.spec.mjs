@@ -114,11 +114,13 @@ test('desktop main menu primary controls open their intended surfaces without ru
   await page.locator('#howToDialog .tutorial-close').click();
   await expect(page.locator('#howToDialog')).toHaveJSProperty('open',false);
 
+  await page.locator('#friendlyGamingBtn').click();
   await page.locator('#freeFriendBtn').click();
   await expect(page.locator('#freeFriendPanel')).toBeVisible();
   await page.locator('#freeFriendClose').click();
   await expect(page.locator('#freeFriendPanel')).toBeHidden();
 
+  await page.locator('#competitiveGamingBtn').click();
   await page.locator('#onlinePlayMenuBtn').click();
   await expect(page.locator('#onlineLobbyPanel')).toBeVisible();
   await page.locator('#onlineLobbyClose').click();
@@ -159,9 +161,32 @@ test('leaderboard is interactive: ten slots render and another player nickname o
   await expect(page.locator('#playerInfoBody')).toContainText('Your History With Jjineeland');
   await expect(page.locator('#playerInfoBody')).toContainText('Coins vs This Player');
   await page.locator('#playerInfoOk').click();
-  await page.locator('.leaderboard-next').click();
+  await page.locator('#monthlyLeaderboardTab').click();
   await expect(page.locator('#leaderboardHeading')).toHaveText('Monthly Leaderboard');
   await expect(page.locator('#leaderboardBody tr')).toHaveCount(10);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('main menu accordion starts simple, slides one category open at a time, and can collapse back to two choices',async({page})=>{
+  const errors=await openMenu(page);
+  await expect(page.locator('#competitiveGamingBtn')).toBeVisible();
+  await expect(page.locator('#friendlyGamingBtn')).toBeVisible();
+  await expect(page.locator('#rankedSoloBtn')).toBeHidden();
+  await expect(page.locator('#freeFriendBtn')).toBeHidden();
+  await page.locator('#competitiveGamingBtn').click();
+  await expect(page.locator('#competitiveGamingBtn')).toHaveAttribute('aria-expanded','true');
+  await expect(page.locator('#rankedSoloBtn')).toBeVisible();
+  await expect(page.locator('#onlinePlayMenuBtn')).toBeVisible();
+  await expect(page.locator('#freeFriendBtn')).toBeHidden();
+  await page.locator('#friendlyGamingBtn').click();
+  await expect(page.locator('#competitiveGamingBtn')).toHaveAttribute('aria-expanded','false');
+  await expect(page.locator('#friendlyGamingBtn')).toHaveAttribute('aria-expanded','true');
+  await expect(page.locator('#rankedSoloBtn')).toBeHidden();
+  await expect(page.locator('#freeFriendBtn')).toBeVisible();
+  await expect(page.locator('#trainingModeBtn')).toBeVisible();
+  await page.locator('#friendlyGamingBtn').click();
+  await expect(page.locator('#friendlyGamingBtn')).toHaveAttribute('aria-expanded','false');
+  await expect(page.locator('#freeFriendBtn')).toBeHidden();
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
@@ -169,7 +194,15 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
   const errors=await openMenu(page,{mobile:true});
   const title=await page.locator('.main-menu-title').boundingBox();
   expect(title).not.toBeNull();expect(title.y).toBeGreaterThanOrEqual(0);
+  await expect(page.locator('#competitiveGamingBtn')).toBeVisible();
+  await expect(page.locator('#friendlyGamingBtn')).toBeVisible();
+  await expect(page.locator('#rankedSoloBtn')).toBeHidden();
+  await expect(page.locator('#freeFriendBtn')).toBeHidden();
+  await page.locator('#competitiveGamingBtn').click();
   await expect(page.locator('#rankedSoloBtn')).toBeVisible();
+  await expect(page.locator('#onlinePlayMenuBtn')).toBeVisible();
+  await page.locator('#friendlyGamingBtn').click();
+  await expect(page.locator('#rankedSoloBtn')).toBeHidden();
   await expect(page.locator('#freeFriendBtn')).toBeVisible();
   await expect(page.locator('#trainingModeBtn')).toBeVisible();
   await expect(page.locator('#friendsMenuBtn')).toBeVisible();
@@ -186,6 +219,7 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
 
 test('Training Mode launches a real local game and Your Captured Cards opens the complete score breakdown',async({page})=>{
   const errors=await openMenu(page);
+  await page.locator('#friendlyGamingBtn').click();
   await page.locator('#trainingModeBtn').click();
   await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:12000});
   await expect(page.locator('#table')).toBeVisible();
@@ -213,6 +247,19 @@ test('main menu keeps Hwatu decoration at wide, medium, and phone widths',async(
   await page.setViewportSize({width:390,height:844});
   await expect(page.locator('.main-menu-floor-cards')).toBeVisible();
   await expect(page.locator('.main-menu-floor-card')).toHaveCount(7);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('leaderboard is centered on the felt and switches directly between Global and Monthly without arrow controls',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#leaderboardMenuBtn').click();
+  await expect(page.locator('.leaderboard-panel')).toBeVisible();
+  await expect(page.locator('#globalLeaderboardTab')).toHaveClass(/active/);
+  await expect(page.locator('.leaderboard-prev')).toHaveCount(0);
+  await expect(page.locator('.leaderboard-next')).toHaveCount(0);
+  await page.locator('#monthlyLeaderboardTab').click();
+  await expect(page.locator('#leaderboardHeading')).toHaveText('Monthly Leaderboard');
+  await expect(page.locator('#monthlyLeaderboardTab')).toHaveClass(/active/);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
@@ -258,6 +305,7 @@ test('mobile How to Play header remains inside the viewport and its close button
 
 test('Online Play browser flow covers Browse Top 10, Search Player, and Auto Match candidate preview',async({page})=>{
   const errors=await openMenu(page);
+  await page.locator('#competitiveGamingBtn').click();
   await page.locator('#onlinePlayMenuBtn').click();
   await expect(page.locator('#onlineLobbyPanel')).toBeVisible();
 
@@ -328,6 +376,7 @@ test('Settings language menu changes the main menu locale and remains usable',as
   const korean=page.locator('#languageMenu button').filter({hasText:/한국/}).first();
   await expect(korean).toBeVisible();
   await korean.click();
+  await page.locator('#friendlyGamingBtn').click();
   await expect(page.locator('#trainingModeBtn')).not.toHaveText('Training Mode');
   await expect(page.locator('#languageMenu')).toBeHidden();
   await page.locator('#settingsOk').click();
@@ -337,6 +386,7 @@ test('Settings language menu changes the main menu locale and remains usable',as
 
 test('Friendly Create Room produces a shareable guest link with referral token before any signup requirement',async({page})=>{
   const errors=await openMenu(page);
+  await page.locator('#friendlyGamingBtn').click();
   await page.locator('#freeFriendBtn').click();
   await page.locator('#freeCreateRoomBtn').click();
   await expect(page.locator('#freeShareLinkBox')).toBeVisible({timeout:8000});
@@ -363,7 +413,7 @@ test('signed-in player outside Top 10 is appended as highlighted row 11 with the
   await expect(own).toHaveClass(/leaderboard-current-outside-top/);
   await expect(own.locator('td').first()).toContainText('42');
   await expect(own).toContainText('Jong');
-  await page.locator('.leaderboard-next').click();
+  await page.locator('#monthlyLeaderboardTab').click();
   await expect(page.locator('#leaderboardBody tr')).toHaveCount(11);
   await expect(page.locator('#leaderboardBody tr').last()).toContainText('42');
   expect(errors.map(error=>error.message)).toEqual([]);
