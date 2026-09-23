@@ -376,10 +376,10 @@ test('Settings language menu changes the main menu locale and remains usable',as
   const korean=page.locator('#languageMenu button').filter({hasText:/한국/}).first();
   await expect(korean).toBeVisible();
   await korean.click();
-  await page.locator('#friendlyGamingBtn').click();
-  await expect(page.locator('#trainingModeBtn')).not.toHaveText('Training Mode');
   await expect(page.locator('#languageMenu')).toBeHidden();
   await page.locator('#settingsOk').click();
+  await page.locator('#friendlyGamingBtn').click();
+  await expect(page.locator('#trainingModeBtn')).not.toHaveText('Training Mode');
   await expect(page.locator('#settingsDialog')).toHaveJSProperty('open',false);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
@@ -447,6 +447,7 @@ test('Player Info network failure shows friendly app copy instead of a raw brows
 
 test('Friendly Solo Play launches a real local game without account or matchmaking UI',async({page})=>{
   const errors=await openMenu(page);
+  await page.locator('#friendlyGamingBtn').click();
   await page.locator('#playSoloBtn').click();
   await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:12000});
   await expect(page.locator('#table')).toBeVisible();

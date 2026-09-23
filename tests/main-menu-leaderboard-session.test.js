@@ -300,7 +300,7 @@ test('main menu uses two exclusive accordion choices with Training inside Friend
   assert.match(source,/trainingBtn\.className='menu-training'/);
   assert.match(source,/utilities\.className='main-menu-utilities'/);assert.match(source,/utilities\.append\(friendsBtn,leaderboardBtn\)/);
   assert.match(source,/menu\.append\(rankedGroup,freeGroup,utilities\)/);
-  assert.match(source,/function setMenuSection\(section=null\)/);assert.match(source,/expandedMenuSection===section\?null:section/);
+  assert.match(source,/function setMenuSection\(section=null\)/);assert.match(source,/expandedMenuSection===section\?null:section/);assert.match(source,/submenu\.inert=!open/);assert.match(source,/visibility:hidden/);
   assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
   assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
   assert.match(source,/freeTitle\.textContent=rt\('freeGaming'\)/);assert.match(source,/rankedTitle\.textContent=rt\('competitiveGaming'\)/);
