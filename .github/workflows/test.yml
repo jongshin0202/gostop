@@ -17,14 +17,31 @@ jobs:
       - name: Syntax checks
         run: |
           node --check app.js
-          node --check ranked-client.js
+          node --check audio-fanfare.js
+          node --check audio-ppeok.js
+          node --check audio-shake.js
+          node --check diagnostics.js
+          node --check game-engine.js
+          node --check gostop-notifications-sw.js
+          node --check i18n.js
+          node --check mobile-fullscreen.js
           node --check online-client.js
+          node --check presentation-plan.js
+          node --check ranked-client.js
+          node --check runtime-config.js
+          node --check session-authority.js
           node --check admin.js
+          node --check scripts/write-runtime-config.mjs
+          node --check server/account-store.mjs
           node --check server/admin-api.mjs
-          node --check server/worker.mjs
+          node --check server/backup-store.mjs
           node --check server/game-room.mjs
+          node --check server/lobby.mjs
+          node --check server/protocol.mjs
           node --check server/ranked-room-core.mjs
           node --check server/ranked-room-final.mjs
           node --check server/ranked-account-store.mjs
+          node --check server/room-core.mjs
+          node --check server/worker.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
