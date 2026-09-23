@@ -664,3 +664,6 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 @media(max-width:700px){.player-info-popover{grid-template-columns:64px minmax(0,1fr);gap:12px;padding:15px 16px}.player-info-avatar{width:60px;height:60px;font-size:15px}.player-info-copy strong{font-size:23px}.player-info-copy>span{font-size:14px}}
 
 .solo-start-overlay[hidden]{display:none!important}
+
+/* Captured-card title opens the same complete score breakdown as the Points pill. */
+.capture-summary-trigger{cursor:pointer;user-select:none}.capture-summary-trigger:hover,.capture-summary-trigger:focus-visible{color:#ffd677;text-decoration:underline;text-underline-offset:2px;outline:none}

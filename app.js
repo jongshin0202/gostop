@@ -2308,6 +2308,12 @@
   setupLanguageMenu();
   document.querySelector('.human-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_A);});
   document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_B);});
+  document.querySelectorAll('.capture-summary-trigger[data-score-owner]').forEach(trigger=>{
+    const playerId=trigger.dataset.scoreOwner==='player'?PLAYER_A:PLAYER_B;
+    const open=event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(playerId);};
+    trigger.addEventListener('click',open);
+    trigger.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;open(event);});
+  });
   if(els.scoreDialog)els.scoreDialog.addEventListener('click',event=>{if(event.target===els.scoreDialog)els.scoreDialog.close();});
   els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
   els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});

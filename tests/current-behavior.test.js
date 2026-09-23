@@ -344,12 +344,12 @@ test('Go/Stop eligibility requires threshold and a strict score increase',()=>{
 
 test('Pi transfer prefers ordinary Pi and falls back to double Pi',async()=>{
   const state=useState(stateWith({
-    ai:api.makePlayer({captured:cards('m11-2','m4-3')})
+    ai:api.makePlayer({captured:cards('m11-3','m4-3')})
   }));
   await api.stealPiAnimated('human',1);
   assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3');
   await api.stealPiAnimated('human',1);
-  assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3,m11-2');
+  assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3,m11-3');
 });
 
 test('Nagari increments and caps carry power at three',async()=>{
@@ -2524,7 +2524,7 @@ test('normal staged and deck cards keep viewport-scaled canonical dimensions wit
 test('tutorial derives category examples from canonical metadata and explains every 2-Single card',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
   assert.match(source,/card\.type==='bright'/);assert.match(source,/card\.type==='animal'/);assert.match(source,/card\.type==='ribbon'/);assert.match(source,/card\.flags\.includes\('doublePi'\)/);assert.match(source,/card\.flags\.includes\('switchPi'\)/);
-  assert.equal(extractedEngine.masterDeck.find(card=>card.month===11&&card.flags.includes('doublePi')).id,'m11-2');
+  assert.equal(extractedEngine.masterDeck.find(card=>card.month===11&&card.flags.includes('doublePi')).id,'m11-3');
   assert.equal(extractedEngine.masterDeck.find(card=>card.month===12&&card.flags.includes('doublePi')).id,'m12-4');
   assert.equal(extractedEngine.masterDeck.find(card=>card.flags.includes('switchPi')).id,'m9-1');
   assert.doesNotMatch(html,/m9-1,m11-2,m12-2/);
@@ -2960,8 +2960,10 @@ test('ranked Solo launch stays covered until the opening presentation is visible
   assert.ok(opening.indexOf("els.openingOverlay.classList.add('show')")<opening.indexOf("els.soloStartOverlay.hidden=true"),'opening overlay must be visible before launch cover is removed');
 });
 
-test('score-pill click opens score breakdown without bubbling into Player Info',()=>{
-  const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+test('score pill and Captured Cards title open the same complete score breakdown',()=>{
+  const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),htmlSource=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   assert.match(appSource,/\.human-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_A\);\}\)/);
   assert.match(appSource,/\.cpu-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_B\);\}\)/);
+  assert.match(htmlSource,/capture-summary-trigger" data-score-owner="player" role="button" tabindex="0"/);
+  assert.match(appSource,/capture-summary-trigger\[data-score-owner\]/);assert.match(appSource,/openScoreBreakdown\(playerId\)/);
 });
