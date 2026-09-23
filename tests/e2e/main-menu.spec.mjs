@@ -6,6 +6,13 @@ const selfAccount={
   stats:{global:{gamesPlayed:39,wins:20}},activeRanked:null,
   incomingFriendRequestCount:0
 };
+const otherPlayer={
+  accountId:'acct-other',nickname:'Jjineeland',countryCode:'US',walletCoins:252,
+  rank:2,globalRank:2,monthlyRank:1,score:3.4,coinsPerGame:3.4,
+  gamesPlayed:10,wins:4,losses:6,online:true,status:'available',challengeable:true,similarity:82,
+  friendState:'none',playedTogether:3,
+  headToHead:{wins:2,losses:1,coinsWon:8,coinsLost:3,lastPlayedAt:'2026-09-21T20:00:00.000Z'}
+};
 const globalRows=[
   {accountId:'acct-self',nickname:'Jong',countryCode:'US',rank:1,score:11.41,totalCoins:445,gamesPlayed:39,wins:20,losses:19,walletCoins:2021},
   {accountId:'acct-other',nickname:'Jjineeland',countryCode:'US',rank:2,score:3.4,totalCoins:34,gamesPlayed:10,wins:4,losses:6,walletCoins:252}
@@ -25,17 +32,25 @@ const profileFor=id=>id==='acct-other'?{
 };
 
 async function installHarness(page){
-  await page.addInitScript(account=>{
+  await page.addInitScript(({account,other})=>{
     localStorage.setItem('gostop-auth-token','e2e-token');
     localStorage.setItem('gostop-account-cache',JSON.stringify(account));
     class FakeWebSocket extends EventTarget{
       static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;
       constructor(){super();this.readyState=FakeWebSocket.CONNECTING;setTimeout(()=>{this.readyState=FakeWebSocket.OPEN;this.dispatchEvent(new Event('open'));},0);}
-      send(){}
+      emit(message){setTimeout(()=>this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(message)})),0);}
+      send(raw){
+        let message={};try{message=JSON.parse(raw);}catch(_){return;}
+        if(message.type==='recommendations')this.emit({type:'recommendations',players:[other],onlineCount:1});
+        else if(message.type==='search')this.emit({type:'searchResults',players:[other],onlineCount:1,autoMatching:false});
+        else if(message.type==='autoMatchStart')this.emit({type:'autoMatchCandidate',candidate:other});
+        else if(message.type==='autoMatchCancel')this.emit({type:'autoMatchCancelled'});
+        else if(message.type==='socialProfiles')this.emit({type:'socialProfiles',players:[other]});
+      }
       close(){if(this.readyState===FakeWebSocket.CLOSED)return;this.readyState=FakeWebSocket.CLOSED;this.dispatchEvent(new Event('close'));}
     }
     globalThis.WebSocket=FakeWebSocket;
-  },selfAccount);
+  },{account:selfAccount,other:otherPlayer});
 
   await page.route('https://commons.wikimedia.org/**',route=>route.abort());
   await page.route(authority+'/**',async route=>{
@@ -53,8 +68,11 @@ async function installHarness(page){
     else if(path==='/api/player-profile'){
       const posted=request.postDataJSON?.()||JSON.parse(request.postData()||'{}');
       body={ok:true,player:profileFor(posted.accountId)};
-    }else if(path==='/api/social')body={ok:true,friends:[],incoming:[],outgoing:[],history:[],recommendations:[]};
-    else if(path==='/api/social/search')body={ok:true,players:[]};
+    }else if(path==='/api/social')body={ok:true,friends:[],incoming:[],outgoing:[],history:[],recommendations:[otherPlayer]};
+    else if(path==='/api/social/search')body={ok:true,players:[{...otherPlayer,friendState:'none'}]};
+    else if(path==='/api/social/request')body={ok:true,state:'outgoing',accountId:'acct-other'};
+    else if(path==='/api/social/respond')body={ok:true,state:'friend'};
+    else if(path==='/api/social/unfriend')body={ok:true,state:'none'};
     else if(path==='/api/auth/logout')body={ok:true};
     return route.fulfill({status:200,headers,body:JSON.stringify(body)});
   });
@@ -223,5 +241,55 @@ test('mobile How to Play header remains inside the viewport and its close button
   expect(dialog.y).toBeGreaterThanOrEqual(0);
   expect(header.y).toBeGreaterThanOrEqual(dialog.y);
   expect(close.y+close.height).toBeLessThanOrEqual(nav.y+1);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+
+test('Online Play browser flow covers Browse Top 10, Search Player, and Auto Match candidate preview',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#onlinePlayMenuBtn').click();
+  await expect(page.locator('#onlineLobbyPanel')).toBeVisible();
+
+  await page.locator('#browsePlayersBtn').click();
+  await expect(page.locator('#browsePlayerResults')).toBeVisible();
+  await expect(page.locator('#browsePlayerResults')).toContainText('Jjineeland');
+  await expect(page.locator('#browsePlayerResults')).toContainText('82% match');
+
+  await page.locator('#searchPlayersBtn').click();
+  await expect(page.locator('[data-online-section="search"]')).toBeVisible();
+  await page.locator('#onlineNicknameSearch').fill('Jjinee');
+  await page.locator('#onlineNicknameSearchBtn').click();
+  await expect(page.locator('#searchPlayerResults')).toBeVisible();
+  await expect(page.locator('#searchPlayerResults')).toContainText('Jjineeland');
+
+  await page.locator('#autoMatchBtn').click();
+  await expect(page.locator('#autoMatchCandidateAccept')).toBeVisible();
+  await expect(page.locator('body')).toContainText('Jjineeland');
+  await page.locator('#autoMatchCandidateCancel').click();
+  await expect(page.locator('#autoMatchCandidateAccept')).toBeHidden();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('Friends Search sends a Friend Request and shows the confirmation dialog',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#friendsMenuBtn').click();
+  await expect(page.locator('#socialScreen')).toBeVisible();
+  await page.locator('[data-social-tab="search"]').click();
+  await page.locator('#socialSearchInput').fill('Jjinee');
+  await page.locator('#socialSearchBtn').click();
+  await expect(page.locator('#socialList')).toContainText('Jjineeland');
+  await page.locator('#socialList [data-social-action="add"]').click();
+  await expect(page.getByRole('heading',{name:'Friend Request Sent'})).toBeVisible();
+  await expect(page.locator('#friendRequestSentText')).toContainText('Jjineeland');
+  await page.locator('#friendRequestSentOk').click();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('Log Out clears the signed-in identity and restores Create ID and Log In controls',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#accountLogoutBtn').click();
+  await expect(page.locator('#accountCreateBtn')).toBeVisible();
+  await expect(page.locator('#accountLoginBtn')).toBeVisible();
+  await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toHaveCount(0);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
