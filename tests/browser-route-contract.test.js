@@ -73,7 +73,7 @@ test('release route integration: main-menu Player Info succeeds through the actu
 
 test('release transport contract: Online room HTTP uses same-origin production proxy but room WebSocket stays direct',()=>{
   assert.match(online,/requestUrl\(path\)/);
-  assert.match(online,/gostoplive\.com/);
+  assert.ok(online.includes('gostoplive\\.com'));
   assert.match(online,/fetch\(this\.requestUrl\(path\)/);
   assert.match(online,/new URL\(\`\$\{this\.baseUrl\}\/api\/rooms\/\$\{room\.roomCode\}\/ws\`\)/);
 });
