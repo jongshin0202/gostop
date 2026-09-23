@@ -2416,7 +2416,7 @@ test('tutorial keeps its header and navigation outside the scrolling lesson body
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);
   assert.match(html,/class="tutorial-header"/);assert.match(html,/class="dialog-close tutorial-close"/);assert.match(html,/class="tutorial-sections"/);
-  const tutorialCardRule=css.slice(css.lastIndexOf('.tutorial-card{'),css.indexOf('}',css.lastIndexOf('.tutorial-card{'))+1);assert.match(tutorialCardRule,/display:grid/);assert.match(tutorialCardRule,/grid-template-rows:auto auto minmax\(0,1fr\)/);assert.match(tutorialCardRule,/overflow:hidden/);
+  assert.match(css,/\.tutorial-card\{box-sizing:border-box;[^}]*overflow:hidden;display:grid;grid-template-rows:auto auto minmax\(0,1fr\)/);
   assert.match(css,/\.tutorial-sections\{[^}]*overflow-y:auto/);assert.match(css,/\.tutorial-header \.tutorial-close\{position:static/);
   assert.match(css,/@media\(max-width:700px\)\{[^]*\.tutorial-dialog\{width:100vw;height:100dvh/);
 });
