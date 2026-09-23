@@ -101,3 +101,20 @@ test('unfriend confirmation uses an in-app dialog instead of blocking browser co
   assert.match(ranked,/await confirmUnfriend\(nickname\)/);
   assert.doesNotMatch(ranked,/globalThis\.confirm\s*\(/);
 });
+
+
+test('Player Info supports clicking your own nickname, not only other players',async()=>{
+  const db=store(),self=await register(db,'self-profile@example.com','SelfProfile');
+  const response=await db.fetch(req('/player-profile',{token:self.session.token,body:{accountId:self.account.id}}));
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.player.accountId,self.account.id);
+  assert.equal(data.player.nickname,'SelfProfile');
+  assert.equal(typeof data.player.walletCoins,'number');
+  assert.equal(typeof data.player.sessionsPlayed,'number');
+  assert.equal(typeof data.player.gamesPlayed,'number');
+  assert.equal(typeof data.player.globalRank,'number');
+  assert.equal(typeof data.player.monthlyRank,'number');
+  assert.equal(data.player.headToHead.sessionsPlayedTogether,0);
+  assert.equal(data.player.headToHead.gamesPlayedTogether,0);
+});
