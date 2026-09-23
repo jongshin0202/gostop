@@ -31,8 +31,8 @@ const profileFor=id=>id==='acct-other'?{
   headToHead:{sessionsPlayedTogether:0,gamesPlayedTogether:0,wins:0,losses:0,coinsWon:0,coinsLost:0,netCoins:0}
 };
 
-async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false}={}){
-  await page.addInitScript(({account,other})=>{
+async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false,notificationPermission=null}={}){
+  await page.addInitScript(({account,other,notificationPermission})=>{
     localStorage.setItem('gostop-auth-token','e2e-token');
     localStorage.setItem('gostop-account-cache',JSON.stringify(account));
     class FakeWebSocket extends EventTarget{
@@ -50,7 +50,13 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
       close(){if(this.readyState===FakeWebSocket.CLOSED)return;this.readyState=FakeWebSocket.CLOSED;const event=new CloseEvent('close',{code:1000});this.dispatchEvent(event);this.onclose?.(event);}
     }
     globalThis.WebSocket=FakeWebSocket;
-  },{account:selfAccount,other:otherPlayer});
+    if(notificationPermission){
+      const fakeNotification={permission:notificationPermission,requestPermission:async()=>notificationPermission};
+      Object.defineProperty(globalThis,'Notification',{configurable:true,value:fakeNotification});
+      Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:{register:async()=>({showNotification:async()=>{}})}});
+      Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:notificationPermission==='granted'?'granted':notificationPermission==='denied'?'denied':'prompt',addEventListener:()=>{}})}});
+    }
+  },{account:selfAccount,other:otherPlayer,notificationPermission});
 
   await page.route('https://commons.wikimedia.org/**',route=>route.abort());
   await page.route(authority+'/**',async route=>{
@@ -83,10 +89,10 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
   });
 }
 
-async function openMenu(page,{mobile=false,boards,socialSnapshot,profileFailure=false}={}){
+async function openMenu(page,{mobile=false,boards,socialSnapshot,profileFailure=false,notificationPermission=null}={}){
   if(mobile)await page.setViewportSize({width:390,height:844});
   const pageErrors=[];page.on('pageerror',error=>pageErrors.push(error));
-  await installHarness(page,{boards,socialSnapshot,profileFailure});
+  await installHarness(page,{boards,socialSnapshot,profileFailure,notificationPermission});
   await page.goto('/',{waitUntil:'domcontentloaded'});
   await expect(page.locator('.main-menu-title')).toContainText('GoStop');
   await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toBeVisible();
@@ -450,5 +456,26 @@ test('every Friends tab is reachable and can return without stale overlays or br
   await page.locator('#socialCloseTop').click();
   await expect(page.locator('#socialScreen')).toBeHidden();
   await expect(page.locator('.gostop-main-menu')).toBeVisible();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+
+test('blocked Notifications uses the in-app recovery flow and never silently fails',async({page})=>{
+  const errors=await openMenu(page,{notificationPermission:'denied'});
+  await page.locator('#accountSettingsBtn').click();
+  await expect(page.locator('#settingsDialog')).toHaveJSProperty('open',true);
+  const button=page.locator('#enablePlayNotificationsBtn');
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(page.locator('#notificationBlockedDialog')).toHaveJSProperty('open',true);
+  await expect(page.locator('#notificationBlockedTitle')).toContainText(/Notifications/i);
+  await expect(page.locator('#notificationBlockedRetry')).toBeDisabled();
+  await page.locator('#notificationBlockedReady').check();
+  await expect(page.locator('#notificationBlockedRetry')).toBeEnabled();
+  await page.locator('#notificationBlockedRetry').click();
+  await expect(page.locator('#notificationBlockedStatus')).not.toHaveText('');
+  await expect(page.locator('#notificationBlockedReady')).not.toBeChecked();
+  await page.locator('#notificationBlockedCancel').click();
+  await expect(page.locator('#notificationBlockedDialog')).toHaveJSProperty('open',false);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
