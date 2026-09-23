@@ -796,8 +796,8 @@
       if(pendingRequest?.requestId===message.requestId){pendingRequest=null;closeRequestDialog(requestDialog);}enqueueMissedRequest(message);return;
     }
     if(message.type==='challengeNoAnswer'){
-      autoMatchSearching=false;syncAutoMatchControls();const name=message.by?.nickname||pendingOutgoingRequest?.to?.nickname||rt('playerFallback');pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);$('lobbyStatus').textContent='';
-      $('declinedDialogTitle').textContent=rt('noResponseTitle');$('declinedDialogText').innerHTML=playerSentenceHtml(rt('noResponseText',{name}),message.by||pendingOutgoingRequest?.to);if(!declinedDialog.open)declinedDialog.showModal();refreshVisibleLobbyResults();return;
+      autoMatchSearching=false;syncAutoMatchControls();const player=message.by||pendingOutgoingRequest?.to||null,name=player?.nickname||rt('playerFallback');pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);$('lobbyStatus').textContent='';
+      $('declinedDialogTitle').textContent=rt('noResponseTitle');$('declinedDialogText').innerHTML=playerSentenceHtml(rt('noResponseText',{name}),player);if(!declinedDialog.open)declinedDialog.showModal();refreshVisibleLobbyResults();return;
     }
     if(message.type==='challengeResolved'){if(pendingRequest?.requestId===message.requestId)pendingRequest=null;closeRequestDialog(requestDialog);return;}
     if(message.type==='challengeAcceptedCreateRoom'){autoMatchSearching=false;autoMatchCandidate=null;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();void createAcceptedChallengeRoom(message);return;}
@@ -806,10 +806,10 @@
     if(message.type==='challengeRoomReady'){void joinAcceptedChallengeRoom(message);return;}
     if(message.type==='challengeRoomHandoffComplete'){pendingChallengeCreate=null;pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);return;}
     if(message.type==='challengeDeclined'){
-      autoMatchSearching=false;autoMatchCandidate=null;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();const name=message.by?.nickname||pendingOutgoingRequest?.to?.nickname||rt('playerFallback');
+      autoMatchSearching=false;autoMatchCandidate=null;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();const player=message.by||pendingOutgoingRequest?.to||null,name=player?.nickname||rt('playerFallback');
       const matchesCurrent=!pendingOutgoingRequest||!pendingOutgoingRequest.requestId||!message.requestId||pendingOutgoingRequest.requestId===message.requestId;
       if(matchesCurrent){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);}$('lobbyStatus').textContent='';
-      $('declinedDialogTitle').textContent=rt('requestDeclinedTitle');$('declinedDialogText').innerHTML=playerSentenceHtml(rt('requestDeclinedText',{name}),message.by||pendingOutgoingRequest?.to);if(!declinedDialog.open)declinedDialog.showModal();
+      $('declinedDialogTitle').textContent=rt('requestDeclinedTitle');$('declinedDialogText').innerHTML=playerSentenceHtml(rt('requestDeclinedText',{name}),player);if(!declinedDialog.open)declinedDialog.showModal();
       refreshVisibleLobbyResults();return;
     }
     if(message.type==='challengeCancelled'||message.type==='challengeError'){
