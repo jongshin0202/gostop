@@ -317,9 +317,10 @@ test('session admin summarizes players, wins, Coins and milestones with player a
 });
 
 test('admin UI avoids browser-native blocking alert and confirm dialogs for normal dashboard actions',()=>{
-  assert.doesNotMatch(adminSource,/\bwindow\.confirm\s*\(/);
-  assert.doesNotMatch(adminSource,/\b(?:window\.)?alert\s*\(/);
-  assert.match(adminSource,/function showAdminNotice\(/);
-  assert.match(adminSource,/System Reset Completed/);
-  assert.match(adminSource,/System Restore Completed/);
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.doesNotMatch(adminJs,/\bwindow\.confirm\s*\(/);
+  assert.doesNotMatch(adminJs,/\b(?:window\.)?alert\s*\(/);
+  assert.match(adminJs,/function showAdminNotice\(/);
+  assert.match(adminJs,/System Reset Completed/);
+  assert.match(adminJs,/System Restore Completed/);
 });
