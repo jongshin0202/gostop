@@ -86,7 +86,7 @@
     return String(value);
   };
   function exportCsv(){
-    if(!currentExport.length){alert('There is no table data to export.');return;}
+    if(!currentExport.length){showAdminNotice('Nothing to Export','There is no table data to export.');return;}
     const keys=[...new Set(currentExport.flatMap(row=>Object.keys(row)))],quote=v=>`"${String(v??'').replace(/"/g,'""')}"`;
     const csv=[keys.map(key=>quote(humanize(key))).join(','),...currentExport.map(row=>keys.map(key=>quote(plainExportValue(row[key]))).join(','))].join('\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${currentExportName}.csv`;a.click();URL.revokeObjectURL(url);
@@ -115,7 +115,7 @@
   function showFailureDialog(error,message){
     const finalMessage=message||error?.message||'The admin page could not connect.';
     try{const overlay=ensureFailureOverlay();overlay.querySelector('#failureMessage').textContent=finalMessage;overlay.hidden=false;overlay.style.display='grid';}
-    catch(_){window.alert(`Could Not Open Admin\n\n${finalMessage}`);}
+    catch(error){console.error('Could Not Open Admin',finalMessage,error);}
     const inline=document.getElementById('loginError');if(inline)inline.textContent=finalMessage;
   }
 
