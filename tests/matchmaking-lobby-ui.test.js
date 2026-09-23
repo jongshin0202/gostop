@@ -246,8 +246,15 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20260922-4/);
   assert.match(index,/styles\.css\?v=20260922-2/);
   assert.match(index,/game-engine\.js\?v=20260922-1/);
-  assert.match(index,/ranked-client\.js\?v=20260922-13/);
+  assert.match(index,/ranked-client\.js\?v=20260923-1/);
   assert.match(index,/app\.js\?v=20260922-6/);
   assert.match(index,/diagnostics\.js\?v=20260923-1/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
+});
+
+test('production browser REST calls use same-origin while lobby WebSocket remains direct',()=>{
+  const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
+  assert.match(client,/productionSameOriginRest/);
+  assert.match(client,/location\.origin/);
+  assert.match(client,/\/api\/lobby\/ws/);
 });
