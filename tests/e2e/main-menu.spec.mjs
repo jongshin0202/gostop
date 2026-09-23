@@ -37,7 +37,7 @@ async function installHarness(page){
     localStorage.setItem('gostop-account-cache',JSON.stringify(account));
     class FakeWebSocket extends EventTarget{
       static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;
-      constructor(){super();this.readyState=FakeWebSocket.CONNECTING;setTimeout(()=>{this.readyState=FakeWebSocket.OPEN;this.dispatchEvent(new Event('open'));},0);}
+      constructor(){super();this.readyState=FakeWebSocket.CONNECTING;setTimeout(()=>{this.readyState=FakeWebSocket.OPEN;const event=new Event('open');this.dispatchEvent(event);this.onopen?.(event);},0);}
       emit(message){setTimeout(()=>this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(message)})),0);}
       send(raw){
         let message={};try{message=JSON.parse(raw);}catch(_){return;}
@@ -47,7 +47,7 @@ async function installHarness(page){
         else if(message.type==='autoMatchCancel')this.emit({type:'autoMatchCancelled'});
         else if(message.type==='socialProfiles')this.emit({type:'socialProfiles',players:[other]});
       }
-      close(){if(this.readyState===FakeWebSocket.CLOSED)return;this.readyState=FakeWebSocket.CLOSED;this.dispatchEvent(new Event('close'));}
+      close(){if(this.readyState===FakeWebSocket.CLOSED)return;this.readyState=FakeWebSocket.CLOSED;const event=new CloseEvent('close',{code:1000});this.dispatchEvent(event);this.onclose?.(event);}
     }
     globalThis.WebSocket=FakeWebSocket;
   },{account:selfAccount,other:otherPlayer});
@@ -73,6 +73,10 @@ async function installHarness(page){
     else if(path==='/api/social/request')body={ok:true,state:'outgoing',accountId:'acct-other'};
     else if(path==='/api/social/respond')body={ok:true,state:'friend'};
     else if(path==='/api/social/unfriend')body={ok:true,state:'none'};
+    else if(path==='/api/auth/login')body={ok:true,account:selfAccount,session:{token:'e2e-login-token'},notices:[]};
+    else if(path==='/api/auth/register')body={ok:true,account:selfAccount,session:{token:'e2e-register-token'},notices:[],awards:{signupCoins:100,dailyCoins:100}};
+    else if(path==='/api/rooms')body={ok:true,room:{roomCode:'ABCDEFGHJK2345',credential:'host-credential',seatId:'playerA',status:'waiting',ranked:false,rankedMode:'free'}};
+    else if(path==='/api/referrals/create')body={ok:true,referralToken:'a'.repeat(64)};
     else if(path==='/api/auth/logout')body={ok:true};
     return route.fulfill({status:200,headers,body:JSON.stringify(body)});
   });
@@ -291,5 +295,48 @@ test('Log Out clears the signed-in identity and restores Create ID and Log In co
   await expect(page.locator('#accountCreateBtn')).toBeVisible();
   await expect(page.locator('#accountLoginBtn')).toBeVisible();
   await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toHaveCount(0);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+
+test('logout then login restores the authenticated Player HUD through the real login form',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#accountLogoutBtn').click();
+  await page.locator('#accountLoginBtn').click();
+  await expect(page.locator('#accountDialog')).toHaveJSProperty('open',true);
+  await page.locator('#loginForm input[name="email"]').fill('jong@example.com');
+  await page.locator('#loginForm input[name="password"]').fill('UsefulPass9');
+  await page.locator('#loginForm button[type="submit"]').click();
+  await expect(page.locator('#accountDialog')).toHaveJSProperty('open',false);
+  await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toContainText('Jong');
+  await expect(page.locator('#accountMenuIdentity')).toContainText('2021');
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('Settings language menu changes the main menu locale and remains usable',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#accountSettingsBtn').click();
+  await page.locator('#languageBtn').click();
+  await expect(page.locator('#languageMenu')).toBeVisible();
+  const korean=page.locator('#languageMenu button').filter({hasText:/한국/}).first();
+  await expect(korean).toBeVisible();
+  await korean.click();
+  await expect(page.locator('#trainingModeBtn')).not.toHaveText('Training Mode');
+  await expect(page.locator('#languageMenu')).toBeHidden();
+  await page.locator('#settingsOk').click();
+  await expect(page.locator('#settingsDialog')).toHaveJSProperty('open',false);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('Friendly Create Room produces a shareable guest link with referral token before any signup requirement',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#freeFriendBtn').click();
+  await page.locator('#freeCreateRoomBtn').click();
+  await expect(page.locator('#freeShareLinkBox')).toBeVisible({timeout:8000});
+  const href=await page.locator('#freeShareLink').getAttribute('href');
+  expect(href).toContain('room=ABCDEFGHJK2345');
+  expect(href).toContain('mode=free');
+  expect(href).toContain('ref=');
+  await expect(page.locator('#freeOnlineStatus')).toContainText(/Waiting|waiting/i);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
