@@ -70,11 +70,11 @@ test('Friends UI exposes Friends, Requests, History, Recommended, Search, Play, 
 
 test('public Player Info returns career, login, session, head-to-head and signed Coin data',async()=>{
   const db=store(),viewer=await register(db,'profile-viewer@example.com','ProfileViewer'),opponent=await register(db,'profile-opponent@example.com','ProfileOpponent');
-  await action(db,'/internal/session/start',viewer.session.token,{sessionId:'profile-session-1',mode:'online',accountIds:[viewer.account.id,opponent.account.id],roomCode:'ABCDEFGHJK2345'});
+  let sessionResponse=await db.fetch(req('/internal/session/start',{body:{sessionId:'profile-session-1',mode:'online',accountIds:[viewer.account.id,opponent.account.id],roomCode:'ABCDEFGHJK2345'}}));assert.equal(sessionResponse.status,201);
   await settle(db,'profile-game-1',viewer,opponent,viewer);
   await settle(db,'profile-game-2',viewer,opponent,opponent);
   await action(db,'/internal/session/end',viewer.session.token,{sessionId:'profile-session-1'});
-  await action(db,'/internal/session/start',viewer.session.token,{sessionId:'profile-session-2',mode:'online',accountIds:[viewer.account.id,opponent.account.id],roomCode:'BCDEFGHJKM2345'});
+  sessionResponse=await db.fetch(req('/internal/session/start',{body:{sessionId:'profile-session-2',mode:'online',accountIds:[viewer.account.id,opponent.account.id],roomCode:'BCDEFGHJKM2345'}}));assert.equal(sessionResponse.status,201);
   await settle(db,'profile-game-3',viewer,opponent,viewer);
   const response=await db.fetch(req('/player-profile',{token:viewer.session.token,body:{accountId:opponent.account.id}}));assert.equal(response.status,200);const data=await response.json(),player=data.player;
   assert.equal(player.accountId,opponent.account.id);assert.equal(player.nickname,'ProfileOpponent');assert.ok(Number.isInteger(player.globalRank));assert.ok(Number.isInteger(player.monthlyRank));
