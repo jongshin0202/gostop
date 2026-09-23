@@ -113,7 +113,7 @@
 
   const rankedLocale=()=>Object.hasOwn(RANKED_TEXT,document.documentElement.lang)?document.documentElement.lang:'en';
   const rt=(key,vars={})=>{const locale=rankedLocale(),base=globalThis.GoStopI18n?.dictionaries?.[locale]?.[key],template=DISCONNECT_NOTICE_TEXT[locale]?.[key]??RANKED_MORE_TEXT[locale]?.[key]??RANKED_TEXT[locale]?.[key]??base??DISCONNECT_NOTICE_TEXT.en[key]??RANKED_MORE_TEXT.en[key]??RANKED_TEXT.en[key]??key;return String(template).replace(/\{(\w+)\}/g,(_,name)=>vars[name]??'');};
-  const localizedError=error=>{const locale=rankedLocale(),key=`error_${error?.code||''}`,mapped=RANKED_MORE_TEXT[locale]?.[key]??RANKED_MORE_TEXT.en[key];return mapped||(locale==='en'?(error?.message||rt('requestFailed')):rt('requestFailed'));};
+  const localizedError=error=>{const locale=rankedLocale(),key=`error_${error?.code||''}`,mapped=RANKED_MORE_TEXT[locale]?.[key]??RANKED_MORE_TEXT.en[key],message=String(error?.message||'');if(error?.name==='TypeError'||/failed to fetch|networkerror|load failed/i.test(message))return rt('requestFailed');return mapped||(locale==='en'?(message||rt('requestFailed')):rt('requestFailed'));};
   const coinText=value=>`${Number(value)||0} ${rt('coins')}`;
   function readAcknowledgedNoticeCache(accountId){
     acknowledgedNoticeIds.clear();if(!accountId)return;
