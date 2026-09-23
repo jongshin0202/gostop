@@ -2867,7 +2867,7 @@ test('intentional Online exits clean room UI and ignore only their resulting dis
   const cleanup=source.slice(source.indexOf('function returnOnlineToMenu'),source.indexOf("els.opponentEndedOkBtn.addEventListener"));
   const disconnect=source.slice(source.indexOf("adapter.addEventListener('disconnected'"),source.indexOf("adapter.addEventListener('snapshot'"));
   assert.match(reconcile,/if\(flow\.disconnectCancelled\|\|flow\.endedByYou\)\{if\(onlineAnonymousMode&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd\?\.\(snapshot\)\)return;returnOnlineToMenu\(\);return;\}/,'Friendly local quit offers referral signup before cleanup while ranked no-penalty exits still return directly');
-  assert.match(reconcile,/onlineAnonymousMode&&flow\.forceEnded\?t\('friendForceEnded'\):t\('opponentEnded'\)/,'Free Friend forced disconnect uses the dedicated force-ended message');
+  assert.match(reconcile,/onlineAnonymousMode\?\(flow\.forceEnded\?t\('friendForceEnded'\):t\('friendEnded'\)\):t\('opponentEnded'\)/,'Free Friend endings use dedicated normal and force-ended messages');
   assert.match(source,/opponentEndedOkBtn\.addEventListener\('click',\(\)=>\{[^]*handleFriendlySessionEnd\?\.\(snapshot\)[^]*returnOnlineToMenu\(\)/,'the opponent OK path offers Friendly referral signup before final cleanup');
   assert.match(cleanup,/onlineMode=false/);
   assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);assert.match(cleanup,/localStorage\.removeItem\('gostop-active-ranked-room'\)/);
