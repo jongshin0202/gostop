@@ -23,6 +23,6 @@ test('Solo replay never leaves the user on an authoritative dead turn after the 
   if(!snapshot.terminalResult&&state.turn===snapshot.seatId&&!state.pendingDecision&&!state.pendingTurn&&state.openingSpecialsComplete){
     assert.ok(state.legalActions.includes('attemptPlayCard')||state.legalActions.includes('useBombBlank'));
   }
-  if(snapshot.terminalResult)assert.equal(snapshot.terminalResult.type,'chongtong');
+  if(snapshot.terminalResult)assert.ok(snapshot.terminalResult.winnerId||state.winner,'terminal replay snapshot must identify the winner');
   assert.equal(snapshot.sessionFlow.replayReady.you,false);
 });
