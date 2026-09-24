@@ -8,12 +8,12 @@
   <style id="gostopBootCloak">
     html.gostop-boot-pending,html.gostop-boot-pending body{margin:0;background:#17110d}
     html.gostop-boot-pending #appShell{visibility:hidden!important}
-    #gostopBootSplash{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#17110d;color:#f4e6cf;font-family:Arial,sans-serif}
+    #gostopBootSplash{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#17110d;color:#fff;font-family:Arial,sans-serif}
     #gostopBootSplash strong{font-size:clamp(36px,7vw,64px);letter-spacing:-2px;text-shadow:0 4px 18px rgba(0,0,0,.55)}
     #gostopBootSplash em{font-style:italic}
     html:not(.gostop-boot-pending) #gostopBootSplash{display:none!important}
   </style>
-  <link rel="stylesheet" href="styles.css?v=20260922-2" />
+  <link rel="stylesheet" href="styles.css?v=20260923-3" />
 </head>
 <body>
   <div id="gostopBootSplash" aria-hidden="true"><strong>GoStop <em>Live!</em></strong></div>
@@ -28,6 +28,14 @@
         <button data-i18n="resultQuit" id="newGameBtn" class="glass-btn stop-btn game-quit-header" type="button">Quit Game</button>
       </div>
     </header>
+
+    <aside id="trainingCoachPanel" class="training-coach-panel" role="dialog" aria-labelledby="trainingCoachTitle" aria-describedby="trainingCoachText" hidden>
+      <div class="training-coach-copy">
+        <strong id="trainingCoachTitle">Training Coach</strong>
+        <p id="trainingCoachText"></p>
+      </div>
+      <button id="trainingCoachDismiss" type="button" aria-label="Dismiss training advice">×</button>
+    </aside>
 
     <main class="game-stage">
       <section class="opponent-zone" data-i18n-aria="computer" aria-label="Computer player">
@@ -100,6 +108,7 @@
       </header>
       <nav class="tutorial-nav" aria-label="Tutorial sections">
         <a href="#guide-overview" data-i18n="overview">Overview</a>
+        <a href="#guide-controls">Using the App</a>
         <a href="#guide-types" data-i18n="cardTypes">Card Types</a>
         <a href="#guide-turn" data-i18n="turnBasics">Turn Basics</a>
         <a href="#guide-matches" data-i18n="matchExamples">Match Examples</a>
@@ -121,6 +130,30 @@
           <h4 class="tutorial-subhead">The 12 month families</h4>
           <p class="tutorial-muted">Every month has exactly four cards. You match by month, regardless of whether the cards are Brights, Pictures, Stripes, or Singles.</p>
           <div id="monthGuide" class="month-guide"></div>
+        </section>
+
+        <section id="guide-controls">
+          <h3>Using GoStop Live!</h3>
+          <p class="tutorial-lead">The game supports mouse, touch, and flick controls. The instructions below automatically show the controls for the device you are using.</p>
+          <div class="tutorial-platform-guide" data-tutorial-platform="desktop">
+            <h4>PC / Mac</h4>
+            <ol class="tutorial-steps">
+              <li><strong>Move the mouse across your hand</strong> to browse cards. The card under the pointer lifts so you can inspect it without playing it.</li>
+              <li><strong>Click the card you want to play.</strong> If only one floor match is legal, GoStop Live resolves it automatically.</li>
+              <li>If two legal floor cards can be hit, <strong>click the floor card you want to capture.</strong></li>
+              <li>You can also <strong>press and flick a card upward with the pointer</strong> to throw it quickly.</li>
+            </ol>
+          </div>
+          <div class="tutorial-platform-guide" data-tutorial-platform="mobile">
+            <h4>Phone / Tablet</h4>
+            <ol class="tutorial-steps">
+              <li><strong>Tap a card once to select it.</strong> Tap the selected card again to play it. When a floor target choice appears, tap the floor card you want to hit.</li>
+              <li>For a faster play, <strong>press and hold a card, then flick your finger upward</strong>. The card is thrown as soon as the flick is recognized.</li>
+              <li><strong>Slide your finger left or right across your hand</strong> without flicking upward to browse the cards. The currently selected card lifts as your finger moves.</li>
+              <li>You can tap outside your hand to clear the current touch selection.</li>
+            </ol>
+          </div>
+          <p class="tutorial-important">Training Mode uses these same controls, but adds strategy coaching and highlights a recommended hand card and floor target after five seconds.</p>
         </section>
 
         <section id="guide-types">
@@ -522,10 +555,10 @@
   <script src="game-engine.js?v=20260922-1"></script>
   <script src="session-authority.js"></script>
   <script src="runtime-config.js"></script>
-  <script src="ranked-client.js?v=20260923-3"></script>
+  <script src="ranked-client.js?v=20260923-4"></script>
   <script src="online-client.js?v=20260923-1"></script>
   <script src="presentation-plan.js"></script>
-  <script src="app.js?v=20260923-1"></script>
+  <script src="app.js?v=20260923-2"></script>
   <script src="diagnostics.js?v=20260923-1"></script>
 </body>
 </html>
