@@ -333,7 +333,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/\.menu-category-title\{font:800 clamp\(19px,2\.35vw,24px\)/);
   assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
   assert.match(source,/submenu\.style\.setProperty\('--submenu-open-height',\`\$\{submenu\.scrollHeight\+24\}px\`\)/);
-  assert.match(source,/\.solo-start-overlay:has\(\.menu-category-block\.expanded\)/);
+  assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
   assert.match(html,/ranked-client\.js\?v=20260924-1/);
