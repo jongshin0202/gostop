@@ -329,14 +329,14 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion\{[^]*?width:min\(720px,90vw\)!important[^]*?grid-template-columns:1fr!important/);
   assert.match(source,/\.account-menu-box\{[^]*?width:min\(720px,90vw\)!important[^]*?box-sizing:border-box/);
-  assert.match(source,/\.menu-category-toggle\{[^]*?min-height:50px[^]*?padding:8px 15px/);
-  assert.match(source,/\.menu-category-title\{font:800 clamp\(19px,2\.35vw,24px\)/);
+  assert.match(source,/\.menu-category-toggle\{[^]*?min-height:38px[^]*?padding:6px 14px/);
+  assert.match(source,/\.menu-category-title\{font:800 clamp\(14px,1\.6vw,18px\)/);
   assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
   assert.match(source,/submenu\.style\.setProperty\('--submenu-open-height',\`\$\{submenu\.scrollHeight\+24\}px\`\)/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(html,/ranked-client\.js\?v=20260924-1/);
+  assert.match(source,/\.menu-category-title\{font:800 clamp\(14px,1\.6vw,18px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:40px[^]*?\.menu-category-title\{font-size:clamp\(14px,4\.6vw,18px\)/);assert.match(html,/ranked-client\.js\?v=20260924-2/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
