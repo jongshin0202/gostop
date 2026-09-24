@@ -6,6 +6,7 @@
   let orientationChangeAt=0;
   let fullscreenExitAt=0;
   let orientationRecoveryArmed=false;
+let mainMenuFullscreenArmed=false;
 
   function isMobileFullscreenEligible(env=globalThis){
     const touchPoints=Number(env.navigator?.maxTouchPoints||0);
@@ -88,7 +89,8 @@
     document.head.appendChild(style);
   }
 
-  document.addEventListener('click',handleFullscreenClick,{capture:true});
+  globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible});
+document.addEventListener('click',handleFullscreenClick,{capture:true});
   document.addEventListener('fullscreenchange',handleFullscreenChange);
   globalThis.addEventListener?.('orientationchange',handleOrientationChange);
 
