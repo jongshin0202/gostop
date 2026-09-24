@@ -717,3 +717,35 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .tutorial-flow-card,.tutorial-example-row,.tutorial-split-visual{gap:7px;padding:9px}
   .tutorial-score-table{min-width:620px;font-size:.9rem}.tutorial-score-table th,.tutorial-score-table td{padding:8px}
 }
+
+
+/* Training Mode strategy coach */
+.training-coach-panel{
+  position:fixed;z-index:1375;left:50%;top:76px;transform:translateX(-50%);
+  width:min(720px,calc(100vw - 28px));display:flex;align-items:flex-start;gap:12px;
+  padding:11px 13px 11px 15px;border:1px solid rgba(242,199,90,.78);border-radius:14px;
+  background:linear-gradient(180deg,rgba(34,27,16,.97),rgba(19,15,10,.97));
+  color:#f7ecd4;box-shadow:0 14px 35px rgba(0,0,0,.43),inset 0 1px rgba(255,255,255,.06);
+  pointer-events:auto;
+}
+.training-coach-panel[hidden]{display:none!important}
+.training-coach-copy{min-width:0;flex:1}.training-coach-copy strong{display:block;margin-bottom:3px;color:#ffd974;font:900 13px/1.1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.training-coach-copy p{margin:0;font:650 13px/1.38 system-ui,sans-serif;color:#f5ead5}
+#trainingCoachDismiss{flex:0 0 32px;width:32px;height:32px;border:1px solid rgba(242,199,90,.34);border-radius:999px;background:#ffffff09;color:#f6e8c8;font-size:20px;line-height:1;cursor:pointer}
+#trainingCoachDismiss:hover,#trainingCoachDismiss:focus-visible{background:#ffffff16;outline:2px solid rgba(242,199,90,.65);outline-offset:2px}
+.floor .floor-card.training-recommended{z-index:22;outline:4px solid #ffd65e;outline-offset:4px;box-shadow:0 0 0 7px rgba(255,214,94,.18),0 0 28px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42);animation:trainingTargetPulse .72s ease-in-out infinite alternate}
+.floor .floor-card.training-recommended.training-warning{outline-color:#ffca52;box-shadow:0 0 0 7px rgba(228,59,50,.16),0 0 18px rgba(228,59,50,.42),0 0 30px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42)}
+@keyframes trainingTargetPulse{from{filter:brightness(1)}to{filter:brightness(1.2)}}
+.tutorial-platform-guide{margin-top:12px;padding:14px;border:1px solid #ffffff18;border-radius:12px;background:#ffffff0b}
+.tutorial-platform-guide h4{margin:0 0 8px;color:#ffd677}.tutorial-platform-guide[hidden]{display:none!important}
+
+@media(max-width:700px){
+  .training-coach-panel{top:47px;width:calc(100vw - 16px);padding:9px 9px 9px 11px;border-radius:11px;gap:8px}
+  .training-coach-copy strong{font-size:10px}.training-coach-copy p{font-size:11px;line-height:1.32}
+  #trainingCoachDismiss{width:29px;height:29px;flex-basis:29px;font-size:18px}
+  .floor .floor-card.training-recommended{outline-width:3px;outline-offset:2px;box-shadow:0 0 0 4px rgba(255,214,94,.17),0 0 20px rgba(255,214,94,.62),0 7px 14px rgba(0,0,0,.4)}
+}
+@media(max-height:540px) and (orientation:landscape){
+  .training-coach-panel{top:43px;max-width:62vw;padding:6px 8px}
+  .training-coach-copy p{font-size:10px;line-height:1.2}
+}
