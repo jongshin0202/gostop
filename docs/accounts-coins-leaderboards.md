@@ -43,7 +43,7 @@ Transactional verification email is sent through Resend from the Cloudflare Work
 4. Global Leaderboard — public; no account is required to view it; Global/Monthly rotating views.
 5. How to Play — moved from in-game header to main menu.
 
-The top-right account box shows Nickname and Wallet Coins when authenticated. When anonymous it shows Create ID plus an explanation that an ID enables friend games and leaderboard competition.
+The player/account box sits at the bottom of the main menu and shows Nickname and Wallet Coins when authenticated. When anonymous it shows Create ID plus an explanation that an ID enables friend games and leaderboard competition.
 
 ## Ranked game settlement
 
