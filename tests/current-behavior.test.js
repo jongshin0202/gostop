@@ -2926,7 +2926,7 @@ test('Online starter messages are localized and viewer-relative for both seats',
 });
 
 
-test('Training Mode warns about an opponent completing a three-ribbon set and recommends blocking it',()=>{
+test('Training Mode warns about an opponent completing a three-ribbon set and recommends the blocking hand/floor pair',()=>{
   const warning=card('m3-2');
   const state=useState(stateWith({
     turn:'playerA',
@@ -2936,7 +2936,38 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   }));
   assert.equal(api.trainingThreatValue(warning,state.ai)>0,true);
   assert.equal(api.trainingWarningCard().id,'m3-2');
-  assert.equal(api.recommendedHumanCard().id,'m3-1');
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m3-1');
+  assert.equal(recommendation.target.id,'m3-2');
+  assert.match(recommendation.reason,/3-Stripe set/);
+  assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/highlighted/);
+});
+
+test('Training Mode opening strategy recognizes a reachable third Godori bird and waits five seconds before turn coaching',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m8-2'),card('m10-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m4-1'),card('m8-3')]}),
+    ai:api.makePlayer()
+  }));
+  assert.match(api.trainingOpeningStrategy(),/Godori/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
+  assert.match(coach,/setTimeout\(\(\)=>\{/);
+  assert.match(coach,/\},5000\)/);
+  assert.match(source,/trainingRecommendedFloorCardId/);
+  assert.match(source,/showTrainingCoach\('Opening Strategy'/);
+  assert.match(source,/The highlighted floor card is the stronger target/);
+});
+
+test('How to Play includes device-specific click, touch navigation, and flick controls',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.match(html,/id="guide-controls"/);
+  assert.match(html,/data-tutorial-platform="desktop"/);
+  assert.match(html,/data-tutorial-platform="mobile"/);
+  assert.match(html,/Move the mouse across your hand/);
+  assert.match(html,/flick your finger upward/);
+  assert.match(html,/Slide your finger left or right across your hand/);
 });
 
 test('Training Mode state is independent from normal Free Solo state',()=>{
@@ -2947,6 +2978,7 @@ test('Training Mode state is independent from normal Free Solo state',()=>{
   assert.equal(snapshot.trainingMode,false);
   assert.equal(snapshot.hintCardId,null);
   assert.equal(snapshot.trainingWarningFloorCardId,null);
+  assert.equal(snapshot.trainingRecommendedFloorCardId,null);
 });
 
 
