@@ -310,7 +310,7 @@ test('main menu uses two exclusive accordion choices with Training inside Friend
   assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);assert.match(source,/rankedGroupNote\.textContent=rt\('competitiveGamingNote'\)/);
 });
 
-test('main menu is a compact two-column game lobby with visible title, player HUD, and Hwatu decoration',()=>{
+test('main menu is a polished balanced accordion lobby with compact choices, centered player HUD, and Hwatu energy',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
   assert.match(source,/menuTitle\.classList\.add\('main-menu-title'\)/);
   assert.doesNotMatch(source,/MATCH · CAPTURE · GO OR STOP/);
@@ -320,15 +320,23 @@ test('main menu is a compact two-column game lobby with visible title, player HU
   assert.match(source,/addFan\('right',\['m8-1','m9-1','m12-1'\]\)/);
   assert.match(source,/main-menu-floor-cards/);
   assert.match(source,/\['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'\]/);
-  assert.match(source,/\.main-menu-floor-cards\{[^]*?display:block/);
+  assert.match(source,/\.main-menu-floor-cards\{[^]*?display:block[^]*?animation:mainMenuCardGlow/);
+  assert.match(source,/@keyframes mainMenuTitleGlow/);
+  assert.match(source,/@keyframes mainMenuChoiceSweep/);
   assert.match(source,/@media\(max-width:1280px\)\{[^]*?\.main-menu-card-fan\{display:none!important\}/);
   assert.match(source,/if\(menuTitle\)menuTitle\.after\(floorCards\);else overlay\.prepend\(floorCards\);menu\.after\(accountBox\)/);
   assert.match(source,/@media\(max-height:760px\)/);
   assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion\{[^]*?width:min\(720px,90vw\)!important[^]*?grid-template-columns:1fr!important/);
+  assert.match(source,/\.account-menu-box\{[^]*?width:min\(720px,90vw\)!important[^]*?box-sizing:border-box/);
+  assert.match(source,/\.menu-category-toggle\{[^]*?min-height:50px[^]*?padding:8px 15px/);
+  assert.match(source,/\.menu-category-title\{font:800 clamp\(19px,2\.35vw,24px\)/);
+  assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
+  assert.match(source,/submenu\.style\.setProperty\('--submenu-open-height',\`\$\{submenu\.scrollHeight\+24\}px\`\)/);
+  assert.match(source,/\.solo-start-overlay:has\(\.menu-category-block\.expanded\)/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(html,/ranked-client\.js\?v=20260923-4/);
+  assert.match(html,/ranked-client\.js\?v=20260924-1/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
