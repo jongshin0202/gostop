@@ -75,6 +75,21 @@ test('start-screen capture listener only reacts to main-screen buttons',()=>{
   assert.equal(calls,1);
 });
 
+test('main-menu reveal attempts fullscreen and a denied automatic request stays armed for the next menu gesture',async()=>{
+  let calls=0,allow=false;
+  const {api,listeners,document}=loadFullscreen({requestFullscreen:()=>{calls++;return allow?Promise.resolve():Promise.reject(new Error('user activation required'));}});
+  assert.equal(api.requestMainMenuFullscreen(document),true);
+  assert.equal(calls,1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isMainMenuFullscreenArmed(),true);
+  allow=true;
+  const menuSurface={closest(selector){return selector==='#soloStartOverlay, .topbar'?this:null;}};
+  listeners.click.fn({target:menuSurface});
+  assert.equal(calls,2);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isMainMenuFullscreenArmed(),false);
+});
+
 test('rotation-related fullscreen exit is re-armed only for the next gameplay gesture',()=>{
   let calls=0;
   const {api,listeners,windowListeners,document}=loadFullscreen({overlayHidden:true,requestFullscreen:()=>{calls++;return Promise.resolve();}});
@@ -105,6 +120,9 @@ test('fullscreen integration preserves click propagation and portrait stack orde
   assert.match(source,/fullscreenchange/);
   assert.match(source,/orientationchange/);
   assert.match(source,/orientationRecoveryArmed/);
+  assert.match(source,/requestMainMenuFullscreen/);
+  assert.match(source,/mainMenuFullscreenArmed/);
+  assert.match(source,/GoStopMobileFullscreen/);
   assert.match(css,/@media \(max-width:700px\) and \(orientation:portrait\)/);
   assert.match(css,/:fullscreen \.app-shell\{height:100vh;height:100dvh\}/);
   assert.match(css,/:fullscreen \.topbar\{[\s\S]*height:40px;[\s\S]*min-height:40px/);
