@@ -1,0 +1,18 @@
+/* Touch-only mobile hand controls. Desktop hover/click behavior is unchanged. */
+@media (hover:none) and (pointer:coarse) and (max-width:1000px){
+  #playerHand{touch-action:none;overflow-x:hidden!important;-webkit-tap-highlight-color:transparent}
+  /* Touch browsers can leave :hover stuck on the first card touched. Neutralize that
+     native hover so only the gesture controller decides which card is raised. */
+  #playerHand .hand-card:hover{transform:none!important}
+  #playerHand .hand-card{transition:transform .07s ease-out,box-shadow .07s ease-out!important}
+  #playerHand .hand-card-slot.is-mobile-selected,
+  #playerHand .hand-card-slot.is-mobile-preview{z-index:40}
+  #playerHand .hand-card-slot.is-mobile-selected .hand-card,
+  #playerHand .hand-card-slot.is-mobile-preview .hand-card{
+    transform:translate3d(0,calc(-12px + var(--mobile-hand-drag-y,0px)),0) rotate(-1deg)!important;
+    box-shadow:0 8px 14px rgba(0,0,0,.38);
+    will-change:transform;
+  }
+  /* The card under the finger tracks immediately; the previous card retracts in 70 ms. */
+  #playerHand .hand-card-slot.is-mobile-preview .hand-card{transition:none!important}
+}
