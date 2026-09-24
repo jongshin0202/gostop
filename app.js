@@ -758,9 +758,13 @@
   }
   function finishTargetChoice(cardId=null){
     const choice=presentation.targetChoice;if(!choice)return false;
+    const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
+    const trainingRecommendationAtChoice=presentation.trainingTurnRecommendation;
+    if(presentation.trainingMode&&card&&trainingRecommendationAtChoice?.target&&choice.matches.some(item=>item.id===trainingRecommendationAtChoice.target.id)&&card.id!==trainingRecommendationAtChoice.target.id){
+      showTrainingCoach('Strategy Note',`The highlighted floor card is the stronger target for this play. ${trainingRecommendationAtChoice.reason}`);
+    }
     presentation.targetChoice=null;presentation.targetChoiceCleanup=null;
     els.floor.querySelectorAll('[data-target-choice="1"]').forEach(el=>{el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');delete el.dataset.targetChoice;});
-    const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
     choice.resolve(card);return !!card;
   }
   async function chooseFloorTarget(matches, message='Choose which card to hit'){
