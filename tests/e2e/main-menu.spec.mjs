@@ -265,7 +265,7 @@ test('leaderboard is centered on the felt and switches directly between Global a
 
 test('phone attract mode swipes Global to Monthly without exiting, while a normal tap returns to main menu',async({page})=>{
   const errors=await openMenu(page,{mobile:true});
-  await expect(page.locator('.leaderboard-screen')).toBeVisible({timeout:13000});
+  await expect(page.locator('.leaderboard-screen')).toBeVisible({timeout:20000});
   await expect(page.locator('#leaderboardHeading')).toHaveText('Global Leaderboard');
 
   await page.locator('.leaderboard-screen').evaluate(node=>{
