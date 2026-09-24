@@ -6,7 +6,7 @@
   let orientationChangeAt=0;
   let fullscreenExitAt=0;
   let orientationRecoveryArmed=false;
-let mainMenuFullscreenArmed=false;
+  let mainMenuFullscreenArmed=false;
 
   function isMobileFullscreenEligible(env=globalThis){
     const touchPoints=Number(env.navigator?.maxTouchPoints||0);
@@ -37,14 +37,42 @@ let mainMenuFullscreenArmed=false;
     return !!button.closest?.(`#${START_OVERLAY_ID}, .topbar`);
   }
 
+  function isMainMenuInteraction(target,doc=document){
+    const overlay=doc?.getElementById?.(START_OVERLAY_ID);
+    if(!overlay||overlay.hidden)return false;
+    return !!target?.closest?.(`#${START_OVERLAY_ID}, .topbar`);
+  }
+
+  function requestMainMenuFullscreen(doc=document){
+    if(!isMobileFullscreenEligible(globalThis))return false;
+    const root=doc?.documentElement;
+    if(!root||doc.fullscreenElement||typeof root.requestFullscreen!=='function'){
+      mainMenuFullscreenArmed=!doc?.fullscreenElement;
+      return false;
+    }
+    mainMenuFullscreenArmed=true;
+    try{
+      const request=root.requestFullscreen();
+      if(request&&typeof request.then==='function'){
+        request.then(()=>{mainMenuFullscreenArmed=false;}).catch(()=>{mainMenuFullscreenArmed=true;});
+      }else{
+        mainMenuFullscreenArmed=false;
+      }
+      return true;
+    }catch(_){
+      mainMenuFullscreenArmed=true;
+      return false;
+    }
+  }
+
   function isGameplayInteraction(target){
     return !!target?.closest?.('.app-shell');
   }
 
   function handleFullscreenClick(event){
     if(!isMobileFullscreenEligible(globalThis))return;
-    if(isStartScreenButton(event.target,document)){
-      requestGameFullscreen(document);
+    if((mainMenuFullscreenArmed||isStartScreenButton(event.target,document))&&isMainMenuInteraction(event.target,document)){
+      requestMainMenuFullscreen(document);
       return;
     }
     if(orientationRecoveryArmed&&isGameplayInteraction(event.target)){
@@ -64,6 +92,7 @@ let mainMenuFullscreenArmed=false;
     const now=Date.now();
     if(document.fullscreenElement){
       orientationRecoveryArmed=false;
+      mainMenuFullscreenArmed=false;
       fullscreenExitAt=0;
     }else{
       fullscreenExitAt=now;
@@ -90,15 +119,16 @@ let mainMenuFullscreenArmed=false;
   }
 
   globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible});
-document.addEventListener('click',handleFullscreenClick,{capture:true});
+  document.addEventListener('click',handleFullscreenClick,{capture:true});
   document.addEventListener('fullscreenchange',handleFullscreenChange);
   globalThis.addEventListener?.('orientationchange',handleOrientationChange);
 
   if(globalThis.GOSTOP_TEST_MODE===true){
     globalThis.GOSTOP_FULLSCREEN_TEST_API=Object.freeze({
-      isMobileFullscreenEligible,requestGameFullscreen,isStartScreenButton,isGameplayInteraction,
+      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,
       handleFullscreenClick,handleFullscreenChange,handleOrientationChange,
-      isOrientationRecoveryArmed:()=>orientationRecoveryArmed
+      isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
+      isMainMenuFullscreenArmed:()=>mainMenuFullscreenArmed
     });
   }
 })();
