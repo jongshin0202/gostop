@@ -69,7 +69,7 @@ function blankStats(){return {gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,tota
 function scoreFor(stats){return (Number(stats?.totalCoinsWon)||0)-(Number(stats?.totalCoinsLost)||0);}
 function leaderboardRow(account,stats){
   const gamesPlayed=Number(stats.gamesPlayed)||0,wins=Number(stats.wins)||0,losses=Number.isFinite(Number(stats.losses))?Number(stats.losses):Math.max(0,gamesPlayed-wins),totalCoins=Number(stats.totalCoinsWon)||0,totalCoinsLost=Number(stats.totalCoinsLost)||0,score=totalCoins-totalCoinsLost;
-  return {nickname:account.nickname,score,netCoins:score,totalCoins,totalCoinsLost,gamesPlayed,wins,losses,provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};
+  return {nickname:account.nickname,score,netCoins:score,coinsPerGame:gamesPlayed?totalCoins/gamesPlayed:0,totalCoins,totalCoinsLost,gamesPlayed,wins,losses,provisional:gamesPlayed<PROVISIONAL_GAMES,countryCode:account.location?.countryCode||null,regionCode:account.location?.regionCode||null};
 }
 function aggregateMonthlyStats(monthly){
   const total=blankStats();
