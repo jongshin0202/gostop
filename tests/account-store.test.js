@@ -101,7 +101,7 @@ test('stale active ranked pointer can be cleared only for its expected session',
   assert.equal(cleared.account.activeRanked,null);assert.equal((await store.accountById(account.id)).activeRanked,null);
 });
 
-test('leaderboard counts only coins won while wallet includes wins and losses',async()=>{
+test('leaderboard ranks by competitive Coins earned minus lost while wallet includes rewards and settlement',async()=>{
   const store=makeStore();
   const a=await (await store.fetch(post('/register',{email:'a@example.com',nickname:'Alpha',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
   const b=await (await store.fetch(post('/register',{email:'b@example.com',nickname:'Beta',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
@@ -109,7 +109,7 @@ test('leaderboard counts only coins won while wallet includes wins and losses',a
   await store.fetch(post('/internal/game/settle',{gameId:'g2',mode:'online',participants:[{accountId:a.account.id,won:false,walletDelta:-12,coinsWon:0},{accountId:b.account.id,won:true,walletDelta:12,coinsWon:12}]}));
   const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json();
   const alpha=board.global.find(row=>row.nickname==='Alpha'),beta=board.global.find(row=>row.nickname==='Beta');
-  assert.equal(alpha.totalCoins,17);assert.equal(alpha.gamesPlayed,2);assert.equal(alpha.wins,1);assert.equal(alpha.losses,1);assert.equal(alpha.score,8.5);assert.equal(beta.totalCoins,12);assert.equal(beta.wins,1);assert.equal(beta.losses,1);assert.equal(beta.score,6);
+  assert.equal(alpha.totalCoins,17);assert.equal(alpha.totalCoinsLost,12);assert.equal(alpha.netCoins,5);assert.equal(alpha.gamesPlayed,2);assert.equal(alpha.wins,1);assert.equal(alpha.losses,1);assert.equal(alpha.coinsPerGame,8.5);assert.equal(alpha.score,5);assert.equal(beta.totalCoins,12);assert.equal(beta.totalCoinsLost,17);assert.equal(beta.netCoins,-5);assert.equal(beta.wins,1);assert.equal(beta.losses,1);assert.equal(beta.coinsPerGame,6);assert.equal(beta.score,-5);
   const storedA=await store.accountById(a.account.id);assert.equal(storedA.walletCoins,205);
 });
 
@@ -118,15 +118,15 @@ test('Global leaderboard repairs stale zero global stats from accumulated monthl
   const store=makeStore('2026-09-19T17:30:00.000Z');
   const registered=await (await store.fetch(post('/register',{email:'global-repair@example.com',nickname:'GlobalRepair',password:'BetterPass9',confirmPassword:'BetterPass9'}))).json();
   const account=await store.accountById(registered.account.id);
-  account.stats={global:{gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,milestones:{}},monthly:{
-    '2026-08':{gamesPlayed:3,wins:2,losses:1,totalCoinsWon:24,milestones:{ppeok:1}},
-    '2026-09':{gamesPlayed:4,wins:1,losses:3,totalCoinsWon:28,milestones:{ppeok:2}}
+  account.stats={global:{gamesPlayed:0,wins:0,losses:0,totalCoinsWon:0,totalCoinsLost:0,milestones:{}},monthly:{
+    '2026-08':{gamesPlayed:3,wins:2,losses:1,totalCoinsWon:24,totalCoinsLost:6,milestones:{ppeok:1}},
+    '2026-09':{gamesPlayed:4,wins:1,losses:3,totalCoinsWon:28,totalCoinsLost:11,milestones:{ppeok:2}}
   }};
   await store.storage.put(`account:${account.id}`,account);
   const board=await (await store.fetch(new Request('https://accounts/leaderboards'))).json();
   const global=board.global.find(row=>row.nickname==='GlobalRepair'),monthly=board.monthly.find(row=>row.nickname==='GlobalRepair');
-  assert.equal(global.gamesPlayed,7);assert.equal(global.wins,3);assert.equal(global.losses,4);assert.equal(global.totalCoins,52);assert.equal(global.score,52/7);
-  assert.equal(monthly.gamesPlayed,4);assert.equal(monthly.totalCoins,28);
+  assert.equal(global.gamesPlayed,7);assert.equal(global.wins,3);assert.equal(global.losses,4);assert.equal(global.totalCoins,52);assert.equal(global.totalCoinsLost,17);assert.equal(global.score,35);assert.equal(global.coinsPerGame,52/7);
+  assert.equal(monthly.gamesPlayed,4);assert.equal(monthly.totalCoins,28);assert.equal(monthly.totalCoinsLost,11);assert.equal(monthly.score,17);
 });
 
 test('player directory search returns wallet wins losses leaderboard score and rank for offline lookup',async()=>{
