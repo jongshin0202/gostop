@@ -119,6 +119,7 @@ test('Friendly room authority exposes completed-game count and relays signup sta
 test('Friendly Play With Friend offers signup after game ten and session end, then delays inviter reward until ten outside Competitive games',()=>{
   const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8'),app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),online=fs.readFileSync(new URL('../online-client.js',import.meta.url),'utf8'),accountStoreSource=fs.readFileSync(new URL('../server/account-store.mjs',import.meta.url),'utf8');
   assert.match(ranked,/Get 200 Bonus Coins/);assert.match(ranked,/friendlyGamesPlayed/);assert.match(ranked,/showFriendlySignupOffer\('game10'\)/);assert.match(ranked,/showFriendlySignupOffer\('session-end'\)/);
+  const guestContext=ranked.slice(ranked.indexOf('function friendlyGuestContext'),ranked.indexOf('function sendFriendlyReferralStatus'));assert.match(guestContext,/roomCode/);assert.doesNotMatch(guestContext,/playerB|seatId/);
   assert.match(ranked,/You will earn 200 bonus Coins after they complete 10 Competitive games outside games played with you/);
   assert.match(ranked,/Your friend is signing up/);assert.match(ranked,/Your friend has declined signing up/);
   assert.match(ranked,/200 Bonus Coins Ready/);assert.match(ranked,/Collect 200 Bonus Coins/);assert.match(ranked,/You have collected 200 Bonus Coins!/);
