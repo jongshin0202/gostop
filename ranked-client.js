@@ -660,64 +660,16 @@
   let expandedMenuSection=null;
   function setMenuSection(section=null){
     expandedMenuSection=section==='competitive'||section==='friendly'?section:null;
-    const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement.classList.contains('gostop-performance-lite');
     for(const [name,group,toggle,submenu] of [['competitive',rankedGroup,rankedToggle,rankedSubmenu],['friendly',freeGroup,freeToggle,freeSubmenu]]){
       const open=expandedMenuSection===name;
-      if(open){
-        const height=lite?(submenu.children.length*52+24):submenu.scrollHeight+24;
-        submenu.style.setProperty('--submenu-open-height',`${height}px`);
-      }
-      group.classList.toggle('expanded',open);toggle.setAttribute('aria-expanded',open?'true':'false');submenu.setAttribute('aria-hidden',open?'false':'true');submenu.inert=!open;
+      group.classList.toggle('expanded',open);
+      toggle.setAttribute('aria-expanded',open?'true':'false');
+      submenu.setAttribute('aria-hidden',open?'false':'true');
+      submenu.inert=!open;
+      submenu.hidden=!open;
     }
   }
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
-  let immediateMenuProgrammaticTarget=null,immediateMenuSuppressTarget=null,immediateMenuSuppressUntil=0;
-  overlay.addEventListener('click',event=>{
-    const button=event.target?.closest?.('button');if(!button)return;
-    if(button===immediateMenuProgrammaticTarget)return;
-    if(button===immediateMenuSuppressTarget&&Date.now()<immediateMenuSuppressUntil){
-      event.preventDefault();event.stopImmediatePropagation();
-    }
-  },true);
-  function installImmediateMobileTap(button){
-    if(!button)return;
-    let press=null;
-    const activate=()=>{
-      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+650;
-      immediateMenuProgrammaticTarget=button;
-      try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
-    };
-    const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
-    const pointerCapable=typeof globalThis.PointerEvent==='function';
-    if(!pointerCapable&&touchCapable){
-      button.addEventListener('touchstart',event=>{
-        if(event.touches.length!==1){press=null;return;}
-        const touch=event.touches[0];press={id:touch.identifier,x:touch.clientX,y:touch.clientY};
-      },{passive:true});
-      button.addEventListener('touchend',event=>{
-        if(!press)return;
-        const touch=[...event.changedTouches].find(item=>item.identifier===press.id),start=press;press=null;
-        if(!touch)return;
-        const distance=Math.hypot(touch.clientX-start.x,touch.clientY-start.y);
-        if(distance>18)return;
-        event.preventDefault();event.stopPropagation();activate();
-      },{passive:false});
-      button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
-      return;
-    }
-    button.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='mouse')return;
-      press={id:event.pointerId,x:event.clientX,y:event.clientY};
-    },{passive:true});
-    button.addEventListener('pointerup',event=>{
-      if(!press||event.pointerId!==press.id||event.pointerType==='mouse')return;
-      const distance=Math.hypot(event.clientX-press.x,event.clientY-press.y);press=null;
-      if(distance>18)return;
-      event.preventDefault();activate();
-    },{passive:false});
-    button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
-  }
-  [rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
@@ -1534,7 +1486,22 @@
     try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode,{resumeExisting:true}));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
     catch(error){returnReconnectState=null;returnReconnectBusy=false;closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);await refreshAccount();revealCurrentMainMenu();}
   });
-  $('returnGameNo').addEventListener('click',()=>{if(activeReconnectPending())void finishReconnectAsAbandonment();else{closeReturnGameDialog();revealCurrentMainMenu();}});
+  $('returnGameNo').addEventListener('click',async()=>{
+    if(activeReconnectPending()){void finishReconnectAsAbandonment();return;}
+    const active=returnReconnectState||account?.activeRanked;
+    if(active?.mode==='solo'&&active?.roomCode){
+      const no=$('returnGameNo');if(no.disabled)return;no.disabled=true;
+      try{
+        const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
+        if(data?.account){account=data.account;renderAccountBox();patchGameIdentity();}
+        try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+      }catch(error){showToast(localizedError(error),6000);}
+      finally{no.disabled=false;}
+    }
+    closeReturnGameDialog();
+    await refreshAccount();
+    revealCurrentMainMenu();
+  });
   $('returnGameOk').addEventListener('click',async()=>{const ok=$('returnGameOk');if(ok.disabled)return;ok.disabled=true;closeReturnGameDialog();await refreshAccount();revealCurrentMainMenu();ok.disabled=false;});
   returnGameDialog.addEventListener('cancel',event=>event.preventDefault());
   function clearVerificationTokenFromUrl(){try{const clean=new URL(location.href);clean.searchParams.delete('verify');if(/^#verify=/i.test(clean.hash))clean.hash='';history.replaceState(null,'',clean.pathname+clean.search+clean.hash);}catch(_){}}
