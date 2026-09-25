@@ -23,71 +23,28 @@ test('staged physical card owns visibility until shared cleanup',()=>{
   assert.match(app,/function removeStage\(id\)[\s\S]*style\.visibility=''\);/);
 });
 
-test('touch selection is card-identity based and resets every new hand/game',()=>{
-  assert.match(presentation,/let selectedCardId=null/);
-  assert.match(presentation,/const cardIdentity=card=>String\(card\?\.dataset\?\.cardId\|\|card\?\.closest\?\.\('\.hand-card-slot'\)\?\.dataset\?\.handKey\|\|''\)/);
-  assert.match(presentation,/selectedCardId=cardIdentity\(card\)/);
+test('mobile hand input is native-touch first and resets every new hand/game',()=>{
+  assert.match(presentation,/doc\.addEventListener\('touchstart'/);
+  assert.match(presentation,/doc\.addEventListener\('touchmove'/);
+  assert.match(presentation,/doc\.addEventListener\('touchend'/);
+  assert.match(presentation,/doc\.addEventListener\('touchcancel'/);
   assert.match(presentation,/doc\.addEventListener\('gostop-hand-reset',resetGestureState\)/);
   assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
+  assert.doesNotMatch(presentation,/pointerTouchSupported|nativeTouchSupported/);
 });
 
-test('Android prefers Pointer Events and keeps native Touch Events only as a fallback',()=>{
-  assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const nativeTouchSupported=touchCapable&&!pointerTouchSupported/);
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
-  assert.match(presentation,/addEventListener\('pointermove'/);
-  assert.match(presentation,/addEventListener\('pointerup'/);
-  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
-  assert.match(presentation,/addEventListener\('touchmove'/);
-  assert.match(presentation,/addEventListener\('touchend'/);
-});
-
-test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{
-  assert.match(presentation,/sideways>=10&&sideways>Math\.max\(8,Math\.abs\(up\)\*1\.10\)/);
-  assert.match(presentation,/up>=10&&up>sideways\*1\.05|up>=8&&up>sideways\*\.9/);
-  assert.match(presentation,/state\.intent='browse'/);
-  assert.match(presentation,/state\.intent='flick'/);
-  assert.doesNotMatch(presentation,/const flick=state\.intent!=='browse'&&isUpwardFlick/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
-  assert.match(presentation,/const browsed=!flick&&\(state\.intent==='browse'\|\|Math\.abs\(dx\)>=18&&Math\.abs\(dx\)>Math\.abs\(dy\)\*\.9\)/);
-  assert.match(presentation,/const tap=Math\.abs\(dx\)<=28&&Math\.abs\(dy\)<=28&&endTime-state\.startTime<=1000/);
-  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
-  assert.match(presentation,/suppressNextClick\(state\.cardId\)/);
-});
-
-test('browse release clears the raised hover instead of leaving the last card sticking out',()=>{
-  const pointerEnd=presentation.slice(presentation.indexOf("doc.addEventListener('pointerup'"),presentation.indexOf("doc.addEventListener('pointercancel'"));
-  assert.match(pointerEnd,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
-  const browseBranch=pointerEnd.slice(pointerEnd.indexOf('if(browsed){'),pointerEnd.indexOf('const tap='));
-  assert.doesNotMatch(browseBranch,/commitSelection/);
-});
-
-test('native Touch path commits second tap and upward flick on touch-capable Android',()=>{
-  const touch=presentation.slice(presentation.indexOf('if(nativeTouchSupported){'),presentation.indexOf("doc.addEventListener('click'"));
-  assert.match(touch,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
-  assert.match(touch,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(touch,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId\)/);
-});
-
-test('second tap and upward flick request direct hand activation before synthetic-click fallback',()=>{
-  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
-  assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank\}\}\)/);
-  assert.match(presentation,/handled=!doc\.dispatchEvent\(request\)/);
-  assert.match(presentation,/if\(handled\)return true/);
+test('native touch keeps horizontal browse, upward flick, and second tap as distinct outcomes',()=>{
+  assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
+  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(card\)/);
+  assert.match(presentation,/else if\(browsed\)\{[\s\S]*clearSelection\(\)/);
+  assert.match(presentation,/else if\(secondTap\)\{[\s\S]*triggerPlay\(card\)/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
-  assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
-  assert.match(app,/if\(onlineMode\)\{[\s\S]*if\(!rankedHandTurnAvailable\(\)\)return;[\s\S]*event\.preventDefault\(\);void humanPlay\(cardId,live\);return;/);
 });
 
-test('ranked gesture activation dispatches by stable card ID before consulting the live DOM',()=>{
-  const trigger=presentation.slice(presentation.indexOf('const triggerPlay=cardOrId=>'),presentation.indexOf('const snapshotHandGeometry'));
-  assert.match(trigger,/const cardId=typeof cardOrId==='string'\?String\(cardOrId\|\|''\):cardIdentity\(initialCard\)/);
-  const dispatchIndex=trigger.indexOf("new CustomEvent('gostop-hand-activate'");
-  const lookupIndex=trigger.indexOf('const card=cardByIdentity(cardId)||initialCard');
-  assert.ok(dispatchIndex>=0&&lookupIndex>dispatchIndex,'direct activation must happen before DOM fallback lookup');
-  assert.doesNotMatch(trigger,/if\(!canUseCard\(initialCard\)\)return false/);
+test('desktop pointer support does not take ownership of touch pointers or normal clicks',()=>{
+  assert.match(presentation,/doc\.addEventListener\('pointerdown',event=>\{[\s\S]*if\(event\.pointerType==='touch'\|\|event\.button!==0\)return/);
+  assert.match(presentation,/doc\.addEventListener\('click',event=>\{[\s\S]*if\(card===bypassClickCard\)return/);
+  assert.match(presentation,/if\(Date\.now\(\)<suppressTouchClicksUntil\|\|Date\.now\(\)<suppressPointerClicksUntil\)/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
