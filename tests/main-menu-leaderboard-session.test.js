@@ -100,7 +100,7 @@ test('coarse mobile menu uses one immediate pointer-up activation path without c
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/button\.addEventListener\('pointerdown'/);
   assert.match(source,/button\.addEventListener\('touchend'/);
-  assert.match(source,/if\(distance>16\)return/);
+  assert.match(source,/if\(distance>18\)return/);
   assert.match(source,/immediateMenuProgrammaticTarget=button;[\s\S]*button\.click\(\)/);
   assert.doesNotMatch(source,/fastMenuPointer|fastMenuSyntheticClick|fastMenuSuppressUntil/);
 });
