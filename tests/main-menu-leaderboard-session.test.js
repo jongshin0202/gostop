@@ -62,7 +62,7 @@ test('leaderboards are public, render immediately, and page controls work even i
   assert.match(source,/class="leaderboard-mode-tabs"/);
   assert.match(source,/id="globalLeaderboardTab"/);assert.match(source,/id="monthlyLeaderboardTab"/);
   assert.match(source,/class="leaderboard-return"/);
-  assert.match(source,/function setLeaderboardHeading\(text\)[^]*?heading\.append\(first,second\)/);
+  assert.match(source,/function setLeaderboardHeading\(text\)[^]*?heading\.append\(first,document\.createTextNode\(' '\),second\)/);
   assert.match(source,/\.leaderboard-title h1\{[^]*?min-height:1\.9em[^]*?display:grid/);
   assert.doesNotMatch(source,/class="leaderboard-controls"/);
 });
