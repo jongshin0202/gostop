@@ -850,7 +850,7 @@
     heading.replaceChildren();
     if(words.length<2){heading.textContent=words[0]||'';return;}
     const first=document.createElement('span'),second=document.createElement('span');
-    first.textContent=words.slice(0,-1).join(' ');second.textContent=words.at(-1);heading.append(first,second);
+    first.textContent=words.slice(0,-1).join(' ');second.textContent=words.at(-1);heading.append(first,document.createTextNode(' '),second);
   }
   function renderLeaderboard(){
     const key=leaderboardPage===0?'global':'monthly',rows=leaderboardData?.[key]||[];
