@@ -55,6 +55,7 @@
     let pointerState=null;
     let suppressPointerClicksUntil=0;
     const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
+    const nativeTouchSupported=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
 
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const requestFrame=globalThis.requestAnimationFrame?.bind(globalThis)||(callback=>setTimeout(callback,16));
@@ -187,8 +188,15 @@
     const triggerPlay=cardOrId=>{
       const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
       if(!canUseCard(card))return false;
+      const cardId=cardIdentity(card);
       touchSelectedCardId=null;
       playerHand()?.classList.remove('gostop-touch-browsing');
+      const CustomEventCtor=globalThis.CustomEvent;
+      if(typeof CustomEventCtor==='function'){
+        const activation=new CustomEventCtor('gostop-hand-activate',{cancelable:true,detail:{cardId,blank:card.classList?.contains?.('blank-turn-card')===true}});
+        const unhandled=doc.dispatchEvent(activation);
+        if(!unhandled)return true;
+      }
       bypassClickCard=card;
       try{card.click();}finally{bypassClickCard=null;}
       return true;
@@ -249,7 +257,10 @@
     };
 
     doc.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='touch'){beginPointerTouch(event);return;}
+      if(event.pointerType==='touch'){
+        if(nativeTouchSupported)return;
+        beginPointerTouch(event);return;
+      }
       if(event.button!==0)return;
       const card=cardFromTarget(event.target);if(!canUseCard(card))return;
       const t=now();pointerState={id:event.pointerId,kind:'mouse',card,cardId:cardIdentity(card),anchorX:event.clientX,anchorY:event.clientY,anchorTime:t,lastX:event.clientX,lastY:event.clientY,intent:null,browsing:false,switched:false,handGeometry:snapshotHandGeometry()};
@@ -281,8 +292,9 @@
       pointerState=null;restoreDraggedCard(state);playerHand()?.classList.remove('gostop-touch-browsing');
     },{capture:true,passive:false});
 
-    // Legacy TouchEvent fallback for browsers without Pointer Events.
-    if(!pointerTouchSupported){
+    // Prefer native TouchEvents on touch devices. Some low-end Android browsers
+    // expose PointerEvent but deliver pointerup/cancel unreliably during card gestures.
+    if(nativeTouchSupported||!pointerTouchSupported){
       const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
       doc.addEventListener('touchstart',event=>{
         if(event.touches.length!==1)return;
