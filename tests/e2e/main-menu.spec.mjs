@@ -312,6 +312,22 @@ test('real mobile touch reaches the ranked humanPlay authority path for second t
     api.setOnlineMode(true);
     globalThis.__rankedTouchActions=[];
     api.setOnlineSubmit(action=>{globalThis.__rankedTouchActions.push(structuredClone(action));return 'touch-action-'+globalThis.__rankedTouchActions.length;});
+    globalThis.__rankedTouchTrace=[];
+    const trace=(type,event)=>globalThis.__rankedTouchTrace.push({
+      type,
+      pointerType:event.pointerType||'',
+      pointerId:event.pointerId??null,
+      defaultPrevented:!!event.defaultPrevented,
+      cardId:event.target?.closest?.('.hand-card')?.dataset?.cardId||event.detail?.cardId||'',
+      detail:event.detail?.cardId?structuredClone(event.detail):null
+    });
+    for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture','click']){
+      document.addEventListener(type,event=>trace(type,event),true);
+    }
+    document.addEventListener('gostop-hand-activate',event=>{
+      trace('gostop-hand-activate-before',event);
+      queueMicrotask(()=>trace('gostop-hand-activate-after',event));
+    },true);
     const hand=document.getElementById('playerHand');
     document.body.appendChild(hand);hand.replaceChildren();
     Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147483000',visibility:'visible',pointerEvents:'auto'});
@@ -330,8 +346,23 @@ test('real mobile touch reaches the ranked humanPlay authority path for second t
 
   const first=await center('m1-1');
   await page.touchscreen.tap(first.x,first.y);
-  expect(await page.evaluate(()=>globalThis.__rankedTouchActions)).toEqual([]);
+  const firstState=await page.evaluate(()=>({
+    actions:globalThis.__rankedTouchActions,
+    trace:globalThis.__rankedTouchTrace,
+    hovered:[...document.querySelectorAll('#playerHand .hand-card-slot.is-hovered')].map(node=>node.dataset.handKey),
+    disabled:[...document.querySelectorAll('#playerHand .hand-card')].map(node=>({id:node.dataset.cardId,disabled:node.disabled}))
+  }));
+  console.log('RANKED_TOUCH_AFTER_FIRST',JSON.stringify(firstState));
+  expect(firstState.actions).toEqual([]);
+  await page.evaluate(()=>{globalThis.__rankedTouchTrace=[];});
   await page.touchscreen.tap(first.x,first.y);
+  const secondState=await page.evaluate(()=>({
+    actions:globalThis.__rankedTouchActions,
+    trace:globalThis.__rankedTouchTrace,
+    hovered:[...document.querySelectorAll('#playerHand .hand-card-slot.is-hovered')].map(node=>node.dataset.handKey),
+    disabled:[...document.querySelectorAll('#playerHand .hand-card')].map(node=>({id:node.dataset.cardId,disabled:node.disabled}))
+  }));
+  console.log('RANKED_TOUCH_AFTER_SECOND',JSON.stringify(secondState));
   await expect.poll(()=>page.evaluate(()=>globalThis.__rankedTouchActions)).toEqual([{type:'playCard',cardId:'m1-1',targetId:null}]);
 
   await page.evaluate(()=>{globalThis.__rankedTouchActions=[];});
