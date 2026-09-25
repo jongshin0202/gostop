@@ -259,11 +259,15 @@ test('Android touch path activates menu taps, second-card tap, and upward flick 
   await page.evaluate(()=>{
     globalThis.__gestureActivations=[];
     const card=document.querySelector('#playerHand .hand-card'),rect=card.getBoundingClientRect();
-    const startX=rect.left+rect.width/2,startY=rect.top+rect.height*.75,pointerId=77;
-    const fire=(type,x,y)=>card.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId,pointerType:'touch',isPrimary:true,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1}));
-    fire('pointerdown',startX,startY);
-    fire('pointermove',startX+3,startY-70);
-    fire('pointerup',startX+3,startY-70);
+    const startX=rect.left+rect.width/2,startY=rect.top+rect.height*.75,identifier=77;
+    const touch=(x,y)=>new Touch({identifier,target:card,clientX:x,clientY:y,screenX:x,screenY:y,pageX:x,pageY:y,radiusX:1,radiusY:1,rotationAngle:0,force:.5});
+    const fire=(type,x,y)=>{
+      const current=touch(x,y),ending=type==='touchend'||type==='touchcancel';
+      card.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,touches:ending?[]:[current],targetTouches:ending?[]:[current],changedTouches:[current]}));
+    };
+    fire('touchstart',startX,startY);
+    fire('touchmove',startX+3,startY-70);
+    fire('touchend',startX+3,startY-70);
   });
   expect(await page.evaluate(()=>globalThis.__gestureActivations)).toEqual(['gesture-test']);
   expect(errors.map(error=>error.message)).toEqual([]);
