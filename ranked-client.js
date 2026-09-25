@@ -657,10 +657,10 @@
   menu.append(rankedGroup,freeGroup,utilities);overlay.appendChild(menu);
 
   let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0;
-  const fastMenuUseTouchEvents=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
+  const fastMenuUsePointerEvents=typeof globalThis.PointerEvent==='function';
   const fastMenuTapButton=target=>target?.closest?.('button');
   overlay.addEventListener('pointerdown',event=>{
-    if(event.pointerType!=='touch'||!event.isPrimary||fastMenuUseTouchEvents)return;
+    if(event.pointerType!=='touch'||!event.isPrimary||!fastMenuUsePointerEvents)return;
     const button=fastMenuTapButton(event.target);
     if(!button||button.disabled||!overlay.contains(button)){fastMenuTapState=null;return;}
     fastMenuTapState={id:event.pointerId,button,x:event.clientX,y:event.clientY,maxDx:0,maxDy:0,at:Date.now()};
@@ -680,7 +680,7 @@
     state.button.click();
   },{capture:true,passive:false});
   overlay.addEventListener('pointercancel',event=>{if(fastMenuTapState?.id===event.pointerId)fastMenuTapState=null;},{capture:true});
-  if(fastMenuUseTouchEvents){
+  if(!fastMenuUsePointerEvents){
     const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
     overlay.addEventListener('touchstart',event=>{
       if(event.touches.length!==1)return;
