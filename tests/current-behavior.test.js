@@ -3006,7 +3006,7 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
   assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
-  assert.match(presentation,/suppressNextClick\(state\.cardId,260\)/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId,180\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
 
