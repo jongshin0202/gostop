@@ -2984,6 +2984,10 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
+  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
+  assert.match(presentation,/Date\.now\(\)\+Math\.max\(80,Number\(ms\)\|\|140\)/);
+  assert.match(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:22,maxDuration:750,minSpeed:\.035,maxHorizontalRatio:\.95/);
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
