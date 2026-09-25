@@ -717,7 +717,7 @@
     },{passive:false});
     button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
   }
-  [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
+  [rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
