@@ -51,8 +51,9 @@
     let bypassClickCard=null;
     let suppressGeneratedClickUntil=0;
     let suppressGeneratedClickCardId='';
-    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
-    const nativeTouchSupported=!pointerTouchSupported&&(('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0);
+    const touchCapable=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
+    const nativeTouchSupported=touchCapable;
+    const pointerTouchSupported=!touchCapable&&typeof globalThis.PointerEvent==='function';
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
@@ -91,7 +92,14 @@
     const triggerPlay=cardOrId=>{
       const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
       if(!canUseCard(card))return false;
+      const cardId=cardIdentity(card),kind=card.classList?.contains('blank-turn-card')?'blank':'card';
       selectedCardId=null;clearVisual();
+      let handled=false;
+      if(typeof globalThis.CustomEvent==='function'){
+        const request=new CustomEvent('gostop-hand-play-request',{cancelable:true,detail:{cardId,kind}});
+        handled=!doc.dispatchEvent(request);
+      }
+      if(handled)return true;
       bypassClickCard=card;
       try{card.click();}finally{bypassClickCard=null;}
       return true;
@@ -187,11 +195,11 @@
         const state=pointerState;if(!state||event.pointerId!==state.id||!touchPointer(event))return;
         pointerState=null;
         const endTime=now(),dx=event.clientX-state.startX,dy=event.clientY-state.startY;
-        const flick=state.intent!=='browse'&&isUpwardFlick(
+        const flick=isUpwardFlick(
           {startX:state.startX,startY:state.startY,endX:event.clientX,endY:event.clientY,duration:Math.max(1,endTime-state.startTime)},
-          {minUpwardDistance:8,minTravelDistance:18,maxDuration:900,minSpeed:.025,maxHorizontalRatio:1.15}
+          {minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:.02,maxHorizontalRatio:1.35}
         );
-        const browsed=state.intent==='browse';
+        const browsed=!flick&&(state.intent==='browse'||Math.abs(dx)>=18&&Math.abs(dx)>Math.abs(dy)*.9);
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
         event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId,420);
         if(flick){clearSelection();triggerPlay(state.cardId);return;}
@@ -257,11 +265,11 @@
         const touch=touchById(event.changedTouches,state.id);touchState=null;
         if(!touch){restoreGhost(state);clearSelection();return;}
         const endTime=now(),dx=touch.clientX-state.startX,dy=touch.clientY-state.startY;
-        const flick=state.intent!=='browse'&&isUpwardFlick(
+        const flick=isUpwardFlick(
           {startX:state.startX,startY:state.startY,endX:touch.clientX,endY:touch.clientY,duration:Math.max(1,endTime-state.startTime)},
-          {minUpwardDistance:8,minTravelDistance:16,maxDuration:900,minSpeed:.02,maxHorizontalRatio:1.15}
+          {minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:.02,maxHorizontalRatio:1.35}
         );
-        const browsed=state.intent==='browse';
+        const browsed=!flick&&(state.intent==='browse'||Math.abs(dx)>=18&&Math.abs(dx)>Math.abs(dy)*.9);
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
         if(flick){
           event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();triggerPlay(state.cardId);return;
