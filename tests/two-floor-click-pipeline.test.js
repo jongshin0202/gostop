@@ -7,9 +7,12 @@ const engine=require('../game-engine.js');
 const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const card=id=>structuredClone(engine.masterDeck.find(item=>item.id===id));
 
-test('ranked client submits the hand card before waiting for an authoritative two-floor choice',()=>{
-  assert.match(app,/async function submitOnlineCardPlay\(\)[\s\S]*?onlineSubmit\(\{type:'playCard',cardId,targetId:null\}\)/);
-  assert.doesNotMatch(app,/if\(matches\.length>1\)\{await driveOnline\(latestOnlineSnapshot,onlineLastEvents\);return;\}/);
+test('ranked client keeps a two-target hand card uncommitted until the player chooses a highlighted target',()=>{
+  const submit=app.slice(app.indexOf('async function submitOnlineCardPlay'),app.indexOf('function enterOnlineMatchView'));
+  assert.match(submit,/const matches=matchesFor\(card\)/);
+  assert.match(submit,/if\(matches\.length===2\)/);
+  assert.match(submit,/chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
 });
 
 test('server engine turns a targetless play with two floor matches into chooseFloorTarget',()=>{
@@ -24,9 +27,10 @@ test('server engine turns a targetless play with two floor matches into chooseFl
 });
 
 
-test('ordinary ranked cards use one-click authoritative play while Shake/Bomb cards keep the pre-decision path',()=>{
+test('ordinary ranked cards delegate to precommit play while Shake/Bomb cards keep the authority pre-decision path',()=>{
   assert.match(app,/const needsPrePlayDecision=state\.human\.armedBombMonths\?\.includes\(card\.month\)\|\|state\.human\.hiddenTripleMonths\?\.includes\(card\.month\)/);
-  assert.match(app,/const action=needsPrePlayDecision\?\{type:'attemptPlayCard',cardId\}:\{type:'playCard',cardId,targetId:null\}/);
+  assert.match(app,/if\(needsPrePlayDecision\)\{[\s\S]*onlineSubmit\(\{type:'attemptPlayCard',cardId\}\)/);
+  assert.match(app,/await submitOnlineCardPlay\(\)/);
   assert.match(app,/clickedEl\?\.classList\.add\('pending-card'\)/);
 });
 
