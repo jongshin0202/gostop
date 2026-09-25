@@ -95,16 +95,13 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('coarse mobile menu uses one immediate pointer-up activation path without competing handlers',()=>{
+test('main menu uses native click activation on mouse and touch without synthetic suppression windows',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
-  assert.match(source,/function installImmediateMobileTap\(button\)/);
-  assert.match(source,/\[rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo\]\.forEach\(installImmediateMobileTap\)/);
-  assert.doesNotMatch(source,/\[rankedToggle,freeToggle[^\]]*\]\.forEach\(installImmediateMobileTap\)/);
-  assert.match(source,/button\.addEventListener\('pointerdown'/);
-  assert.match(source,/button\.addEventListener\('touchend'/);
-  assert.match(source,/if\(distance>18\)return/);
-  assert.match(source,/immediateMenuProgrammaticTarget=button;[\s\S]*button\.click\(\)/);
-  assert.doesNotMatch(source,/fastMenuPointer|fastMenuSyntheticClick|fastMenuSuppressUntil/);
+  assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
+  assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
+  assert.doesNotMatch(source,/function installImmediateMobileTap\(button\)/);
+  assert.doesNotMatch(source,/immediateMenuSuppressUntil|immediateMenuSuppressTarget|immediateMenuProgrammaticTarget/);
+  assert.doesNotMatch(source,/button\.addEventListener\('touchend',[\s\S]*button\.click\(\)/);
 });
 
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
@@ -336,7 +333,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/addFan\('right',\['m8-1','m9-1','m12-1'\]\)/);
   assert.match(source,/main-menu-floor-cards/);
   assert.match(source,/\['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'\]/);
-  assert.match(source,/\.main-menu-floor-cards\{[^]*?display:block[^]*?animation:mainMenuCardGlow/);
+  assert.match(source,/\.main-menu-floor-cards\{[^]*?display:block[^]*?animation:none/);
   assert.match(source,/@keyframes mainMenuTitleGlow/);
   assert.match(source,/@keyframes mainMenuChoiceSweep/);
   assert.match(source,/@media\(max-width:1280px\)\{[^]*?\.main-menu-card-fan\{display:none!important\}/);
@@ -349,18 +346,13 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
-  assert.match(source,/const height=lite\?\(submenu\.children\.length\*52\+24\):submenu\.scrollHeight\+24/);assert.match(source,/touch-action:manipulation/);
-  assert.match(source,/function installImmediateMobileTap\(button\)/);
-  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
-  assert.match(source,/const pointerCapable=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(source,/if\(!pointerCapable&&touchCapable\)[\s\S]*button\.addEventListener\('touchend',[\s\S]*activate\(\)/);
-  assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*activate\(\)/);
-  assert.match(source,/immediateMenuSuppressUntil=Date\.now\(\)\+650/);
+  assert.match(source,/\.menu-submenu\{display:none!important[^]*?\.menu-category-block\.expanded \.menu-submenu\{display:grid!important\}/);
+  assert.doesNotMatch(source,/--submenu-open-height|submenu\.scrollHeight/);assert.match(source,/touch-action:manipulation/);
+  assert.doesNotMatch(source,/installImmediateMobileTap|immediateMenuSuppressUntil/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260925-25/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260925-26/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
@@ -439,7 +431,7 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
   assert.match(boot,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
   assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
   assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
-  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',[\s\S]*if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
+  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',async\(\)=>\{[\s\S]*if\(activeReconnectPending\(\)\)\{void finishReconnectAsAbandonment\(\);return;\}[\s\S]*active\?\.mode==='solo'[\s\S]*api\('\/api\/solo\/leave-for-challenge',[\s\S]*localStorage\.removeItem\(ACTIVE_RANKED_ROOM_KEY\)/);
   assert.match(boot,/function showReconnectAbandonmentOutcome\(result\)[\s\S]*returnGameDialog\.dataset\.outcome='1'[\s\S]*returnGameCountdown'\)\.hidden=true[\s\S]*returnGameActions'\)\.hidden=true[\s\S]*returnGameOk'\)\.hidden=false/);
   assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
   assert.match(boot,/if\(promptActiveRankedGameIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);

@@ -259,7 +259,7 @@
       font-size:clamp(3rem,6.5vw,5.35rem)!important;line-height:.92!important;
       letter-spacing:-.045em;color:#ffd978!important;
       text-shadow:0 4px 0 rgba(105,43,18,.52),0 10px 28px rgba(0,0,0,.82),0 0 34px rgba(244,183,73,.16)!important;
-      animation:mainMenuTitleGlow 4.2s ease-in-out infinite;
+      animation:none;
     }
     @keyframes mainMenuTitleGlow{0%,100%{filter:brightness(1);text-shadow:0 4px 0 rgba(105,43,18,.52),0 10px 28px rgba(0,0,0,.82),0 0 28px rgba(244,183,73,.14)}50%{filter:brightness(1.08);text-shadow:0 4px 0 rgba(105,43,18,.52),0 10px 28px rgba(0,0,0,.82),0 0 44px rgba(255,199,86,.34)}}
     .account-menu-box{
@@ -290,7 +290,7 @@
       padding:16px!important;border:1px solid rgba(221,178,94,.28);border-radius:22px;
       background:linear-gradient(180deg,rgba(18,12,8,.66),rgba(12,8,6,.82));
       box-shadow:0 22px 52px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.035);
-      backdrop-filter:blur(2px);
+      backdrop-filter:none;
     }
     .gostop-main-menu:before{
       content:"CHOOSE YOUR GAME";grid-column:1/-1;justify-self:center;margin:-2px 0 1px;
@@ -546,7 +546,7 @@
 
     .main-menu-floor-cards{
       display:block;position:relative;z-index:4;width:min(700px,90vw);height:112px;margin:2px auto 4px;
-      pointer-events:none;filter:drop-shadow(0 14px 16px rgba(0,0,0,.44));animation:mainMenuCardGlow 5.4s ease-in-out infinite;
+      pointer-events:none;filter:drop-shadow(0 14px 16px rgba(0,0,0,.44));animation:none;
     }
     @keyframes mainMenuCardGlow{0%,100%{filter:drop-shadow(0 14px 16px rgba(0,0,0,.44)) drop-shadow(0 0 0 rgba(236,180,73,0))}50%{filter:drop-shadow(0 15px 18px rgba(0,0,0,.48)) drop-shadow(0 0 13px rgba(236,180,73,.16))}}
     .main-menu-floor-card{
@@ -590,16 +590,16 @@
     .gostop-main-menu.main-menu-accordion{width:min(720px,90vw)!important;display:grid!important;grid-template-columns:1fr!important;gap:9px!important;margin:4px auto 0!important;padding:13px!important;border:1px solid rgba(224,180,91,.28)!important;border-radius:22px!important;background:linear-gradient(180deg,rgba(16,11,7,.66),rgba(9,7,5,.78))!important;box-shadow:0 22px 52px rgba(0,0,0,.35),inset 0 1px rgba(255,255,255,.035)!important;backdrop-filter:blur(2px)}
     .gostop-main-menu.main-menu-accordion:before{content:none!important;display:none!important}
     .menu-category-block{display:grid!important;gap:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;border-radius:16px!important;overflow:visible!important}.menu-category-block:before,.menu-category-block:after{content:none!important;display:none!important}
-    .menu-category-toggle{position:relative;overflow:hidden;width:100%;min-height:72px;border-radius:12px;border:2px solid;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 18px;color:#fff;cursor:pointer;text-align:left;box-shadow:inset 0 1px rgba(255,255,255,.18),0 8px 18px rgba(0,0,0,.25);transition:transform .18s cubic-bezier(.22,1,.36,1),filter .18s ease,border-radius .38s cubic-bezier(.22,1,.36,1),box-shadow .24s ease}.menu-category-toggle>*{position:relative;z-index:1}.menu-category-toggle:before{content:"";position:absolute;z-index:0;top:-90%;left:-24%;width:18%;height:280%;pointer-events:none;opacity:0;background:linear-gradient(90deg,transparent,rgba(255,247,211,.34),transparent);transform:rotate(18deg);animation:mainMenuChoiceSweep 5.8s ease-in-out infinite}.menu-category-friendly:before{animation-delay:2.9s}.menu-category-toggle:hover,.menu-category-toggle:focus-visible{transform:translateY(-1px) scale(1.004);filter:brightness(1.10);outline:none;box-shadow:inset 0 1px rgba(255,255,255,.20),0 10px 22px rgba(0,0,0,.29),0 0 18px rgba(235,186,82,.10)}.menu-category-toggle:active{transform:translateY(0) scale(.994)}.menu-category-competitive{border-color:#efc66b;background:radial-gradient(circle at 20% 0%,rgba(255,224,142,.14),transparent 35%),linear-gradient(180deg,#a97628,#754617)}.menu-category-friendly{border-color:#8cc89a;background:radial-gradient(circle at 78% 0%,rgba(191,242,201,.11),transparent 35%),linear-gradient(180deg,#31693f,#234c30)}@keyframes mainMenuChoiceSweep{0%,68%{left:-24%;opacity:0}73%{opacity:.62}88%{left:112%;opacity:.42}94%,100%{left:112%;opacity:0}}
-    .menu-category-copy{display:grid;gap:2px}.solo-start-overlay .menu-category-title{font:800 clamp(36px,3.05vw,42px)/.98 Georgia,serif!important;letter-spacing:0;white-space:nowrap}.menu-category-note{font:750 10px/1.1 system-ui,sans-serif;letter-spacing:.05em;opacity:.88}.menu-category-chevron{font:800 24px/1 system-ui,sans-serif;transition:transform .38s cubic-bezier(.22,1,.36,1)}.menu-category-block.expanded .menu-category-toggle{border-radius:13px 13px 8px 8px}.menu-category-block.expanded .menu-category-chevron{transform:rotate(180deg)}
-    .menu-submenu{display:grid!important;grid-template-columns:1fr;gap:7px;max-height:0;opacity:0;visibility:hidden;overflow:hidden;pointer-events:none;margin:0 10px;padding:0 9px;border:1px solid transparent;border-top:0;border-radius:0 0 13px 13px;transform:translateY(-4px);will-change:max-height,opacity,transform;transition:max-height .46s cubic-bezier(.22,1,.36,1),opacity .28s ease,transform .46s cubic-bezier(.22,1,.36,1),padding .46s cubic-bezier(.22,1,.36,1),border-color .30s ease,background .30s ease,visibility 0s linear .46s}.menu-category-block.expanded .menu-submenu{max-height:var(--submenu-open-height,240px);opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);padding:8px 9px 9px;transition-delay:0s}.ranked-menu-group.expanded .menu-submenu{border-color:rgba(239,198,107,.34);background:linear-gradient(180deg,rgba(99,60,20,.44),rgba(40,24,12,.72))}.free-menu-group.expanded .menu-submenu{border-color:rgba(140,200,154,.30);background:linear-gradient(180deg,rgba(40,83,49,.46),rgba(19,43,27,.72))}.menu-submenu>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800}
+    .menu-category-toggle{position:relative;overflow:hidden;width:100%;min-height:72px;border-radius:12px;border:2px solid;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 18px;color:#fff;cursor:pointer;text-align:left;box-shadow:inset 0 1px rgba(255,255,255,.18),0 8px 18px rgba(0,0,0,.25);transition:transform .08s ease,filter .08s ease,border-radius .08s ease,box-shadow .08s ease}.menu-category-toggle>*{position:relative;z-index:1}.menu-category-toggle:before{content:"";position:absolute;z-index:0;top:-90%;left:-24%;width:18%;height:280%;pointer-events:none;opacity:0;background:linear-gradient(90deg,transparent,rgba(255,247,211,.34),transparent);transform:rotate(18deg);animation:none}.menu-category-friendly:before{animation-delay:0s}.menu-category-toggle:hover,.menu-category-toggle:focus-visible{transform:translateY(-1px) scale(1.004);filter:brightness(1.10);outline:none;box-shadow:inset 0 1px rgba(255,255,255,.20),0 10px 22px rgba(0,0,0,.29),0 0 18px rgba(235,186,82,.10)}.menu-category-toggle:active{transform:translateY(0) scale(.994)}.menu-category-competitive{border-color:#efc66b;background:radial-gradient(circle at 20% 0%,rgba(255,224,142,.14),transparent 35%),linear-gradient(180deg,#a97628,#754617)}.menu-category-friendly{border-color:#8cc89a;background:radial-gradient(circle at 78% 0%,rgba(191,242,201,.11),transparent 35%),linear-gradient(180deg,#31693f,#234c30)}@keyframes mainMenuChoiceSweep{0%,68%{left:-24%;opacity:0}73%{opacity:.62}88%{left:112%;opacity:.42}94%,100%{left:112%;opacity:0}}
+    .menu-category-copy{display:grid;gap:2px}.solo-start-overlay .menu-category-title{font:800 clamp(36px,3.05vw,42px)/.98 Georgia,serif!important;letter-spacing:0;white-space:nowrap}.menu-category-note{font:750 10px/1.1 system-ui,sans-serif;letter-spacing:.05em;opacity:.88}.menu-category-chevron{font:800 24px/1 system-ui,sans-serif;transition:transform .08s ease}.menu-category-block.expanded .menu-category-toggle{border-radius:13px 13px 8px 8px}.menu-category-block.expanded .menu-category-chevron{transform:rotate(180deg)}
+    .menu-submenu{display:none!important;grid-template-columns:1fr;gap:7px;margin:0 10px;padding:8px 9px 9px;border:1px solid transparent;border-top:0;border-radius:0 0 13px 13px;overflow:visible;pointer-events:auto}.menu-category-block.expanded .menu-submenu{display:grid!important}.ranked-menu-group.expanded .menu-submenu{border-color:rgba(239,198,107,.34);background:linear-gradient(180deg,rgba(99,60,20,.44),rgba(40,24,12,.72))}.free-menu-group.expanded .menu-submenu{border-color:rgba(140,200,154,.30);background:linear-gradient(180deg,rgba(40,83,49,.46),rgba(19,43,27,.72))}.menu-submenu>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800}
     .menu-training{background:linear-gradient(180deg,#24201d,#100e0d);border:1px solid #6e6257;color:#f4eadb;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.08),0 7px 16px rgba(0,0,0,.28)}.menu-training:hover,.menu-training:focus-visible{filter:brightness(1.14);outline:none}
     .main-menu-utilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:2px}.menu-utility{min-height:40px!important;border:1px solid rgba(218,177,91,.43)!important;border-radius:11px!important;background:linear-gradient(180deg,rgba(62,37,23,.96),rgba(32,20,14,.98))!important;color:#f5e8ce!important;font:800 14px/1.1 Georgia,serif!important;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.04),0 7px 15px rgba(0,0,0,.20);transition:transform .14s ease,filter .14s ease}.menu-utility:hover,.menu-utility:focus-visible{transform:translateY(-1px);filter:brightness(1.12);outline:none}.menu-utility:before{display:inline-block;margin-right:7px;font-family:system-ui,sans-serif;font-size:14px;vertical-align:-1px}.menu-utility-friends:before{content:"👥"}.menu-utility-leaderboards:before{content:"🏆"}.menu-utility-help:before{content:"?"}.ranked-menu-group.referral-focus .menu-category-toggle{animation:referralFocus 1.1s ease-in-out 3;box-shadow:0 0 0 3px rgba(240,204,123,.34),0 0 32px rgba(240,204,123,.32)}
     .leaderboard-screen{display:grid!important;place-items:center!important;overflow:auto!important;padding:clamp(14px,3vw,34px)!important;background:radial-gradient(circle at 12% 18%,rgba(145,37,24,.22) 0 5%,transparent 19%),radial-gradient(circle at 88% 22%,rgba(223,170,70,.14) 0 6%,transparent 20%),radial-gradient(ellipse at 50% 48%,#31563f 0 31%,#1f3a2c 54%,#17100c 81%,#0b0705 100%)!important;isolation:isolate}.leaderboard-screen[hidden]{display:none!important}.leaderboard-screen:before{content:"";position:absolute;left:50%;top:51%;width:min(1180px,92vw);height:min(760px,84vh);transform:translate(-50%,-50%);z-index:0;pointer-events:none;border:15px solid rgba(74,40,24,.78);border-radius:46% / 13%;background:radial-gradient(ellipse at 50% 44%,rgba(65,105,78,.50),rgba(26,53,38,.32) 58%,rgba(11,22,16,.18) 100%);box-shadow:inset 0 0 0 3px rgba(156,95,45,.34),inset 0 0 78px rgba(0,0,0,.46),0 28px 70px rgba(0,0,0,.38)}
     .leaderboard-panel{position:relative;z-index:3;width:min(1020px,88vw);max-height:min(820px,88dvh);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:11px;padding:18px;border:1px solid rgba(230,187,98,.54);border-radius:20px;background:linear-gradient(180deg,rgba(24,15,10,.90),rgba(11,9,7,.90));box-shadow:0 24px 58px rgba(0,0,0,.45),inset 0 1px rgba(255,255,255,.04)}
     .leaderboard-title{padding:0!important}.leaderboard-title h1{font-size:clamp(34px,5vw,54px)!important}.leaderboard-title p{margin-top:5px!important}.leaderboard-mode-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:min(540px,100%);margin:0 auto}.leaderboard-mode-tab{min-height:49px;border:1px solid rgba(222,181,95,.40);border-radius:11px;background:#2b1a11;color:#ead9b9;font:800 16px/1 system-ui,sans-serif;cursor:pointer;transition:transform .14s ease,filter .14s ease,background .18s ease,border-color .18s ease}.leaderboard-mode-tab:hover,.leaderboard-mode-tab:focus-visible{transform:translateY(-1px);filter:brightness(1.12);outline:none}.leaderboard-mode-tab.active{border-color:#efc66b;background:linear-gradient(180deg,#a7752b,#704417);color:#fff6df;box-shadow:inset 0 1px rgba(255,255,255,.18),0 7px 18px rgba(0,0,0,.24)}
     .leaderboard-table-wrap{align-self:stretch!important;width:100%!important;margin:0!important;max-height:100%!important;border-radius:13px!important}.leaderboard-table{table-layout:fixed}.leaderboard-table th:first-child,.leaderboard-table td:first-child{width:9%}.leaderboard-table th:nth-child(2),.leaderboard-table td:nth-child(2){width:26%}.leaderboard-table th:nth-child(3),.leaderboard-table td:nth-child(3){width:14%}.leaderboard-table th:nth-child(4),.leaderboard-table td:nth-child(4){width:29%}.leaderboard-table th:nth-child(5),.leaderboard-table td:nth-child(5){width:22%}.leaderboard-footer{display:grid!important;justify-items:center!important;gap:6px!important;margin:0!important}.leaderboard-return{width:min(260px,78vw);height:48px!important}.leaderboard-decor{z-index:1}.leaderboard-card-fan{opacity:.22!important}.leaderboard-controls,.leaderboard-nav{display:none!important}
-    @media(max-width:760px){.solo-start-overlay{min-height:100dvh!important;align-content:center!important;place-content:center!important;overflow-y:auto!important;padding-top:max(22px,env(safe-area-inset-top))!important;padding-bottom:max(14px,env(safe-area-inset-bottom))!important}.gostop-main-menu.main-menu-accordion{width:min(94vw,560px)!important;margin-top:3px!important;padding:9px!important;gap:7px!important;border-radius:17px!important}.menu-category-toggle{min-height:56px;padding:7px 12px;border-radius:12px}.solo-start-overlay .menu-category-title{font-size:clamp(24px,6vw,30px)!important;white-space:normal}.menu-category-note{font-size:9px}.menu-category-chevron{font-size:21px}.menu-category-block.expanded .menu-category-toggle{border-radius:12px 12px 7px 7px}.menu-submenu{margin:0 7px;padding-left:7px;padding-right:7px}.menu-category-block.expanded .menu-submenu{padding:6px 7px 7px}.menu-submenu>button{min-height:40px;font-size:15px}.main-menu-utilities{gap:6px;margin-top:4px}.menu-utility{min-height:39px!important;font-size:11px!important;padding:7px 5px!important}.menu-utility:before{display:block;margin:0 0 3px;font-size:13px}.account-menu-box{width:min(94vw,560px)!important;margin-top:44px!important;margin-bottom:max(8px,env(safe-area-inset-bottom))!important}.leaderboard-screen{padding:10px!important;touch-action:pan-y}.leaderboard-screen:before{width:97vw;height:92dvh;border-width:9px;top:50%}.leaderboard-panel{width:94vw;max-height:92dvh;padding:11px;gap:8px;border-radius:16px}.leaderboard-title h1{font-size:clamp(28px,8vw,38px)!important}.leaderboard-title p{font-size:10px!important}.leaderboard-mode-tabs{gap:6px}.leaderboard-mode-tab{min-height:42px;font-size:13px}.leaderboard-table-wrap{overflow:hidden!important}.leaderboard-table{min-width:0!important;width:100%!important;table-layout:fixed}.leaderboard-table th,.leaderboard-table td{height:31px!important;padding:5px 4px!important;font-size:9px!important;white-space:normal!important;overflow:hidden;text-overflow:ellipsis}.leaderboard-table th{font-size:8px!important;line-height:1.05}.leaderboard-table th:first-child,.leaderboard-table td:first-child{width:9%}.leaderboard-table th:nth-child(2),.leaderboard-table td:nth-child(2){width:25%}.leaderboard-table th:nth-child(3),.leaderboard-table td:nth-child(3){width:13%}.leaderboard-table th:nth-child(4),.leaderboard-table td:nth-child(4){width:31%}.leaderboard-table th:nth-child(5),.leaderboard-table td:nth-child(5){width:22%}.leaderboard-return{height:43px!important}.leaderboard-attract-note{font-size:9px!important}}
+    @media(max-width:760px){.solo-start-overlay{min-height:100dvh!important;align-content:center!important;place-content:center!important;overflow-y:auto!important;padding-top:max(22px,env(safe-area-inset-top))!important;padding-bottom:max(14px,env(safe-area-inset-bottom))!important}.gostop-main-menu.main-menu-accordion{width:min(94vw,560px)!important;margin-top:3px!important;padding:9px!important;gap:7px!important;border-radius:17px!important}.menu-category-toggle{min-height:56px;padding:7px 12px;border-radius:12px}.solo-start-overlay .menu-category-title{font-size:clamp(24px,6vw,30px)!important;white-space:normal}.menu-category-note{font-size:9px}.menu-category-chevron{font-size:21px}.menu-category-block.expanded .menu-category-toggle{border-radius:12px 12px 7px 7px}.menu-submenu{margin:0 7px;padding-left:7px;padding-right:7px}.menu-category-block.expanded .menu-submenu{padding:6px 7px 7px!important}.menu-submenu>button{min-height:40px;font-size:15px}.main-menu-utilities{gap:6px;margin-top:4px}.menu-utility{min-height:39px!important;font-size:11px!important;padding:7px 5px!important}.menu-utility:before{display:block;margin:0 0 3px;font-size:13px}.account-menu-box{width:min(94vw,560px)!important;margin-top:44px!important;margin-bottom:max(8px,env(safe-area-inset-bottom))!important}.leaderboard-screen{padding:10px!important;touch-action:pan-y}.leaderboard-screen:before{width:97vw;height:92dvh;border-width:9px;top:50%}.leaderboard-panel{width:94vw;max-height:92dvh;padding:11px;gap:8px;border-radius:16px}.leaderboard-title h1{font-size:clamp(28px,8vw,38px)!important}.leaderboard-title p{font-size:10px!important}.leaderboard-mode-tabs{gap:6px}.leaderboard-mode-tab{min-height:42px;font-size:13px}.leaderboard-table-wrap{overflow:hidden!important}.leaderboard-table{min-width:0!important;width:100%!important;table-layout:fixed}.leaderboard-table th,.leaderboard-table td{height:31px!important;padding:5px 4px!important;font-size:9px!important;white-space:normal!important;overflow:hidden;text-overflow:ellipsis}.leaderboard-table th{font-size:8px!important;line-height:1.05}.leaderboard-table th:first-child,.leaderboard-table td:first-child{width:9%}.leaderboard-table th:nth-child(2),.leaderboard-table td:nth-child(2){width:25%}.leaderboard-table th:nth-child(3),.leaderboard-table td:nth-child(3){width:13%}.leaderboard-table th:nth-child(4),.leaderboard-table td:nth-child(4){width:31%}.leaderboard-table th:nth-child(5),.leaderboard-table td:nth-child(5){width:22%}.leaderboard-return{height:43px!important}.leaderboard-attract-note{font-size:9px!important}}
 
     @media(max-height:760px){
       .solo-start-overlay{padding-top:max(6px,env(safe-area-inset-top))!important;padding-bottom:max(9px,env(safe-area-inset-bottom))!important;gap:3px!important;overflow-y:auto!important}
@@ -660,64 +660,15 @@
   let expandedMenuSection=null;
   function setMenuSection(section=null){
     expandedMenuSection=section==='competitive'||section==='friendly'?section:null;
-    const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement.classList.contains('gostop-performance-lite');
     for(const [name,group,toggle,submenu] of [['competitive',rankedGroup,rankedToggle,rankedSubmenu],['friendly',freeGroup,freeToggle,freeSubmenu]]){
       const open=expandedMenuSection===name;
-      if(open){
-        const height=lite?(submenu.children.length*52+24):submenu.scrollHeight+24;
-        submenu.style.setProperty('--submenu-open-height',`${height}px`);
-      }
-      group.classList.toggle('expanded',open);toggle.setAttribute('aria-expanded',open?'true':'false');submenu.setAttribute('aria-hidden',open?'false':'true');submenu.inert=!open;
+      group.classList.toggle('expanded',open);
+      toggle.setAttribute('aria-expanded',open?'true':'false');
+      submenu.setAttribute('aria-hidden',open?'false':'true');
+      submenu.inert=!open;
     }
   }
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
-  let immediateMenuProgrammaticTarget=null,immediateMenuSuppressTarget=null,immediateMenuSuppressUntil=0;
-  overlay.addEventListener('click',event=>{
-    const button=event.target?.closest?.('button');if(!button)return;
-    if(button===immediateMenuProgrammaticTarget)return;
-    if(button===immediateMenuSuppressTarget&&Date.now()<immediateMenuSuppressUntil){
-      event.preventDefault();event.stopImmediatePropagation();
-    }
-  },true);
-  function installImmediateMobileTap(button){
-    if(!button)return;
-    let press=null;
-    const activate=()=>{
-      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+650;
-      immediateMenuProgrammaticTarget=button;
-      try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
-    };
-    const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
-    const pointerCapable=typeof globalThis.PointerEvent==='function';
-    if(!pointerCapable&&touchCapable){
-      button.addEventListener('touchstart',event=>{
-        if(event.touches.length!==1){press=null;return;}
-        const touch=event.touches[0];press={id:touch.identifier,x:touch.clientX,y:touch.clientY};
-      },{passive:true});
-      button.addEventListener('touchend',event=>{
-        if(!press)return;
-        const touch=[...event.changedTouches].find(item=>item.identifier===press.id),start=press;press=null;
-        if(!touch)return;
-        const distance=Math.hypot(touch.clientX-start.x,touch.clientY-start.y);
-        if(distance>18)return;
-        event.preventDefault();event.stopPropagation();activate();
-      },{passive:false});
-      button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
-      return;
-    }
-    button.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='mouse')return;
-      press={id:event.pointerId,x:event.clientX,y:event.clientY};
-    },{passive:true});
-    button.addEventListener('pointerup',event=>{
-      if(!press||event.pointerId!==press.id||event.pointerType==='mouse')return;
-      const distance=Math.hypot(event.clientX-press.x,event.clientY-press.y);press=null;
-      if(distance>18)return;
-      event.preventDefault();activate();
-    },{passive:false});
-    button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
-  }
-  [rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
@@ -749,7 +700,7 @@
   const linkCopiedDialog=document.createElement('dialog');linkCopiedDialog.id='linkCopiedDialog';linkCopiedDialog.className='gostop-request-dialog link-copied-dialog';linkCopiedDialog.innerHTML=`<div class="dialog-card link-copied-card"><h2>Link Copied</h2></div>`;document.body.appendChild(linkCopiedDialog);
   const missedRequestDialog=document.createElement('dialog');missedRequestDialog.className='gostop-request-dialog';missedRequestDialog.innerHTML=`<div class="dialog-card"><h2 id="missedRequestTitle">Missed Play Request</h2><p id="missedRequestText"></p><p id="missedRequestTime" class="account-help"></p><div class="decision-actions"><button id="missedRequestPrev" class="glass-btn" type="button" aria-label="Previous request">‹</button><button id="missedRequestOk" class="go-btn" type="button">OK</button><button id="missedRequestClearAll" class="stop-btn" type="button">Clear All</button><button id="missedRequestNext" class="glass-btn" type="button" aria-label="Next request">›</button></div></div>`;document.body.appendChild(missedRequestDialog);
   const matchHandoffDialog=document.createElement('dialog');matchHandoffDialog.className='gostop-request-dialog';matchHandoffDialog.innerHTML=`<div class="dialog-card"><h2 id="matchHandoffTitle">Starting Online Game…</h2><p id="matchHandoffText"></p></div>`;document.body.appendChild(matchHandoffDialog);
-  const returnGameDialog=document.createElement('dialog');returnGameDialog.className='gostop-request-dialog';returnGameDialog.innerHTML=`<div class="dialog-card"><h2 id="returnGameTitle">Continue Active Game?</h2><span id="returnGameCountdown" class="ranked-countdown" hidden>1:00</span><p id="returnGameText">You already have an active Competitive game. Do you want to continue the same game on this device too?</p><div id="returnGameActions" class="decision-actions"><button id="returnGameYes" class="go-btn" type="button">Yes</button><button id="returnGameNo" class="stop-btn" type="button">No</button></div><button id="returnGameOk" class="go-btn" type="button" hidden>OK</button></div>`;document.body.appendChild(returnGameDialog);
+  const returnGameDialog=document.createElement('dialog');returnGameDialog.id='returnGameDialog';returnGameDialog.className='gostop-request-dialog';returnGameDialog.innerHTML=`<div class="dialog-card"><h2 id="returnGameTitle">Continue Active Game?</h2><span id="returnGameCountdown" class="ranked-countdown" hidden>1:00</span><p id="returnGameText">You already have an active Competitive game. Do you want to continue the same game on this device too?</p><div id="returnGameActions" class="decision-actions"><button id="returnGameYes" class="go-btn" type="button">Yes</button><button id="returnGameNo" class="stop-btn" type="button">No</button></div><button id="returnGameOk" class="go-btn" type="button" hidden>OK</button></div>`;document.body.appendChild(returnGameDialog);
 
   const leaderboardScreen=document.createElement('section');leaderboardScreen.className='leaderboard-screen';leaderboardScreen.hidden=true;leaderboardScreen.innerHTML=`<div class="leaderboard-decor" aria-hidden="true"></div><div class="leaderboard-panel"><header class="leaderboard-title"><h1 id="leaderboardHeading">Global Leaderboard</h1><p id="leaderboardSubheading"></p></header><nav class="leaderboard-mode-tabs" aria-label="Leaderboard view"><button id="globalLeaderboardTab" class="leaderboard-mode-tab active" type="button" aria-selected="true">Global</button><button id="monthlyLeaderboardTab" class="leaderboard-mode-tab" type="button" aria-selected="false">Monthly</button></nav><div class="leaderboard-table-wrap"><table class="leaderboard-table"><thead><tr><th>Rank</th><th>Nickname</th><th>Net Coins</th><th>Earned / Lost</th><th>Games Played</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div><footer class="leaderboard-footer"><p class="leaderboard-attract-note" id="leaderboardAttractNote"></p><button class="leaderboard-return" type="button">Return</button></footer></div>`;document.body.appendChild(leaderboardScreen);
   const leaderboardDecor=leaderboardScreen.querySelector('.leaderboard-decor');
@@ -1534,7 +1485,24 @@
     try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode,{resumeExisting:true}));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
     catch(error){returnReconnectState=null;returnReconnectBusy=false;closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);await refreshAccount();revealCurrentMainMenu();}
   });
-  $('returnGameNo').addEventListener('click',()=>{if(activeReconnectPending())void finishReconnectAsAbandonment();else{closeReturnGameDialog();revealCurrentMainMenu();}});
+  $('returnGameNo').addEventListener('click',async()=>{
+    if(returnReconnectBusy)return;
+    if(activeReconnectPending()){void finishReconnectAsAbandonment();return;}
+    const active=returnReconnectState||account?.activeRanked;
+    if(active?.mode==='solo'&&active.roomCode){
+      returnReconnectBusy=true;
+      const no=$('returnGameNo'),yes=$('returnGameYes');if(no)no.disabled=true;if(yes)yes.disabled=true;
+      try{
+        const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
+        captureAccountPayload(data);
+        try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+        returnReconnectState=null;closeReturnGameDialog();syncRankedButtons();renderAccountBox();revealCurrentMainMenu();
+      }catch(error){showToast(localizedError(error),6000);}
+      finally{returnReconnectBusy=false;if(no)no.disabled=false;if(yes)yes.disabled=false;}
+      return;
+    }
+    returnReconnectState=null;closeReturnGameDialog();revealCurrentMainMenu();
+  });
   $('returnGameOk').addEventListener('click',async()=>{const ok=$('returnGameOk');if(ok.disabled)return;ok.disabled=true;closeReturnGameDialog();await refreshAccount();revealCurrentMainMenu();ok.disabled=false;});
   returnGameDialog.addEventListener('cancel',event=>event.preventDefault());
   function clearVerificationTokenFromUrl(){try{const clean=new URL(location.href);clean.searchParams.delete('verify');if(/^#verify=/i.test(clean.hash))clean.hash='';history.replaceState(null,'',clean.pathname+clean.search+clean.hash);}catch(_){}}
