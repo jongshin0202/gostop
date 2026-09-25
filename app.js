@@ -519,8 +519,12 @@
     if(!onlineMode)return false;
     repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
-    const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open||presentation.activePhysicalMotions>0);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
+    const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);
+    if(!connected||blocked||!state||state.winner||state.pendingTurn||state.pendingDecision)return false;
+    // onlineStateFromSnapshot remaps the viewer to PLAYER_A. The rendered authoritative
+    // state is therefore the strongest source of truth for whether the visible hand may act.
+    if(state.turn===PLAYER_A&&Array.isArray(state.human?.hand)&&state.human.hand.length>0)return true;
     return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:null,blocked});
   }
   function rankedHandInputEnabled(){
