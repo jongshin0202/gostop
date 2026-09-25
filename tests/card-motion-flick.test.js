@@ -52,7 +52,8 @@ test('horizontal browse, upward flick, and tap are separate deterministic outcom
 test('browse release clears the raised hover instead of leaving the last card sticking out',()=>{
   const end=presentation.slice(presentation.indexOf("doc.addEventListener('touchend'"),presentation.indexOf("doc.addEventListener('touchcancel'"));
   assert.match(end,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
-  assert.doesNotMatch(end,/if\(browsed\)[\s\S]*commitSelection/);
+  const browseBranch=end.slice(end.indexOf('if(browsed){'),end.indexOf('const tap='));
+  assert.doesNotMatch(browseBranch,/commitSelection/);
 });
 
 test('second tap and upward flick play through the live card click handler',()=>{
