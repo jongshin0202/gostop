@@ -131,7 +131,9 @@
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
-  const presentationPause=key=>sleep(PRESENTATION_PACING[key]);
+  const performanceLite=()=>globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement.classList.contains('gostop-performance-lite');
+  const motionDuration=ms=>performanceLite()?Math.max(110,Math.round(ms*.58)):ms;
+  const presentationPause=key=>sleep(performanceLite()?Math.max(65,Math.round(PRESENTATION_PACING[key]*.55)):PRESENTATION_PACING[key]);
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
@@ -1343,7 +1345,7 @@
       {transform:'translate(0,0) rotate(-3deg)',opacity:.96},
       {transform:`translate(${dx*.5}px,${dy*.5-16}px) rotate(4deg)`,opacity:1},
       {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.95}
-    ],{duration:460,easing:'cubic-bezier(.25,.7,.2,1)',fill:'forwards'});
+    ],{duration:motionDuration(460),easing:'cubic-bezier(.25,.7,.2,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.remove();
   }
 
@@ -1619,15 +1621,20 @@
 
     const dx=landing.left-sourceRect.left, dy=landing.top-sourceRect.top;
     const sideBias=seatForLegacySide(side)==='bottom'?-1:1;
-    const duration=650;
-    if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
-    const a=el.animate([
+    const duration=motionDuration(650);
+    if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-40));
+    const frames=performanceLite()?[
+      {transform:'translate(0,0) rotate(0deg)',offset:0},
+      {transform:`translate(${dx*.62}px,${dy*.62-28}px) rotate(${landing.rotation*.48}deg)`,offset:.64},
+      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,offset:1}
+    ]:[
       {transform:'translate(0,0) rotate(0deg)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
       {transform:`translate(0,-30px) rotate(${sideBias*-2}deg)`,filter:'drop-shadow(0 22px 16px rgba(0,0,0,.46))',offset:.24},
       {transform:`translate(${dx*.62}px,${dy*.62-54}px) rotate(${landing.rotation*.48}deg)`,offset:.70},
       {transform:`translate(${dx}px,${dy-12}px) rotate(${landing.rotation}deg)`,offset:.92},
       {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
-    ],{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
+    ];
+    const a=el.animate(frames,{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`;
     impactAt(landing); return el;
   }
@@ -1654,16 +1661,21 @@
       });
       impactAt(tr); return;
     }
-    const duration=720;
+    const duration=motionDuration(720);
     const jobs=starts.map(({el,start,i})=>{
       const land={left:tr.left+(i-1)*10,top:tr.top+(i-1)*6,width:w,height:h,rotation:[-13,1,12][i]};
       const dx=land.left-start.left,dy=land.top-start.top;
-      return el.animate([
+      const frames=performanceLite()?[
+        {transform:'translate(0,0) rotate(0deg)',offset:0},
+        {transform:`translate(${dx*.62}px,${dy*.62-30}px) rotate(${land.rotation*.45}deg)`,offset:.64},
+        {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
+      ]:[
         {transform:'translate(0,0) rotate(0deg)',offset:0},
         {transform:`translate(${dx*.55}px,${dy*.55-58}px) rotate(${land.rotation*.45}deg)`,offset:.68},
         {transform:`translate(${dx}px,${dy-14}px) rotate(${land.rotation}deg)`,offset:.92},
         {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
-      ],{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
+      ];
+      return el.animate(frames,{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
         el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,land); el.style.transform=`rotate(${land.rotation}deg)`;
       }).catch(()=>{});
     });
@@ -1696,10 +1708,10 @@
       {transform:'translate(0,0)',offset:0},
       {transform:'translate(0,-18px)',offset:.35},
       {transform:`translate(${dx}px,${dy}px)`,offset:1}
-    ],{duration:360,easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
+    ],{duration:motionDuration(360),easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
     await lift.finished.catch(()=>{});
     const now=el.getBoundingClientRect(); el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,now);
-    const flip=inner.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],{duration:380,easing:'cubic-bezier(.35,.05,.2,1)',fill:'forwards'});
+    const flip=inner.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],{duration:motionDuration(380),easing:'cubic-bezier(.35,.05,.2,1)',fill:'forwards'});
     await flip.finished.catch(()=>{}); inner.style.transform='rotateY(180deg)'; inner.getAnimations().forEach(a=>a.cancel());
     await presentationPause('deckReveal'); return el;
   }
@@ -1709,7 +1721,7 @@
     const start=el.getBoundingClientRect(); normalizeFixed(el,start);
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
-    const dx=landing.left-start.left,dy=landing.top-start.top; const duration=500;
+    const dx=landing.left-start.left,dy=landing.top-start.top; const duration=motionDuration(500);
     if(prefersReducedMotion()){normalizeFixed(el,landing);el.style.transform=`rotate(${landing.rotation}deg)`;return;}
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-52));
     const a=el.animate([
@@ -1724,7 +1736,7 @@
   async function stageHandCardForChoice(side,card,sourceRect){
     await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');stagePhysicalCard(card.id,el);
     document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
-    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:240,easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
+    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:motionDuration(240),easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
     return el;
   }
 
@@ -1777,11 +1789,11 @@
           {transform:'translate(0,0) rotate(0deg)',opacity:1,offset:0},
           {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg)`,opacity:1,offset:.48},
           {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.96,offset:1}
-        ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
+        ],{duration:motionDuration(520),easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
         presentation.stagedCards.delete(entry.card.id);
         entry.el.remove(); if(entry.sourceEl)entry.sourceEl.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
-      },i*70);
+      },i*(performanceLite()?35:70));
     }));
     await Promise.all(jobs);
     // These in-flight cards have left the table. Canonical occupied slots are
@@ -1903,7 +1915,7 @@
     const bounds=els.floor.getBoundingClientRect(),broom=document.createElement('div');
     broom.className='sweep-broom';broom.textContent='🧹';broom.setAttribute('aria-hidden','true');
     broom.style.top=`${bounds.top+bounds.height*.48}px`;document.body.appendChild(broom);
-    const animation=broom.animate([{transform:`translate(${bounds.left-120}px,-50%) rotate(-22deg)`},{transform:`translate(${bounds.right+120}px,-50%) rotate(18deg)`}],{duration:1200,easing:'ease-in-out'});
+    const animation=broom.animate([{transform:`translate(${bounds.left-120}px,-50%) rotate(-22deg)`},{transform:`translate(${bounds.right+120}px,-50%) rotate(18deg)`}],{duration:motionDuration(1200),easing:'ease-in-out'});
     try{await animation.finished;}catch(_){ }finally{broom.remove();}
   }
 
@@ -2365,8 +2377,8 @@
     const dieFaces=onlineMode?['Y','O']:['P','C'];
     if(roll){
       els.openingDie.classList.add('rolling');playDiceSound();let face=0;
-      const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);
-      await sleep(900);clearInterval(timer);
+      const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},performanceLite()?130:90);
+      await sleep(performanceLite()?620:900);clearInterval(timer);
       if(!isGameplayPresentationCurrent(epoch))return;
       els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];
     }
@@ -2380,9 +2392,10 @@
   async function presentDealSequence(epoch=gameplayPresentationEpoch){
     if(TEST_MODE||!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=48;render();
-    for(let count=47;count>=20;count--){
+    const dealStep=performanceLite()?2:1,dealDelay=performanceLite()?44:72;
+    for(let count=47;count>=20;count-=dealStep){
       if(!isGameplayPresentationCurrent(epoch))return;
-      presentation.deckDisplayCount=count;render();await sleep(72);
+      presentation.deckDisplayCount=count;render();await sleep(dealDelay);
     }
     if(!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=null;render();
