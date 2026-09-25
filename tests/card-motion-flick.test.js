@@ -23,10 +23,18 @@ test('staged physical card owns visibility until shared cleanup',()=>{
   assert.match(app,/function removeStage\(id\)[\s\S]*style\.visibility=''\);/);
 });
 
+test('touch selection survives hand rerenders by card identity instead of DOM identity',()=>{
+  assert.match(presentation,/let touchSelectedCardId=null/);
+  assert.match(presentation,/const cardIdentity=card=>String\(card\?\.dataset\?\.cardId\|\|card\?\.closest\?\.\('\.hand-card-slot'\)\?\.dataset\?\.handKey\|\|''\)/);
+  assert.match(presentation,/touchSelectedCardId=cardIdentity\(card\)/);
+  assert.match(presentation,/touchSelectedCardId===cardIdentity\(card\)/);
+  assert.doesNotMatch(presentation,/touchSelectedCard===card/);
+});
+
 test('touch flick sampling retains the full gesture window for slower phones',()=>{
   assert.match(presentation,/const cutoff=time-360/);
   assert.match(presentation,/const cutoff=endTime-320/);
-  assert.match(presentation,/const secondTap=!state\.dragging&&!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<18&&Math\.abs\(endY-state\.anchorY\)<18/);
+  assert.match(presentation,/const secondTap=!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<28&&Math\.abs\(endY-state\.anchorY\)<28/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
@@ -49,7 +57,7 @@ test('touch intent locks upward flicks before horizontal browsing can switch car
 
 test('touchend can classify an upward flick even when a slow phone skipped intermediate touchmove delivery',()=>{
   assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(flickSample\)/);
-  assert.match(presentation,/const secondTap=!state\.dragging&&!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<18&&Math\.abs\(endY-state\.anchorY\)<18/);
+  assert.match(presentation,/const secondTap=!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<28&&Math\.abs\(endY-state\.anchorY\)<28/);
   assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:108,endY:445,duration:180}),true);
   assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:170,endY:485,duration:180}),false);
 });
