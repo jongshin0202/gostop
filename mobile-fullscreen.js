@@ -115,7 +115,7 @@
   if(!document.querySelector('link[data-gostop-fullscreen-style]')){
     const style=document.createElement('link');
     style.rel='stylesheet';
-    style.href='mobile-fullscreen.css';
+    style.href='mobile-fullscreen.css?v=20260924-2';
     style.dataset.gostopFullscreenStyle='true';
     document.head.appendChild(style);
   }
