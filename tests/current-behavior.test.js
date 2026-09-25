@@ -2981,7 +2981,9 @@ test('mobile hand browsing is owned by the canonical touch gesture layer, not du
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
   assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(flickSample\)/);
-  assert.match(presentation,/const secondTap=!state\.dragging&&!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<18/);
+  assert.match(presentation,/const cardIdentity=card=>String\(card\?\.dataset\?\.cardId\|\|card\?\.closest\?\.\('\.hand-card-slot'\)\?\.dataset\?\.handKey\|\|''\)/);
+  assert.match(presentation,/const wasSelected=!!cardIdentity\(card\)&&touchSelectedCardId===cardIdentity\(card\)/);
+  assert.match(presentation,/const secondTap=!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<28&&Math\.abs\(endY-state\.anchorY\)<28/);
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(card\)[\s\S]*else if\(browsed\)\{[\s\S]*clearSelection\(\)[\s\S]*else if\(secondTap\)\{[\s\S]*triggerPlay\(card\)/);
   assert.match(presentation,/suppressTouchClicksUntil=Date\.now\(\)\+900/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
