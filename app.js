@@ -795,7 +795,7 @@
   els.floor.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
   document.addEventListener('click',event=>{
     if(onlineMode||!presentation.targetChoiceCleanup||!presentation.pendingHumanCardId)return;
-    if(targetChoiceCardId(event))return;
+    if(targetChoiceCardId(event)||els.playerHand.contains(event.target))return;
     presentation.targetChoiceCleanup();
   });
 
@@ -818,6 +818,7 @@
 
   async function humanUseBombBlank(){
     if(onlineMode){onlineSubmit({type:'useBombBlank'});return;}
+    if(presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
     if(state.turn!==PLAYER_A||state.winner||state.human.bombFreeTurns<=0||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||state.pendingDecision||presentation.targetChoice)return;
     clearTrainingCoach();presentation.blankTurnInFlight=true;presentation.locked=true;render();
     try{await executeDeckOnlyTurn('human');}
@@ -850,9 +851,9 @@
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
     if(presentation.locked){
-      if(presentation.targetChoiceCleanup && presentation.pendingHumanCardId && cardId!==presentation.pendingHumanCardId){
-        presentation.queuedHumanCardSwitch={cardId,clickedEl};
-        presentation.targetChoiceCleanup();
+      if(presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){
+        if(cardId===presentation.pendingHumanCardId)presentation.targetChoiceCleanup();
+        else{presentation.queuedHumanCardSwitch={cardId,clickedEl};presentation.targetChoiceCleanup();}
       }
       return;
     }
