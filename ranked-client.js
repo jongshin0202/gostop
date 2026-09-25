@@ -19,6 +19,34 @@
   const PRESENCE_AWAY_MS=300000;
   const PRESENCE_HEARTBEAT_MS=30000;
   const baseUrl=String(globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');
+  const PERFORMANCE_LITE_CLASS='gostop-performance-lite';
+  function enablePerformanceLite(reason='adaptive'){
+    if(globalThis.GOSTOP_PERFORMANCE_LITE===true)return;
+    globalThis.GOSTOP_PERFORMANCE_LITE=true;
+    document.documentElement.classList.add(PERFORMANCE_LITE_CLASS);
+    document.documentElement.dataset.performanceProfile='lite';
+    document.documentElement.dataset.performanceReason=reason;
+    globalThis.dispatchEvent?.(new CustomEvent('gostop-performance-profile',{detail:{profile:'lite',reason}}));
+  }
+  function initializeAdaptivePerformance(){
+    const reduced=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches===true;
+    const mobileLike=globalThis.matchMedia?.('(pointer:coarse)')?.matches===true||globalThis.innerWidth<=760;
+    if(!mobileLike||reduced)return;
+    const memory=Number(navigator.deviceMemory)||0,cores=Number(navigator.hardwareConcurrency)||0,saveData=navigator.connection?.saveData===true;
+    if(saveData||(memory>0&&memory<=4)||(cores>0&&cores<=4)){enablePerformanceLite(saveData?'save-data':memory>0&&memory<=4?'device-memory':'cpu-cores');return;}
+    setTimeout(()=>{
+      if(globalThis.GOSTOP_PERFORMANCE_LITE===true||document.visibilityState==='hidden')return;
+      const deltas=[];let previous=0,frames=0;
+      const sample=now=>{
+        if(previous)deltas.push(now-previous);previous=now;frames++;
+        if(frames<34){requestAnimationFrame(sample);return;}
+        const sorted=[...deltas].sort((a,b)=>a-b),p90=sorted[Math.floor(sorted.length*.9)]||0,slow=deltas.filter(ms=>ms>24).length;
+        if(p90>28||slow>=Math.max(6,Math.ceil(deltas.length*.25)))enablePerformanceLite('measured-frame-time');
+      };
+      requestAnimationFrame(sample);
+    },900);
+  }
+  initializeAdaptivePerformance();
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
   let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false,pendingSocialChangedIds=new Set();
   let friendlyReferralPollTimer=null,friendlyReferralProgressTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false,linkCopiedTimer=null;
@@ -347,6 +375,34 @@
       .main-menu-hwatu-card,.main-menu-title,.main-menu-floor-cards,.menu-category-toggle:before{animation:none!important}.menu-mode-group:after{transition:none!important}
       .gostop-main-menu>button,.menu-mode-group>button,.menu-category-toggle,.menu-submenu,.menu-category-chevron{transition:none!important}
     }
+    html.gostop-performance-lite .main-menu-title,
+    html.gostop-performance-lite .main-menu-floor-cards,
+    html.gostop-performance-lite .main-menu-hwatu-card,
+    html.gostop-performance-lite .menu-category-toggle:before,
+    html.gostop-performance-lite .ranked-menu-group.referral-focus .menu-category-toggle{animation:none!important}
+    html.gostop-performance-lite .menu-category-toggle:before{display:none!important}
+    html.gostop-performance-lite .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important;box-shadow:0 10px 22px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.025)!important}
+    html.gostop-performance-lite .menu-category-toggle{filter:none!important;transition:transform .10s ease,border-radius .10s ease!important;box-shadow:inset 0 1px rgba(255,255,255,.13),0 4px 9px rgba(0,0,0,.20)!important}
+    html.gostop-performance-lite .menu-submenu{will-change:auto!important;transform:none!important;transition:opacity .12s ease,visibility 0s linear .12s!important}
+    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{transition:opacity .12s ease!important}
+    html.gostop-performance-lite .menu-category-chevron{transition:transform .12s ease!important}
+    html.gostop-performance-lite .main-menu-floor-cards,
+    html.gostop-performance-lite .main-menu-card-fan,
+    html.gostop-performance-lite .leaderboard-card-fan{filter:none!important}
+    html.gostop-performance-lite .leaderboard-card-fan{display:none!important}
+    html.gostop-performance-lite .ambient-room{filter:none!important;transform:none!important}
+    html.gostop-performance-lite dialog::backdrop{backdrop-filter:none!important}
+    html.gostop-performance-lite .table{box-shadow:inset 0 0 0 2px #70432a,inset 0 0 36px rgba(0,0,0,.28),0 12px 22px rgba(0,0,0,.34)!important}
+    html.gostop-performance-lite .table:after,
+    html.gostop-performance-lite .hand-actor,
+    html.gostop-performance-lite .flying-card,
+    html.gostop-performance-lite .capture-ghost{filter:none!important}
+    html.gostop-performance-lite .physical-card{box-shadow:0 5px 8px rgba(0,0,0,.28)!important}
+    html.gostop-performance-lite .floor .floor-card.target-option,
+    html.gostop-performance-lite .floor .floor-card.training-recommended{animation:none!important}
+    html.gostop-performance-lite .milestone-birds{display:none!important}
+    html.gostop-performance-lite .opening-die.rolling{animation:liteDieRoll .32s linear infinite!important}
+    @keyframes liteDieRoll{from{transform:rotate(0deg) scale(.92)}to{transform:rotate(360deg) scale(1)}}
 
     /* Leaderboards: top-ten board near the title, with the signed-in player's rank appended when outside Top 10. */
     .leaderboard-screen{
