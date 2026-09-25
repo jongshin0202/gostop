@@ -13,13 +13,20 @@ function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayH
   const listeners={};
   const windowListeners={};
   const overlay={hidden:overlayHidden};
-  const documentElement={requestFullscreen};
+  const splashListeners={};
+  const splashClasses=new Set();
+  const splash={
+    classList:{add(name){splashClasses.add(name);},remove(name){splashClasses.delete(name);},contains(name){return splashClasses.has(name);}},
+    setAttribute(){},
+    addEventListener(type,fn){splashListeners[type]=fn;}
+  };
+  const documentElement={requestFullscreen,classList:{contains(){return false;}}};
   const document={
     fullscreenElement,documentElement,
     head:{appendChild(){}},
     createElement(){return {dataset:{}};},
     querySelector(){return null;},
-    getElementById(id){return id==='soloStartOverlay'?overlay:null;},
+    getElementById(id){if(id==='soloStartOverlay')return overlay;if(id==='gostopBootSplash')return splash;return null;},
     addEventListener(type,fn,opts){listeners[type]={fn,opts};}
   };
   const context={
@@ -33,7 +40,7 @@ function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayH
   };
   context.globalThis=context;
   vm.runInNewContext(source,context);
-  return {api:context.GOSTOP_FULLSCREEN_TEST_API,listeners,windowListeners,overlay,document,context};
+  return {api:context.GOSTOP_FULLSCREEN_TEST_API,listeners,windowListeners,overlay,splash,splashListeners,splashClasses,document,context};
 }
 
 test('mobile fullscreen eligibility covers portrait and phone landscape but not desktop',()=>{
@@ -115,6 +122,21 @@ test('lite phones never request fullscreen, including on menu gestures',async()=
   assert.equal(api.isMainMenuFullscreenArmed(),false);
 });
 
+test('mobile boot gate waits for splash tap, enters fullscreen once, then releases main-menu reveal',async()=>{
+  let calls=0;
+  const {api,splashListeners,splashClasses,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{calls++;document.fullscreenElement=document.documentElement;return Promise.resolve();}});
+  const gate=api.gateInitialMainMenuFullscreen(document);
+  assert.ok(gate&&typeof gate.then==='function');
+  assert.equal(calls,0);
+  assert.equal(splashClasses.has('gostop-boot-ready'),true);
+  splashListeners.click();
+  await gate;
+  assert.equal(calls,1);
+  assert.equal(api.isInitialMenuGateComplete(),true);
+  assert.equal(splashClasses.has('gostop-boot-ready'),false);
+  assert.equal(api.gateInitialMainMenuFullscreen(document),null);
+});
+
 test('rotation-related fullscreen exit is re-armed only for the next gameplay gesture',()=>{
   let calls=0;
   const {api,listeners,windowListeners,document}=loadFullscreen({overlayHidden:true,requestFullscreen:()=>{calls++;return Promise.resolve();}});
@@ -170,5 +192,5 @@ test('fullscreen integration preserves click propagation and portrait stack orde
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
-  assert.match(generator,/mobile-fullscreen\.js\?v=20260924-3/);
+  assert.match(generator,/mobile-fullscreen\.js\?v=20260924-4/);
 });
