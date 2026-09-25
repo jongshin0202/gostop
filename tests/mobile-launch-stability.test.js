@@ -63,7 +63,7 @@ test('initial load hides the entire game shell until the menu or an actual game 
   assert.match(index,/html\.gostop-boot-pending #appShell\{visibility:hidden!important\}/);
   assert.match(index,/id="gostopBootSplash"[^>]*><strong>GoStop <em>Live!<\/em><\/strong><\/div>/);
   assert.match(index,/html:not\(\.gostop-boot-pending\) #gostopBootSplash\{display:none!important\}/);
-  assert.match(index,/#gostopBootSplash\.gostop-boot-ready::after\{content:"Tap to Start"/);
+  assert.match(index,/#gostopBootSplash\.gostop-boot-ready::after\{content:attr\(data-start-label\)/);
   const reveal=ranked.slice(ranked.indexOf('function revealCurrentMainMenu'),ranked.indexOf('const inviteUrl=',ranked.indexOf('function revealCurrentMainMenu')));
   assert.match(reveal,/gateInitialMainMenuFullscreen\?\.\(\)[^]*Promise\.resolve\(gate\)\.then\(\(\)=>revealCurrentMainMenu\(\)\)/);
   assert.match(reveal,/document\.documentElement\.classList\.remove\('gostop-boot-pending'\)[^]*overlay\.hidden=false/);
