@@ -219,7 +219,17 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after pause-expiry and lobby cleanup fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20260920-2/);
-  assert.match(index,/ranked-client\.js\?v=20260920-19/);
+  assert.match(index,/ranked-client\.js\?v=20260925-20/);
   assert.match(index,/app\.js\?v=20260925-7/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
+  assert.match(index,/<div class="start-actions" hidden>/);
+});
+
+test('production root HTML cannot preserve the obsolete main menu in cache',()=>{
+  const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  const root=vercel.headers.find(item=>item.source==='/'),index=vercel.headers.find(item=>item.source==='/index.html');
+  for(const rule of [root,index]){
+    assert.ok(rule);
+    assert.ok(rule.headers.some(header=>header.key==='Cache-Control'&&/no-store/.test(header.value)));
+  }
 });
