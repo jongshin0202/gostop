@@ -2980,7 +2980,8 @@ test('mobile hand browsing is owned by the canonical touch gesture layer, not du
   assert.doesNotMatch(source,/handPointerGesture|suppressDraggedHandClick|suppressNextDraggedHandClick/);
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
-  assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
+  assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(flickSample\)/);
+  assert.match(presentation,/const secondTap=!state\.dragging&&!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<18/);
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(card\)[\s\S]*else if\(browsed\)\{[\s\S]*clearSelection\(\)[\s\S]*else if\(secondTap\)\{[\s\S]*triggerPlay\(card\)/);
   assert.match(presentation,/suppressTouchClicksUntil=Date\.now\(\)\+900/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
