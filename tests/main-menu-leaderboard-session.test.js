@@ -95,14 +95,14 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('coarse mobile pointers activate main-menu buttons immediately on clean pointer-up',()=>{
+test('coarse mobile menu uses one immediate pointer-up activation path without competing handlers',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
-  assert.match(source,/const fastMenuEligible=\(\)=>globalThis\.matchMedia\?\.\('\(pointer:coarse\)'\)\?\.matches===true&&globalThis\.innerWidth<=760/);
-  assert.match(source,/overlay\.addEventListener\('pointerdown'/);
-  assert.match(source,/overlay\.addEventListener\('pointerup'/);
-  assert.match(source,/distance>14\|\|elapsed>900/);
-  assert.match(source,/fastMenuSyntheticClick=true;[\s\S]*state\.button\.click\(\)/);
-  assert.match(source,/Date\.now\(\)<fastMenuSuppressUntil/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/button\.addEventListener\('pointerdown'/);
+  assert.match(source,/button\.addEventListener\('pointerup'/);
+  assert.match(source,/if\(distance>16\)return/);
+  assert.match(source,/immediateMenuProgrammaticTarget=button;[\s\S]*button\.click\(\)/);
+  assert.doesNotMatch(source,/fastMenuPointer|fastMenuSyntheticClick|fastMenuSuppressUntil/);
 });
 
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
