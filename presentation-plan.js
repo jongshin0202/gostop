@@ -27,7 +27,7 @@
     const style=doc.createElement('style');
     style.dataset.gostopMotionLayer='true';
     style.textContent=`
-      #playerHand .hand-card{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+      #playerHand,#playerHand .hand-card{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
       #appShell,#appShell img,#scoreDialog,#scoreDialog img,#captureDialog,#captureDialog img,#resultDialog,#resultDialog img{-webkit-touch-callout:none}
       #scoreDialog{overscroll-behavior:contain}
       #scoreDialog .score-breakdown-card{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
@@ -51,8 +51,8 @@
     let bypassClickCard=null;
     let suppressGeneratedClickUntil=0;
     let suppressGeneratedClickCardId='';
-    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
-    const nativeTouchSupported=!pointerTouchSupported&&(('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0);
+    const nativeTouchSupported=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
+    const pointerTouchSupported=!nativeTouchSupported&&typeof globalThis.PointerEvent==='function';
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
