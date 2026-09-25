@@ -542,7 +542,7 @@
 
     const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
     const handInputDisabled=onlineMode?!rankedHandInputEnabled():(presentation.locked||state.turn!==PLAYER_A);
-    const blankInputDisabled=onlineMode?!rankedHandInputEnabled():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice);
+    const blankInputDisabled=onlineMode?!rankedHandInputEnabled():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
@@ -819,7 +819,7 @@
   async function humanUseBombBlank(){
     if(onlineMode){onlineSubmit({type:'useBombBlank'});return;}
     if(presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
-    if(state.turn!==PLAYER_A||state.winner||state.human.bombFreeTurns<=0||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||state.pendingDecision||presentation.targetChoice)return;
+    if(state.turn!==PLAYER_A||state.winner||state.human.bombFreeTurns<=0||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||state.pendingDecision||presentation.targetChoice||presentation.shakeResolver||presentation.bombResolver)return;
     clearTrainingCoach();presentation.blankTurnInFlight=true;presentation.locked=true;render();
     try{await executeDeckOnlyTurn('human');}
     finally{presentation.blankTurnInFlight=false;}
