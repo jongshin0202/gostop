@@ -16,29 +16,7 @@ function mobileHarness(){
     closest(selector){if(selector==='#playerHand .hand-card')return this;if(selector==='.hand-card-slot')return slot;return null;},
     getBoundingClientRect(){return {left:100,top:500,width:58,height:94};},
     cloneNode(){return {style:{},classList:classList(),tabIndex:0,removeAttribute(){},setAttribute(){},remove(){}};},
-    click(){activations.push({cardId:'m1-1',blank:false});
-
-test('Android PointerEvent browsers fall back to click activation if release bookkeeping is lost',()=>{
-  const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
-  const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
-  const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
-  try{
-    Object.defineProperty(globalThis,'PointerEvent',{value:function PointerEvent(){},configurable:true});
-    Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:5},configurable:true});
-    Object.defineProperty(globalThis,'ontouchstart',{value:null,configurable:true});
-    const h=mobileHarness();
-    assert.equal(plan.installHandFlickGestures(h.doc),true);
-    const click=()=>h.fire('click',{...h.eventBase(),target:h.card});
-    click();
-    assert.equal(h.activations.length,0,'first fallback click selects');
-    click();
-    assert.deepEqual(h.activations,[{cardId:'m1-1',blank:false}],'second fallback click commits');
-  }finally{
-    if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
-    if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
-    if(touchDescriptor)Object.defineProperty(globalThis,'ontouchstart',touchDescriptor);else delete globalThis.ontouchstart;
-  }
-});}
+    click(){activations.push({cardId:'m1-1',blank:false});}
   };
   const hand={
     classList:classList(),scrollLeft:0,
@@ -109,6 +87,29 @@ test('Android Chrome prefers Pointer Events, second tap commits, upward flick co
     h.fire('pointermove',pointerEvent(7,128,515));
     h.fire('pointercancel',pointerEvent(7,128,505));
     assert.equal(h.activations.length,4,'a cancelled pointer sequence still commits when its recorded movement is a valid upward flick');
+  }finally{
+    if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
+    if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
+    if(touchDescriptor)Object.defineProperty(globalThis,'ontouchstart',touchDescriptor);else delete globalThis.ontouchstart;
+  }
+});
+
+
+test('Android PointerEvent browsers fall back to click activation if release bookkeeping is lost',()=>{
+  const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
+  const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
+  try{
+    Object.defineProperty(globalThis,'PointerEvent',{value:function PointerEvent(){},configurable:true});
+    Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:5},configurable:true});
+    Object.defineProperty(globalThis,'ontouchstart',{value:null,configurable:true});
+    const h=mobileHarness();
+    assert.equal(plan.installHandFlickGestures(h.doc),true);
+    const click=()=>h.fire('click',{...h.eventBase(),target:h.card});
+    click();
+    assert.equal(h.activations.length,0,'first fallback click selects');
+    click();
+    assert.deepEqual(h.activations,[{cardId:'m1-1',blank:false}],'second fallback click commits');
   }finally{
     if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
     if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
