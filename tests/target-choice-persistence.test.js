@@ -24,7 +24,8 @@ test('ranked precommit target choice is cancelable while authoritative post-comm
 
 
 test('pre-hit floor choice can be cancelled anywhere except a highlighted target without consuming the selected card',()=>{
-  assert.match(source,/document\.addEventListener\('click',event=>\{[\s\S]*?!presentation\.targetChoice\?\.cancelable\|\|!presentation\.targetChoiceCleanup\|\|!presentation\.pendingHumanCardId[\s\S]*?targetChoiceCardId\(event\)\|\|els\.playerHand\.contains\(event\.target\)[\s\S]*?presentation\.targetChoiceCleanup\(\)/);
+  assert.match(source,/const cancelPrecommitTargetChoiceFromOutside=event=>\{[\s\S]*?!presentation\.targetChoice\?\.cancelable\|\|!presentation\.targetChoiceCleanup\|\|!presentation\.pendingHumanCardId[\s\S]*?targetChoiceCardId\(event\)\|\|els\.playerHand\.contains\(event\.target\)[\s\S]*?presentation\.targetChoiceCleanup\(\)/);
+  assert.match(source,/document\.addEventListener\('pointerdown',cancelPrecommitTargetChoiceFromOutside,true\)/);
   assert.match(source,/if\(presentation\.locked\)\{[\s\S]*?if\(presentation\.targetChoiceCleanup&&presentation\.pendingHumanCardId\)\{[\s\S]*?cardId===presentation\.pendingHumanCardId\)presentation\.targetChoiceCleanup\(\)/);
   assert.match(source,/if\(presentation\.targetChoice\?\.cancelable&&presentation\.targetChoiceCleanup&&presentation\.pendingHumanCardId\)\{presentation\.targetChoiceCleanup\(\);return;\}/);
 });
