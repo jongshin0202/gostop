@@ -121,12 +121,17 @@ test('orphaned ranked lock gets a short runtime recovery grace then ends without
   assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit').length,0);
 });
 
-test('closing a displaced same-seat socket does not create a false reconnect deadline',async()=>{
-  const {core,a,sa,sb}=await onlineRoom(),replacement=new Socket();
-  await core.connect(a.credential,replacement);assert.equal(core.sockets.get(a.playerId),replacement);
-  const disconnected=await core.disconnect(sa);assert.equal(disconnected,false);assert.equal(core.sockets.get(a.playerId),replacement);
+test('same authenticated seat stays live on two devices until the last device disconnects',async()=>{
+  const {core,a,sa,sb}=await onlineRoom(),secondDevice=new Socket(),resumed=await core.join(null,account('a','Alpha'));
+  assert.equal(resumed.playerId,a.playerId);assert.equal(resumed.seatId,a.seatId);assert.equal(resumed.resumedByAccount,true);
+  await core.connect(resumed.credential,secondDevice);
+  const live=core.sockets.get(a.playerId);assert.ok(live instanceof Set);assert.equal(live.size,2);
+  core.broadcastSnapshots();assert.ok(sa.last('snapshot'));assert.ok(secondDevice.last('snapshot'));
+  const firstDisconnect=await core.disconnect(sa);assert.equal(firstDisconnect,false);assert.equal(core.sockets.get(a.playerId).size,1);
   assert.equal(core.room.rankFlow.disconnectDeadlines[a.playerId],undefined);
   assert.equal(sb.last('snapshot').snapshot.sessionFlow.opponentReconnectUntil,null);
+  const lastDisconnect=await core.disconnect(secondDevice);assert.equal(lastDisconnect,true);assert.equal(core.sockets.has(a.playerId),false);
+  assert.ok(core.room.rankFlow.disconnectDeadlines[a.playerId]);
 });
 
 test('sync request after reconnect deadline resolves the session instead of leaving 0:00 stuck',async()=>{
@@ -146,6 +151,42 @@ test('live ranked socket survives account reconciliation and clears any orphan d
   assert.equal(status.active,true);assert.equal(status.connected,true);assert.equal(core.room.rankFlow.runtimeOrphanDeadlines[a.playerId],undefined);
 });
 
+
+test('disconnected Competitive seat reconciliation exposes the active reconnect deadline',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,sa}=await onlineRoom({now:clock});
+  await core.disconnect(sa);
+  const deadline=core.room.rankFlow.disconnectDeadlines[a.playerId],status=await core.reconcileActiveRanked('a',core.room.sessionId);
+  assert.ok(deadline>Date.parse(instant));assert.equal(status.active,true);assert.equal(status.connected,false);assert.equal(status.reconnectUntil,deadline);
+});
+
+test('returning Competitive player can choose No and immediately apply normal disconnect abandonment rules',async()=>{
+  const {core,a,b,sa,sb,accountStore}=await onlineRoom(),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.playerId===a.playerId?'a':'b',sessionId=core.room.sessionId;
+  await core.disconnect(socket);assert.ok(core.room.rankFlow.disconnectDeadlines[quitter.playerId]);
+  const result=await core.declineReconnect(accountId,sessionId);
+  assert.equal(result.ok,true);assert.equal(result.ended,true);assert.equal(result.reason,'reconnect-declined');assert.equal(result.normalQuit,false);
+  assert.equal(result.penaltyCoins,core.room.rankFlow.abandonment.penaltyCoins);assert.equal(result.fairPoints,core.room.rankFlow.abandonment.fairPoints);assert.equal(result.settlementType,core.room.rankFlow.abandonment.settlementType);
+  assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,quitter.playerId);assert.equal(core.room.status,'ended');
+  assert.equal(core.room.rankFlow.abandonment.playerId,quitter.playerId);assert.equal(core.room.rankFlow.abandonment.reason,'reconnect-declined');
+  const forceQuit=accountStore.calls.findLast(call=>call.path==='/internal/force-quit');assert.ok(forceQuit);assert.equal(forceQuit.body.accountId,accountId);assert.equal(forceQuit.body.reason,'reconnect-declined');
+});
+
+test('expired reconnect reconciliation settles the disconnect before returning account status',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb;
+  await core.disconnect(socket);instant='2026-09-15T04:46:01.000Z';
+  const accountId=quitter.playerId===a.playerId?'a':'b',status=await core.reconcileActiveRanked(accountId,core.room.sessionId);
+  assert.equal(status.active,false);assert.equal(status.reason,'disconnect-timeout');assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
+});
+
+test('Competitive player cannot choose Yes after reconnect grace has expired',async()=>{
+  let instant='2026-09-15T04:45:00.000Z';const clock=()=>instant,{core,a,b,sa,sb,accountStore}=await onlineRoom({now:clock}),state=core.engineState(),activeSeat=state.pendingDecision?.playerId||state.pendingTurn?.actorId||state.turn;
+  const quitter=a.seatId===activeSeat?a:b,socket=quitter.playerId===a.playerId?sa:sb,accountId=quitter.playerId===a.playerId?'a':'b',credential=quitter.credential,stored=core.room.participants.find(item=>item.playerId===quitter.playerId),returningAccount={id:accountId,nickname:stored.nickname,walletCoins:stored.walletCoins};
+  await core.disconnect(socket);instant='2026-09-15T04:46:01.000Z';
+  await assert.rejects(()=>core.join(credential,returningAccount),error=>error?.code==='ROOM_NOT_FOUND');
+  assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.status,'ended');
+  assert.ok(accountStore.calls.some(call=>call.path==='/internal/force-quit'&&call.body.accountId===accountId));
+});
 test('accepted multiplayer challenge ends ranked Solo immediately with no abandonment penalty',async()=>{
   const {core,user,socket,accountStore}=await soloRoom(),forceQuitsBefore=accountStore.calls.filter(call=>call.path==='/internal/force-quit').length;
   assert.equal(core.room.sessionFlow.ended,false);
@@ -207,7 +248,19 @@ test('online quit decline schedules requester exit after current game',async()=>
 
 test('ranked Solo disconnect freezes the five-point settlement and stops the computer during grace',async()=>{
   const {core,user,socket}=await soloRoom(),bot=core.room.participants.find(item=>item.bot),record=core.authority.exportMatch(core.room.matchId),botSide=bot.seatId==='playerA'?'human':'ai';
-  assert.equal(globalThis.GoStopEngine.scorePlayer(record.state[botSide]).total,0);record.state[botSide].firstPpeokPoints=5;record.state[botSide].go=0;record.state[botSide].shakes=0;record.state[botSide].shakeMultiplier=1;record.state.matchContext.nagariCarryPower=0;
+  record.state.terminalResult=null;record.state.winner=null;record.completedAt=null;core.room.terminalResult=null;core.room.status='ready';
+  // Secure-random Solo setup can let either seat collect scoring cards before this synthetic
+  // disconnect scenario is injected. Return those captures to the deck so the fixture still
+  // conserves all 48 cards, then normalize both scoring states to a deterministic 0-vs-5 setup.
+  const userSide=botSide==='human'?'ai':'human';
+  record.state.deck.push(...record.state[botSide].captured,...record.state[userSide].captured);
+  for(const side of [botSide,userSide]){
+    record.state[side].captured=[];record.state[side].gukjinMode='animal';record.state[side].firstPpeokPoints=0;
+    record.state[side].go=0;record.state[side].shakes=0;record.state[side].shakeMultiplier=1;record.state[side].lastGoScore=0;
+  }
+  assert.equal(globalThis.GoStopEngine.scorePlayer(record.state[botSide]).total,0);
+  assert.equal(globalThis.GoStopEngine.scorePlayer(record.state[userSide]).total,0);
+  record.state[botSide].firstPpeokPoints=5;record.state.matchContext.nagariCarryPower=0;
   core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);await core.persist();assert.equal(core.calculateDisconnectSettlement(user.playerId).fairPoints,5);
   await core.disconnect(socket);assert.equal(core.room.rankFlow.disconnectSettlements[user.playerId].fairPoints,5);const before=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId}).revision;
   const changed=core.authority.exportMatch(core.room.matchId);changed.state[botSide].firstPpeokPoints=20;core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(changed);assert.equal(core.calculateDisconnectSettlement(user.playerId).fairPoints,5);
@@ -216,6 +269,15 @@ test('ranked Solo disconnect freezes the five-point settlement and stops the com
 
 test('ranked Solo browser return during reconnect grace restores the same seat and game with no coin settlement',async()=>{
   const {core,user,socket,accountStore}=await soloRoom();
+  // Secure-random Solo setup can very rarely finish before this reconnect scenario starts.
+  // Normalize only the current hand to an active user turn so the test always owns the
+  // reconnect window instead of inheriting a randomly completed hand.
+  const record=core.authority.exportMatch(core.room.matchId),userSide=user.seatId==='playerA'?'human':'ai';
+  record.state.terminalResult=null;record.state.winner=null;record.state.pendingDecision=null;record.state.pendingTurn=null;record.state.turn=user.seatId;record.completedAt=null;
+  record.state[userSide].turnsTaken=Math.max(1,Number(record.state[userSide].turnsTaken)||0);
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);
+  core.room.terminalResult=null;core.room.status='ready';core.room.sessionFlow.ended=false;core.room.sessionFlow.endedBy=null;core.room.sessionFlow.replayReady={playerA:false,playerB:false};await core.persist();
+
   const oldMatch=core.room.matchId,oldSequence=core.room.gameSequence,oldWallet=core.room.participants.find(item=>item.playerId===user.playerId).walletCoins;
   const settlementsBefore=accountStore.calls.filter(call=>call.path==='/internal/game/settle'||call.path==='/internal/force-quit').length;
   await core.disconnect(socket);
@@ -268,6 +330,9 @@ test('clean seven-point Solo Stop settles and records exactly seven with no hidd
   record.state.terminalResult={type:'stop',winnerId:seatId,score:7,settlement:{baseTotal:7,total:7,goBonus:0,reasons:[],formulaSteps:['Base 7']}};
   record.state.winner=seatId;record.completedAt=now();
   core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);
+  // Secure random setup can very rarely finish the hand before this synthetic settlement is injected.
+  // This test owns the current game settlement, so remove only that game's prior marker before asserting it.
+  const gameId=core.currentGameId();core.room.settledGameIds=(core.room.settledGameIds||[]).filter(id=>id!==gameId);
   const snapshot=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId});
   await core.settleTerminal(snapshot);
   const call=accountStore.calls.findLast(item=>item.path==='/internal/game/settle');
@@ -293,4 +358,29 @@ test('anonymous Free Gaming host stays connected while waiting for the second pl
   assert.equal(connected.playerId,host.playerId);
   assert.equal(core.room.participants[0].connected,true);
   assert.equal(socket.last('snapshot'),undefined);
+});
+
+
+test('Friendly Quit Game ends an unranked two-player room immediately instead of opening a Competitive quit request',async()=>{
+  const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});
+  const host=await core.create('FREEGAMEABC2348',null),friend=await core.join(null,null),hostSocket=new Socket(),friendSocket=new Socket();
+  await core.connect(host.credential,hostSocket);await core.connect(friend.credential,friendSocket);
+  const snapshot=hostSocket.last('snapshot').snapshot;
+  const result=await core.handle(hostSocket,flow('friendly-quit',snapshot.revision,{type:'quitGame'}));
+  assert.equal(result.type,'actionAccepted');assert.equal(core.isRanked(),false);assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,host.playerId);assert.equal(core.room.rankFlow.quitRequest,null);assert.equal(core.room.status,'ended');
+  const hostFlow=hostSocket.last('snapshot').snapshot.sessionFlow,friendFlow=friendSocket.last('snapshot').snapshot.sessionFlow;
+  assert.equal(hostFlow.ended,true);assert.equal(hostFlow.endedByYou,true);assert.equal(friendFlow.ended,true);assert.equal(friendFlow.endedByYou,false);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit'||call.path==='/internal/game/settle').length,0);
+});
+
+test('anonymous Free Friend tab disconnect immediately ends the room for the surviving player',async()=>{
+  const storage=new MemoryStorage(),accountStore=new AccountStub(),core=new FinalRankedRoomCore({storage,accountStore,cryptoApi:webcrypto,now});
+  const host=await core.create('FREEGAMEABC2347',null),friend=await core.join(null,null),hostSocket=new Socket(),friendSocket=new Socket();
+  await core.connect(host.credential,hostSocket);await core.connect(friend.credential,friendSocket);
+  assert.equal(core.isRanked(),false);assert.ok(core.room.matchId);assert.equal(core.room.sessionFlow.ended,false);
+  const result=await core.disconnect(friendSocket);
+  assert.equal(result,true);assert.equal(core.room.sessionFlow.ended,true);assert.equal(core.room.sessionFlow.endedBy,friend.playerId);assert.equal(core.room.sessionFlow.forceEnded,true);assert.equal(core.room.status,'ended');
+  const survivor=hostSocket.last('snapshot').snapshot.sessionFlow;
+  assert.equal(survivor.ended,true);assert.equal(survivor.endedByYou,false);assert.equal(survivor.forceEnded,true);
+  assert.equal(accountStore.calls.filter(call=>call.path==='/internal/force-quit'||call.path==='/internal/game/settle').length,0);
 });

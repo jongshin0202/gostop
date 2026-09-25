@@ -24,7 +24,8 @@ async function reconcileActiveRanked(env,account){
   const active=account?.activeRanked;if(!active?.roomCode||!active?.sessionId||!account?.id)return account;
   try{
     const room=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(active.roomCode)),response=await room.fetch(new Request('https://room/reconcile-active',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:active.sessionId})}));
-    if(!response.ok)return account;const status=await response.json();if(status.active!==false)return account;
+    if(!response.ok)return account;const status=await response.json();
+    if(status.active!==false)return {...account,activeRanked:{...active,connected:status.connected!==false,reconnectUntil:Number(status.reconnectUntil)||null,runtimeOrphanUntil:Number(status.runtimeOrphanUntil)||null}};
     const cleared=await accountStub(env).fetch(new Request('https://accounts/internal/active-ranked/clear',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:active.sessionId})}));
     if(!cleared.ok)return account;return (await cleared.json()).account||account;
   }catch(_){return account;}
@@ -39,7 +40,7 @@ async function allocateRoom(env,{solo=false,account=null}={}){
   return json({ok:false,error:{code:'ROOM_CODE_EXHAUSTED',message:'Could not allocate a room code.'}},503);
 }
 export default {async fetch(request,env){
-  const url=new URL(request.url),origin=request.headers.get('Origin'),adminRoute=/^\/api\/admin(?:\/|$)/.test(url.pathname),apiRoute=/^\/api\/(?:rooms|solo|auth|account|me|leaderboards|lobby|admin)(?:\/|$)/.test(url.pathname);
+  const url=new URL(request.url),origin=request.headers.get('Origin'),adminRoute=/^\/api\/admin(?:\/|$)/.test(url.pathname),apiRoute=/^\/api\/(?:rooms|solo|auth|account|referrals|social|me|leaderboards|player-profile|lobby|admin)(?:\/|$)/.test(url.pathname);
   if(adminRoute&&origin&&!isAllowedAdminOrigin(origin,env))return json({ok:false,error:{code:'ADMIN_ORIGIN_NOT_ALLOWED',message:'Admin origin is not allowed.'}},403);
   if(apiRoute&&!adminRoute&&!isAllowedOrigin(origin,env))return json({ok:false,error:{code:'ORIGIN_NOT_ALLOWED',message:'Request origin is not allowed.'}},403);
   if(request.method==='OPTIONS'){
@@ -64,10 +65,20 @@ export default {async fetch(request,env){
       const headers=new Headers(request.headers);copyGeoHeaders(geoHeadersFor(request),headers);const stub=env.LOBBY.get(env.LOBBY.idFromName('global'));return stub.fetch(new Request('https://lobby/connect',{headers}));
     }
     if(request.method==='POST'&&url.pathname==='/api/auth/register')return withCors(await forwardAccount(request,env,'/register'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/auth/verify-email')return withCors(await forwardAccount(request,env,'/verify-email'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/auth/resend-verification')return withCors(await forwardAccount(request,env,'/resend-verification'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/login')return withCors(await forwardAccount(request,env,'/login'),origin);
     if(request.method==='POST'&&url.pathname==='/api/auth/logout')return withCors(await forwardAccount(request,env,'/logout'),origin);
     if(request.method==='GET'&&url.pathname==='/api/me'){const response=await forwardAccount(request,env,'/me');if(!response.ok)return withCors(response,origin);const data=await response.json();if(data.account)data.account=await reconcileActiveRanked(env,data.account);return withCors(json(data,response.status),origin);}
     if(request.method==='POST'&&url.pathname==='/api/account/notices/ack')return withCors(await forwardAccount(request,env,'/notices/ack'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/referrals/create')return withCors(await forwardAccount(request,env,'/referrals/create'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/referrals/collect')return withCors(await forwardAccount(request,env,'/referrals/collect'),origin);
+    if(request.method==='GET'&&url.pathname==='/api/social')return withCors(await forwardAccount(request,env,'/social'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/search')return withCors(await forwardAccount(request,env,'/social/search'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/request')return withCors(await forwardAccount(request,env,'/social/request'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/respond')return withCors(await forwardAccount(request,env,'/social/respond'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/social/unfriend')return withCors(await forwardAccount(request,env,'/social/unfriend'),origin);
+    if(request.method==='POST'&&url.pathname==='/api/player-profile')return withCors(await forwardAccount(request,env,'/player-profile'),origin);
     if(request.method==='GET'&&url.pathname==='/api/leaderboards')return withCors(await forwardAccount(request,env,'/leaderboards'),origin);
     if(request.method==='POST'&&url.pathname==='/api/solo'){
       const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
@@ -95,6 +106,11 @@ export default {async fetch(request,env){
       const account=await resolveAccount(request,env);
       if(account?.activeRanked?.roomCode&&account.activeRanked.roomCode!==match[1])return withCors(json({ok:false,error:{code:'ACTIVE_RANKED_GAME',message:'Only one Coin game can be active at a time.',activeRanked:account.activeRanked}},409),origin);
       const body=await request.json().catch(()=>({})),stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return withCors(await stub.fetch(new Request('https://room/join',{method:'POST',body:JSON.stringify({...body,account}),headers:{'content-type':'application/json'}})),origin);
+    }
+    if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/decline-reconnect$/))&&request.method==='POST'){
+      const account=await requireAccount(request,env);if(!account)return withCors(json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401),origin);
+      if(account.activeRanked?.roomCode!==match[1]||!['solo','online'].includes(account.activeRanked?.mode))return withCors(json({ok:false,error:{code:'RECONNECT_NOT_PENDING',message:'There is no active Competitive reconnect for this room.'}},409),origin);
+      const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1])),response=await stub.fetch(new Request('https://room/decline-reconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({accountId:account.id,sessionId:account.activeRanked.sessionId})}));return withCors(response,origin);
     }
     if((match=url.pathname.match(/^\/api\/rooms\/([A-Z2-9]{14})\/ws$/))&&request.method==='GET'){
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return stub.fetch(new Request('https://room/connect',{headers:request.headers}));

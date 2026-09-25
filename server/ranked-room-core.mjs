@@ -100,6 +100,17 @@ export class RankedRoomCore extends RoomCore{
     await this.persist();if(this.room.matchId)this.broadcastSnapshots();await this.scheduleAlarm();
     return {ok:true,roomCode:this.room.roomCode};
   }
+  async join(presentedCredential,account=null){
+    await this.load();
+    if(this.room&&!this.room.sessionFlow?.ended&&this.room.status!=='ended'&&account?.id){
+      const participant=this.room.participants.find(item=>item.accountId===account.id&&!item.bot),deadline=participant?this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0:0;
+      if(participant&&deadline&&!this.sockets.has(participant.playerId)&&this.nowMs()>=deadline){
+        if(this.isBeforeFirstTurn(participant.playerId))await this.endPreFirstTurnDisconnect(participant.playerId);else await this.abandon(participant.playerId,'disconnect-timeout');
+        await this.scheduleAlarm();throw new RoomError('ROOM_NOT_FOUND','Room does not exist or has expired.',404);
+      }
+    }
+    return super.join(presentedCredential,account);
+  }
   async connect(credential,socket){
     const participant=await super.connect(credential,socket);await this.load();
     if(this.room.rankFlow.disconnectDeadlines[participant.playerId])delete this.room.rankFlow.disconnectDeadlines[participant.playerId];
@@ -112,7 +123,15 @@ export class RankedRoomCore extends RoomCore{
   }
   async disconnect(socket){
     const playerId=socket.__playerId,disconnected=await super.disconnect(socket);if(!disconnected||!playerId||!this.room||this.room.sessionFlow.ended||this.room.terminalResult)return false;
-    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot||!this.isRanked())return disconnected;
+    const participant=this.room.participants.find(item=>item.playerId===playerId);if(!participant||participant.bot)return disconnected;
+    if(!this.isRanked()){
+      const activeFreeFriendMatch=!this.isSolo()&&!!this.room.matchId&&this.room.participants.length===2;
+      if(activeFreeFriendMatch){
+        this.room.sessionFlow.ended=true;this.room.sessionFlow.endedBy=playerId;this.room.sessionFlow.forceEnded=true;this.room.status='ended';this.room.updatedAt=this.now();
+        await this.persist();this.broadcastSnapshots();
+      }
+      return disconnected;
+    }
     if(this.room.rankFlow.runtimeOrphanDeadlines?.[playerId])delete this.room.rankFlow.runtimeOrphanDeadlines[playerId];
     this.room.rankFlow.disconnectSettlements[playerId]=this.calculateDisconnectSettlement(playerId);this.room.rankFlow.disconnectDeadlines[playerId]=this.nowMs()+RECONNECT_GRACE_MS;if(this.room.rankFlow.inactivity?.playerId===playerId)this.room.rankFlow.inactivity=null;await this.persist();await this.scheduleAlarm();return true;
   }
@@ -128,12 +147,29 @@ export class RankedRoomCore extends RoomCore{
     if(this.room.sessionFlow?.ended||this.room.status==='ended'||!this.room.sessionId)return {active:false,reason:'room-ended'};
     if(sessionId&&this.room.sessionId!==sessionId)return {active:false,reason:'session-mismatch'};
     const participant=this.room.participants.find(item=>item.accountId===accountId&&!item.bot);if(!participant)return {active:false,reason:'participant-missing'};
+    if(await this.resolveExpiredDisconnects(this.nowMs()))return {active:false,reason:'disconnect-timeout'};
     if(this.sockets.has(participant.playerId)){if(this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId]){delete this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId];await this.persist();await this.scheduleAlarm();}return {active:true,connected:true};}
     const reconnectUntil=this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0;if(reconnectUntil)return {active:true,connected:false,reconnectUntil};
     let orphanUntil=this.room.rankFlow.runtimeOrphanDeadlines?.[participant.playerId]||0;
     if(!orphanUntil){orphanUntil=this.nowMs()+RUNTIME_ORPHAN_GRACE_MS;this.room.rankFlow.runtimeOrphanDeadlines[participant.playerId]=orphanUntil;await this.persist();await this.scheduleAlarm();}
     if(this.nowMs()>=orphanUntil)return this.endRuntimeOrphan(participant.playerId);
     return {active:true,connected:false,runtimeOrphanUntil:orphanUntil};
+  }
+  async declineReconnect(accountId,sessionId){
+    await this.load();
+    if(!this.room||this.room.sessionFlow?.ended||this.room.status==='ended'||!this.room.sessionId)return {ok:true,ended:true,reason:'room-ended'};
+    if(!this.isRanked())throw new RoomError('RECONNECT_DECLINE_NOT_AVAILABLE','Reconnect decline is only available for Competitive play.',409);
+    if(sessionId&&this.room.sessionId!==sessionId)throw new RoomError('SESSION_MISMATCH','The active Competitive session changed.',409);
+    const participant=this.room.participants.find(item=>item.accountId===accountId&&!item.bot);if(!participant)throw new RoomError('NOT_AUTHENTICATED','This account is not part of the Competitive game.',401);
+    if(this.sockets.has(participant.playerId))throw new RoomError('PLAYER_CONNECTED','This player is already connected to the game.',409);
+    const deadline=this.room.rankFlow.disconnectDeadlines?.[participant.playerId]||0;
+    if(!deadline){if(await this.resolveExpiredDisconnects(this.nowMs()))return {ok:true,ended:true,reason:'disconnect-timeout'};throw new RoomError('RECONNECT_NOT_PENDING','There is no active reconnect window for this player.',409);}
+    const timedOut=this.nowMs()>=deadline,normalQuit=this.isBeforeFirstTurn(participant.playerId);
+    if(normalQuit)await this.endPreFirstTurnDisconnect(participant.playerId);
+    else await this.abandon(participant.playerId,timedOut?'disconnect-timeout':'reconnect-declined');
+    await this.scheduleAlarm();
+    const abandonment=this.room.rankFlow.abandonment;
+    return {ok:true,ended:true,reason:timedOut?'disconnect-timeout':'reconnect-declined',normalQuit,penaltyCoins:Math.max(0,Number(abandonment?.penaltyCoins)||0),fairPoints:Math.max(0,Number(abandonment?.fairPoints)||0),settlementType:abandonment?.settlementType||null};
   }
   engineState(){return this.room?.matchId?this.authority.readTrustedState(this.room.matchId):null;}
   calculateDisconnectSettlement(playerId){
@@ -249,7 +285,7 @@ export class RankedRoomCore extends RoomCore{
     return false;
   }
   async handle(socket,input){
-    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}const expiredResolved=await this.resolveExpiredDisconnects();if(expiredResolved&&message.type==='action'){const participant=this.room.participants.find(item=>item.playerId===socket.__playerId),revision=participant&&this.room.matchId?this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision:0,response=envelope('actionAccepted',{actionId:message.actionId,matchId:this.room.matchId,revision,duplicate:false});this.send(socket,response);return response;}if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
+    await this.load();let message;try{message=parseClientMessage(input);}catch(_){return super.handle(socket,input);}const expiredResolved=await this.resolveExpiredDisconnects();if(expiredResolved&&message.type==='action'){const participant=this.room.participants.find(item=>item.playerId===socket.__playerId),revision=participant&&this.room.matchId?this.authority.getSnapshot({matchId:this.room.matchId,viewerId:participant.playerId}).revision:0,response=envelope('actionAccepted',{actionId:message.actionId,matchId:this.room.matchId,revision,duplicate:false});this.send(socket,response);return response;}if(message.type==='action'&&message.action.type==='quitGame'&&!this.isRanked())return super.handle(socket,input);if(message.type==='action'&&['requestPause','cancelPause','quitPausedGame','claimExpiredPauseWin','quitGame','respondQuit','cancelDisconnectedGame'].includes(message.action.type)){
       try{await this.handleRankedFlow(socket,message);}catch(error){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:error.code||'ILLEGAL_ACTION',message:error.message}});this.send(socket,response);return response;}return envelope('actionAccepted',{actionId:message.actionId});
     }
     if(message.type==='action'&&this.room.rankFlow?.pause){const response=envelope('actionRejected',{actionId:message.actionId,error:{code:'PAUSED',message:'The game is paused.'}});this.send(socket,response);return response;}

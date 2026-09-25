@@ -174,9 +174,12 @@ test('System Reset is the final admin section with two backup-first reset modes 
   assert.match(adminJs,/name:'adminPassword'.*type:'password'/);assert.match(adminApi,/requireConfirmationPassword/);assert.match(adminApi,/writeBackup\(store,'primary'/);assert.match(adminApi,/writeBackup\(store,'safety'/);assert.match(adminApi,/promote-safety/);
 });
 
-test('player detail includes password-confirmed complete account deletion',()=>{
+test('player detail includes password-confirmed complete account deletion without blocking browser dialogs',()=>{
   const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
   assert.match(adminJs,/Delete Account & All Records/);assert.match(adminJs,/kind==='delete-player'/);assert.match(adminJs,/adminPassword/);
+  const start=adminJs.indexOf("else if(kind==='delete-player')"),end=adminJs.indexOf('async function leaderboardAction',start),flow=adminJs.slice(start,end);
+  assert.doesNotMatch(flow,/window\.confirm\(|alert\(/);
+  assert.match(flow,/await refreshCurrent\(\)/);assert.match(flow,/Account Deleted/);assert.match(flow,/detailDialog'\)\.showModal\(\)/);
   assert.match(adminApi,/deletePlayerCompletely/);assert.match(adminApi,/purge-account/);assert.match(adminApi,/entryReferencesAccount/);
 });
 
@@ -246,6 +249,13 @@ test('admin dashboard assets are no-store and expose a visible build stamp',()=>
 });
 
 
+test('Vercel has a same-origin player API rewrite',()=>{
+  const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  const rule=(vercel.rewrites||[]).find(item=>item.source==='/api/:path*');
+  assert.ok(rule);
+  assert.equal(rule.destination,'https://gostop-authority.jwshin1.workers.dev/api/:path*');
+});
+
 test('Vercel proxies admin APIs to Cloudflare authority on the same browser origin',()=>{
   const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
   assert.ok((vercel.rewrites||[]).some(rule=>rule.source==='/api/admin/:path*'&&rule.destination==='https://gostop-authority.jwshin1.workers.dev/api/admin/:path*'));
@@ -311,4 +321,13 @@ test('session admin summarizes players, wins, Coins and milestones with player a
   assert.match(adminJs,/5 Brights/);assert.match(adminJs,/5 Birdies/);assert.match(adminJs,/3 Stripes/);assert.match(adminJs,/Shakes/);assert.match(adminJs,/3-Go/);assert.match(adminJs,/Ttadak/);assert.match(adminJs,/Sweep/);
   assert.match(adminJs,/Click any Game ID for the full authoritative settlement, events, cards, and stored game history/);
   assert.match(adminJs,/data-session-player/);assert.match(adminJs,/data-game/);
+});
+
+test('admin UI avoids browser-native blocking alert and confirm dialogs for normal dashboard actions',()=>{
+  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  assert.doesNotMatch(adminJs,/\bwindow\.confirm\s*\(/);
+  assert.doesNotMatch(adminJs,/\b(?:window\.)?alert\s*\(/);
+  assert.match(adminJs,/function showAdminNotice\(/);
+  assert.match(adminJs,/System Reset Completed/);
+  assert.match(adminJs,/System Restore Completed/);
 });

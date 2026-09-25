@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,14 +17,37 @@ jobs:
       - name: Syntax checks
         run: |
           node --check app.js
-          node --check ranked-client.js
+          node --check audio-fanfare.js
+          node --check audio-ppeok.js
+          node --check audio-shake.js
+          node --check diagnostics.js
+          node --check game-engine.js
+          node --check gostop-notifications-sw.js
+          node --check i18n.js
+          node --check mobile-fullscreen.js
           node --check online-client.js
+          node --check presentation-plan.js
+          node --check ranked-client.js
+          node --check runtime-config.js
+          node --check session-authority.js
           node --check admin.js
+          node --check scripts/write-runtime-config.mjs
+          node --check server/account-store.mjs
           node --check server/admin-api.mjs
-          node --check server/worker.mjs
+          node --check server/backup-store.mjs
           node --check server/game-room.mjs
+          node --check server/lobby.mjs
+          node --check server/protocol.mjs
           node --check server/ranked-room-core.mjs
           node --check server/ranked-room-final.mjs
           node --check server/ranked-account-store.mjs
+          node --check server/room-core.mjs
+          node --check server/worker.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
+      - name: Install browser test runner
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Browser end-to-end smoke tests
+        run: npx playwright test

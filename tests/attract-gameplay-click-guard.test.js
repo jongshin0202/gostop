@@ -15,6 +15,6 @@ test('ranked game launches synchronously cancel attract mode before async accoun
 });
 
 test('attract capture can never swallow gameplay clicks once an online session exists',()=>{
-  assert.match(ranked,/if\(!attractMode\|\|leaderboardScreen\.hidden\|\|globalThis\.goStopOnlineSession\)return;event\.preventDefault\(\);event\.stopPropagation\(\)/);
+  assert.match(ranked,/if\(!attractMode\|\|leaderboardScreen\.hidden\|\|globalThis\.goStopOnlineSession\)return;if\(Date\.now\(\)<leaderboardSwipeSuppressClickUntil\)\{event\.preventDefault\(\);event\.stopPropagation\(\);return;\}event\.preventDefault\(\);event\.stopPropagation\(\)/);
   assert.match(ranked,/if\(attractMode&&!globalThis\.goStopOnlineSession\)\{event\.preventDefault\(\);event\.stopPropagation\(\)/);
 });

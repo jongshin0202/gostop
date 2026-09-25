@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
 
 test('ranked Solo and Online entry are single-flight and cannot overlap while a notice is pending',()=>{
@@ -55,6 +56,21 @@ test('leaving an online game invalidates all stale session events',()=>{
   const block=app.slice(start,end);
   assert.match(block,/onlineSessionGeneration\+\+/);
   assert.match(block,/goStopOnlineSession\?\.close\(\)/);
+});
+
+test('initial load hides the entire game shell until the menu or an actual game is ready',()=>{
+  assert.match(index,/<html lang="en" class="gostop-boot-pending">/);
+  assert.match(index,/html\.gostop-boot-pending #appShell\{visibility:hidden!important\}/);
+  assert.match(index,/id="gostopBootSplash"[^>]*><strong>GoStop <em>Live!<\/em><\/strong><\/div>/);
+  assert.match(index,/html:not\(\.gostop-boot-pending\) #gostopBootSplash\{display:none!important\}/);
+  assert.match(index,/#gostopBootSplash\.gostop-boot-ready::after\{content:attr\(data-start-label\)/);
+  const reveal=ranked.slice(ranked.indexOf('function revealCurrentMainMenu'),ranked.indexOf('const inviteUrl=',ranked.indexOf('function revealCurrentMainMenu')));
+  assert.match(reveal,/gateInitialMainMenuFullscreen\?\.\(\)[^]*Promise\.resolve\(gate\)\.then\(\(\)=>revealCurrentMainMenu\(\)\)/);
+  assert.match(reveal,/document\.documentElement\.classList\.remove\('gostop-boot-pending'\)[^]*overlay\.hidden=false/);
+  const localLaunch=app.slice(app.indexOf('async function launchLocalGame'),app.indexOf("document.addEventListener('pointerdown'",app.indexOf('async function launchLocalGame')));
+  assert.match(localLaunch,/document\.documentElement\.classList\.remove\('gostop-boot-pending'\)/);
+  const onlineLaunch=app.slice(app.indexOf('function enterOnlineMatchView'),app.indexOf('const beginOnline=async',app.indexOf('function enterOnlineMatchView')));
+  assert.match(onlineLaunch,/document\.documentElement\.classList\.remove\('gostop-boot-pending'\)/);
 });
 
 test('admin tables fit desktop width and only use horizontal scrolling on small screens',()=>{

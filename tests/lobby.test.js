@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Lobby,distance,similarityPercent,MATCH_WEIGHTS,MAX_LOBBY_RESULTS} from '../server/lobby.mjs';
 
-const socket=()=>({messages:[],send(data){this.messages.push(JSON.parse(data));}});
+const socket=()=>({messages:[],closed:false,closeCode:null,send(data){this.messages.push(JSON.parse(data));},close(code){this.closed=true;this.closeCode=code;}});
 const account=(id,nickname,walletCoins)=>({id,nickname,walletCoins,countryCode:'US'});
 let clientSequence=0;
-const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu',foreground=true,lastActivityAt=Date.now(),lastPresenceAt=Date.now(),notificationsEnabled=false}={})=>({clientId:`test-client-${++clientSequence}`,socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,autoMatching,searchQuery:'',connectedAt:Date.now(),lastActivityAt,lastPresenceAt,foreground,notificationsEnabled});
+const client=(id,nickname,walletCoins,{available=true,twoPlayer=false,autoMatching=false,mode='menu',foreground=true,lastActivityAt=Date.now(),lastPresenceAt=Date.now(),notificationsEnabled=false,tabId=null}={})=>({clientId:`test-client-${++clientSequence}`,socket:socket(),account:account(id,nickname,walletCoins),available,twoPlayer,mode,tabId,autoMatching,searchQuery:'',connectedAt:Date.now(),lastActivityAt,lastPresenceAt,foreground,notificationsEnabled});
 const rowsFor=entries=>new Map(entries.map(([nickname,score,gamesPlayed,totalCoins,rank,wins=0,losses=Math.max(0,gamesPlayed-wins)])=>[
   nickname.toLowerCase(),
   {nickname,score,gamesPlayed,totalCoins,rank,wins,losses,provisional:gamesPlayed<10,countryCode:'US'}
@@ -85,7 +85,90 @@ test('Away remains challengeable even without notification permission while noti
   away.notificationsEnabled=true;assert.equal(lobby.presenceForAccount('away').notificationsEnabled,true);
 });
 
-test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
+
+test('stale lobby heartbeat is not challengeable or counted online',()=>{
+  const rows=rowsFor([['Viewer',1,1,1,1],['Ghost',1,1,1,2]]),lobby=makeLobby(rows),now=Date.now(),viewer=client('viewer','Viewer',100,{lastPresenceAt:now}),ghost=client('ghost','Ghost',100,{foreground:false,lastActivityAt:now,lastPresenceAt:now-90001});
+  add(lobby,viewer,ghost);
+  assert.equal(lobby.clientCanReceiveChallenge(ghost),false);
+  assert.deepEqual(lobby.presenceForAccount('ghost'),{online:false,challengeable:false,status:'offline',mode:'offline'});
+  assert.equal(lobby.onlineAccountCount(viewer),0);
+});
+
+test('stale two-player sibling cannot block a fresh menu socket for the same account',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),now=Date.now(),jong=client('jong','Jong',1000,{lastPresenceAt:now}),staleBusy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now-90001}),sono=client('sono','Sonogong',1000,{lastPresenceAt:now});
+  add(lobby,jong,staleBusy,sono);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),false);
+  assert.equal(lobby.presenceForAccount('jong').status,'available');
+  const rowsNow=await lobby.leaderboardRows();
+  const challenge=lobby.startChallenge(jong,sono,rowsNow,{automatic:true});
+  assert.ok(challenge);
+  assert.ok(jong.socket.messages.some(message=>message.type==='challengeSent'));
+  assert.ok(sono.socket.messages.some(message=>message.type==='playRequest'));
+});
+
+test('fresh two-player sibling still blocks the account',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),menu=client('jong','Jong',1000,{lastPresenceAt:now}),busy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now});
+  add(lobby,menu,busy);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+  assert.equal(lobby.presenceForAccount('jong').status,'in-game');
+});
+
+
+test('same browser tab reconnect replaces its older lobby socket immediately',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),old=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:'tab-a'}),fresh=client('jong','Jong',1000,{available:true,twoPlayer:false,mode:'menu',lastPresenceAt:now});
+  add(lobby,old,fresh);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+  lobby.claimTabInstance(fresh,'tab-a');
+  assert.equal(fresh.tabId,'tab-a');
+  assert.equal(lobby.clientsForAccount('jong').length,1);
+  assert.equal(lobby.clientsForAccount('jong')[0],fresh);
+  assert.equal(old.socket.closed,true);
+  assert.equal(old.socket.closeCode,4004);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),false);
+});
+
+test('different browser tabs remain independent and a real second two-player tab still blocks',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),game=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:'tab-game'}),menu=client('jong','Jong',1000,{available:true,twoPlayer:false,mode:'menu',lastPresenceAt:now});
+  add(lobby,game,menu);
+  lobby.claimTabInstance(menu,'tab-menu');
+  assert.equal(lobby.clientsForAccount('jong').length,2);
+  assert.equal(game.socket.closed,false);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+});
+
+
+test('fresh tab-aware lobby client suppresses legacy no-tab busy residue for matchmaking',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),legacy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:null}),modern=client('jong','Jong',1000,{available:true,twoPlayer:false,mode:'menu',lastPresenceAt:now,tabId:'tab-modern'});
+  add(lobby,legacy,modern);
+  assert.deepEqual(lobby.effectiveClientsForAccount('jong'),[modern]);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),false);
+  assert.equal(lobby.presenceForAccount('jong').status,'available');
+  assert.equal(lobby.clientByAccountId('jong',{challengeableOnly:true}),modern);
+});
+
+test('legacy no-tab clients remain authoritative only until a fresh tab-aware client exists',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),legacy=client('jong','Jong',1000,{available:false,twoPlayer:true,mode:'competitive-online',lastPresenceAt:now,tabId:null});
+  add(lobby,legacy);
+  assert.deepEqual(lobby.effectiveClientsForAccount('jong'),[legacy]);
+  assert.equal(lobby.accountTwoPlayerBusy('jong'),true);
+});
+
+test('play-request fanout ignores legacy no-tab sockets once a modern tab is live',()=>{
+  const rows=rowsFor([['Sonogong',10,100,1000,1]]),lobby=makeLobby(rows),now=Date.now(),legacy=client('sono','Sonogong',1000,{lastPresenceAt:now,tabId:null}),modern=client('sono','Sonogong',1000,{lastPresenceAt:now,tabId:'tab-modern'});
+  add(lobby,legacy,modern);
+  lobby.sendToAccount('sono',{type:'playRequest',requestId:'req-1'});
+  assert.equal(legacy.socket.messages.length,0);
+  assert.equal(modern.socket.messages.length,1);
+  assert.equal(modern.socket.messages[0].type,'playRequest');
+});
+test('same-tab takeover preserves challenge ownership on the new socket',()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10,100,1000,2]]),lobby=makeLobby(rows),now=Date.now(),old=client('jong','Jong',1000,{lastPresenceAt:now,tabId:'tab-a'}),fresh=client('jong','Jong',1000,{lastPresenceAt:now}),sono=client('sono','Sonogong',1000,{lastPresenceAt:now});
+  add(lobby,old,fresh,sono);
+  const challenge=lobby.startChallenge(old,sono,rows,{automatic:true});assert.ok(challenge);assert.equal(challenge.fromClientId,old.clientId);
+  lobby.claimTabInstance(fresh,'tab-a');
+  assert.equal(challenge.fromClientId,fresh.clientId);
+  assert.equal(lobby.clientsForAccount('jong').includes(old),false);
+});test('online count includes busy online accounts while Browse recommendations remain challengeable-only',async()=>{
   const rows=rowsFor([['Jong',10,100,1000,1],['Available',10.1,90,900,2],['Busy',10.2,80,800,3]]);
   const lobby=makeLobby(rows),me=client('me','Jong',1000),available=client('available','Available',900),busy=client('busy','Busy',800,{available:false,twoPlayer:true,mode:'competitive-online'});
   add(lobby,me,available,busy);
@@ -213,6 +296,55 @@ test('Auto Match previews the closest skill match with rich history before sendi
   await lobby.handle(me,JSON.stringify({type:'autoMatchAccept'}));
   const sent=me.socket.messages.find(message=>message.type==='challengeSent'),request=closest.socket.messages.find(message=>message.type==='playRequest');
   assert.equal(sent?.automatic,true);assert.equal(sent?.to?.nickname,'Closest');assert.equal(request?.automatic,true);
+});
+
+test('Auto Match Accept survives requester lobby reconnect by carrying the selected account ID',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),lobby=makeLobby(rows),original=client('me','Jong',1000),sono=client('sono','Sonogong',1000);add(lobby,original,sono);
+  original.autoMatching=true;
+  assert.equal(await lobby.tryAutoMatch(original),true);
+  const preview=original.socket.messages.find(message=>message.type==='autoMatchCandidate');assert.equal(preview?.candidate?.accountId,'sono');
+  lobby.clients.delete(original.socket);
+  const reconnected=client('me','Jong',1000);add(lobby,reconnected);
+  await lobby.handle(reconnected,JSON.stringify({type:'autoMatchAccept',accountId:'sono'}));
+  const sent=reconnected.socket.messages.find(message=>message.type==='challengeSent'),request=sono.socket.messages.find(message=>message.type==='playRequest');
+  assert.equal(sent?.to?.accountId,'sono');assert.equal(request?.from?.accountId,'me');assert.equal(request?.automatic,true);
+});
+
+test('reconnected requester processes availability before queued Auto Match Accept',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.05,100,1000,2]]),lobby=makeLobby(rows),original=client('me','Jong',1000),sono=client('sono','Sonogong',1000);add(lobby,original,sono);
+  original.autoMatching=true;assert.equal(await lobby.tryAutoMatch(original),true);
+  const preview=original.socket.messages.find(message=>message.type==='autoMatchCandidate');assert.equal(preview?.candidate?.accountId,'sono');
+  lobby.clients.delete(original.socket);
+  const reconnected=client('me','Jong',1000,{available:false,foreground:false});add(lobby,reconnected);reconnected.messageQueue=Promise.resolve();
+  const availability=JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu',foreground:true,lastActivityAt:Date.now(),notificationsEnabled:false});
+  const accept=JSON.stringify({type:'autoMatchAccept',accountId:'sono'});
+  await Promise.all([lobby.enqueueClientMessage(reconnected,availability),lobby.enqueueClientMessage(reconnected,accept)]);
+  assert.equal(reconnected.available,true);
+  assert.ok(reconnected.socket.messages.some(message=>message.type==='challengeSent'&&message.to?.accountId==='sono'));
+  assert.ok(sono.socket.messages.some(message=>message.type==='playRequest'&&message.from?.accountId==='me'));
+});
+
+test('pending play request is redelivered to a refreshed recipient tab and receipt is acknowledged',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),me=client('me','Jong',1000),oldTab=client('sono','Sonogong',1000);add(lobby,me,oldTab);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'sono'}));
+  const first=oldTab.socket.messages.find(message=>message.type==='playRequest');assert.ok(first?.requestId);
+  const refreshed=client('sono','Sonogong',1000);add(lobby,refreshed);
+  await lobby.handle(refreshed,JSON.stringify({type:'setAvailability',available:true,twoPlayer:false,mode:'menu',foreground:true,lastActivityAt:Date.now(),notificationsEnabled:false}));
+  const redelivered=refreshed.socket.messages.find(message=>message.type==='playRequest'&&message.requestId===first.requestId);assert.ok(redelivered);
+  await lobby.handle(refreshed,JSON.stringify({type:'challengeReceipt',requestId:first.requestId}));
+  const challenge=lobby.challenges.get(first.requestId);assert.ok(challenge.deliveryReceipts.has(refreshed.clientId));assert.ok(me.socket.messages.some(message=>message.type==='challengeDelivered'&&message.requestId===first.requestId));
+});
+
+test('unacknowledged play request retries before timeout and stops after receipt',async()=>{
+  const rows=rowsFor([['Jong',10,100,1000,1],['Sonogong',10.1,100,1000,2]]),lobby=makeLobby(rows),me=client('me','Jong',1000),sono=client('sono','Sonogong',1000);add(lobby,me,sono);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'sono'}));
+  const first=sono.socket.messages.find(message=>message.type==='playRequest');assert.ok(first?.requestId);
+  assert.equal(sono.socket.messages.filter(message=>message.type==='playRequest').length,1);
+  assert.equal(lobby.retryChallengeDelivery(first.requestId),true);
+  assert.equal(sono.socket.messages.filter(message=>message.type==='playRequest').length,2);
+  await lobby.handle(sono,JSON.stringify({type:'challengeReceipt',requestId:first.requestId}));
+  assert.equal(lobby.retryChallengeDelivery(first.requestId),false);
+  assert.equal(sono.socket.messages.filter(message=>message.type==='playRequest').length,2);
 });
 
 test('searching a player before Auto Match does not suppress candidate preview or request delivery',async()=>{

@@ -5,29 +5,35 @@ This document is the product/server contract for the ranked GoStop Live system.
 ## Terms
 
 - **Wallet Coins**: the player's current spendable balance. Signup/daily rewards and ranked-game wins/losses change this balance. It may be negative.
-- **Total Coins** on a leaderboard: cumulative Coins **won** in ranked games in that leaderboard period. Losses do not subtract from this number. Signup/daily/promotional grants never count.
+- **Coins Earned** on a leaderboard: cumulative Coins **won** in ranked games in that leaderboard period.
+- **Coins Lost** on a leaderboard: cumulative Coins lost in ranked games in that leaderboard period. Protected disconnects with a zero-Coin penalty add no lost Coins.
+- **Net Coins**: `Coins Earned - Coins Lost`. This is the leaderboard ranking score. Signup, daily, referral, and promotional grants never count.
 - **Games Played**: completed ranked games plus ranked games lost by abandonment/force quit.
-- **Score**: `Total Coins Won / Games Played`.
+- **Coins / Game**: `Coins Earned / Games Played`. This remains the skill-rate input used by matchmaking and is not the leaderboard rank score.
 - **Provisional**: fewer than 10 ranked games in the applicable leaderboard period. Provisional players are visible but marked provisional.
 
 ## Leaderboards
 
-Two views use identical columns: Rank, Nickname, Score, Total Coins, Games Played.
+Two views use identical columns: Rank, Nickname, Net Coins, Earned / Lost, Games Played.
 
 - **Global Leaderboard**: all ranked games to date.
 - **Monthly Leaderboard**: ranked games recorded in the current UTC calendar month.
 
-Ranking order is Score descending, Games Played descending, Total Coins descending, then Nickname for deterministic display. A future revision may use earliest achievement timestamp as the final tie-break.
+Ranking order is Net Coins descending, Games Played descending, Coins Earned descending, then Nickname for deterministic display. This intentionally rewards sustained successful Competitive play while still subtracting losses.
 
 ## Account rewards
 
 - Registration award: +100 Wallet Coins once.
 - First authenticated use each player-local calendar day: +100 Wallet Coins once. The server determines the day from trusted edge timezone context.
 - Registration automatically creates a persistent authenticated session, therefore a brand-new account receives both awards on its first day (+200 total Wallet Coins).
-- Rewards never affect leaderboard Total Coins or Score.
+- Rewards never affect leaderboard Coins Earned, Coins Lost, or Net Coins.
 - Daily Coins are committed server-side before the notice is acknowledged. Every signed-in device displays the authoritative Wallet immediately; the notice explains the award but never hides or re-applies it.
 
-Passwords are salted and hashed on the server using PBKDF2-SHA-256. Authentication uses random bearer tokens; the password is not stored on the device. A valid saved browser session is restored automatically when GoStop Live opens; only an invalid or expired session requires login again. The current server data model includes `emailVerified`; outbound email verification will be enabled when an email delivery provider is connected.
+Passwords are salted and hashed on the server using PBKDF2-SHA-256. Authentication uses random bearer tokens; the password is not stored on the device. A valid saved browser session is restored automatically when GoStop Live opens; only an invalid or expired session requires login again.
+
+Create ID uses server-authoritative email verification in production. A newly registered email and nickname are reserved immediately, but the account remains `emailVerified: false`, receives no authenticated session, and receives no signup or daily Coins until the verification link is used. Verification tokens are random, stored only as SHA-256 hashes, single-use, and expire after 24 hours. Resending requires the account email and password, invalidates the prior token, and is rate-limited. Successful verification activates the account, grants the one-time +100 signup Coins and that day's +100 daily Coins, and creates the persistent authenticated session. Unverified accounts cannot log in, enter ranked play, or appear in public player search/leaderboards.
+
+Transactional verification email is sent through Resend from the Cloudflare Worker/Durable Object path. Production requires `EMAIL_VERIFICATION_REQUIRED=true`, `EMAIL_VERIFY_BASE_URL=https://gostoplive.com`, `EMAIL_FROM`, and the secret `RESEND_API_KEY`. The API key is never committed to the repository.
 
 ## Main menu
 
@@ -37,7 +43,7 @@ Passwords are salted and hashed on the server using PBKDF2-SHA-256. Authenticati
 4. Global Leaderboard — public; no account is required to view it; Global/Monthly rotating views.
 5. How to Play — moved from in-game header to main menu.
 
-The top-right account box shows Nickname and Wallet Coins when authenticated. When anonymous it shows Create ID plus an explanation that an ID enables friend games and leaderboard competition.
+The player/account box sits at the bottom of the main menu and shows Nickname and Wallet Coins when authenticated. When anonymous it shows Create ID plus an explanation that an ID enables friend games and leaderboard competition.
 
 ## Ranked game settlement
 
@@ -99,7 +105,7 @@ Competitive Online Play has exactly three visible sections:
 2. **Search Player** — Nickname search covers the registered-player directory, so a player can be found whether available, busy in another two-player game, or offline.
 3. **Share Link** — Create Room creates an authenticated Competitive room and displays its direct URL with Copy URL. Competitive Online Play does not expose the legacy Room Code / Join Game controls. Direct room URLs still contain the internal room identifier and continue to join the exact authoritative room.
 
-Browse and Search use the same player profile card. It displays current Coins, overall Wins / Losses, leaderboard Score, **Global Rank**, **Monthly Rank**, the viewer's historical **Wins / Losses** against that player, Coins won/lost against that player, and the last-played date. Presence has four user-facing states: **Online - Available** (green), **Online - Away** (orange), **Online - Not Available** (orange), and **Not Online** (red).
+Browse and Search use the same player profile card. It displays current Coins, overall Wins / Losses, leaderboard Net Coins, **Global Rank**, **Monthly Rank**, the viewer's historical **Wins / Losses** against that player, Coins won/lost against that player, and the last-played date. Presence has four user-facing states: **Online - Available** (green), **Online - Away** (orange), **Online - Not Available** (orange), and **Not Online** (red).
 
 **Online - Available** requires at least one authenticated GoStop Live browser tab for the account to be in the foreground and to have received real user input within the previous **5 minutes**. A background/hidden tab or five minutes without user activity becomes **Online - Away** even though the login session remains valid. Returning to the tab and interacting with it makes the player Available again. An active two-player game is **Online - Not Available** regardless of other tabs. Closing/disconnecting the remaining lobby tabs makes the account **Not Online**.
 
@@ -113,7 +119,7 @@ Online-lobby presence is ephemeral. Browse recommendations include only challeng
 
 Normal leaderboard view rotates Global → Monthly every 5 seconds. Left/right arrows switch manually; tapping/clicking the page advances; Return exits to the main menu.
 
-After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats. Any interaction exits attract mode back to the main menu. Layout reserves space for future ads without making ads part of ranking logic.
+After 15 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 15 seconds and repeats. Any interaction exits attract mode back to the main menu. Layout reserves space for future ads without making ads part of ranking logic.
 
 ## Trust boundary
 

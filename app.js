@@ -49,7 +49,7 @@
     'bombDialog','bombText','bombCards','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
-    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','trainingModeBtn','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedOkBtn','playerInfoOverlay','playerInfoPopover','playerInfoAvatar','playerInfoName','playerInfoSession','playerInfoWallet','playerInfoPoints','playerInfoStatus'
+    'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','trainingModeBtn','trainingCoachPanel','trainingCoachTitle','trainingCoachText','trainingCoachDismiss','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedTitle','opponentEndedOkBtn','playerInfoOverlay','playerInfoPopover','playerInfoAvatar','playerInfoName','playerInfoSession','playerInfoWallet','playerInfoPoints','playerInfoStatus'
   ];
   const els = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
 
@@ -87,6 +87,7 @@
     targetChoice:null,
     pendingHumanCardId:null,
     queuedHumanCardSwitch:null,
+    blankTurnInFlight:false,
     shakeResolver:null,
     bombResolver:null,
     aiTurnInProgress:false,
@@ -96,7 +97,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,
+    trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,trainingRecommendedFloorCardId:null,trainingTurnRecommendation:null,
     dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null,activePhysicalMotions:0,rendersDuringPhysicalMotion:0,goCalloutTimer:null
   };
 
@@ -131,7 +132,9 @@
 
   const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
-  const presentationPause=key=>sleep(PRESENTATION_PACING[key]);
+  const performanceLite=()=>globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement.classList.contains('gostop-performance-lite');
+  const motionDuration=ms=>performanceLite()?Math.max(110,Math.round(ms*.58)):ms;
+  const presentationPause=key=>sleep(performanceLite()?Math.max(65,Math.round(PRESENTATION_PACING[key]*.55)):PRESENTATION_PACING[key]);
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clampVolume = v => Math.max(0, Math.min(1, v));
@@ -506,12 +509,24 @@
     const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=alt; img.draggable=false; return img;
   }
 
-  function rankedHandInputEnabled(){
+  function repairOrphanedRankedPendingAction(){
+    const session=globalThis.goStopOnlineSession,pendingActionId=session?.pendingActionId;
+    if(!pendingActionId||onlineActions.has(pendingActionId))return false;
+    session.pendingActionId=null;
+    return true;
+  }
+  function rankedHandTurnAvailable(){
     if(!onlineMode)return false;
+    repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open||presentation.activePhysicalMotions>0);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
-    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:session?.pendingActionId,blocked});
+    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:null,blocked});
+  }
+  function rankedHandInputEnabled(){
+    if(!rankedHandTurnAvailable())return false;
+    const session=globalThis.goStopOnlineSession;
+    return !session?.pendingActionId;
   }
 
   function render() {
@@ -538,11 +553,12 @@
     if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
     const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
-    const handInputDisabled=onlineMode?!rankedHandInputEnabled():(presentation.locked||state.turn!==PLAYER_A);
+    const handInputDisabled=onlineMode?!rankedHandTurnAvailable():(presentation.locked||state.turn!==PLAYER_A);
+    const blankInputDisabled=onlineMode?!rankedHandTurnAvailable():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
-      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',()=>humanPlay(card.id,el));slot.appendChild(el);}
+      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',()=>{void humanPlay(card.id,el);});slot.appendChild(el);}
       el.disabled=handInputDisabled;
       el.classList.toggle('matchable',card.id===presentation.hintCardId);
       el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
@@ -553,9 +569,9 @@
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
-      blank.disabled=handInputDisabled;
+      blank.disabled=blankInputDisabled;
       blank.innerHTML='<span aria-hidden="true">—</span>';
-      blank.addEventListener('click',humanUseBombBlank);
+      blank.addEventListener('click',()=>{void humanUseBombBlank();});
       const slot=document.createElement('div'); slot.className='hand-card-slot';slot.dataset.handKey=`blank-${i}`; slot.appendChild(blank); desired.push(slot);
     }
     existing.forEach(node=>node.remove());desired.forEach(node=>els.playerHand.appendChild(node));
@@ -585,6 +601,7 @@
       const card=slot.querySelector('.hand-card');if(card)card.title=active?(card.dataset.hoverTitle||''):'';
     });
   }
+
 
 
   function playerDoubleLabel(player){
@@ -633,6 +650,7 @@
         cardsInStack(stack).forEach((c,i)=>{
           const el=createCardEl(c,'card floor-card stacked-floor-card');
           el.classList.toggle('training-warning',c.id===presentation.trainingWarningFloorCardId);
+          el.classList.toggle('training-recommended',c.id===presentation.trainingRecommendedFloorCardId);
           el.style.setProperty('--stack-angle',`${stableStackAngle(stack,c,i)}deg`);
           el.style.setProperty('--stack-x',`${i*5}px`);
           el.style.setProperty('--stack-y',`${i*3}px`);
@@ -646,6 +664,7 @@
           const card=cards[0];
           const el=createCardEl(card,'card floor-card');
           el.classList.toggle('training-warning',card.id===presentation.trainingWarningFloorCardId);
+          el.classList.toggle('training-recommended',card.id===presentation.trainingRecommendedFloorCardId);
           el.style.setProperty('--tilt',`${stableFloorTilt(card)}deg`);
           slotEl.appendChild(el);
         }
@@ -683,7 +702,7 @@
         if((c.flags.includes('doublePi')||(c.id==='m9-1'&&owner.gukjinMode==='pi'))){const badge=document.createElement('span');badge.className='double-single-badge';badge.textContent='×2';stack.appendChild(badge);}
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
-      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(ownerId,group,groupCards)); root.appendChild(btn);
+      btn.append(head,stack); root.appendChild(btn);
     });
   }
 
@@ -756,14 +775,18 @@
   }
   function finishTargetChoice(cardId=null){
     const choice=presentation.targetChoice;if(!choice)return false;
+    const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
+    const trainingRecommendationAtChoice=presentation.trainingTurnRecommendation;
+    if(presentation.trainingMode&&card&&trainingRecommendationAtChoice?.target&&choice.matches.some(item=>item.id===trainingRecommendationAtChoice.target.id)&&card.id!==trainingRecommendationAtChoice.target.id){
+      showTrainingCoach('Strategy Note',`The highlighted floor card is the stronger target for this play. ${trainingRecommendationAtChoice.reason}`);
+    }
     presentation.targetChoice=null;presentation.targetChoiceCleanup=null;
     els.floor.querySelectorAll('[data-target-choice="1"]').forEach(el=>{el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');delete el.dataset.targetChoice;});
-    const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
     choice.resolve(card);return !!card;
   }
-  async function chooseFloorTarget(matches, message='Choose which card to hit'){
+  async function chooseFloorTarget(matches, message='Choose which card to hit',{cancelable=false}={}){
     if(matches.length<=1)return matches[0]||null;
-    const key=matches.map(card=>card.id).sort().join('|');
+    const key=`${matches.map(card=>card.id).sort().join('|')}:${cancelable?'precommit':'authoritative'}`;
     // An authoritative refresh may ask us to present the same pending choice again.
     // Keep the original waiter alive; renderFloor() will reapply its visual affordances.
     if(presentation.targetChoice?.key===key){syncTargetChoiceUi();return null;}
@@ -771,7 +794,7 @@
     presentation.locked=true;
     showActionCue('human','choose a floor card');
     return new Promise(resolve=>{
-      presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve};
+      presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve,cancelable};
       presentation.targetChoiceCleanup=()=>finishTargetChoice(null);
       syncTargetChoiceUi();
     });
@@ -783,6 +806,13 @@
   }
   els.floor.addEventListener('click',event=>{const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
   els.floor.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
+  const cancelPrecommitTargetChoiceFromOutside=event=>{
+    if(!presentation.targetChoice?.cancelable||!presentation.targetChoiceCleanup||!presentation.pendingHumanCardId)return;
+    if(targetChoiceCardId(event)||els.playerHand.contains(event.target))return;
+    presentation.targetChoiceCleanup();
+  };
+  document.addEventListener('pointerdown',cancelPrecommitTargetChoiceFromOutside,true);
+  document.addEventListener('click',cancelPrecommitTargetChoiceFromOutside);
 
   async function previewAiTarget(target){
     if(!target)return;
@@ -802,10 +832,13 @@
   function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
+    if(presentation.targetChoice?.cancelable&&presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
     if(onlineMode){onlineSubmit({type:'useBombBlank'});return;}
-    if(presentation.locked || state.turn!==PLAYER_A || state.winner || state.human.bombFreeTurns<=0)return;
-    clearTrainingCoach();presentation.locked=true; render();
-    await executeDeckOnlyTurn('human');
+    if(presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
+    if(state.turn!==PLAYER_A||state.winner||state.human.bombFreeTurns<=0||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||state.pendingDecision||presentation.targetChoice||presentation.shakeResolver||presentation.bombResolver)return;
+    clearTrainingCoach();presentation.blankTurnInFlight=true;presentation.locked=true;render();
+    try{await executeDeckOnlyTurn('human');}
+    finally{presentation.blankTurnInFlight=false;}
   }
 
   async function humanPlay(cardId, clickedEl){
@@ -818,6 +851,11 @@
         onlineActions.clear();
       }
       if(presentation.targetChoice){
+        if(presentation.targetChoice.cancelable&&presentation.pendingHumanCardId){
+          if(cardId===presentation.pendingHumanCardId)presentation.targetChoiceCleanup?.();
+          else{presentation.queuedHumanCardSwitch={cardId,clickedEl};presentation.targetChoiceCleanup?.();}
+          return;
+        }
         const authoritativeTargetChoice=state?.pendingDecision?.type==='chooseFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
         if(onlinePendingCardId===cardId||authoritativeTargetChoice){syncTargetChoiceUi();return;}
         cleanupTargetChoice();onlineHandSourceRects.clear();
@@ -825,8 +863,12 @@
       const card=state.human.hand.find(item=>item.id===cardId);if(!card)return;
       onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);clickedEl?.classList.add('pending-card');
       const needsPrePlayDecision=state.human.armedBombMonths?.includes(card.month)||state.human.hiddenTripleMonths?.includes(card.month);
-      const action=needsPrePlayDecision?{type:'attemptPlayCard',cardId}:{type:'playCard',cardId,targetId:null};
-      if(!onlineSubmit(action)){onlineHandSourceRects.delete(cardId);onlinePendingCardId=null;clickedEl?.classList.remove('pending-card');}return;
+      if(needsPrePlayDecision){
+        if(!onlineSubmit({type:'attemptPlayCard',cardId})){onlineHandSourceRects.delete(cardId);onlinePendingCardId=null;clickedEl?.classList.remove('pending-card');}
+        return;
+      }
+      await submitOnlineCardPlay();
+      return;
     }
     const epoch=gameplayPresentationEpoch;
     if(!isGameplayPresentationCurrent(epoch)||state.turn!==PLAYER_A||state.winner)return;
@@ -834,15 +876,19 @@
     // While choosing between two floor targets, clicking a different hand card
     // cancels the current choice immediately and starts selection for the new card.
     if(presentation.locked){
-      if(presentation.targetChoiceCleanup && presentation.pendingHumanCardId && cardId!==presentation.pendingHumanCardId){
-        presentation.queuedHumanCardSwitch={cardId,clickedEl};
-        presentation.targetChoiceCleanup();
+      if(presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){
+        if(cardId===presentation.pendingHumanCardId)presentation.targetChoiceCleanup();
+        else{presentation.queuedHumanCardSwitch={cardId,clickedEl};presentation.targetChoiceCleanup();}
       }
       return;
     }
 
     const card=state.human.hand.find(c=>c.id===cardId); if(!card)return;
-    clearTrainingCoach();presentation.locked=true;
+    const trainingRecommendationAtPlay=presentation.trainingMode?trainingRecommendation():null;
+    const trainingCorrection=presentation.trainingMode?trainingAlternativeReason(card,trainingRecommendationAtPlay):'';
+    clearTrainingCoach();presentation.trainingTurnRecommendation=trainingRecommendationAtPlay;
+    if(trainingCorrection)showTrainingCoach('Strategy Note',trainingCorrection);
+    presentation.locked=true;
 
     const committedBombCards=state.human.armedBombMonths.includes(card.month)?state.human.hand.filter(item=>item.month===card.month).slice(0,3):[];
     const committedBombTarget=committedBombCards.length===3?state.floor.find(item=>item.month===card.month):null;
@@ -917,6 +963,24 @@
     const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
     await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true,epoch);
   }
+
+  document.addEventListener('gostop-hand-activate',event=>{
+    const detail=event.detail||{},cardId=String(detail.cardId||'');
+    if(!cardId)return;
+    if(detail.blank===true||cardId.startsWith('blank-')){
+      if((onlineMode?state?.human?.bombFreeTurns:state?.human?.bombFreeTurns)<=0)return;
+      if(onlineMode&&!rankedHandInputEnabled())return;
+      event.preventDefault();void humanUseBombBlank();return;
+    }
+    if(!state?.human?.hand?.some(card=>card.id===cardId))return;
+    const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId)||null;
+    if(onlineMode){
+      if(!rankedHandTurnAvailable())return;
+      event.preventDefault();void humanPlay(cardId,live);return;
+    }
+    if(!live||live.disabled)return;
+    event.preventDefault();void humanPlay(cardId,live);
+  });
 
   async function aiTurn(){
     if(onlineMode)return;
@@ -1333,7 +1397,7 @@
       {transform:'translate(0,0) rotate(-3deg)',opacity:.96},
       {transform:`translate(${dx*.5}px,${dy*.5-16}px) rotate(4deg)`,opacity:1},
       {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.95}
-    ],{duration:460,easing:'cubic-bezier(.25,.7,.2,1)',fill:'forwards'});
+    ],{duration:motionDuration(460),easing:'cubic-bezier(.25,.7,.2,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.remove();
   }
 
@@ -1475,7 +1539,10 @@
       }
     }
     if(!isGameplayPresentationCurrent(epoch))return;
-    presentation.locked=false; render(); scheduleTurnStart();
+    presentation.locked=false; render();
+    const openingAdvice=presentation.trainingMode?trainingOpeningStrategy():'';
+    scheduleTurnStart();
+    if(openingAdvice)showTrainingCoach('Opening Strategy',openingAdvice);
   }
 
   function presentChongtong(event,epoch=gameplayPresentationEpoch){
@@ -1584,8 +1651,8 @@
     if(presentation.goCalloutTimer){clearTimeout(presentation.goCalloutTimer);presentation.goCalloutTimer=null;}
     presentation.stagedCards.forEach(el=>{el?.getAnimations?.().forEach(animation=>animation.cancel());el?.remove?.();});
     presentation.stagedCards.clear();presentation.floorSlotReservations.clear();onlineHandSourceRects.clear();presentation.activeHoveredHandCardId=null;
-    presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;
-    if(!TEST_MODE){document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
+    presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;presentation.blankTurnInFlight=false;
+    if(!TEST_MODE){document.dispatchEvent(new Event('gostop-hand-reset'));document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
   }
 
   function fullSizeSourceRect(sourceRect){
@@ -1606,15 +1673,20 @@
 
     const dx=landing.left-sourceRect.left, dy=landing.top-sourceRect.top;
     const sideBias=seatForLegacySide(side)==='bottom'?-1:1;
-    const duration=650;
-    if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-58));
-    const a=el.animate([
+    const duration=motionDuration(650);
+    if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-40));
+    const frames=performanceLite()?[
+      {transform:'translate(0,0) rotate(0deg)',offset:0},
+      {transform:`translate(${dx*.62}px,${dy*.62-28}px) rotate(${landing.rotation*.48}deg)`,offset:.64},
+      {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,offset:1}
+    ]:[
       {transform:'translate(0,0) rotate(0deg)',filter:'drop-shadow(0 8px 8px rgba(0,0,0,.32))',offset:0},
       {transform:`translate(0,-30px) rotate(${sideBias*-2}deg)`,filter:'drop-shadow(0 22px 16px rgba(0,0,0,.46))',offset:.24},
       {transform:`translate(${dx*.62}px,${dy*.62-54}px) rotate(${landing.rotation*.48}deg)`,offset:.70},
       {transform:`translate(${dx}px,${dy-12}px) rotate(${landing.rotation}deg)`,offset:.92},
       {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
-    ],{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
+    ];
+    const a=el.animate(frames,{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
     await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`;
     impactAt(landing); return el;
   }
@@ -1641,16 +1713,21 @@
       });
       impactAt(tr); return;
     }
-    const duration=720;
+    const duration=motionDuration(720);
     const jobs=starts.map(({el,start,i})=>{
       const land={left:tr.left+(i-1)*10,top:tr.top+(i-1)*6,width:w,height:h,rotation:[-13,1,12][i]};
       const dx=land.left-start.left,dy=land.top-start.top;
-      return el.animate([
+      const frames=performanceLite()?[
+        {transform:'translate(0,0) rotate(0deg)',offset:0},
+        {transform:`translate(${dx*.62}px,${dy*.62-30}px) rotate(${land.rotation*.45}deg)`,offset:.64},
+        {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
+      ]:[
         {transform:'translate(0,0) rotate(0deg)',offset:0},
         {transform:`translate(${dx*.55}px,${dy*.55-58}px) rotate(${land.rotation*.45}deg)`,offset:.68},
         {transform:`translate(${dx}px,${dy-14}px) rotate(${land.rotation}deg)`,offset:.92},
         {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
-      ],{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
+      ];
+      return el.animate(frames,{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
         el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,land); el.style.transform=`rotate(${land.rotation}deg)`;
       }).catch(()=>{});
     });
@@ -1683,10 +1760,10 @@
       {transform:'translate(0,0)',offset:0},
       {transform:'translate(0,-18px)',offset:.35},
       {transform:`translate(${dx}px,${dy}px)`,offset:1}
-    ],{duration:360,easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
+    ],{duration:motionDuration(360),easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
     await lift.finished.catch(()=>{});
     const now=el.getBoundingClientRect(); el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,now);
-    const flip=inner.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],{duration:380,easing:'cubic-bezier(.35,.05,.2,1)',fill:'forwards'});
+    const flip=inner.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],{duration:motionDuration(380),easing:'cubic-bezier(.35,.05,.2,1)',fill:'forwards'});
     await flip.finished.catch(()=>{}); inner.style.transform='rotateY(180deg)'; inner.getAnimations().forEach(a=>a.cancel());
     await presentationPause('deckReveal'); return el;
   }
@@ -1696,7 +1773,7 @@
     const start=el.getBoundingClientRect(); normalizeFixed(el,start);
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
-    const dx=landing.left-start.left,dy=landing.top-start.top; const duration=500;
+    const dx=landing.left-start.left,dy=landing.top-start.top; const duration=motionDuration(500);
     if(prefersReducedMotion()){normalizeFixed(el,landing);el.style.transform=`rotate(${landing.rotation}deg)`;return;}
     if(target) setTimeout(()=>playHitSound(1),Math.max(0,duration-52));
     const a=el.animate([
@@ -1711,7 +1788,7 @@
   async function stageHandCardForChoice(side,card,sourceRect){
     await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');stagePhysicalCard(card.id,el);
     document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
-    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:240,easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
+    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:motionDuration(240),easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
     return el;
   }
 
@@ -1764,11 +1841,11 @@
           {transform:'translate(0,0) rotate(0deg)',opacity:1,offset:0},
           {transform:`translate(${dx*.48}px,${dy*.48+curve}px) rotate(${i%2?4:-4}deg)`,opacity:1,offset:.48},
           {transform:`translate(${dx}px,${dy}px) rotate(0deg)`,opacity:.96,offset:1}
-        ],{duration:520,easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
+        ],{duration:motionDuration(520),easing:'cubic-bezier(.28,.68,.22,1)',fill:'forwards'});
         await a.finished.catch(()=>{});
         presentation.stagedCards.delete(entry.card.id);
         entry.el.remove(); if(entry.sourceEl)entry.sourceEl.remove(); if(entry.placeholder)entry.placeholder.remove(); resolve();
-      },i*70);
+      },i*(performanceLite()?35:70));
     }));
     await Promise.all(jobs);
     // These in-flight cards have left the table. Canonical occupied slots are
@@ -1890,7 +1967,7 @@
     const bounds=els.floor.getBoundingClientRect(),broom=document.createElement('div');
     broom.className='sweep-broom';broom.textContent='🧹';broom.setAttribute('aria-hidden','true');
     broom.style.top=`${bounds.top+bounds.height*.48}px`;document.body.appendChild(broom);
-    const animation=broom.animate([{transform:`translate(${bounds.left-120}px,-50%) rotate(-22deg)`},{transform:`translate(${bounds.right+120}px,-50%) rotate(18deg)`}],{duration:1200,easing:'ease-in-out'});
+    const animation=broom.animate([{transform:`translate(${bounds.left-120}px,-50%) rotate(-22deg)`},{transform:`translate(${bounds.right+120}px,-50%) rotate(18deg)`}],{duration:motionDuration(1200),easing:'ease-in-out'});
     try{await animation.finished;}catch(_){ }finally{broom.remove();}
   }
 
@@ -2167,7 +2244,8 @@
     if(TEST_MODE)return;
     document.querySelectorAll('.tutorial-cards[data-card-ids]').forEach(root=>{if(root.childElementCount)return;root.dataset.cardIds.split(',').map(id=>MASTER_DECK.find(card=>card.id===id)).filter(Boolean).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
     const tutorialQueries={bright:card=>card.type==='bright',animal:card=>card.type==='animal',ribbon:card=>card.type==='ribbon',single:card=>card.type==='pi'&&!card.flags.includes('doublePi'),'doublePi-11':card=>card.month===11&&card.flags.includes('doublePi'),'doublePi-12':card=>card.month===12&&card.flags.includes('doublePi'),switchPi:card=>card.flags.includes('switchPi')};
-    document.querySelectorAll('.tutorial-cards[data-tutorial-query]').forEach(root=>{root.replaceChildren();MASTER_DECK.filter(tutorialQueries[root.dataset.tutorialQuery]||(()=>false)).slice(0,['bright','animal','ribbon','single'].includes(root.dataset.tutorialQuery)?3:1).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
+    const tutorialQueryLimits={bright:5,animal:5,ribbon:5,single:5,'doublePi-11':1,'doublePi-12':1,switchPi:1};
+    document.querySelectorAll('.tutorial-cards[data-tutorial-query]').forEach(root=>{root.replaceChildren();MASTER_DECK.filter(tutorialQueries[root.dataset.tutorialQuery]||(()=>false)).slice(0,tutorialQueryLimits[root.dataset.tutorialQuery]||1).forEach(card=>root.appendChild(createCardEl(card,'card tutorial-game-card')));});
     const monthGuide=document.getElementById('monthGuide');
     if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>{const item=document.createElement('span');item.className='tutorial-month-card';item.appendChild(createCardEl(card,'card tutorial-game-card'));const label=document.createElement('small');label.textContent=t(card.id==='m9-1'?'sakeCup':card.flags.includes('doublePi')?'doubleSingle':card.type==='bright'?'brights':card.type==='animal'?'pictures':card.type==='ribbon'?'stripes':'singles');item.appendChild(label);cards.appendChild(item);});article.append(heading,cards,description);monthGuide.appendChild(article);}}
   }
@@ -2179,7 +2257,7 @@
     if(card.type==='ribbon'){
       const family=card.ribbonSet||'plain';
       const sameFamily=captured.filter(item=>item.type==='ribbon'&&(item.ribbonSet||'plain')===family).length;
-      if(sameFamily>=2)threat=Math.max(threat,120+sameFamily);
+      if(card.ribbonSet&&sameFamily>=2)threat=Math.max(threat,120+sameFamily);
       const ribbonCount=captured.filter(item=>item.type==='ribbon').length;
       if(ribbonCount>=4)threat=Math.max(threat,78+ribbonCount);
     }
@@ -2198,39 +2276,141 @@
     if(!state)return null;
     return state.floor.map(card=>({card,value:trainingThreatValue(card,state.ai)})).filter(item=>item.value>0).sort((a,b)=>b.value-a.value||captureValue(b.card)-captureValue(a.card)||a.card.month-b.card.month)[0]?.card||null;
   }
-  function recommendedHumanCard(){
-    if(!state||state.turn!==PLAYER_A)return null;
-    const warning=trainingWarningCard();
-    let best=null,val=-Infinity;
-    state.human.hand.forEach(c=>{
-      const matches=matchesFor(c),cv=matches.length?captureValue(c)+Math.max(...matches.map(captureValue)):0;
-      const combo=(c.flags.includes('godori')?2:0)+(c.ribbonSet?1:0)+(c.type==='bright'?2:0);
-      const blocksThreat=warning&&matches.some(match=>match.id===warning.id)?30:0;
-      const v=cv*1.4+combo+blocksThreat;
-      if(v>val||(v===val&&best&&(c.month<best.month||c.month===best.month&&c.id<best.id))){val=v;best=c;}
-    });
+  function trainingRibbonName(value){return value==='red'?'red poetry':value==='blue'?'blue':value==='grass'?'green/plain':'ribbon';}
+  function trainingCategoryName(card){
+    if(!card)return 'card';
+    if(card.flags?.includes('godori'))return 'bird Picture';
+    return card.type==='bright'?'Bright':card.type==='animal'?'Picture':card.type==='ribbon'?'Stripe':card.flags?.includes('doublePi')?'2x Single':'Single';
+  }
+  function trainingThreatReason(card,opponent=state?.ai){
+    if(!card||!opponent)return '';
+    const captured=opponent.captured||[];
+    if(card.ribbonSet){
+      const count=captured.filter(item=>item.type==='ribbon'&&item.ribbonSet===card.ribbonSet).length;
+      if(count>=2)return `The computer already has ${count} ${trainingRibbonName(card.ribbonSet)} Stripes. Taking this card blocks the 3-Stripe set.`;
+    }
+    if(card.flags.includes('godori')){
+      const count=captured.filter(item=>item.flags.includes('godori')).length;
+      if(count>=2)return `The computer already has ${count} bird Pictures. Taking this card blocks Godori (5-Birdies).`;
+    }
+    if(card.type==='bright'){
+      const count=captured.filter(item=>item.type==='bright').length;
+      if(count>=2)return `The computer already has ${count} Brights. Taking this card makes a 3-Brights score harder to complete.`;
+    }
+    if(card.type==='animal'){
+      const count=captured.filter(item=>item.type==='animal').length;
+      if(count>=4)return `The computer has ${count} Pictures and is close to scoring more Picture points. Cut this card now.`;
+    }
+    if(card.type==='ribbon'){
+      const count=captured.filter(item=>item.type==='ribbon').length;
+      if(count>=4)return `The computer has ${count} Stripes and is near the general Stripe scoring threshold. Deny this capture.`;
+    }
+    const before=score(captured,opponent.gukjinMode||'animal').total,after=score([...captured,card],opponent.gukjinMode||'animal').total;
+    return after>before?`If the computer captures this ${trainingCategoryName(card)}, its visible score increases. Blocking it reduces immediate scoring risk.`:'';
+  }
+  function trainingOpportunityReason(gained,human=state?.human){
+    if(!human||!gained?.length)return '';
+    const captured=human.captured||[],after=[...captured,...gained];
+    const beforeScore=score(captured,human.gukjinMode||'animal'),afterScore=score(after,human.gukjinMode||'animal');
+    const godoriBefore=captured.filter(item=>item.flags.includes('godori')).length,godoriAfter=after.filter(item=>item.flags.includes('godori')).length;
+    if(godoriBefore<3&&godoriAfter>=3)return 'This capture completes Godori (5-Birdies), a valuable 5-point combination.';
+    for(const family of ['red','blue','grass']){
+      const before=captured.filter(item=>item.type==='ribbon'&&item.ribbonSet===family).length,afterCount=after.filter(item=>item.type==='ribbon'&&item.ribbonSet===family).length;
+      if(before<3&&afterCount>=3)return `This capture completes the 3-card ${trainingRibbonName(family)} Stripe set.`;
+    }
+    const brightBefore=captured.filter(item=>item.type==='bright').length,brightAfter=after.filter(item=>item.type==='bright').length;
+    if(brightBefore<3&&brightAfter>=3)return 'This capture reaches 3 Brights and starts Bright scoring.';
+    const animalBefore=captured.filter(item=>item.type==='animal').length,animalAfter=after.filter(item=>item.type==='animal').length;
+    if(animalBefore<5&&animalAfter>=5)return 'This capture reaches 5 Pictures, the Picture scoring threshold.';
+    const ribbonBefore=captured.filter(item=>item.type==='ribbon').length,ribbonAfter=after.filter(item=>item.type==='ribbon').length;
+    if(ribbonBefore<5&&ribbonAfter>=5)return 'This capture reaches 5 Stripes, the general Stripe scoring threshold.';
+    if(beforeScore.piCount<10&&afterScore.piCount>=10)return 'This capture reaches 10 Singles, the Single scoring threshold.';
+    if(afterScore.total>beforeScore.total)return `This move raises your visible score from ${beforeScore.total} to ${afterScore.total}.`;
+    return '';
+  }
+  function trainingCandidate(card){
+    if(!card||!state)return null;
+    const matches=matchesFor(card);
+    if(!matches.length){
+      return {card,target:null,score:-captureValue(card)*.55,reason:`No floor card matches this month, so playing it leaves a ${trainingCategoryName(card)} exposed. If you must discard, sacrificing a lower-value card is usually safer.`};
+    }
+    let best=null;
+    for(const target of matches){
+      const gained=[card,...expandedTargetCards(target)],blockValue=trainingThreatValue(target,state.ai),opportunity=trainingOpportunityReason(gained,state.human);
+      const immediate=captureValue(card)+expandedTargetCards(target).reduce((sum,item)=>sum+captureValue(item),0);
+      const value=immediate*1.4+blockValue*.72+(opportunity?65:0)+(card.flags.includes('godori')?5:0)+(card.ribbonSet?3:0);
+      const reason=trainingThreatReason(target,state.ai)||opportunity||`This immediately captures a ${trainingCategoryName(target)} and gives the strongest visible value among your available plays.`;
+      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best={card,target,score:value,reason};
+    }
     return best;
+  }
+  function trainingRecommendation(){
+    if(!state||state.turn!==PLAYER_A||!state.human?.hand?.length)return null;
+    let best=null;
+    for(const card of state.human.hand){
+      const candidate=trainingCandidate(card);
+      if(!candidate)continue;
+      if(!best||candidate.score>best.score||(candidate.score===best.score&&(card.month<best.card.month||card.month===best.card.month&&card.id<best.card.id)))best=candidate;
+    }
+    return best;
+  }
+  function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
+  function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
+    if(!chosen||!recommended||chosen.id===recommended.card.id)return '';
+    const chosenAnalysis=trainingCandidate(chosen);
+    const prefix=chosenAnalysis?.target?`Your selected ${localizedMonth(chosen.month)} card can capture, but `:`Your selected ${localizedMonth(chosen.month)} card has no immediate floor capture, so `;
+    return `${prefix}the highlighted ${localizedMonth(recommended.card.month)} play is stronger. ${recommended.reason}`;
+  }
+  function trainingOpeningStrategy(){
+    if(!state?.human)return '';
+    const hand=state.human.hand||[],floor=state.floor||[];
+    const reachable=target=>hand.some(card=>card.month===target.month);
+    const handGodori=hand.filter(card=>card.flags.includes('godori')),floorGodori=floor.filter(card=>card.flags.includes('godori')&&reachable(card));
+    if(handGodori.length>=2&&floorGodori.length)return `Opening strategy: you have ${handGodori.length} bird Pictures in your hand and a reachable bird Picture is already on the floor. Prioritize those months and build toward Godori (5-Birdies).`;
+    if(handGodori.length>=2)return `Opening strategy: you start with ${handGodori.length} bird Pictures. Protect opportunities to capture them and look for the remaining Godori bird.`;
+    for(const family of ['red','blue','grass']){
+      const familyInHand=hand.filter(card=>card.ribbonSet===family),reachableFamily=floor.filter(card=>card.ribbonSet===family&&reachable(card));
+      if(familyInHand.length>=2&&reachableFamily.length)return `Opening strategy: you hold ${familyInHand.length} ${trainingRibbonName(family)} Stripes and can reach another on the floor. Build toward the 3-Stripe set before the computer can cut it.`;
+    }
+    const brights=hand.filter(card=>card.type==='bright').length,reachableBright=floor.some(card=>card.type==='bright'&&reachable(card));
+    if(brights>=2&&reachableBright)return `Opening strategy: you have ${brights} Brights and another reachable Bright is visible. Prioritize Bright months while avoiding unnecessary high-value discards.`;
+    const triple=state.human.hiddenTripleMonths?.[0];
+    if(triple)return `Opening strategy: you hold three cards from ${localizedMonth(triple)}. Keep the Shake/Bomb option in mind and watch for a matching floor card before committing the month.`;
+    const best=trainingRecommendation();
+    return best?`Opening strategy: no major set is immediately dominant, so start by maximizing safe captures and denying visible scoring threats. First look: ${best.reason}`:'Opening strategy: focus on making captures, protecting Brights and set cards, and watching the computer’s captured groups for the next scoring threshold.';
+  }
+  function showTrainingCoach(title,text){
+    if(!presentation.trainingMode||!text||TEST_MODE)return;
+    if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=title||'Training Coach';
+    if(els.trainingCoachText)els.trainingCoachText.textContent=text;
+    if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
+  }
+  function hideTrainingCoach(){if(!TEST_MODE&&els.trainingCoachPanel)els.trainingCoachPanel.hidden=true;}
+  function applyTrainingRecommendation(recommendation,{showMessage=true}={}){
+    if(!recommendation)return;
+    presentation.hintCardId=recommendation.card?.id||null;
+    presentation.trainingRecommendedFloorCardId=recommendation.target?.id||null;
+    presentation.trainingWarningFloorCardId=recommendation.target&&trainingThreatValue(recommendation.target,state.ai)>0?recommendation.target.id:null;
+    render();
+    if(showMessage)showTrainingCoach('Recommended Move',recommendation.reason);
   }
   function recommendHumanCard(){
     if(!state||state.turn!==PLAYER_A||presentation.locked)return;
-    const best=recommendedHumanCard();if(!best)return;
-    presentation.hintCardId=best.id;render();
+    applyTrainingRecommendation(trainingRecommendation());
   }
   function clearTrainingCoach(clearVisuals=true){
     if(presentation.trainingHintTimer){clearTimeout(presentation.trainingHintTimer);presentation.trainingHintTimer=null;}
-    if(clearVisuals){presentation.hintCardId=null;presentation.trainingWarningFloorCardId=null;}
+    if(clearVisuals){presentation.hintCardId=null;presentation.trainingWarningFloorCardId=null;presentation.trainingRecommendedFloorCardId=null;presentation.trainingTurnRecommendation=null;hideTrainingCoach();}
   }
-  function setTrainingMode(enabled){clearTrainingCoach();presentation.trainingMode=!!enabled;}
+  function setTrainingMode(enabled){clearTrainingCoach();presentation.trainingMode=!!enabled;if(!enabled)hideTrainingCoach();}
   function armTrainingCoach(){
     clearTrainingCoach();
     if(!presentation.trainingMode||onlineMode||!state||state.winner||state.turn!==PLAYER_A||presentation.locked)return;
     presentation.trainingHintTimer=setTimeout(()=>{
       presentation.trainingHintTimer=null;
       if(!presentation.trainingMode||onlineMode||!state||state.winner||state.turn!==PLAYER_A||presentation.locked)return;
-      presentation.hintCardId=recommendedHumanCard()?.id||null;
-      presentation.trainingWarningFloorCardId=trainingWarningCard()?.id||null;
-      render();
-    },3000);
+      applyTrainingRecommendation(trainingRecommendation());
+    },5000);
   }
 
 
@@ -2249,8 +2429,8 @@
     const dieFaces=onlineMode?['Y','O']:['P','C'];
     if(roll){
       els.openingDie.classList.add('rolling');playDiceSound();let face=0;
-      const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},90);
-      await sleep(900);clearInterval(timer);
+      const timer=setInterval(()=>{els.openingDie.textContent=dieFaces[face++%2];},performanceLite()?130:90);
+      await sleep(performanceLite()?620:900);clearInterval(timer);
       if(!isGameplayPresentationCurrent(epoch))return;
       els.openingDie.classList.remove('rolling');els.openingDie.textContent=starter===PLAYER_A?dieFaces[0]:dieFaces[1];
     }
@@ -2264,9 +2444,10 @@
   async function presentDealSequence(epoch=gameplayPresentationEpoch){
     if(TEST_MODE||!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=48;render();
-    for(let count=47;count>=20;count--){
+    const dealStep=performanceLite()?2:1,dealDelay=performanceLite()?44:72;
+    for(let count=47;count>=20;count-=dealStep){
       if(!isGameplayPresentationCurrent(epoch))return;
-      presentation.deckDisplayCount=count;render();await sleep(72);
+      presentation.deckDisplayCount=count;render();await sleep(dealDelay);
     }
     if(!isGameplayPresentationCurrent(epoch))return;
     presentation.deckDisplayCount=null;render();
@@ -2299,7 +2480,7 @@
     const freePanel=document.getElementById('freeFriendPanel'),competitivePanel=document.getElementById('onlineLobbyPanel');
     if(freePanel)freePanel.hidden=true;if(competitivePanel)competitivePanel.hidden=true;
     onlineMode=false;latestOnlineSnapshot=null;state=null;resetSession();setTrainingMode(training);localGameActive=true;localGameGeneration++;beginGameplayPresentation();
-    await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
+    document.documentElement.classList.remove('gostop-boot-pending');await unlockAudio();els.soloStartOverlay.hidden=true;await startGame();
   }
 
 
@@ -2308,11 +2489,27 @@
   setupLanguageMenu();
   document.querySelector('.human-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_A);});
   document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_B);});
+  document.querySelectorAll('.game-capture-panel').forEach(panel=>{
+    const playerId=panel.contains(els.playerCaptured)?PLAYER_A:PLAYER_B;
+    panel.addEventListener('click',event=>{if(event.defaultPrevented)return;event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(playerId);});
+  });
+  document.querySelectorAll('.capture-summary-trigger[data-score-owner]').forEach(trigger=>{
+    const playerId=trigger.dataset.scoreOwner==='player'?PLAYER_A:PLAYER_B;
+    const open=event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(playerId);};
+    trigger.addEventListener('click',open);
+    trigger.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;open(event);});
+  });
   if(els.scoreDialog)els.scoreDialog.addEventListener('click',event=>{if(event.target===els.scoreDialog)els.scoreDialog.close();});
-  els.howToBtn.addEventListener('click',()=>els.howToDialog.showModal());
+  function syncTutorialPlatformGuide(){
+    if(TEST_MODE||!els.howToDialog)return;
+    const mobile=(Number(globalThis.navigator?.maxTouchPoints||0)>0)||!!globalThis.matchMedia?.('(pointer: coarse)')?.matches;
+    els.howToDialog.querySelectorAll('[data-tutorial-platform]').forEach(node=>{node.hidden=node.dataset.tutorialPlatform!==(mobile?'mobile':'desktop');});
+  }
+  els.howToBtn.addEventListener('click',()=>{syncTutorialPlatformGuide();const sections=els.howToDialog.querySelector('.tutorial-sections');if(sections)sections.scrollTop=0;els.howToDialog.showModal();});
+  els.howToDialog.querySelector('.tutorial-nav')?.addEventListener('click',event=>{const link=event.target.closest('a[href^="#guide-"]');if(!link)return;const target=els.howToDialog.querySelector(link.getAttribute('href'));if(!target)return;event.preventDefault();target.scrollIntoView({block:'start',behavior:'smooth'});});
   els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});
   if(els.shakeReviewDialog)els.shakeReviewDialog.addEventListener('click',()=>els.shakeReviewDialog.close());
-  if(els.railHowTo)els.railHowTo.addEventListener('click',()=>els.howToDialog.showModal());
+  if(els.railHowTo)els.railHowTo.addEventListener('click',()=>{syncTutorialPlatformGuide();els.howToDialog.showModal();});
   if(els.railNewGame)els.railNewGame.addEventListener('click',()=>els.newGameDialog.showModal());
   els.playerHand.addEventListener('pointerleave',()=>setActiveHoveredHandCard(null));
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
@@ -2334,6 +2531,7 @@
   els.gukjinPictureBtn.addEventListener('click',()=>chooseGukjinMode('animal'));
   els.gukjinSingleBtn.addEventListener('click',()=>chooseGukjinMode('pi'));
   els.hintBtn.addEventListener('click',recommendHumanCard);
+  els.trainingCoachDismiss?.addEventListener('click',hideTrainingCoach);
   els.goBtn.addEventListener('click',()=>{
     if(onlineMode){if(onlineSubmit({type:'declareGo'}))els.decisionDialog.close();return;}
     if(!state||state.turn!==PLAYER_A)return;
@@ -2424,7 +2622,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
@@ -2436,6 +2634,7 @@
           hintCardId:presentation.hintCardId,
           trainingMode:presentation.trainingMode,
           trainingWarningFloorCardId:presentation.trainingWarningFloorCardId,
+          trainingRecommendedFloorCardId:presentation.trainingRecommendedFloorCardId,
           sessionStarted:presentation.sessionStarted,
           dicePresentationCount:presentation.dicePresentationCount,
           diceSoundCount:presentation.diceSoundCount,
@@ -2462,7 +2661,7 @@
     els.trainingModeBtn?.addEventListener('click',()=>launchLocalGame(true));
     const onlineStatus=document.getElementById('onlineStatus'),freeOnlineStatus=document.getElementById('freeOnlineStatus'),freeFriendPanel=document.getElementById('freeFriendPanel'),createOnlineBtn=document.getElementById('createOnlineBtn'),joinOnlineForm=document.getElementById('joinOnlineForm');
     let activeOnlineStatus=onlineStatus,onlineAnonymousMode=false;
-    let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
+    let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlineSkipInitialOpening=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
     const isOnlinePresentationCurrent=epoch=>onlineMode&&epoch===onlinePresentationEpoch;
     onlineSubmit=function(action){
       if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
@@ -2484,7 +2683,7 @@
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
       const flow=snapshot?.sessionFlow;if(!flow)return;
-      if(flow.ended){presentation.locked=true;if(flow.pauseResolution){setDialog(els.opponentEndedDialog,false);return;}if(flow.disconnectCancelled||flow.endedByYou)returnOnlineToMenu();else setDialog(els.opponentEndedDialog,true);return;}
+      if(flow.ended){presentation.locked=true;if(flow.pauseResolution||flow.abandonment){setDialog(els.opponentEndedDialog,false);return;}if(flow.disconnectCancelled||flow.endedByYou){if(onlineAnonymousMode&&globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot))return;returnOnlineToMenu();return;}if(onlineAnonymousMode&&els.opponentEndedDialog?.dataset.acknowledged==='1'){if(globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot))return;returnOnlineToMenu();return;}if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=onlineAnonymousMode?(flow.forceEnded?t('friendForceEnded'):t('friendEnded')):t('opponentEnded');setDialog(els.opponentEndedDialog,true);return;}
       const request=flow.newGameRequest;
       setDialog(els.newGameWaitingDialog,!!request?.requestedByYou);
       setDialog(els.incomingNewGameDialog,!!request&&!request.requestedByYou);
@@ -2495,9 +2694,9 @@
       if(!snapshot.terminalResult&&els.quitConfirmDialog.open&&onlineQuitFromResult)setDialog(els.quitConfirmDialog,false);
     }
     function returnOnlineToMenu(){
-      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);publishPlayerActivity(false,'menu');
+      onlineSessionGeneration++;onlinePresentationEpoch++;onlineMode=false;onlineSkipInitialOpening=false;presentation.locked=true;clearOnlineGameplayPresentation();setTrainingMode(false);publishPlayerActivity(false,'menu');
       const room=globalThis.goStopOnlineSession?.room;if(room)sessionStorage.removeItem(`gostop-room-${room.roomCode}`);if(!onlineAnonymousMode){try{localStorage.removeItem('gostop-active-ranked-room');}catch(_){}}
-      document.getElementById('onlineRoomCode').value='';if(document.getElementById('freeRoomCode'))document.getElementById('freeRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;
+      document.getElementById('onlineRoomCode').value='';activeOnlineStatus.textContent='';if(freeFriendPanel)freeFriendPanel.hidden=true;if(els.opponentEndedDialog)delete els.opponentEndedDialog.dataset.acknowledged;if(els.opponentEndedTitle)els.opponentEndedTitle.textContent=t('opponentEnded');
       globalThis.goStopOnlineSession?.close();globalThis.goStopOnlineSession=null;latestOnlineSnapshot=null;onlineAnonymousMode=false;activeOnlineStatus=onlineStatus;els.soloStartOverlay.hidden=false;refreshModeLocalizedLabels();
     }
     globalThis.GoStopGameBridge=Object.freeze({
@@ -2514,11 +2713,16 @@
         const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),room=await adapter.create();
         await beginOnline(room,{adapter});return room;
       },
-      async joinCompetitiveRoom(roomCode){
+      async joinCompetitiveRoom(roomCode,{resumeExisting=false}={}){
         const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
         const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');
         if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}
-        const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});return room;
+        const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter,resumeExisting});return room;
+      },
+      async joinGuestCompetitiveRoom(roomCode){
+        const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
+        const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);
+        const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:onlineStatus,adapter});return room;
       },
       async createFreeRoom(){
         const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();
@@ -2528,9 +2732,15 @@
         const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
         const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);
         const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:status,adapter});return room;
+      },
+      async resumeFriendlyRoom(roomCode){
+        const code=String(roomCode||'').trim().toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))throw new Error('Invalid room link.');
+        const saved=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!saved?.credential)throw new Error('This Friendly game can no longer be resumed from this tab.');
+        const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.join(code,saved.credential);
+        await beginOnline(room,{anonymous:true,statusElement:status,adapter,resumeExisting:true});return room;
       }
     });
-    els.opponentEndedOkBtn.addEventListener('click',returnOnlineToMenu);
+    els.opponentEndedOkBtn.addEventListener('click',()=>{const snapshot=latestOnlineSnapshot;if(els.opponentEndedDialog.open)els.opponentEndedDialog.close();if(els.opponentEndedDialog)els.opponentEndedDialog.dataset.acknowledged='1';if(onlineAnonymousMode&&snapshot?.sessionFlow?.ended&&globalThis.GoStopRanked?.handleFriendlySessionEnd?.(snapshot))return;returnOnlineToMenu();});
     [els.replayWaitingDialog,els.newGameWaitingDialog,els.incomingNewGameDialog,els.opponentEndedDialog].forEach(dialog=>dialog.addEventListener('cancel',event=>event.preventDefault()));
     async function driveOnline(snapshot,events=[]){
       if(!onlineMode)return;
@@ -2567,7 +2777,7 @@
       const incomingMapped=onlineStateFromSnapshot(snapshot,events),presentationEvents=incomingMapped.events;
       reconcileOnlineFlow(snapshot);
       if(snapshot.sessionFlow?.ended)return;
-      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;await presentOpeningSequence(state.startingPlayerId,true);if(!isOnlinePresentationCurrent(epoch))return;}await driveOnline(snapshot,onlineLastEvents);return;}
+      if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;if(!onlineSkipInitialOpening){await presentOpeningSequence(state.startingPlayerId,true);if(!isOnlinePresentationCurrent(epoch))return;}onlineSkipInitialOpening=false;}await driveOnline(snapshot,onlineLastEvents);return;}
       if(!presentationEvents.length){
         // Sync/flow snapshots carry no new physical action. Preserve any staged cards that
         // authority still owns in pendingTurn so the played card cannot disappear between
@@ -2637,22 +2847,49 @@
       else if(threePpeok)presentThreePpeok({events:[threePpeok]});
       else if(nagari){recordTerminalResult(state.terminalResult);setGrandResult(t('noWinner'),'',`${t('points')} ×${nagari.nextHandMultiplier}`,t('noWinnerHelp'),'special');showGameplayModal(els.resultDialog,epoch);}
       else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
+      if(onlineAnonymousMode&&snapshot.terminalResult)globalThis.GoStopRanked?.handleFriendlyTerminal?.(snapshot);
       await driveOnline(snapshot,presentationEvents);
     }
     async function submitOnlineCardPlay(){
       const cardId=onlinePendingCardId;
-      if(!cardId)return;
-      // Authority owns floor matching. Always submit the card first without a client-picked
-      // target: zero/one-match plays resolve normally, while two matches make the server
-      // enter awaitingFloorTarget and publish the authoritative chooseFloorTarget action.
-      onlineSubmit({type:'playCard',cardId,targetId:null});
+      if(!cardId)return false;
+      const card=state?.human?.hand?.find(item=>item.id===cardId);
+      let targetId=null;
+      if(card&&!state?.pendingDecision&&latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'){
+        const matches=matchesFor(card);
+        if(matches.length===2){
+          presentation.pendingHumanCardId=cardId;
+          const target=await chooseFloorTarget(matches,'Choose which floor card to hit',{cancelable:true});
+          if(!target){
+            const next=presentation.queuedHumanCardSwitch;
+            presentation.queuedHumanCardSwitch=null;
+            presentation.pendingHumanCardId=null;
+            presentation.locked=false;
+            onlineHandSourceRects.delete(cardId);
+            onlinePendingCardId=null;
+            els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
+            render();
+            if(next){await nextFrame();return humanPlay(next.cardId,next.clickedEl);}
+            return false;
+          }
+          targetId=target.id;
+          presentation.pendingHumanCardId=null;
+          presentation.queuedHumanCardSwitch=null;
+          presentation.locked=false;
+        }
+      }
+      if(onlineSubmit({type:'playCard',cardId,targetId}))return true;
+      onlineHandSourceRects.delete(cardId);
+      onlinePendingCardId=null;
+      els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
+      return false;
     }
     function enterOnlineMatchView(anonymous){
       if(anonymous){if(freeFriendPanel)freeFriendPanel.hidden=true;}
       else {const panel=document.getElementById('onlineLobbyPanel');if(panel)panel.hidden=true;}
-      els.soloStartOverlay.hidden=true;
+      document.documentElement.classList.remove('gostop-boot-pending');els.soloStartOverlay.hidden=true;
     }
-    const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null}={})=>{
+    const beginOnline=async (room,{anonymous=false,statusElement=onlineStatus,adapter:roomAdapter=null,resumeExisting=false}={})=>{
       const twoPlayer=!!anonymous||room?.rankedMode!=='solo';
       publishPlayerActivity(true,anonymous?'free-friend':room?.rankedMode==='solo'?'competitive-solo':'competitive-online',twoPlayer);
       localGameActive=false;localGameGeneration++;onlinePresentationEpoch++;beginGameplayPresentation();setTrainingMode(false);onlineAnonymousMode=!!anonymous;activeOnlineStatus=statusElement||onlineStatus;
@@ -2661,17 +2898,18 @@
       adapter.room=room;
       const generation=++onlineSessionGeneration,previous=globalThis.goStopOnlineSession;
       if(previous&&previous!==adapter){try{previous.close();}catch(_){}}
-      onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
+      onlinePresentationQueue=Promise.resolve();onlineDealPresented=false;onlineSkipInitialOpening=!!resumeExisting;onlinePresentedMatchId=null;onlineStageState={};onlinePresentedEvents.clear();latestOnlineSnapshot=null;onlineLastEvents=[];
       globalThis.goStopOnlineSession=adapter;
-      const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter;
+      const isCurrent=()=>generation===onlineSessionGeneration&&globalThis.goStopOnlineSession===adapter,isFriendlyHost=!!anonymous&&room?.seatId==='playerA';let friendlyJoinAnnounced=false;
+      const announceFriendlyJoin=()=>{if(!isFriendlyHost||friendlyJoinAnnounced)return;friendlyJoinAnnounced=true;globalThis.dispatchEvent(new CustomEvent('gostop-friendly-friend-joined',{detail:{roomCode:room.roomCode}}));};
       onlineMode=true;
       refreshModeLocalizedLabels();
-      sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));if(!anonymous){try{localStorage.setItem('gostop-active-ranked-room',JSON.stringify(room));}catch(_){}}activeOnlineStatus.textContent=t('roomWaitingConnection',{roomCode:room.roomCode});
-      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready)enterOnlineMatchView(anonymous);activeOnlineStatus.textContent=ready?t('matchReady'):t('roomWaitingOpponent',{roomCode:room.roomCode});});
-      adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);});
-      adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);});
-      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
+      sessionStorage.setItem(`gostop-room-${room.roomCode}`,JSON.stringify(room));if(!anonymous){try{localStorage.setItem('gostop-active-ranked-room',JSON.stringify(room));}catch(_){}}activeOnlineStatus.textContent=anonymous?t('waitingForOpponent'):t('roomWaitingConnection',{roomCode:room.roomCode});
+      adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready){enterOnlineMatchView(anonymous);announceFriendlyJoin();}activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
+      adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
+      adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
+      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();adapter.pendingActionId=null;onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
@@ -2703,13 +2941,8 @@
     joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();if(onlineJoinInFlight)return;onlineJoinInFlight=true;try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:true,roomCode:room.roomCode}}));}catch(error){activeOnlineStatus.textContent=error.message;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:false}}));}finally{onlineJoinInFlight=false;}});
     addEventListener('gostop-free-online-create',async()=>{
       if(!freeOnlineStatus)return;
-      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('shareRoomCode',{roomCode:room.roomCode});await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
+      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('waitingForOpponent');await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
       catch(error){activeOnlineStatus.textContent=error.message;}
-    });
-    addEventListener('gostop-free-online-join',async event=>{
-      if(!freeOnlineStatus||onlineJoinInFlight)return;const code=String(event.detail?.roomCode||'').toUpperCase();if(!/^[A-Z2-9]{14}$/.test(code))return;
-      onlineJoinInFlight=true;try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true});sessionStorage.removeItem(`gostop-room-${code}`);const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
-      catch(error){activeOnlineStatus.textContent=error.message;}finally{onlineJoinInFlight=false;}
     });
   }
   if(typeof globalThis.CustomEvent==='function')globalThis.dispatchEvent?.(new CustomEvent('gostop-app-ready'));

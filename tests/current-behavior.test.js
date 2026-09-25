@@ -152,10 +152,13 @@ test('Online semantic floor candidates collapse every registered stack but retai
   useState(stateWith({floor:[card('m2-1')]}));assert.equal(api.effectiveFloorMatchCards(played).map(item=>item.id).join(','),'m2-1');
   useState(stateWith({floor:[card('m3-1')]}));assert.equal(api.effectiveFloorMatchCards(played).length,0);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),submit=source.slice(source.indexOf('async function submitOnlineCardPlay'),source.indexOf('const beginOnline'));
-  // Ranked authority, not the browser, owns floor matching. The client must send the
-  // card targetless so zero/one/two-match resolution uses the same authoritative path.
-  assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId:null\}\)/);
-  assert.doesNotMatch(submit,/matchesFor\(/);
+  // Ranked play still resolves on the authority, but an ordinary two-target hand card
+  // stays uncommitted until the player chooses one highlighted legal target.
+  assert.match(submit,/let targetId=null/);
+  assert.match(submit,/const matches=matchesFor\(card\)/);
+  assert.match(submit,/if\(matches\.length===2\)[\s\S]*chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/targetId=target\.id/);
+  assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
   assert.doesNotMatch(submit,/state\.floor\.filter\(item=>item\.month===card\.month\)/);
 });
 
@@ -344,12 +347,12 @@ test('Go/Stop eligibility requires threshold and a strict score increase',()=>{
 
 test('Pi transfer prefers ordinary Pi and falls back to double Pi',async()=>{
   const state=useState(stateWith({
-    ai:api.makePlayer({captured:cards('m11-2','m4-3')})
+    ai:api.makePlayer({captured:cards('m11-3','m4-3')})
   }));
   await api.stealPiAnimated('human',1);
   assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3');
   await api.stealPiAnimated('human',1);
-  assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3,m11-2');
+  assert.equal(state.human.captured.map(c=>c.id).join(','),'m4-3,m11-3');
 });
 
 test('Nagari increments and caps carry power at three',async()=>{
@@ -2149,6 +2152,18 @@ test('opening Bomb arms without moving cards or changing the selected starter',(
   assert.equal(result.state.startingPlayerId,'playerB');
 });
 
+test('Bomb blank buttons recover from stale presentation locks but remain single-flight',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.match(source,/const blankInputDisabled=onlineMode\?!rankedHandTurnAvailable\(\):\(state\.turn!==PLAYER_A\|\|!!state\.winner\|\|presentation\.blankTurnInFlight\|\|presentation\.activePhysicalMotions>0\|\|!!state\.pendingDecision\|\|!!presentation\.targetChoice\|\|!!presentation\.shakeResolver\|\|!!presentation\.bombResolver\)/);
+  assert.match(source,/blank\.disabled=blankInputDisabled/);
+  const blankHandler=source.slice(source.indexOf('async function humanUseBombBlank'),source.indexOf('async function humanPlay'));
+  assert.doesNotMatch(blankHandler,/if\(presentation\.locked/);
+  assert.match(blankHandler,/presentation\.blankTurnInFlight=true;presentation\.locked=true;render\(\)/);
+  assert.match(blankHandler,/finally\{presentation\.blankTurnInFlight=false;\}/);
+  const reset=source.slice(source.indexOf('function resetHandPresentationState'),source.indexOf('function fullSizeSourceRect'));
+  assert.match(reset,/presentation\.blankTurnInFlight=false/);
+});
+
 test('No Winner authority requires both hands, blank opportunities, turns, and decisions to be exhausted',()=>{
   let state=exhaustedState();
   assert.equal(extractedEngine.isHandExhausted(state),true);
@@ -2235,9 +2250,8 @@ test('visual beginner guide covers every section with canonical GoStop Card evid
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   for(const section of ['guide-overview','guide-types','guide-turn','guide-matches','guide-specials','guide-scoring','guide-go','guide-hands'])assert.match(html,new RegExp(`id="${section}"`));
   for(const query of ['bright','animal','ribbon','single','doublePi-11','doublePi-12','switchPi'])assert.equal(html.includes(`data-tutorial-query="${query}"`),true);
-  for(const cards of ['m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3,m2-4'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
-  assert.equal(html.includes('data-i18n-vars=\'{"count":1}\''),true);
-  assert.equal(html.includes('data-i18n-vars=\'{"points":48}\''),true);
+  for(const cards of ['m1-1,m3-1,m8-1,m11-1,m12-1','m2-1,m2-2,m2-3','m2-4','m2-1,m4-1,m8-2'])assert.equal(html.includes(`data-card-ids="${cards}"`),true);
+  for(const go of ['<td>1 Go</td><td>+1</td>','<td>3 Go</td><td>×2</td>','<td>5 Go</td><td>×8</td>'])assert.equal(html.includes(go),true);
   assert.equal(fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8').includes("createCardEl(card,'card tutorial-game-card')"),true);
 });
 
@@ -2413,8 +2427,13 @@ test('5-Birdies presentation flies exactly five birds with synchronized chirps a
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),i18n=require('../i18n.js');assert.equal(i18n.translate('en','birdies'),'5-BIRDIES!');assert.equal(i18n.translate('ko','birdies'),'고도리!');assert.equal(source.includes('for(let index=0;index<5;index++)'),true);assert.equal(source.includes('if(milestone.birds)playBirdSound()'),true);assert.equal(css.includes('animation:birdFly 2s'),true);const state=stateWith({ai:api.makePlayer({captured:cards('m2-1','m4-1','m8-2')})});api.setState(state);const event=api.detectNewMilestones('playerB')[0];assert.equal(event.cardIds.length,3);
 });
 
-test('tutorial dismissal distinguishes backdrop from content and keeps an outside sticky close control visible',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);assert.equal(css.includes('.tutorial-card>.dialog-close{position:sticky;top:0;float:right;transform:translate(22px,-22px)'),true);assert.equal(css.includes('max-height:90vh;overflow:auto'),true);
+test('tutorial keeps its header and navigation outside the scrolling lesson body on desktop and mobile',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.equal(source.includes("if(event.target===els.howToDialog)els.howToDialog.close()"),true);
+  assert.match(html,/class="tutorial-header"/);assert.match(html,/class="dialog-close tutorial-close"/);assert.match(html,/class="tutorial-sections"/);
+  assert.match(css,/\.tutorial-card\{box-sizing:border-box;[^}]*overflow:hidden;display:grid;grid-template-rows:auto auto minmax\(0,1fr\)/);
+  assert.match(css,/\.tutorial-sections\{[^}]*overflow-y:auto/);assert.match(css,/\.tutorial-header \.tutorial-close\{position:static/);
+  assert.match(css,/@media\(max-width:700px\)\{[^]*\.tutorial-dialog\{width:100vw;height:100dvh/);
 });
 
 test('status panels use four stable siblings and horizontal localized identity text',()=>{
@@ -2521,14 +2540,35 @@ test('normal staged and deck cards keep viewport-scaled canonical dimensions wit
   assert.match(css,/hand-card-slot\.is-hovered \.hand-card\{transform:translateY/);
 });
 
-test('tutorial derives category examples from canonical metadata and explains every 2-Single card',()=>{
+test('tutorial derives category examples from canonical metadata and explains every 2x Single card',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
   assert.match(source,/card\.type==='bright'/);assert.match(source,/card\.type==='animal'/);assert.match(source,/card\.type==='ribbon'/);assert.match(source,/card\.flags\.includes\('doublePi'\)/);assert.match(source,/card\.flags\.includes\('switchPi'\)/);
-  assert.equal(extractedEngine.masterDeck.find(card=>card.month===11&&card.flags.includes('doublePi')).id,'m11-2');
+  assert.equal(extractedEngine.masterDeck.find(card=>card.month===11&&card.flags.includes('doublePi')).id,'m11-3');
   assert.equal(extractedEngine.masterDeck.find(card=>card.month===12&&card.flags.includes('doublePi')).id,'m12-4');
   assert.equal(extractedEngine.masterDeck.find(card=>card.flags.includes('switchPi')).id,'m9-1');
   assert.doesNotMatch(html,/m9-1,m11-2,m12-2/);
+  assert.equal(i18n.dictionaries.en.twoSingleCards,'2x Single Cards');
   for(const locale of Object.keys(i18n.dictionaries))for(const key of ['twoSingleCards','novemberDoubleHelp','decemberDoubleHelp','sakeCupHelp'])assert.ok(i18n.dictionaries[locale][key].trim());
+});
+
+test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, and rule-correct special examples',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
+  assert.match(i18n.translate('en','scoringGate'),/Seven points is the first eligibility gate/);
+  for(const text of ['1 Go','2 Go','3 Go','4 Go','5 Go','×2','×4','×8'])assert.ok(html.includes(text),text);
+  for(const text of ['3 Brights without the December Rain Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
+  assert.match(html,/data-card-ids="m6-4"/);assert.match(html,/data-card-ids="m6-3"/);
+  assert.doesNotMatch(html,/data-card-ids="m6-1,m7-2,m8-3"/);
+  assert.match(html,/data-card-ids="m5-1,m5-2"/);assert.match(html,/data-card-ids="m5-3"/);assert.match(html,/data-card-ids="m5-4"/);
+  assert.match(html,/data-card-ids="m1-2,m2-2,m3-2"/);assert.match(html,/data-card-ids="m4-2,m5-2,m7-2"/);assert.match(html,/data-card-ids="m6-2,m9-2,m10-2"/);
+  for(const key of ['shakeLong','bombLong','poopedLong','firstPoopLong','triplePoopLong','kissLong','flushLong','cleanSweepLong','conquerLong','birdiesLong','stripesLong','fiveBrightsLong','noWinnerLong'])assert.ok(i18n.translate('en',key).length>80,key);
+  assert.equal(Object.keys(i18n.dictionaries.en).includes('shakeLong'),false,'expanded tutorial detail copy stays outside the canonical localized UI dictionary');
+});
+
+test('match examples label zero, one, two, and deck-draw month matching instead of unexplained card rows',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.match(html,/One floor match → capture/);assert.match(html,/No floor match → stays on floor/);assert.match(html,/Two floor matches → choose one/);assert.match(html,/The deck card also matches by month/);
+  assert.match(html,/data-card-ids="m8-3"/);assert.match(html,/data-card-ids="m8-1,m8-2"/);
+  assert.doesNotMatch(html,/data-card-ids="m10-2,m11-3,m12-3"/);
 });
 
 test('normal gameplay semantic class leaves the approved card shell untouched',()=>{
@@ -2635,7 +2675,7 @@ test('Online hand play captures the live source before animation and preserves e
   api.rememberOnlineHandSource('m2-1',exact);api.resetHandPresentationState();assert.equal(api.takeOnlineHandSource('m2-1'),null);
   const onlineClick=source.slice(source.indexOf('async function humanPlay'),source.indexOf('// While choosing between two floor targets'));
   const remembered=onlineClick.indexOf('rememberOnlineHandSource(cardId,clickedEl)');
-  const submitted=onlineClick.indexOf('onlineSubmit(action)');
+  const submitted=onlineClick.indexOf('await submitOnlineCardPlay()');
   assert.ok(remembered>=0&&submitted>remembered);
   const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
   assert.match(transition,/side==='human'\?takeOnlineHandSource\(event\.card\.id\)\|\|els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
@@ -2820,7 +2860,7 @@ test('authoritative unmatched deck landing keeps its reserved slot after earlier
 
 test('physical-motion instrumentation detects render interruption without changing Solo timing',()=>{
   api.resetPhysicalMotionTrace();api.beginPhysicalMotion();api.notePresentationRender();let trace=api.getPresentationSnapshot();assert.equal(trace.activePhysicalMotions,1);assert.equal(trace.rendersDuringPhysicalMotion,1);api.endPhysicalMotion();api.notePresentationRender();trace=api.getPresentationSnapshot();assert.equal(trace.activePhysicalMotions,0);assert.equal(trace.rendersDuringPhysicalMotion,1);
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/runPhysicalMotion\(\(\)=>animateHandCardSlap/);assert.match(source,/runPhysicalMotion\(\(\)=>animateDeckLiftFlip/);assert.match(source,/runPhysicalMotion\(\(\)=>animateStagedSlap/);assert.match(source,/duration=650/);assert.match(source,/duration=500/);assert.match(source,/cubic-bezier\(\.22,\.72,\.17,1\)/);assert.match(source,/cubic-bezier\(\.2,\.7,\.14,1\)/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');assert.match(source,/runPhysicalMotion\(\(\)=>animateHandCardSlap/);assert.match(source,/runPhysicalMotion\(\(\)=>animateDeckLiftFlip/);assert.match(source,/runPhysicalMotion\(\(\)=>animateStagedSlap/);assert.match(source,/duration=motionDuration\(650\)/);assert.match(source,/duration=motionDuration\(500\)/);assert.match(source,/cubic-bezier\(\.22,\.72,\.17,1\)/);assert.match(source,/cubic-bezier\(\.2,\.7,\.14,1\)/);
 });
 
 
@@ -2866,8 +2906,9 @@ test('intentional Online exits clean room UI and ignore only their resulting dis
   const reconcile=source.slice(source.indexOf('function reconcileOnlineFlow'),source.indexOf('function returnOnlineToMenu'));
   const cleanup=source.slice(source.indexOf('function returnOnlineToMenu'),source.indexOf("els.opponentEndedOkBtn.addEventListener"));
   const disconnect=source.slice(source.indexOf("adapter.addEventListener('disconnected'"),source.indexOf("adapter.addEventListener('snapshot'"));
-  assert.match(reconcile,/if\(flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\);else setDialog\(els\.opponentEndedDialog,true\)/,'local quit or no-penalty disconnect cancellation returns automatically while a normal opponent-ended session keeps its dialog');
-  assert.match(source,/opponentEndedOkBtn\.addEventListener\('click',returnOnlineToMenu\)/,'the opponent OK path uses the same cleanup');
+  assert.match(reconcile,/if\(flow\.disconnectCancelled\|\|flow\.endedByYou\)\{if\(onlineAnonymousMode&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd\?\.\(snapshot\)\)return;returnOnlineToMenu\(\);return;\}/,'Friendly local quit offers referral signup before cleanup while ranked no-penalty exits still return directly');
+  assert.match(reconcile,/onlineAnonymousMode\?\(flow\.forceEnded\?t\('friendForceEnded'\):t\('friendEnded'\)\):t\('opponentEnded'\)/,'Free Friend endings use dedicated normal and force-ended messages');
+  assert.match(source,/opponentEndedOkBtn\.addEventListener\('click',\(\)=>\{[^]*handleFriendlySessionEnd\?\.\(snapshot\)[^]*returnOnlineToMenu\(\)/,'the opponent OK path offers Friendly referral signup before final cleanup');
   assert.match(cleanup,/onlineMode=false/);
   assert.match(cleanup,/sessionStorage\.removeItem\(`gostop-room-\$\{room\.roomCode\}`\)/);assert.match(cleanup,/localStorage\.removeItem\('gostop-active-ranked-room'\)/);
   assert.match(cleanup,/getElementById\('onlineRoomCode'\)\.value=''/);
@@ -2900,7 +2941,7 @@ test('Online starter messages are localized and viewer-relative for both seats',
 });
 
 
-test('Training Mode warns about an opponent completing a three-ribbon set and recommends blocking it',()=>{
+test('Training Mode warns about an opponent completing a three-ribbon set and recommends the blocking hand/floor pair',()=>{
   const warning=card('m3-2');
   const state=useState(stateWith({
     turn:'playerA',
@@ -2910,7 +2951,71 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   }));
   assert.equal(api.trainingThreatValue(warning,state.ai)>0,true);
   assert.equal(api.trainingWarningCard().id,'m3-2');
-  assert.equal(api.recommendedHumanCard().id,'m3-1');
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m3-1');
+  assert.equal(recommendation.target.id,'m3-2');
+  assert.match(recommendation.reason,/3-Stripe set/);
+  assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/highlighted/);
+});
+
+test('Training Mode opening strategy recognizes a reachable third Godori bird and waits five seconds before turn coaching',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m8-2'),card('m10-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m4-1'),card('m8-3')]}),
+    ai:api.makePlayer()
+  }));
+  assert.match(api.trainingOpeningStrategy(),/Godori/);
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
+  assert.match(coach,/setTimeout\(\(\)=>\{/);
+  assert.match(coach,/\},5000\)/);
+  assert.match(source,/trainingRecommendedFloorCardId/);
+  assert.match(source,/showTrainingCoach\('Opening Strategy'/);
+  assert.match(source,/The highlighted floor card is the stronger target/);
+});
+
+test('mobile hand browsing, second tap, and flick share one deterministic native-touch path',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
+  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank\}\}\)/);
+  assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(source,/if\(!state\?\.human\?\.hand\?\.some\(card=>card\.id===cardId\)\)return/);
+  assert.match(source,/event\.preventDefault\(\);void humanPlay\(cardId,live\)/);
+  assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
+  assert.match(source,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
+  assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const nativeTouchSupported=touchCapable&&!pointerTouchSupported/);
+  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/addEventListener\('pointermove'/);
+  assert.match(presentation,/addEventListener\('pointerup'/);
+  assert.match(presentation,/state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/addEventListener\('touchmove'/);
+  assert.match(presentation,/addEventListener\('touchend'/);
+  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
+  assert.match(presentation,/Date\.now\(\)\+Math\.max\(80,Number\(ms\)\|\|140\)/);
+  assert.doesNotMatch(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
+  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
+  assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
+  assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
+  assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId,260\)/);
+  assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
+});
+
+test('How to Play includes device-specific click, touch navigation, and flick controls',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.match(html,/id="guide-controls"/);
+  assert.match(html,/data-tutorial-platform="desktop"/);
+  assert.match(html,/data-tutorial-platform="mobile"/);
+  assert.match(html,/Move the mouse across your hand/);
+  assert.match(html,/flick your finger upward/);
+  assert.match(html,/Slide your finger left or right across your hand/);
 });
 
 test('Training Mode state is independent from normal Free Solo state',()=>{
@@ -2921,6 +3026,7 @@ test('Training Mode state is independent from normal Free Solo state',()=>{
   assert.equal(snapshot.trainingMode,false);
   assert.equal(snapshot.hintCardId,null);
   assert.equal(snapshot.trainingWarningFloorCardId,null);
+  assert.equal(snapshot.trainingRecommendedFloorCardId,null);
 });
 
 
@@ -2953,14 +3059,25 @@ test('ranked Solo launch stays covered until the opening presentation is visible
   assert.match(entry,/overlay\.dataset\.launching='true'/);
   assert.match(entry,/if\(kind==='solo'\)setSoloLaunchCover\(true\)/);
   assert.match(rankedSource,/\.solo-start-overlay\[data-launching="true"\]/);
+  assert.match(rankedSource,/\.solo-start-overlay\[data-launching="true"\]>\*:not\(\.solo-launch-message\)\{display:none!important\}/);
+  assert.match(rankedSource,/\.solo-launch-message\{display:none;position:absolute;inset:0;z-index:90;place-items:center;text-align:center/);
+  assert.match(rankedSource,/const soloLaunchMessage=document\.createElement\('div'\);soloLaunchMessage\.className='solo-launch-message'/);
+  assert.match(entry,/soloLaunchMessage\.textContent=rt\('starting'\)/);
+  assert.doesNotMatch(rankedSource,/data-launching-text/);
   const snapshot=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
   assert.match(snapshot,/snapshot\?\.ranked&&els\.soloStartOverlay\?\.dataset\.launching!=='true'/);
   const opening=appSource.slice(appSource.indexOf('async function presentOpeningSequence'),appSource.indexOf('async function presentDealSequence'));
   assert.ok(opening.indexOf("els.openingOverlay.classList.add('show')")<opening.indexOf("els.soloStartOverlay.hidden=true"),'opening overlay must be visible before launch cover is removed');
 });
 
-test('score-pill click opens score breakdown without bubbling into Player Info',()=>{
-  const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+test('score pill, Captured Cards title, and entire capture panels open the same complete score breakdown',()=>{
+  const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),htmlSource=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   assert.match(appSource,/\.human-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_A\);\}\)/);
   assert.match(appSource,/\.cpu-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_B\);\}\)/);
+  assert.match(htmlSource,/capture-summary-trigger" data-score-owner="player" role="button" tabindex="0"/);
+  assert.match(appSource,/capture-summary-trigger\[data-score-owner\]/);assert.match(appSource,/openScoreBreakdown\(playerId\)/);
+  assert.match(appSource,/querySelectorAll\('\.game-capture-panel'\)\.forEach\(panel=>\{/);
+  assert.match(appSource,/panel\.contains\(els\.playerCaptured\)\?PLAYER_A:PLAYER_B/);
+  assert.match(appSource,/panel\.addEventListener\('click',event=>\{if\(event\.defaultPrevented\)return;event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(playerId\);\}\)/);
+  assert.doesNotMatch(appSource,/btn\.addEventListener\('click',\(\)=>openCapturedGroup/);
 });

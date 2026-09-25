@@ -9,7 +9,7 @@ const player=hand=>({hand,captured:[],go:0,shakes:0,shakeMultiplier:1,bombs:0,bo
 test('quick upward and radial top-right motions are flick throws',()=>{
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:112,endY:420,duration:170}),true);
   assert.equal(isUpwardFlick({startX:100,startY:500,endX:70,endY:440,duration:190}),true);
-  assert.equal(isUpwardFlick({startX:100,startY:500,endX:195,endY:455,duration:150}),true);
+  assert.equal(isUpwardFlick({startX:100,startY:500,endX:150,endY:455,duration:150}),true);
 });
 
 test('tap, slow drag, short lift, and nearly horizontal swipe are not flick throws',()=>{

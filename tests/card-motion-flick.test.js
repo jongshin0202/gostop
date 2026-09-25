@@ -23,27 +23,77 @@ test('staged physical card owns visibility until shared cleanup',()=>{
   assert.match(app,/function removeStage\(id\)[\s\S]*style\.visibility=''\);/);
 });
 
-test('flick classifier accepts fast upward intent and rejects jitter slow and horizontal motion',()=>{
+test('touch selection is card-identity based and resets every new hand/game',()=>{
+  assert.match(presentation,/let selectedCardId=null/);
+  assert.match(presentation,/const cardIdentity=card=>String\(card\?\.dataset\?\.cardId\|\|card\?\.closest\?\.\('\.hand-card-slot'\)\?\.dataset\?\.handKey\|\|''\)/);
+  assert.match(presentation,/selectedCardId=cardIdentity\(card\)/);
+  assert.match(presentation,/doc\.addEventListener\('gostop-hand-reset',resetGestureState\)/);
+  assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
+});
+
+test('Android prefers Pointer Events and keeps native Touch Events only as a fallback',()=>{
+  assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(presentation,/const nativeTouchSupported=touchCapable&&!pointerTouchSupported/);
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/addEventListener\('pointermove'/);
+  assert.match(presentation,/addEventListener\('pointerup'/);
+  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/addEventListener\('touchmove'/);
+  assert.match(presentation,/addEventListener\('touchend'/);
+});
+
+test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{
+  assert.match(presentation,/sideways>=10&&sideways>Math\.max\(8,Math\.abs\(up\)\*1\.10\)/);
+  assert.match(presentation,/up>=10&&up>sideways\*1\.05|up>=8&&up>sideways\*\.9/);
+  assert.match(presentation,/state\.intent='browse'/);
+  assert.match(presentation,/state\.intent='flick'/);
+  assert.doesNotMatch(presentation,/const flick=state\.intent!=='browse'&&isUpwardFlick/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
+  assert.match(presentation,/const browsed=!flick&&\(state\.intent==='browse'\|\|Math\.abs\(dx\)>=18&&Math\.abs\(dx\)>Math\.abs\(dy\)\*\.9\)/);
+  assert.match(presentation,/const tap=Math\.abs\(dx\)<=28&&Math\.abs\(dy\)<=28&&endTime-state\.startTime<=1000/);
+  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId\)/);
+});
+
+test('browse release clears the raised hover instead of leaving the last card sticking out',()=>{
+  const pointerEnd=presentation.slice(presentation.indexOf("doc.addEventListener('pointerup'"),presentation.indexOf("doc.addEventListener('pointercancel'"));
+  assert.match(pointerEnd,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
+  const browseBranch=pointerEnd.slice(pointerEnd.indexOf('if(browsed){'),pointerEnd.indexOf('const tap='));
+  assert.doesNotMatch(browseBranch,/commitSelection/);
+});
+
+test('native Touch path commits second tap and upward flick on touch-capable Android',()=>{
+  const touch=presentation.slice(presentation.indexOf('if(nativeTouchSupported){'),presentation.indexOf("doc.addEventListener('click'"));
+  assert.match(touch,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
+  assert.match(touch,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(touch,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId\)/);
+});
+
+test('second tap and upward flick request direct hand activation before synthetic-click fallback',()=>{
+  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
+  assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank\}\}\)/);
+  assert.match(presentation,/handled=!doc\.dispatchEvent\(request\)/);
+  assert.match(presentation,/if\(handled\)return true/);
+  assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
+  assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(app,/if\(onlineMode\)\{[\s\S]*if\(!rankedHandTurnAvailable\(\)\)return;[\s\S]*event\.preventDefault\(\);void humanPlay\(cardId,live\);return;/);
+});
+
+test('ranked gesture activation dispatches by stable card ID before consulting the live DOM',()=>{
+  const trigger=presentation.slice(presentation.indexOf('const triggerPlay=cardOrId=>'),presentation.indexOf('const snapshotHandGeometry'));
+  assert.match(trigger,/const cardId=typeof cardOrId==='string'\?String\(cardOrId\|\|''\):cardIdentity\(initialCard\)/);
+  const dispatchIndex=trigger.indexOf("new CustomEvent('gostop-hand-activate'");
+  const lookupIndex=trigger.indexOf('const card=cardByIdentity(cardId)||initialCard');
+  assert.ok(dispatchIndex>=0&&lookupIndex>dispatchIndex,'direct activation must happen before DOM fallback lookup');
+  assert.doesNotMatch(trigger,/if\(!canUseCard\(initialCard\)\)return false/);
+});
+
+test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:120}),true);
+  assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:500}),true);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:210,duration:80}),false);
-  assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:500}),false);
+  assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:700}),false);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:400,endY:190,duration:100}),false);
-});
-
-test('touch and pointer flicks commit before release and suppress generated clicks',()=>{
-  assert.match(presentation,/processTouchMove[\s\S]*isUpwardFlick\(flickSample\)[\s\S]*triggerPlay\(card\)/);
-  assert.match(presentation,/addEventListener\('pointerdown'/);
-  assert.match(presentation,/addEventListener\('pointermove'[\s\S]*isUpwardFlick\(sample\)[\s\S]*triggerPlay\(state\.card\)/);
-  assert.match(presentation,/suppressTouchClicksUntil\|\|Date\.now\(\)<suppressPointerClicksUntil/);
-});
-
-test('gesture layer reuses canonical click path without ranked authority logic',()=>{
-  const gesture=presentation.slice(presentation.indexOf('function installHandFlickGestures'),presentation.indexOf('function pendingOnlineStageIds'));
-  assert.match(gesture,/const triggerPlay=card=>[\s\S]*card\.click\(\)/);
-  assert.doesNotMatch(gesture,/onlineSubmit\(/);
-  assert.doesNotMatch(gesture,/matchesFor\(/);
-  assert.doesNotMatch(gesture,/chooseFloorTarget\(/);
-  const online=app.slice(app.indexOf('async function humanPlay'),app.indexOf('// While choosing between two floor targets'));
-  assert.match(online,/\{type:'playCard',cardId,targetId:null\}/);
-  assert.match(online,/needsPrePlayDecision\?\{type:'attemptPlayCard',cardId\}/);
 });

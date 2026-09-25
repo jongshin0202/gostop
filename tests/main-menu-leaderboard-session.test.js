@@ -26,6 +26,19 @@ test('saved authenticated sessions restore automatically and transient refresh f
   assert.match(source,/authRestorePromise=refreshAccount\(\)/);
 });
 
+test('Create ID requires email verification before session and Coin rewards in production',()=>{
+  assert.match(worker,/\/api\/auth\/verify-email/);assert.match(worker,/\/api\/auth\/resend-verification/);
+  assert.match(accountStoreSource,/EMAIL_VERIFICATION_REQUIRED/);assert.match(accountStoreSource,/emailVerified:!verificationRequired/);
+  assert.match(accountStoreSource,/walletCoins:verificationRequired\?0:100/);
+  assert.match(accountStoreSource,/async verifyEmail\(request\)/);assert.match(accountStoreSource,/async resendVerification\(request\)/);
+  assert.match(accountStoreSource,/emailVerificationTokenHash/);assert.match(accountStoreSource,/EMAIL_VERIFY_TTL_MS=1000\*60\*60\*24/);
+  assert.match(accountStoreSource,/signupAwardedAt/);assert.match(accountStoreSource,/account\.emailVerified===false/);
+  assert.match(source,/id="verificationTitle">Verify Your Email</);assert.match(source,/id="verificationResend"/);
+  assert.match(source,/api\('\/api\/auth\/resend-verification'/);assert.match(source,/error\?\.code==='EMAIL_NOT_VERIFIED'/);
+  assert.match(source,/verificationHash=inviteUrl\.hash\.match\(\/\^#verify=/);assert.match(source,/verificationToken=verificationHash\?\.\[1\]\|\|inviteUrl\.searchParams\.get\('verify'\)/);assert.match(source,/api\('\/api\/auth\/verify-email'/);
+  assert.match(source,/if\(validVerificationToken\)\{await launchEmailVerification\(\);return;\}/);
+});
+
 test('worker accepts first-party origins and forwards Cloudflare timezone for local daily rewards',async()=>{
   const {isAllowedOrigin}=await import('../server/worker.mjs');
   const env={ALLOWED_ORIGINS:''};
@@ -46,22 +59,56 @@ test('leaderboards are public, render immediately, and page controls work even i
   assert.match(block,/const key=leaderboardPage===0\?'global':'monthly'/);
   assert.match(block,/if\(!leaderboardData\).*leaderboardLoadFailed/s);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return;leaderboardTimer=setTimeout\(\(\)=>\{[\s\S]*if\(leaderboardPage===1\)\{closeLeaderboard\(true\);return;\}[\s\S]*nextLeaderboard\(1\)[\s\S]*LEADERBOARD_ROTATE_MS/);
-  assert.match(source,/class=\"leaderboard-controls\".*leaderboard-prev.*leaderboard-return.*leaderboard-next/s);
-  assert.doesNotMatch(source,/\.leaderboard-nav\{position:absolute/);
+  assert.match(source,/class="leaderboard-mode-tabs"/);
+  assert.match(source,/id="globalLeaderboardTab"/);assert.match(source,/id="monthlyLeaderboardTab"/);
+  assert.match(source,/class="leaderboard-return"/);
+  assert.match(source,/function setLeaderboardHeading\(text\)[^]*?heading\.append\(first,document\.createTextNode\(' '\),second\)/);
+  assert.match(source,/\.leaderboard-title h1\{[^]*?min-height:1\.9em[^]*?display:grid/);
+  assert.doesNotMatch(source,/class="leaderboard-controls"/);
+});
+
+test('mobile leaderboards swipe horizontally in attract and manual views while ordinary taps return to the menu',()=>{
+  const board=source.slice(source.indexOf('let leaderboardTouchStart'),source.indexOf('function mainMenuIdleEligible'));
+  assert.match(board,/function leaderboardSwipeEnabled\(\)\{return !leaderboardScreen\.hidden&&globalThis\.matchMedia\?\.\('\(max-width:760px\)'\)\.matches;\}/);
+  assert.match(board,/leaderboardScreen\.addEventListener\('touchstart'/);
+  assert.match(board,/leaderboardScreen\.addEventListener\('touchend'/);
+  assert.match(board,/Math\.abs\(dx\)<48/);
+  assert.match(board,/Math\.abs\(dx\)<Math\.abs\(dy\)\*1\.15/);
+  assert.match(board,/nextLeaderboard\(dx<0\?1:-1\)/);
+  assert.match(source,/Date\.now\(\)<leaderboardSwipeSuppressClickUntil/);
+  assert.match(source,/leaderboardScreen\.classList\.toggle\('attract-mode',attractMode\)/);
+  assert.match(source,/leaderboardScreen\.classList\.remove\('attract-mode'\)/);
+  assert.match(source,/\.leaderboard-screen\.attract-mode \.leaderboard-mode-tabs\{visibility:hidden;pointer-events:none\}/);
+  assert.match(source,/modeTabs\.setAttribute\('aria-hidden',attractMode\?'true':'false'\)/);
+  assert.doesNotMatch(source,/Swipe left or right to switch leaderboards/);
+  assert.doesNotMatch(source,/calc\(abs\(/);
 });
 
 test('manual leaderboard background click and Return restore the main menu without automatic rotation',()=>{
   const block=source.slice(source.indexOf('function restartLeaderboardTimer'),source.indexOf('function lobbyUrl'));
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;freePanel\.hidden=true;overlay\.hidden=false;\}/);
+  assert.match(block,/globalLeaderboardTab'\)\.addEventListener\('click'/);assert.match(block,/monthlyLeaderboardTab'\)\.addEventListener\('click'/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
-  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
+  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(Date\.now\(\)<leaderboardSwipeSuppressClickUntil\)[^]*?if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return/);
   assert.doesNotMatch(block,/if\(attractMode\)\{closeLeaderboard\(true\);return;\}nextLeaderboard\(1\)/);
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('main-menu attract mode starts ten seconds after the visible menu becomes idle',()=>{
-  assert.match(source,/const ATTRACT_IDLE_MS=10000;/);
+test('coarse mobile menu uses one immediate pointer-up activation path without competing handlers',()=>{
+  assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/\[rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo\]\.forEach\(installImmediateMobileTap\)/);
+  assert.doesNotMatch(source,/\[rankedToggle,freeToggle[^\]]*\]\.forEach\(installImmediateMobileTap\)/);
+  assert.match(source,/button\.addEventListener\('pointerdown'/);
+  assert.match(source,/button\.addEventListener\('touchend'/);
+  assert.match(source,/if\(distance>18\)return/);
+  assert.match(source,/immediateMenuProgrammaticTarget=button;[\s\S]*button\.click\(\)/);
+  assert.doesNotMatch(source,/fastMenuPointer|fastMenuSyntheticClick|fastMenuSuppressUntil/);
+});
+
+test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
+  assert.match(source,/const ATTRACT_IDLE_MS=15000;/);
   assert.match(source,/const LEADERBOARD_ROTATE_MS=5000;/);
   assert.match(source,/let lastMenuActivityAt=Date\.now\(\)/);
   assert.match(source,/function startAttractWatcher\(\)[\s\S]*setInterval/);
@@ -71,7 +118,7 @@ test('main-menu attract mode starts ten seconds after the visible menu becomes i
   assert.match(source,/lastMenuActivityAt=Date\.now\(\);startAttractWatcher\(\)/);
   assert.match(source,/if\(event\.isTrusted&&!attractMode&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
   assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;void prepareNotificationRegistration\(\);void watchNotificationPermission\(\);authRestorePromise=refreshAccount\(\)/);assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false/);assert.doesNotMatch(source,/resumeActiveRankedRoom/);
-  assert.match(docs,/After 10 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 10 seconds and repeats/);
+  assert.match(docs,/After 15 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 15 seconds and repeats/);
 });
 test('inactivity warning dismissal is sticky for the current warning while server countdown continues',()=>{
   assert.match(source,/let flowInterval=null,dismissedInactivityKey='',pauseActionPending=false/);
@@ -107,7 +154,7 @@ test('pause UI resumes requester, confirms opponent quit in both phases, and rec
   assert.match(source,/submitRanked\(\{type:'cancelPause'\}\)/);
   assert.match(source,/pauseResolutionChanged/);
   assert.match(source,/returnEndedOnlineSessionToMenu/);
-  assert.match(appSource,/if\(flow\.pauseResolution\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
+  assert.match(appSource,/if\(flow\.pauseResolution\|\|flow\.abandonment\)\{setDialog\(els\.opponentEndedDialog,false\);return;\}/);
   const snapshotHandler=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
   assert.match(snapshotHandler,/sessionFlow\?\.ended[\s\S]*reconcileOnlineFlow\(event\.detail\.snapshot\)[\s\S]*gostop-online-snapshot/);
   assert.match(appSource,/dialog\[open\]:not\(\.ranked-flow-dialog\)/);
@@ -123,19 +170,43 @@ test('share-link room creator leaves Online Play overlay when the friend makes t
   assert.match(appSource,/adapter\.addEventListener\('snapshot'[\s\S]*event\.detail\.snapshot\?\.matchId[\s\S]*enterOnlineMatchView\(anonymous\)/);
 });
 
-test('stale ranked locks are server-reconciled and main menu rechecks them automatically',()=>{
+test('stale ranked locks are server-reconciled and reconnect status reaches the browser',()=>{
   assert.match(worker,/async function reconcileActiveRanked\(env,account\)/);
   assert.match(worker,/\/reconcile-active/);
+  assert.match(worker,/activeRanked:\{\.\.\.active,connected:status\.connected!==false,reconnectUntil:Number\(status\.reconnectUntil\)\|\|null/);
   assert.match(worker,/\/internal\/active-ranked\/clear/);
   assert.match(source,/activeRankedRefreshTimer/);
   assert.match(source,/function scheduleActiveRankedRecheck\(\)/);
   assert.match(source,/setTimeout\(\(\)=>\{activeRankedRefreshTimer=null;void refreshAccount\(\);\},20000\)/);
 });
 
-test('leaderboard uses Total Coins Earned and ranked game identity shows nickname only',()=>{
-  assert.match(source,/totalCoins:'Total Coins Earned'/);
+test('Competitive reconnect No is authenticated and routed to authoritative abandonment settlement',()=>{
+  assert.match(worker,/decline-reconnect/);
+  assert.match(worker,/account\.activeRanked\?\.roomCode!==match\[1\]\|\|!\['solo','online'\]\.includes\(account\.activeRanked\?\.mode\)/);
+  assert.match(worker,/https:\/\/room\/decline-reconnect/);
+});
+
+test('Global and Monthly leaderboards always render ten rank slots and append the signed-in player only when outside Top 10',()=>{
+  const board=source.slice(source.indexOf('function leaderboardRowIsCurrent'),source.indexOf('function nextLeaderboard'));
+  assert.match(board,/rankedRows=rows\.filter\(row=>Number\(row\.rank\)>0\)/);
+  assert.match(board,/topTen=rankedRows\.slice\(0,10\)/);
+  assert.match(board,/for\(let index=0;index<10;index\+\+\)/);
+  assert.match(board,/emptyLeaderboardRow\(index\+1\)/);
+  assert.match(board,/ownRow=account\?rows\.find\(leaderboardRowIsCurrent\):null/);
+  assert.match(board,/if\(ownRow&&!ownInTop\)rendered\.push\(leaderboardRowHtml\(ownRow,\{current:true,outsideTop:true\}\)\)/);
+  assert.match(source,/leaderboard-current-outside-top/);
+  assert.match(source,/leaderboard-empty-row/);
+  assert.match(source,/leaderboard-decor/);assert.match(source,/leaderboard-card-fan/);
+  assert.match(source,/\.leaderboard-table-wrap\{[^]*?align-self:start!important[^]*?margin:14px auto 0!important/);
+});
+
+test('leaderboard uses Net Coins ranking while ranked game identity shows nickname only',()=>{
+  assert.match(source,/netCoins:'Net Coins'/);
+  assert.match(source,/earnedLost:'Earned \/ Lost'/);
+  assert.match(source,/row\.netCoins\?\?row\.score/);
+  assert.match(source,/row\.totalCoinsLost/);
   const identity=source.slice(source.indexOf('function patchGameIdentity'),source.indexOf('playPractice.addEventListener'));
-  assert.match(identity,/if\(account\)\{humanName\.textContent=account\.nickname;/);
+  assert.match(identity,/if\(account\)\{humanName\.innerHTML=playerNicknameHtml\(\{accountId:account\.id,nickname:account\.nickname/);
   assert.doesNotMatch(identity,/humanName\.textContent=`\$\{rt\('you'\)\} \(\$\{account\.nickname\}\)/);
 });
 
@@ -168,7 +239,7 @@ test('room wallet mismatch refreshes the authoritative account without directly 
   const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
   assert.match(ack,/captureAccountPayload\(data\)/);
 });
-test('attract idle resets only on trusted user input and diagnostics contract is ten seconds',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
+test('attract idle resets only on trusted user input',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
 
 test('pending daily bonus never masks the authoritative Wallet or replays after acknowledgement',()=>{
   const display=source.slice(source.indexOf('function pendingDailyNotice'),source.indexOf('function saveSession'));
@@ -203,15 +274,15 @@ test('pending daily bonus never masks the authoritative Wallet or replays after 
 });
 
 
-test('legacy two-button shell is hidden until the current menu client has finished booting',()=>{
+test('legacy two-button shell stays hidden through auth restore before any reconnect choice is shown',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8'),css=fs.readFileSync(path.join(root,'styles.css'),'utf8');
   assert.match(html,/id="soloStartOverlay" class="solo-start-overlay" hidden data-current-menu-ready="false"/);
   assert.match(css,/\.solo-start-overlay\[hidden\]\{display:none!important\}/);
   assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.hidden=false/);
+  assert.match(source,/function revealCurrentMainMenu\(\)\{[\s\S]*gateInitialMainMenuFullscreen\?\.\(\)[\s\S]*Promise\.resolve\(gate\)\.then\(\(\)=>revealCurrentMainMenu\(\)\)/);
   const boot=source.slice(source.indexOf('function revealCurrentMainMenu'),source.lastIndexOf('})();'));
   assert.match(boot,/authRestorePromise=refreshAccount\(\)/);
-  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}revealCurrentMainMenu\(\)/);
-  assert.doesNotMatch(boot,/resumeActiveRankedRoom\(/);
+  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}await settleInitialReconnectDecision\(\);if\(promptActiveRankedGameIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
   assert.match(source,/gostop-online-launch-settled'[\s\S]*event\.detail\?\.ok===false[\s\S]*revealCurrentMainMenu\(\)/);
 });
 
@@ -232,30 +303,73 @@ test('Coin mode buttons reflect the account-wide active ranked game and resume t
 });
 
 
-test('main menu owns Language and Enable Notifications while legacy Room code Join Game is visually removed',()=>{
+test('Settings dialog owns Language and Notifications while legacy Room code Join Game is visually removed',()=>{
   const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
   assert.match(source,/languageBtn\.id='languageBtn'/);assert.match(source,/languageMenu\.id='languageMenu'/);assert.match(source,/notificationsBtn\.id='enablePlayNotificationsBtn'/);
-  assert.match(source,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);
+  assert.match(source,/settingsDialog\.id='settingsDialog'/);assert.match(source,/settingsControlsHost/);assert.match(source,/accountSettingsBtn/);assert.match(source,/settingsOk/);
+  assert.match(source,/accountMenuControls\.append\(accountLanguageControl,notificationsBtn\)/);assert.match(source,/settingsControlsHost'\)\.appendChild\(accountMenuControls\)/);
   assert.doesNotMatch(html,/id="languageBtn"/);assert.match(html,/id="joinOnlineForm"[^>]*hidden[^>]*display:none!important/);
   assert.match(source,/if\(joinForm\)\{joinForm\.hidden=true;joinForm\.style\.display='none';\}/);
 });
 
-test('main menu separates Training, Free Gaming, Competitive Gaming, and Leaderboards',()=>{
-  assert.match(source,/trainingBtn\.textContent='Training Mode'/);
-  assert.match(source,/freeGroup\.dataset\.label='FREE GAMING'/);
-  assert.match(source,/freeFriendBtn\.textContent='Play With Friend'/);
-  assert.match(source,/rankedGroup\.className='menu-mode-group ranked-menu-group'/);
-  assert.match(source,/leaderboardBtn\.textContent='Leaderboards'/);
-  assert.match(source,/trainingBtn\.textContent=rt\('training'\)/);
-  assert.match(source,/freeGroup\.dataset\.label=rt\('freeGaming'\)/);
-  assert.match(source,/rankedGroup\.dataset\.label=rt\('competitiveGaming'\)/);
-  assert.match(source,/leaderboardBtn\.textContent=rt\('leaderboards'\)/);
+test('main menu uses two exclusive accordion choices with Training inside Friendly and compact utility navigation',()=>{
+  assert.match(source,/rankedToggle\.id='competitiveGamingBtn'/);assert.match(source,/freeToggle\.id='friendlyGamingBtn'/);
+  assert.match(source,/rankedSubmenu\.append\(rankedSolo,onlinePlay\)/);
+  assert.match(source,/freeSubmenu\.append\(playPractice,freeFriendBtn,trainingBtn\)/);
+  assert.match(source,/trainingBtn\.className='menu-training'/);
+  assert.match(source,/utilities\.className='main-menu-utilities'/);assert.match(source,/utilities\.append\(friendsBtn,leaderboardBtn\)/);
+  assert.match(source,/menu\.append\(rankedGroup,freeGroup,utilities\)/);
+  assert.match(source,/function setMenuSection\(section=null\)/);assert.match(source,/expandedMenuSection===section\?null:section/);assert.match(source,/submenu\.inert=!open/);assert.match(source,/visibility:hidden/);
+  assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
+  assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
+  assert.match(source,/freeTitle\.textContent=rt\('freeGaming'\)/);assert.match(source,/rankedTitle\.textContent=rt\('competitiveGaming'\)/);
+  assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);assert.match(source,/rankedGroupNote\.textContent=rt\('competitiveGamingNote'\)/);
 });
 
-test('Free Play With Friend launches through a separate non-ranked room flow',()=>{
+test('main menu is a polished balanced accordion lobby with compact choices, centered player HUD, and Hwatu energy',()=>{
+  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  assert.match(source,/menuTitle\.classList\.add\('main-menu-title'\)/);
+  assert.doesNotMatch(source,/MATCH · CAPTURE · GO OR STOP/);
+  assert.doesNotMatch(source,/main-menu-tagline/);
+  assert.match(source,/main-menu-hwatu-decor/);
+  assert.match(source,/addFan\('left',\['m1-1','m2-1','m3-1'\]\)/);
+  assert.match(source,/addFan\('right',\['m8-1','m9-1','m12-1'\]\)/);
+  assert.match(source,/main-menu-floor-cards/);
+  assert.match(source,/\['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'\]/);
+  assert.match(source,/\.main-menu-floor-cards\{[^]*?display:block[^]*?animation:mainMenuCardGlow/);
+  assert.match(source,/@keyframes mainMenuTitleGlow/);
+  assert.match(source,/@keyframes mainMenuChoiceSweep/);
+  assert.match(source,/@media\(max-width:1280px\)\{[^]*?\.main-menu-card-fan\{display:none!important\}/);
+  assert.match(source,/if\(menuTitle\)menuTitle\.after\(floorCards\);else overlay\.prepend\(floorCards\);menu\.after\(accountBox\)/);
+  assert.match(source,/@media\(max-height:760px\)/);
+  assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
+  assert.match(source,/\.gostop-main-menu\.main-menu-accordion\{[^]*?width:min\(720px,90vw\)!important[^]*?grid-template-columns:1fr!important/);
+  assert.match(source,/\.account-menu-box\{[^]*?width:min\(720px,90vw\)!important[^]*?box-sizing:border-box[^]*?margin:28px auto 4px!important/);
+  assert.match(source,/@media\(max-width:760px\)[^]*?\.account-menu-box\{width:min\(94vw,560px\)!important;margin-top:44px!important/);
+  assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
+  assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
+  assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
+  assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
+  assert.match(source,/const height=lite\?\(submenu\.children\.length\*52\+24\):submenu\.scrollHeight\+24/);assert.match(source,/touch-action:manipulation/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
+  assert.match(source,/const pointerCapable=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(source,/if\(!pointerCapable&&touchCapable\)[\s\S]*button\.addEventListener\('touchend',[\s\S]*activate\(\)/);
+  assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*activate\(\)/);
+  assert.match(source,/immediateMenuSuppressUntil=Date\.now\(\)\+650/);
+  assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
+  assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
+  assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260925-25/);
+});
+
+test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
   assert.match(source,/freePanel\.id='freeFriendPanel'/);
   assert.match(source,/gostop-free-online-create/);
-  assert.match(source,/gostop-free-online-join/);
+  assert.doesNotMatch(source,/gostop-free-online-join/);
+  assert.doesNotMatch(source,/id="freeRoomCode"|id="freeJoinForm"|id="freeJoinBtn"/);
+  assert.match(source,/id="freeShareLink"/);
+  assert.match(source,/id="freeCopyLinkBtn"/);
   assert.match(source,/freePanel\.hidden/);
   const snapshot=source.slice(source.indexOf("globalThis.addEventListener('gostop-online-snapshot'"),source.indexOf("globalThis.addEventListener('gostop-online-message'"));
   assert.match(snapshot,/if\(!snapshot\.ranked\)\{currentSnapshot=null/);
@@ -277,18 +391,20 @@ test('switching modes clears stale Free and Competitive lobby panels before game
 });
 
 
-test('Free Play With Friend makes manual Join a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
+test('Friendly Play With Friend direct link joins a new seat and closes the waiting panel on the authoritative match snapshot',()=>{
   const beginOnline=appSource.slice(appSource.indexOf('const beginOnline=async'),appSource.indexOf("addEventListener('gostop-online-snapshot'"));
-  assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);\}/);
+  assert.match(beginOnline,/if\(event\.detail\.snapshot\?\.matchId\)\{activeOnlineStatus\.textContent=t\('matchReady'\);enterOnlineMatchView\(anonymous\);announceFriendlyJoin\(\);\}/);
   const handoff=appSource.slice(appSource.indexOf('function enterOnlineMatchView'),appSource.indexOf('const beginOnline=async'));
   assert.match(handoff,/if\(anonymous\)\{if\(freeFriendPanel\)freeFriendPanel\.hidden=true;\}/);
-  const freeJoin=appSource.slice(appSource.indexOf("addEventListener('gostop-free-online-join'"),appSource.lastIndexOf('  }\n})();'));
+  const invite=source.slice(source.indexOf('async function launchInviteRoom'),source.indexOf('globalThis.GoStopRanked'));
+  assert.match(invite,/if\(inviteMode==='free'\)[^]*bridge=>bridge\.joinFreeRoom\(code\)/);
+  const freeJoin=appSource.slice(appSource.indexOf('async joinFreeRoom(roomCode)'),appSource.indexOf('    });',appSource.indexOf('async joinFreeRoom(roomCode)')));
   assert.match(freeJoin,/sessionStorage\.removeItem\(`gostop-room-\$\{code\}`\)/);
   assert.match(freeJoin,/const room=await adapter\.join\(code\)/);
   assert.doesNotMatch(freeJoin,/adapter\.join\(code,existing\?\.credential\)/);
 });
 
-test('Free Play With Friend uses Cancel while leaderboard and competitive lobby keep Return',()=>{
+test('Friendly Play With Friend uses Cancel while leaderboard and competitive lobby keep Return',()=>{
   const locale=source.slice(source.indexOf('function applyRankedLocale'),source.indexOf('function renderAccountBox'));
   assert.match(locale,/\$\('freeFriendClose'\)\.textContent=rt\('cancel'\)/);
   assert.match(locale,/\$\('onlineLobbyClose'\)\.textContent=rt\('return'\)/);
@@ -296,15 +412,38 @@ test('Free Play With Friend uses Cancel while leaderboard and competitive lobby 
 });
 
 
-test('root URL never auto-resumes an active Competitive game before user chooses the mode, while explicit invite links do',()=>{
+test('first root visit waits briefly for the closed game socket to reconcile before revealing the menu',()=>{
+  const boot=source.slice(source.indexOf("const inviteUrl=new URL(location.href)"),source.lastIndexOf('})();'));
+  assert.match(boot,/async function settleInitialReconnectDecision\(\)/);
+  assert.match(boot,/!\['solo','online'\]\.includes\(mode\)\|\|!roomCode\|\|initial\.connected===false\|\|!savedCompetitiveRoom\(roomCode\)/);
+  assert.match(boot,/for\(const waitMs of \[120,220,350,500\]\)/);
+  assert.match(boot,/await new Promise\(resolve=>setTimeout\(resolve,waitMs\)\)/);
+  assert.match(boot,/const data=await api\('\/api\/me'\);captureAccountPayload\(data\);renderAccountBox\(\);patchGameIdentity\(\)/);
+  assert.match(boot,/refreshed\?\.mode!==mode\|\|refreshed\.roomCode!==roomCode\|\|refreshed\.connected===false/);
+  assert.match(boot,/await settleInitialReconnectDecision\(\);if\(promptActiveRankedGameIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
+});
+
+test('root URL offers a Yes/No continuation dialog for another device and shows countdown only during reconnect grace',()=>{
   const boot=source.slice(source.indexOf("const inviteUrl=new URL(location.href)"),source.lastIndexOf('})();'));
   assert.match(boot,/validRoomParam=!!roomParam/);
-  assert.match(boot,/if\(validRoomParam\)\{void launchInviteRoom\(\);return;\}revealCurrentMainMenu\(\)/);
-  assert.match(boot,/inviteMode=inviteUrl\.searchParams\.get\('mode'\)==='free'\?'free':'competitive'/);
-  assert.doesNotMatch(source,/function resumeActiveRankedRoom\(/);
-  assert.doesNotMatch(source,/activeRoomResumeAttempted/);
-  const launches=source.slice(source.indexOf("rankedSolo.addEventListener"),source.indexOf("function renderLeaderboard"));
-  assert.match(launches,/account\?\.activeRanked\?\.mode==='solo'&&account\.activeRanked\.roomCode/);
-  assert.match(launches,/account\?\.activeRanked\?\.mode==='online'&&account\.activeRanked\.roomCode/);
-  assert.match(launches,/launchRankedRoom\(account\.activeRanked\.roomCode\)/);
+  assert.match(boot,/function savedCompetitiveRoom\(roomCode\)/);
+  assert.match(boot,/saved\?\.roomCode===roomCode&&saved\?\.credential/);
+  assert.match(source,/id="returnGameTitle">Continue Active Game\?/);
+  assert.match(source,/id="returnGameCountdown" class="ranked-countdown" hidden>1:00/);
+  assert.match(source,/id="returnGameYes"[^>]*>Yes</);
+  assert.match(source,/id="returnGameNo"[^>]*>No</);
+  assert.match(source,/id="returnGameOk"[^>]*hidden>OK</);
+  assert.match(boot,/function promptActiveRankedGameIfNeeded\(\)/);
+  assert.match(boot,/reconnecting=active\?\.connected===false&&reconnectUntil>Date\.now\(\),activeElsewhere=active\?\.connected===true/);
+  assert.match(boot,/!\['solo','online'\]\.includes\(mode\)\|\|!active\.roomCode\|\|\(!reconnecting&&!activeElsewhere\)/);
+  assert.match(boot,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
+  assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
+  assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
+  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',[\s\S]*if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
+  assert.match(boot,/function showReconnectAbandonmentOutcome\(result\)[\s\S]*returnGameDialog\.dataset\.outcome='1'[\s\S]*returnGameCountdown'\)\.hidden=true[\s\S]*returnGameActions'\)\.hidden=true[\s\S]*returnGameOk'\)\.hidden=false/);
+  assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
+  assert.match(boot,/if\(promptActiveRankedGameIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
+  assert.match(appSource,/async joinCompetitiveRoom\(roomCode,\{resumeExisting=false\}=\{\}\)/);
+  assert.match(appSource,/onlineSkipInitialOpening=!!resumeExisting/);
 });
+

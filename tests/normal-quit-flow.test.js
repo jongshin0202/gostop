@@ -35,7 +35,7 @@ test('normal in-game header has one red Quit Game action and continues to use qu
 
 test('quit requester waiting dialog hides Accept and Decline while opponent still receives them',()=>{
   const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
-  assert.match(ranked,/#rankedQuitActions\[hidden\]\{display:none!important\}/);
+  assert.match(ranked,/#rankedQuitActions\[hidden\],#returnGameActions\[hidden\],#returnGameOk\[hidden\],#verificationResend\[hidden\]\{display:none!important\}/);
   const flow=ranked.slice(ranked.indexOf('const quit=flow.quitRequest'),ranked.indexOf('if(flow.scheduledQuitByYou)'));
   assert.match(flow,/rankedQuitActions'\)\.hidden=quit\.requestedByYou/);
   assert.match(flow,/rankedQuitActions'\)\.style\.display=quit\.requestedByYou\?'none':''/);
@@ -63,6 +63,39 @@ test('local quit cancels stale First Poop and delayed AI presentation work',()=>
 });
 
 
+test('Free Play With Friend forced tab close shows Friend forcefully ended the game and OK then offers referral signup before menu',()=>{
+  assert.match(html,/id="opponentEndedTitle"[^>]*data-i18n="opponentEnded"/);
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/onlineAnonymousMode\?\(flow\.forceEnded\?t\('friendForceEnded'\):t\('friendEnded'\)\):t\('opponentEnded'\)/);
+  assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,true\)/);
+  const ok=app.slice(app.indexOf("els.opponentEndedOkBtn.addEventListener"),app.indexOf("[els.replayWaitingDialog",app.indexOf("els.opponentEndedOkBtn.addEventListener")));
+  assert.match(ok,/opponentEndedDialog\.close\(\)/);assert.match(ok,/dataset\.acknowledged='1'/);assert.match(ok,/snapshot\?\.sessionFlow\?\.ended/);assert.match(ok,/handleFriendlySessionEnd\?\.\(snapshot\)/);assert.match(ok,/returnOnlineToMenu\(\)/);
+});
+
+test('normal Friendly quit tells the guest their friend ended the game before the signup offer',()=>{
+  const i18n=fs.readFileSync(new URL('../i18n.js',import.meta.url),'utf8');
+  assert.match(i18n,/friendEnded:'Your friend has ended the game\.'/);
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/flow\.endedByYou/);assert.match(reconcile,/flow\.forceEnded\?t\('friendForceEnded'\):t\('friendEnded'\)/);
+  assert.doesNotMatch(reconcile,/onlineAnonymousMode&&!flow\.forceEnded&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd/);
+  const ok=app.slice(app.indexOf("els.opponentEndedOkBtn.addEventListener"),app.indexOf("[els.replayWaitingDialog",app.indexOf("els.opponentEndedOkBtn.addEventListener")));
+  assert.ok(ok.indexOf("dataset.acknowledged='1'")<ok.indexOf('handleFriendlySessionEnd?.(snapshot)'));
+});
+
+test('ranked abandonment Game Ended owns the final dialog and OK returns directly to menu',()=>{
+  const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
+  const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
+  assert.match(reconcile,/flow\.pauseResolution\|\|flow\.abandonment/);
+  assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,false\);return/);
+  const start=ranked.indexOf("\$('rankedAbandonmentOk').addEventListener");
+  const end=ranked.indexOf('[pauseDialog,pauseQuitConfirmDialog',start);
+  const handler=ranked.slice(start,end);
+  assert.match(handler,/abandonmentDialog\.close\(\)/);
+  assert.match(handler,/refreshAccount\(\)/);
+  assert.match(handler,/refreshLeaderboardData\(true\)/);
+  assert.match(handler,/returnEndedOnlineSessionToMenu/);
+});
+
 test('Free Play With Friend quit bypasses presentation queue and ends both views immediately',()=>{
   const onlineState=app.slice(app.indexOf('let activeOnlineStatus=onlineStatus'),app.indexOf('onlineSubmit=function'));
   assert.match(onlineState,/onlinePresentationEpoch=0/);
@@ -78,7 +111,7 @@ test('Free Play With Friend quit bypasses presentation queue and ends both views
   assert.match(snapshot,/clearOnlineGameplayPresentation\(\);reconcileOnlineFlow\(event\.detail\.snapshot\);globalThis\.dispatchEvent\(new CustomEvent\('gostop-online-snapshot'/);
   const reconcile=app.slice(app.indexOf('function reconcileOnlineFlow'),app.indexOf('function returnOnlineToMenu'));
   assert.match(reconcile,/flow\.ended/);
-  assert.match(reconcile,/flow\.disconnectCancelled\|\|flow\.endedByYou\)returnOnlineToMenu\(\)/);
+  assert.match(reconcile,/flow\.disconnectCancelled\|\|flow\.endedByYou\)\{if\(onlineAnonymousMode&&globalThis\.GoStopRanked\?\.handleFriendlySessionEnd\?\.\(snapshot\)\)return;returnOnlineToMenu\(\);return;\}/);
   assert.match(reconcile,/setDialog\(els\.opponentEndedDialog,true\)/);
   const transition=app.slice(app.indexOf('async function presentOnlineTransition'),app.indexOf('async function submitOnlineCardPlay'));
   assert.match(transition,/epoch=onlinePresentationEpoch/);

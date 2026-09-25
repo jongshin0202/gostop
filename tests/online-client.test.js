@@ -162,3 +162,19 @@ test('default room transport falls back to live authority when static runtime co
     if(oldConfig===undefined)delete globalThis.GOSTOP_CONFIG;else globalThis.GOSTOP_CONFIG=oldConfig;
   }
 });
+
+
+test('socket disconnect clears an in-flight action lock before reconnect',()=>{
+  class FakeSocket{
+    static OPEN=1;
+    constructor(){this.readyState=1;FakeSocket.last=this;}
+    close(){}
+    send(){}
+  }
+  const client=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:FakeSocket});
+  client.room={roomCode:'ABCDEFGHJK2345',credential:'credential'};
+  client.connect();
+  client.pendingActionId='orphaned-action';
+  FakeSocket.last.onclose?.({code:1006});
+  assert.equal(client.pendingActionId,null);
+});
