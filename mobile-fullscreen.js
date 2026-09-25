@@ -52,13 +52,18 @@
         delete splash.dataset.startLabel;
         resolve(true);
       };
-      const arm=()=>splash.addEventListener('pointerup',enter,{once:true});
+      const nativeTouch=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
+      const arm=()=>{
+        if(nativeTouch)splash.addEventListener('touchend',enter,{once:true,passive:false});
+        else splash.addEventListener('pointerup',enter,{once:true});
+      };
       const verify=()=>{
         if(doc.fullscreenElement){finish();return;}
         if(attempts<3){splash.dataset.startLabel='Tap Again for Full Screen';arm();return;}
         finish();
       };
-      const enter=()=>{
+      const enter=event=>{
+        event?.preventDefault?.();
         attempts++;
         let request;
         try{request=root.requestFullscreen({navigationUI:'hide'});}
