@@ -27,14 +27,14 @@ test('touch selection survives hand rerenders by card identity instead of DOM id
   assert.match(presentation,/let touchSelectedCardId=null/);
   assert.match(presentation,/const cardIdentity=card=>String\(card\?\.dataset\?\.cardId\|\|card\?\.closest\?\.\('\.hand-card-slot'\)\?\.dataset\?\.handKey\|\|''\)/);
   assert.match(presentation,/touchSelectedCardId=cardIdentity\(card\)/);
-  assert.match(presentation,/touchSelectedCardId===cardIdentity\(card\)/);
+  assert.match(presentation,/touchSelectedCardId===id/);
   assert.doesNotMatch(presentation,/touchSelectedCard===card/);
 });
 
-test('touch flick sampling retains the full gesture window for slower phones',()=>{
-  assert.match(presentation,/const cutoff=time-360/);
-  assert.match(presentation,/const cutoff=endTime-320/);
-  assert.match(presentation,/const secondTap=!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<28&&Math\.abs\(endY-state\.anchorY\)<28/);
+test('modern mobile gestures use pointer identity and tolerate low-end phone tap jitter',()=>{
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const tap=!browsed&&Math\.abs\(dx\)<=18&&Math\.abs\(dy\)<=18&&endTime-state\.anchorTime<=650/);
+  assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
@@ -45,33 +45,32 @@ test('flick classifier tolerates slower phones while rejecting jitter and horizo
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:400,endY:190,duration:100}),false);
 });
 
-test('touch intent locks upward flicks before horizontal browsing can switch cards',()=>{
-  assert.match(presentation,/const upwardIntent=up>=10&&up>=sideways\*\.75/);
-  assert.match(presentation,/const browseIntent=sideways>=14&&sideways>Math\.max\(10,Math\.abs\(up\)\*1\.25\)/);
+test('pointer intent separates horizontal browsing from upward flicking',()=>{
+  assert.match(presentation,/sideways>=16&&sideways>Math\.max\(12,Math\.abs\(up\)\*1\.20\)/);
+  assert.match(presentation,/up>=12&&up>=sideways\*\.72/);
   assert.match(presentation,/state\.intent='flick'/);
   assert.match(presentation,/state\.intent='browse'/);
   assert.match(presentation,/if\(state\.intent==='browse'\)[\s\S]*nearestHandCard/);
-  assert.match(presentation,/if\(state\.intent==='flick'\)[\s\S]*startX:state\.anchorX,startY:state\.anchorY/);
-  assert.doesNotMatch(presentation,/state\.anchorX=x;[\s\S]{0,120}state\.anchorY=y/);
+  assert.match(presentation,/if\(state\.intent==='flick'\)[\s\S]*ensureGhost/);
 });
 
-test('touchend can classify an upward flick even when a slow phone skipped intermediate touchmove delivery',()=>{
-  assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(flickSample\)/);
-  assert.match(presentation,/const secondTap=!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<28&&Math\.abs\(endY-state\.anchorY\)<28/);
+test('pointerup classifies flick and second tap even if move delivery was sparse',()=>{
+  assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(\{startX:state\.anchorX,startY:state\.anchorY,endX,endY,duration:/);
+  assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
   assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:108,endY:445,duration:180}),true);
   assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:170,endY:485,duration:180}),false);
 });
 
-test('touch and pointer flicks commit before release and suppress generated clicks',()=>{
-  assert.match(presentation,/processTouchMove[\s\S]*isUpwardFlick\(flickSample\)[\s\S]*triggerPlay\(card\)/);
-  assert.match(presentation,/addEventListener\('pointerdown'/);
-  assert.match(presentation,/addEventListener\('pointermove'[\s\S]*isUpwardFlick\(sample\)[\s\S]*triggerPlay\(state\.card\)/);
-  assert.match(presentation,/suppressTouchClicksUntil\|\|Date\.now\(\)<suppressPointerClicksUntil/);
+test('touch pointers commit on pointerup and suppress generated browser clicks',()=>{
+  assert.match(presentation,/addEventListener\('pointerdown'[\s\S]*beginPointerTouch\(event\)/);
+  assert.match(presentation,/addEventListener\('pointermove'[\s\S]*classifyMove\(state,event\.clientX,event\.clientY\)/);
+  assert.match(presentation,/addEventListener\('pointerup'[\s\S]*finishGesture\(state,event\.clientX,event\.clientY,now\(\),event\)/);
+  assert.match(presentation,/Date\.now\(\)<suppressTouchClicksUntil\|\|Date\.now\(\)<suppressPointerClicksUntil/);
 });
 
 test('gesture layer reuses canonical click path without ranked authority logic',()=>{
   const gesture=presentation.slice(presentation.indexOf('function installHandFlickGestures'),presentation.indexOf('function pendingOnlineStageIds'));
-  assert.match(gesture,/const triggerPlay=card=>[\s\S]*card\.click\(\)/);
+  assert.match(gesture,/const triggerPlay=cardOrId=>[\s\S]*card\.click\(\)/);
   assert.doesNotMatch(gesture,/onlineSubmit\(/);
   assert.doesNotMatch(gesture,/matchesFor\(/);
   assert.doesNotMatch(gesture,/chooseFloorTarget\(/);
