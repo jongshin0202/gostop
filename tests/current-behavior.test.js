@@ -2985,8 +2985,8 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
   assert.match(source,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
   assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const nativeTouchSupported=touchCapable/);
-  assert.match(presentation,/const pointerTouchSupported=!touchCapable&&typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const nativeTouchSupported=touchCapable&&!pointerTouchSupported/);
   assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
@@ -3004,7 +3004,7 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
   assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
-  assert.match(presentation,/suppressNextClick\(state\.cardId,420\)/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId,260\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
 
