@@ -2978,10 +2978,15 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird an
 test('mobile hand browsing, second tap, and flick share one deterministic native-touch path',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
+  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank:kind==='blank'\}\}\)/);
+  assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(source,/if\(!state\?\.human\?\.hand\?\.some\(card=>card\.id===cardId\)\)return/);
+  assert.match(source,/event\.preventDefault\(\);void humanPlay\(cardId,live\)/);
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
   assert.match(source,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/const nativeTouchSupported=!pointerTouchSupported&&\(\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0\)/);
+  assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(presentation,/const nativeTouchSupported=touchCapable/);
+  assert.match(presentation,/const pointerTouchSupported=!touchCapable&&typeof globalThis\.PointerEvent==='function'/);
   assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
@@ -2991,14 +2996,14 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/addEventListener\('touchend'/);
   assert.match(presentation,/clearPreviousClickSuppression\(\)/);
   assert.match(presentation,/Date\.now\(\)\+Math\.max\(80,Number\(ms\)\|\|140\)/);
-  assert.match(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
-  assert.match(presentation,/minUpwardDistance:8,minTravelDistance:16,maxDuration:900,minSpeed:\.02,maxHorizontalRatio:1\.15/);
+  assert.doesNotMatch(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(presentation,/minUpwardDistance:8,minTravelDistance:18,maxDuration:900,minSpeed:\.025,maxHorizontalRatio:1\.15/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
   assert.match(presentation,/suppressNextClick\(state\.cardId,420\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
