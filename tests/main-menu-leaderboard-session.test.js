@@ -352,7 +352,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
   assert.match(source,/const pointerCapable=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(source,/if\(touchCapable\)[\s\S]*button\.addEventListener\('touchend',[\s\S]*activate\(\)/);
+  assert.match(source,/if\(!pointerCapable&&touchCapable\)[\s\S]*button\.addEventListener\('touchend',[\s\S]*activate\(\)/);
   assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*activate\(\)/);
   assert.match(source,/immediateMenuSuppressUntil=Date\.now\(\)\+650/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
