@@ -2975,15 +2975,14 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird an
   assert.match(source,/The highlighted floor card is the stronger target/);
 });
 
-test('mobile hand browsing suppresses the synthetic click after a finger drag',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
-  assert.match(source,/function beginHandPointerGesture\(event\)/);
-  assert.match(source,/Math\.hypot\(event\.clientX-gesture\.x,event\.clientY-gesture\.y\)>9/);
-  assert.match(source,/suppressNextDraggedHandClick=true/);
-  assert.match(source,/setTimeout\(\(\)=>\{suppressNextDraggedHandClick=false;dragClickResetTimer=null;\},350\)/);
-  assert.match(source,/function suppressDraggedHandClick\(event\)[\s\S]*suppressNextDraggedHandClick=false[\s\S]*event\.preventDefault\(\);event\.stopPropagation\(\);return true/);
-  assert.match(source,/el\.addEventListener\('click',event=>\{if\(suppressDraggedHandClick\(event\)\)return;void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(source,/blank\.addEventListener\('click',event=>\{if\(suppressDraggedHandClick\(event\)\)return;void humanUseBombBlank\(\);\}\)/);
+test('mobile hand browsing is owned by the canonical touch gesture layer, not duplicate app click suppression',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.doesNotMatch(source,/handPointerGesture|suppressDraggedHandClick|suppressNextDraggedHandClick/);
+  assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
+  assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
+  assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
+  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(card\)[\s\S]*else if\(browsed\)\{[\s\S]*clearSelection\(\)[\s\S]*else if\(secondTap\)\{[\s\S]*triggerPlay\(card\)/);
+  assert.match(presentation,/suppressTouchClicksUntil=Date\.now\(\)\+900/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
 
