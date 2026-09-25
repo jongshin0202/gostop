@@ -133,7 +133,7 @@ test('mobile boot gate waits for splash tap, verifies fullscreen, then releases 
   assert.equal(calls,0);
   assert.equal(splashClasses.has('gostop-boot-ready'),true);
   assert.equal(splash.dataset.startLabel,'Tap to Start');
-  splashListeners.click();
+  splashListeners.pointerup();
   await gate;
   assert.equal(calls,1);
   assert.equal(api.isInitialMenuGateComplete(),true);
@@ -141,17 +141,31 @@ test('mobile boot gate waits for splash tap, verifies fullscreen, then releases 
   assert.equal(api.gateInitialMainMenuFullscreen(document),null);
 });
 
+test('completed splash gate suppresses later main-menu fullscreen retries when Chrome did not actually enter fullscreen',async()=>{
+  let calls=0;
+  const {api,splashListeners,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.resolve();}});
+  const gate=api.gateInitialMainMenuFullscreen(document);
+  splashListeners.pointerup();await Promise.resolve();
+  splashListeners.pointerup();await Promise.resolve();
+  splashListeners.pointerup();await gate;
+  assert.equal(calls,3);
+  assert.equal(api.isInitialMenuGateComplete(),true);
+  assert.equal(api.requestMainMenuFullscreen(document,{userGesture:true}),false);
+  assert.equal(calls,3);
+  assert.equal(api.isMainMenuFullscreenArmed(),false);
+});
+
 test('mobile boot gate retries fullscreen instead of revealing the menu after a failed tap',async()=>{
   let calls=0;
   const {api,splashListeners,splash,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.resolve();}});
   const gate=api.gateInitialMainMenuFullscreen(document);
-  splashListeners.click();
+  splashListeners.pointerup();
   await Promise.resolve();
   assert.equal(calls,1);
   assert.equal(api.isInitialMenuGateComplete(),false);
   assert.equal(splash.dataset.startLabel,'Tap Again for Full Screen');
   document.fullscreenElement=document.documentElement;
-  splashListeners.click();
+  splashListeners.pointerup();
   await gate;
   assert.equal(calls,2);
   assert.equal(api.isInitialMenuGateComplete(),true);
@@ -213,7 +227,7 @@ test('fullscreen integration preserves click propagation and portrait stack orde
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
   assert.match(index,/<script src="runtime-config\.js\?v=20260924-5"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20260924-6"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20260924-10"><\/script>/);
-  assert.doesNotMatch(source,/navigationUI/);
+  assert.match(source,/requestFullscreen\(\{navigationUI:'hide'\}\)/);
   assert.doesNotMatch(runtimeConfig,/mobile-fullscreen\.js/);
   assert.doesNotMatch(generator,/mobile-fullscreen\.js/);
 });
