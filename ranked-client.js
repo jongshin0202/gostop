@@ -387,6 +387,7 @@
     html.gostop-performance-lite .menu-category-toggle:before{display:none!important}
     html.gostop-performance-lite .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important;box-shadow:0 10px 22px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.025)!important}
     html.gostop-performance-lite .menu-category-toggle{filter:none!important;transition:transform .10s ease,border-radius .10s ease!important;box-shadow:inset 0 1px rgba(255,255,255,.13),0 4px 9px rgba(0,0,0,.20)!important}
+    .solo-start-overlay button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     .menu-category-toggle,.menu-submenu>button,.menu-utility,.account-menu-actions button,.account-menu-control{touch-action:manipulation}
     html.gostop-performance-lite .menu-submenu{will-change:auto!important;transform:none!important;transition:opacity .12s ease,visibility 0s linear .12s!important}
     html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{transition:opacity .12s ease!important}
@@ -654,6 +655,32 @@
   if(howTo){howTo.className='menu-utility menu-utility-help';howTo.textContent='How to Play';}
   utilities.append(friendsBtn,leaderboardBtn);if(howTo)utilities.append(howTo);
   menu.append(rankedGroup,freeGroup,utilities);overlay.appendChild(menu);
+
+  let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0;
+  const fastMenuTapButton=target=>target?.closest?.('button');
+  overlay.addEventListener('pointerdown',event=>{
+    if(event.pointerType!=='touch')return;
+    const button=fastMenuTapButton(event.target);
+    if(!button||button.disabled||!overlay.contains(button))return;
+    fastMenuTapState={id:event.pointerId,button,x:event.clientX,y:event.clientY,at:Date.now()};
+  },{capture:true,passive:true});
+  overlay.addEventListener('pointerup',event=>{
+    const state=fastMenuTapState;fastMenuTapState=null;
+    if(!state||event.pointerId!==state.id||state.button.disabled||!state.button.isConnected)return;
+    const dx=Math.abs(event.clientX-state.x),dy=Math.abs(event.clientY-state.y),elapsed=Date.now()-state.at;
+    if(dx>14||dy>14||elapsed>700)return;
+    fastMenuTapSuppressButton=state.button;fastMenuTapSuppressUntil=Date.now()+700;
+    event.preventDefault();
+    state.button.click();
+  },{capture:true,passive:false});
+  overlay.addEventListener('pointercancel',()=>{fastMenuTapState=null;},{capture:true});
+  overlay.addEventListener('click',event=>{
+    if(!event.isTrusted)return;
+    const button=fastMenuTapButton(event.target);
+    if(button&&button===fastMenuTapSuppressButton&&Date.now()<fastMenuTapSuppressUntil){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+  },true);
 
   let expandedMenuSection=null;
   function setMenuSection(section=null){
