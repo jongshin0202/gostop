@@ -29,11 +29,22 @@ test('touch flick sampling retains the full gesture window for slower phones',()
   assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
 });
 
-test('flick classifier accepts fast upward intent and rejects jitter slow and horizontal motion',()=>{
+test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:120}),true);
+  assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:500}),true);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:210,duration:80}),false);
-  assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:500}),false);
+  assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:700}),false);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:400,endY:190,duration:100}),false);
+});
+
+test('touch intent locks upward flicks before horizontal browsing can switch cards',()=>{
+  assert.match(presentation,/const upwardIntent=up>=10&&up>=sideways\*\.75/);
+  assert.match(presentation,/const browseIntent=sideways>=14&&sideways>Math\.max\(10,Math\.abs\(up\)\*1\.25\)/);
+  assert.match(presentation,/state\.intent='flick'/);
+  assert.match(presentation,/state\.intent='browse'/);
+  assert.match(presentation,/if\(state\.intent==='browse'\)[\s\S]*nearestHandCard/);
+  assert.match(presentation,/if\(state\.intent==='flick'\)[\s\S]*startX:state\.anchorX,startY:state\.anchorY/);
+  assert.doesNotMatch(presentation,/state\.anchorX=x;[\s\S]{0,120}state\.anchorY=y/);
 });
 
 test('touch and pointer flicks commit before release and suppress generated clicks',()=>{
