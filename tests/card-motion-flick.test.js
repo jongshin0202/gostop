@@ -23,6 +23,12 @@ test('staged physical card owns visibility until shared cleanup',()=>{
   assert.match(app,/function removeStage\(id\)[\s\S]*style\.visibility=''\);/);
 });
 
+test('touch flick sampling retains the full gesture window for slower phones',()=>{
+  assert.match(presentation,/const cutoff=time-360/);
+  assert.match(presentation,/const cutoff=endTime-320/);
+  assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
+});
+
 test('flick classifier accepts fast upward intent and rejects jitter slow and horizontal motion',()=>{
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:120}),true);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:210,duration:80}),false);
