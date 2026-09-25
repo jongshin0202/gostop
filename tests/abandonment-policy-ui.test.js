@@ -104,8 +104,9 @@ test('disconnect grace freezes Solo computer play and settlement at disconnect-t
 test('normal play and hand input are frozen while opponent reconnect window is active',()=>{
   assert.match(room,/OPPONENT_RECONNECTING/);
   assert.match(app,/flow\?\.opponentReconnectUntil/);
-  const hand=app.slice(app.indexOf('function rankedHandInputEnabled'),app.indexOf('function render()'));
+  const hand=app.slice(app.indexOf('function rankedHandTurnAvailable'),app.indexOf('function render()'));
   assert.match(hand,/flow\?\.opponentReconnectUntil/);
+  assert.match(hand,/viewerCanInteract\?\.\(snapshot,\{connected,pendingActionId:null,blocked\}\)/);
 });
 
 test('active ranked room credential persists on device but resumes only after explicit mode selection',()=>{
