@@ -288,6 +288,63 @@ test('Android Pointer Events keep menu taps, second tap, flick, and browse relea
   await context.close();
 });
 
+
+test('real mobile touch reaches the ranked humanPlay authority path for second tap and flick',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+  const page=await context.newPage();
+  await page.addInitScript(()=>{globalThis.GOSTOP_TEST_MODE=true;});
+  await installHarness(page);
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>!!globalThis.GOSTOP_TEST_API&&!!globalThis.GoStopPresentationPlan);
+  await page.evaluate(()=>{
+    const api=globalThis.GOSTOP_TEST_API;
+    const first=api.card('m1-1'),second=api.card('m2-1');
+    const state=api.makeState({
+      human:api.makePlayer({hand:[first,second]}),
+      ai:api.makePlayer({hand:[]}),
+      floor:[],
+      turn:'playerA',
+      winner:null,
+      openingSpecialsComplete:true,
+      legalActions:['attemptPlayCard']
+    });
+    api.setState(state);
+    api.setOnlineMode(true);
+    globalThis.__rankedTouchActions=[];
+    api.setOnlineSubmit(action=>{globalThis.__rankedTouchActions.push(structuredClone(action));return 'touch-action-'+globalThis.__rankedTouchActions.length;});
+    const hand=document.getElementById('playerHand');
+    document.body.appendChild(hand);hand.replaceChildren();
+    Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147483000',visibility:'visible',pointerEvents:'auto'});
+    for(const item of [first,second]){
+      const slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=item.id;
+      const card=document.createElement('button');card.type='button';card.className='card hand-card';card.dataset.cardId=item.id;
+      Object.assign(card.style,{width:'64px',height:'104px',display:'block'});
+      slot.appendChild(card);hand.appendChild(slot);
+    }
+  });
+
+  const center=async id=>{
+    const box=await page.locator(`#playerHand .hand-card[data-card-id="${id}"]`).boundingBox();
+    return {x:box.x+box.width/2,y:box.y+box.height*.65};
+  };
+
+  const first=await center('m1-1');
+  await page.touchscreen.tap(first.x,first.y);
+  expect(await page.evaluate(()=>globalThis.__rankedTouchActions)).toEqual([]);
+  await page.touchscreen.tap(first.x,first.y);
+  await expect.poll(()=>page.evaluate(()=>globalThis.__rankedTouchActions)).toEqual([{type:'playCard',cardId:'m1-1',targetId:null}]);
+
+  await page.evaluate(()=>{globalThis.__rankedTouchActions=[];});
+  const second=await center('m2-1');
+  const cdp=await context.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:second.x,y:second.y}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:second.x+2,y:second.y-28}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:second.x+3,y:second.y-72}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await expect.poll(()=>page.evaluate(()=>globalThis.__rankedTouchActions)).toEqual([{type:'playCard',cardId:'m2-1',targetId:null}]);
+  await context.close();
+});
+
 test('Training Mode launches a real local game and Your Captured Cards opens the complete score breakdown',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#friendlyGamingBtn').click();
