@@ -98,7 +98,8 @@ test('manual leaderboard background click and Return restore the main menu witho
 test('touch phones activate main-menu buttons directly on short touch release and suppress the delayed native click',()=>{
   assert.match(source,/let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0/);
   assert.match(source,/const fastMenuTouchById=\(list,id\)=>Array\.from\(list\|\|\[\]\)\.find\(touch=>touch\.identifier===id\)\|\|null/);
-  assert.match(source,/overlay\.addEventListener\('touchstart',event=>\{[\s\S]*fastMenuTapState=\{id:touch\.identifier,button,x:touch\.clientX,y:touch\.clientY,maxDx:0,maxDy:0,at:Date\.now\(\)\}/);
+  assert.match(source,/overlay\.addEventListener\('pointerdown',event=>\{[\s\S]*event\.pointerType!=='touch'[\s\S]*fastMenuTapState=\{id:event\.pointerId,button,x:event\.clientX,y:event\.clientY,maxDx:0,maxDy:0,at:Date\.now\(\)\}/);
+  assert.match(source,/overlay\.addEventListener\('pointerup',event=>\{[\s\S]*state\.button\.click\(\)/);
   assert.match(source,/overlay\.addEventListener\('touchend',event=>\{[\s\S]*Math\.max\(dx,state\.maxDx\)>24\|\|Math\.max\(dy,state\.maxDy\)>24\|\|elapsed>1000[\s\S]*state\.button\.click\(\)/);
   assert.match(source,/fastMenuTapSuppressButton=state\.button;fastMenuTapSuppressUntil=Date\.now\(\)\+900/);
   assert.match(source,/if\(!event\.isTrusted\)return;[\s\S]*event\.stopImmediatePropagation\(\)/);
@@ -353,7 +354,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260924-12/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260924-13/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
