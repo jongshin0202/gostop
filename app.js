@@ -957,10 +957,15 @@
     if(!cardId)return;
     if(detail.blank===true||cardId.startsWith('blank-')){
       if((onlineMode?state?.human?.bombFreeTurns:state?.human?.bombFreeTurns)<=0)return;
+      if(onlineMode&&!rankedHandInputEnabled())return;
       event.preventDefault();void humanUseBombBlank();return;
     }
     if(!state?.human?.hand?.some(card=>card.id===cardId))return;
-    const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId);
+    const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId)||null;
+    if(onlineMode){
+      if(!rankedHandInputEnabled())return;
+      event.preventDefault();void humanPlay(cardId,live);return;
+    }
     if(!live||live.disabled)return;
     event.preventDefault();void humanPlay(cardId,live);
   });

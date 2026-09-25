@@ -73,12 +73,21 @@ test('native Touch path commits second tap and upward flick on touch-capable And
 test('second tap and upward flick request direct hand activation before synthetic-click fallback',()=>{
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank:kind==='blank'\}\}\)/);
+  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank\}\}\)/);
   assert.match(presentation,/handled=!doc\.dispatchEvent\(request\)/);
   assert.match(presentation,/if\(handled\)return true/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
   assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
-  assert.match(app,/event\.preventDefault\(\);void humanPlay\(cardId,live\)/);
+  assert.match(app,/if\(onlineMode\)\{[\s\S]*if\(!rankedHandInputEnabled\(\)\)return;[\s\S]*event\.preventDefault\(\);void humanPlay\(cardId,live\);return;/);
+});
+
+test('ranked gesture activation dispatches by stable card ID before consulting the live DOM',()=>{
+  const trigger=presentation.slice(presentation.indexOf('const triggerPlay=cardOrId=>'),presentation.indexOf('const snapshotHandGeometry'));
+  assert.match(trigger,/const cardId=typeof cardOrId==='string'\?String\(cardOrId\|\|''\):cardIdentity\(initialCard\)/);
+  const dispatchIndex=trigger.indexOf("new CustomEvent('gostop-hand-activate'");
+  const lookupIndex=trigger.indexOf('const card=cardByIdentity(cardId)||initialCard');
+  assert.ok(dispatchIndex>=0&&lookupIndex>dispatchIndex,'direct activation must happen before DOM fallback lookup');
+  assert.doesNotMatch(trigger,/if\(!canUseCard\(initialCard\)\)return false/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{

@@ -90,16 +90,19 @@
       suppressGeneratedClickCardId='';
     };
     const triggerPlay=cardOrId=>{
-      const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
-      if(!canUseCard(card))return false;
-      const cardId=cardIdentity(card),kind=card.classList?.contains('blank-turn-card')?'blank':'card';
+      const initialCard=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
+      const cardId=typeof cardOrId==='string'?String(cardOrId||''):cardIdentity(initialCard);
+      if(!cardId)return false;
+      const blank=cardId.startsWith('blank-')||initialCard?.classList?.contains('blank-turn-card')===true;
       selectedCardId=null;clearVisual();
       let handled=false;
       if(typeof globalThis.CustomEvent==='function'){
-        const request=new CustomEvent('gostop-hand-activate',{cancelable:true,detail:{cardId,blank:kind==='blank'}});
+        const request=new CustomEvent('gostop-hand-activate',{cancelable:true,detail:{cardId,blank}});
         handled=!doc.dispatchEvent(request);
       }
       if(handled)return true;
+      const card=cardByIdentity(cardId)||initialCard;
+      if(!canUseCard(card))return false;
       bypassClickCard=card;
       try{card.click();}finally{bypassClickCard=null;}
       return true;
