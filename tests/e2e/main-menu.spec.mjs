@@ -220,7 +220,8 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
 test('Android Pointer Events keep menu taps, second tap, flick, and browse release deterministic',async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
   const page=await context.newPage();
-  const errors=[];page.on('pageerror',error=>errors.push(error));
+  let competitiveSoloRequests=0;
+  const errors=[];page.on('pageerror',error=>errors.push(error));page.on('request',request=>{if(new URL(request.url()).pathname==='/api/solo')competitiveSoloRequests++;});
   await page.addInitScript(()=>{
     let fullscreenElement=null;
     Object.defineProperty(Document.prototype,'fullscreenElement',{configurable:true,get(){return fullscreenElement;}});
@@ -236,6 +237,10 @@ test('Android Pointer Events keep menu taps, second tap, flick, and browse relea
   const competitive=await page.locator('#competitiveGamingBtn').boundingBox();
   await page.touchscreen.tap(competitive.x+competitive.width/2,competitive.y+competitive.height/2);
   await expect(page.locator('#competitiveGamingBtn')).toHaveAttribute('aria-expanded','true');
+  await expect(page.locator('#rankedSoloBtn')).toBeVisible();
+  await expect(page.locator('#onlinePlayMenuBtn')).toBeVisible();
+  await page.waitForTimeout(250);
+  expect(competitiveSoloRequests).toBe(0);
 
   await page.evaluate(()=>{
     const hand=document.getElementById('playerHand');

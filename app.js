@@ -509,12 +509,24 @@
     const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=alt; img.draggable=false; return img;
   }
 
-  function rankedHandInputEnabled(){
+  function repairOrphanedRankedPendingAction(){
+    const session=globalThis.goStopOnlineSession,pendingActionId=session?.pendingActionId;
+    if(!pendingActionId||onlineActions.has(pendingActionId))return false;
+    session.pendingActionId=null;
+    return true;
+  }
+  function rankedHandTurnAvailable(){
     if(!onlineMode)return false;
+    repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open||presentation.activePhysicalMotions>0);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
-    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:session?.pendingActionId,blocked});
+    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:null,blocked});
+  }
+  function rankedHandInputEnabled(){
+    if(!rankedHandTurnAvailable())return false;
+    const session=globalThis.goStopOnlineSession;
+    return !session?.pendingActionId;
   }
 
   function render() {
@@ -541,8 +553,8 @@
     if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
     const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
-    const handInputDisabled=onlineMode?!rankedHandInputEnabled():(presentation.locked||state.turn!==PLAYER_A);
-    const blankInputDisabled=onlineMode?!rankedHandInputEnabled():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
+    const handInputDisabled=onlineMode?!rankedHandTurnAvailable():(presentation.locked||state.turn!==PLAYER_A);
+    const blankInputDisabled=onlineMode?!rankedHandTurnAvailable():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
@@ -963,7 +975,7 @@
     if(!state?.human?.hand?.some(card=>card.id===cardId))return;
     const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId)||null;
     if(onlineMode){
-      if(!rankedHandInputEnabled())return;
+      if(!rankedHandTurnAvailable())return;
       event.preventDefault();void humanPlay(cardId,live);return;
     }
     if(!live||live.disabled)return;
@@ -2896,7 +2908,7 @@
       adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready){enterOnlineMatchView(anonymous);announceFriendlyJoin();}activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
-      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
+      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();adapter.pendingActionId=null;onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
       adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
