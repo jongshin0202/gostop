@@ -8,6 +8,8 @@ const root=path.join(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'mobile-fullscreen.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'mobile-fullscreen.css'),'utf8');
 const generator=fs.readFileSync(path.join(root,'scripts','write-runtime-config.mjs'),'utf8');
+const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const runtimeConfig=fs.readFileSync(path.join(root,'runtime-config.js'),'utf8');
 
 function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayHidden=false,fullscreenElement=null,requestFullscreen=()=>Promise.resolve(),performanceLite=false}={}){
   const listeners={};
@@ -16,6 +18,7 @@ function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayH
   const splashListeners={};
   const splashClasses=new Set();
   const splash={
+    dataset:{},
     classList:{add(name){splashClasses.add(name);},remove(name){splashClasses.delete(name);},contains(name){return splashClasses.has(name);}},
     setAttribute(){},
     addEventListener(type,fn){splashListeners[type]=fn;}
@@ -122,19 +125,36 @@ test('lite phones never request fullscreen, including on menu gestures',async()=
   assert.equal(api.isMainMenuFullscreenArmed(),false);
 });
 
-test('mobile boot gate waits for splash tap, enters fullscreen once, then releases main-menu reveal',async()=>{
+test('mobile boot gate waits for splash tap, verifies fullscreen, then releases main-menu reveal',async()=>{
   let calls=0;
-  const {api,splashListeners,splashClasses,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{calls++;document.fullscreenElement=document.documentElement;return Promise.resolve();}});
+  const {api,splashListeners,splashClasses,splash,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{calls++;document.fullscreenElement=document.documentElement;return Promise.resolve();}});
   const gate=api.gateInitialMainMenuFullscreen(document);
   assert.ok(gate&&typeof gate.then==='function');
   assert.equal(calls,0);
   assert.equal(splashClasses.has('gostop-boot-ready'),true);
+  assert.equal(splash.dataset.startLabel,'Tap to Start');
   splashListeners.click();
   await gate;
   assert.equal(calls,1);
   assert.equal(api.isInitialMenuGateComplete(),true);
   assert.equal(splashClasses.has('gostop-boot-ready'),false);
   assert.equal(api.gateInitialMainMenuFullscreen(document),null);
+});
+
+test('mobile boot gate retries fullscreen instead of revealing the menu after a failed tap',async()=>{
+  let calls=0;
+  const {api,splashListeners,splash,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.resolve();}});
+  const gate=api.gateInitialMainMenuFullscreen(document);
+  splashListeners.click();
+  await Promise.resolve();
+  assert.equal(calls,1);
+  assert.equal(api.isInitialMenuGateComplete(),false);
+  assert.equal(splash.dataset.startLabel,'Tap Again for Full Screen');
+  document.fullscreenElement=document.documentElement;
+  splashListeners.click();
+  await gate;
+  assert.equal(calls,2);
+  assert.equal(api.isInitialMenuGateComplete(),true);
 });
 
 test('rotation-related fullscreen exit is re-armed only for the next gameplay gesture',()=>{
@@ -192,5 +212,7 @@ test('fullscreen integration preserves click propagation and portrait stack orde
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
-  assert.match(generator,/mobile-fullscreen\.js\?v=20260924-4/);
+  assert.match(index,/<script src="runtime-config\.js\?v=20260924-5"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20260924-5"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20260924-10"><\/script>/);
+  assert.doesNotMatch(runtimeConfig,/mobile-fullscreen\.js/);
+  assert.doesNotMatch(generator,/mobile-fullscreen\.js/);
 });
