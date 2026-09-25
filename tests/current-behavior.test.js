@@ -2154,7 +2154,8 @@ test('opening Bomb arms without moving cards or changing the selected starter',(
 
 test('Bomb blank buttons recover from stale presentation locks but remain single-flight',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
-  assert.match(source,/const blankInputDisabled=onlineMode\?!rankedHandTurnAvailable\(\):\(state\.turn!==PLAYER_A\|\|!!state\.winner\|\|presentation\.blankTurnInFlight\|\|presentation\.activePhysicalMotions>0\|\|!!state\.pendingDecision\|\|!!presentation\.targetChoice\|\|!!presentation\.shakeResolver\|\|!!presentation\.bombResolver\)/);
+  assert.match(source,/const rankedSessionEnded=!!latestOnlineSnapshot\?\.sessionFlow\?\.ended\|\|!!latestOnlineSnapshot\?\.terminalResult/);
+  assert.match(source,/const blankInputDisabled=onlineMode\?rankedSessionEnded:\(state\.turn!==PLAYER_A\|\|!!state\.winner\|\|presentation\.blankTurnInFlight/);
   assert.match(source,/blank\.disabled=blankInputDisabled/);
   const blankHandler=source.slice(source.indexOf('async function humanUseBombBlank'),source.indexOf('async function humanPlay'));
   assert.doesNotMatch(blankHandler,/if\(presentation\.locked/);
@@ -2975,37 +2976,20 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird an
   assert.match(source,/The highlighted floor card is the stronger target/);
 });
 
-test('mobile hand browsing, second tap, and flick share one deterministic native-touch path',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+test('mobile hand browsing, second tap, and flick use the restored native-touch path',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8');
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank\}\}\)/);
-  assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
-  assert.match(source,/if\(!state\?\.human\?\.hand\?\.some\(card=>card\.id===cardId\)\)return/);
-  assert.match(source,/event\.preventDefault\(\);void humanPlay\(cardId,live\)/);
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
   assert.match(source,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
-  assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/const nativeTouchSupported=touchCapable&&!pointerTouchSupported/);
-  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
-  assert.match(presentation,/addEventListener\('pointermove'/);
-  assert.match(presentation,/addEventListener\('pointerup'/);
-  assert.match(presentation,/state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
-  assert.match(presentation,/addEventListener\('touchmove'/);
-  assert.match(presentation,/addEventListener\('touchend'/);
-  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
-  assert.match(presentation,/Date\.now\(\)\+Math\.max\(80,Number\(ms\)\|\|140\)/);
-  assert.doesNotMatch(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
-  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
-  assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
-  assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/doc\.addEventListener\('touchstart'/);
+  assert.match(presentation,/doc\.addEventListener\('touchmove'/);
+  assert.match(presentation,/doc\.addEventListener\('touchend'/);
+  assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
+  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(card\)/);
+  assert.match(presentation,/else if\(browsed\)\{[\s\S]*clearSelection\(\)/);
+  assert.match(presentation,/else if\(secondTap\)\{[\s\S]*triggerPlay\(card\)/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
-  assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
-  assert.match(presentation,/suppressNextClick\(state\.cardId,260\)/);
-  assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
+  assert.doesNotMatch(presentation,/new CustomEvent\('gostop-hand-activate'/);
 });
 
 test('How to Play includes device-specific click, touch navigation, and flick controls',()=>{

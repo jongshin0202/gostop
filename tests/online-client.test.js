@@ -178,3 +178,25 @@ test('socket disconnect clears an in-flight action lock before reconnect',()=>{
   FakeSocket.last.onclose?.({code:1006});
   assert.equal(client.pendingActionId,null);
 });
+
+
+test('authoritative snapshot revision releases a pending action even before actionAccepted arrives',()=>{
+  const client=adapter();
+  client.revision=12;
+  client.pendingActionId='play-12';
+  client.pendingActionRevision=12;
+  client.receive(message('snapshot',{snapshot:{seatId:'playerA',revision:13,state:{turn:'playerB',legalActions:[]}},events:[]}));
+  assert.equal(client.revision,13);
+  assert.equal(client.pendingActionId,null);
+  assert.equal(client.pendingActionRevision,null);
+});
+
+test('same-revision snapshot does not release an action that has not progressed authoritatively',()=>{
+  const client=adapter();
+  client.revision=12;
+  client.pendingActionId='play-12';
+  client.pendingActionRevision=12;
+  client.receive(message('snapshot',{snapshot:{seatId:'playerA',revision:12,state:{turn:'playerA',legalActions:['attemptPlayCard']}},events:[]}));
+  assert.equal(client.pendingActionId,'play-12');
+  assert.equal(client.pendingActionRevision,12);
+});
