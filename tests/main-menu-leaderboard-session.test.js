@@ -62,22 +62,25 @@ test('leaderboards are public, render immediately, and page controls work even i
   assert.match(source,/class="leaderboard-mode-tabs"/);
   assert.match(source,/id="globalLeaderboardTab"/);assert.match(source,/id="monthlyLeaderboardTab"/);
   assert.match(source,/class="leaderboard-return"/);
+  assert.match(source,/function setLeaderboardHeading\(text\)[^]*?heading\.append\(first,second\)/);
+  assert.match(source,/\.leaderboard-title h1\{[^]*?min-height:1\.9em[^]*?display:grid/);
   assert.doesNotMatch(source,/class="leaderboard-controls"/);
 });
 
-test('phone attract-mode leaderboards swipe horizontally while ordinary taps still return to the menu',()=>{
+test('mobile leaderboards swipe horizontally in attract and manual views while ordinary taps return to the menu',()=>{
   const board=source.slice(source.indexOf('let leaderboardTouchStart'),source.indexOf('function mainMenuIdleEligible'));
-  assert.match(board,/function attractSwipeEnabled\(\)\{return attractMode&&!leaderboardScreen\.hidden&&globalThis\.matchMedia\?\.\('\(max-width:760px\)'\)\.matches;\}/);
+  assert.match(board,/function leaderboardSwipeEnabled\(\)\{return !leaderboardScreen\.hidden&&globalThis\.matchMedia\?\.\('\(max-width:760px\)'\)\.matches;\}/);
   assert.match(board,/leaderboardScreen\.addEventListener\('touchstart'/);
   assert.match(board,/leaderboardScreen\.addEventListener\('touchend'/);
   assert.match(board,/Math\.abs\(dx\)<48/);
   assert.match(board,/Math\.abs\(dx\)<Math\.abs\(dy\)\*1\.15/);
   assert.match(board,/nextLeaderboard\(dx<0\?1:-1\)/);
-  assert.match(source,/Date\.now\(\)<attractSwipeSuppressClickUntil/);
+  assert.match(source,/Date\.now\(\)<leaderboardSwipeSuppressClickUntil/);
   assert.match(source,/leaderboardScreen\.classList\.toggle\('attract-mode',attractMode\)/);
   assert.match(source,/leaderboardScreen\.classList\.remove\('attract-mode'\)/);
+  assert.match(source,/\.leaderboard-screen\.attract-mode \.leaderboard-mode-tabs\{visibility:hidden;pointer-events:none\}/);
+  assert.match(source,/modeTabs\.setAttribute\('aria-hidden',attractMode\?'true':'false'\)/);
   assert.doesNotMatch(source,/Swipe left or right to switch leaderboards/);
-  assert.doesNotMatch(source,/\.leaderboard-screen\.attract-mode \.leaderboard-title:after/);
   assert.doesNotMatch(source,/calc\(abs\(/);
 });
 
@@ -86,7 +89,7 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(block,/if\(returnToMenu\)\{onlinePanel\.hidden=true;freePanel\.hidden=true;overlay\.hidden=false;\}/);
   assert.match(block,/globalLeaderboardTab'\)\.addEventListener\('click'/);assert.match(block,/monthlyLeaderboardTab'\)\.addEventListener\('click'/);
   assert.match(block,/leaderboard-return'\)\.addEventListener\('click',event=>\{event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
-  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(Date\.now\(\)<attractSwipeSuppressClickUntil\)[^]*?if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
+  assert.match(block,/leaderboardScreen\.addEventListener\('click',event=>\{if\(Date\.now\(\)<leaderboardSwipeSuppressClickUntil\)[^]*?if\(event\.target\.closest\('button'\)\)return;closeLeaderboard\(true\);\}\)/);
   assert.match(block,/if\(leaderboardScreen\.hidden\|\|!attractMode\)return/);
   assert.doesNotMatch(block,/if\(attractMode\)\{closeLeaderboard\(true\);return;\}nextLeaderboard\(1\)/);
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
@@ -328,7 +331,9 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)/);
   assert.match(source,/\.solo-start-overlay\{[^]*?align-content:start!important[^]*?place-content:start center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion\{[^]*?width:min\(720px,90vw\)!important[^]*?grid-template-columns:1fr!important/);
-  assert.match(source,/\.account-menu-box\{[^]*?width:min\(720px,90vw\)!important[^]*?box-sizing:border-box/);
+  assert.match(source,/\.account-menu-box\{[^]*?width:min\(720px,90vw\)!important[^]*?box-sizing:border-box[^]*?margin:28px auto 4px!important/);
+  assert.match(source,/@media\(max-width:760px\)[^]*?\.account-menu-box\{width:min\(94vw,560px\)!important;margin-top:24px!important/);
+  assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:16px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
   assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
@@ -336,7 +341,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260924-4/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260924-5/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
