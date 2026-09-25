@@ -7,6 +7,7 @@
   let fullscreenExitAt=0;
   let orientationRecoveryArmed=false;
   let mainMenuFullscreenArmed=false;
+  let mainMenuAutoAttempted=false;
 
   function isMobileFullscreenEligible(env=globalThis){
     const touchPoints=Number(env.navigator?.maxTouchPoints||0);
@@ -43,14 +44,15 @@
     return !!target?.closest?.(`#${START_OVERLAY_ID}, .topbar`);
   }
 
-  function requestMainMenuFullscreen(doc=document){
+  function requestMainMenuFullscreen(doc=document,{userGesture=false}={}){
     if(!isMobileFullscreenEligible(globalThis))return false;
     const root=doc?.documentElement;
-    if(!root||doc.fullscreenElement||typeof root.requestFullscreen!=='function'){
-      mainMenuFullscreenArmed=!doc?.fullscreenElement;
-      return false;
-    }
+    if(doc?.fullscreenElement){mainMenuFullscreenArmed=false;return false;}
     mainMenuFullscreenArmed=true;
+    const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||doc?.documentElement?.classList?.contains('gostop-performance-lite');
+    if(!userGesture&&(lite||mainMenuAutoAttempted))return false;
+    if(!root||typeof root.requestFullscreen!=='function')return false;
+    if(!userGesture)mainMenuAutoAttempted=true;
     try{
       const request=root.requestFullscreen();
       if(request&&typeof request.then==='function'){
@@ -72,7 +74,7 @@
   function handleFullscreenClick(event){
     if(!isMobileFullscreenEligible(globalThis))return;
     if((mainMenuFullscreenArmed||isStartScreenButton(event.target,document))&&isMainMenuInteraction(event.target,document)){
-      requestMainMenuFullscreen(document);
+      requestMainMenuFullscreen(document,{userGesture:true});
       return;
     }
     if(orientationRecoveryArmed&&isGameplayInteraction(event.target)){
@@ -128,7 +130,8 @@
       isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,
       handleFullscreenClick,handleFullscreenChange,handleOrientationChange,
       isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
-      isMainMenuFullscreenArmed:()=>mainMenuFullscreenArmed
+      isMainMenuFullscreenArmed:()=>mainMenuFullscreenArmed,
+      isMainMenuAutoAttempted:()=>mainMenuAutoAttempted
     });
   }
 })();
