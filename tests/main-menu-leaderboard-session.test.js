@@ -349,6 +349,9 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
   assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
   assert.match(source,/const height=lite\?\(submenu\.children\.length\*52\+24\):submenu\.scrollHeight\+24/);assert.match(source,/touch-action:manipulation/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*button\.click\(\)/);
+  assert.match(source,/immediateMenuSuppressUntil=Date\.now\(\)\+650/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
