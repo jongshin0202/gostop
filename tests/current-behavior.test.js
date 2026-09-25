@@ -2149,6 +2149,18 @@ test('opening Bomb arms without moving cards or changing the selected starter',(
   assert.equal(result.state.startingPlayerId,'playerB');
 });
 
+test('Bomb blank buttons recover from stale presentation locks but remain single-flight',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  assert.match(source,/const blankInputDisabled=onlineMode\?!rankedHandInputEnabled\(\):\(state\.turn!==PLAYER_A\|\|!!state\.winner\|\|presentation\.blankTurnInFlight\|\|presentation\.activePhysicalMotions>0\|\|!!state\.pendingDecision\|\|!!presentation\.targetChoice\|\|!!presentation\.shakeResolver\|\|!!presentation\.bombResolver\)/);
+  assert.match(source,/blank\.disabled=blankInputDisabled/);
+  const blankHandler=source.slice(source.indexOf('async function humanUseBombBlank'),source.indexOf('async function humanPlay'));
+  assert.doesNotMatch(blankHandler,/if\(presentation\.locked/);
+  assert.match(blankHandler,/presentation\.blankTurnInFlight=true;presentation\.locked=true;render\(\)/);
+  assert.match(blankHandler,/finally\{presentation\.blankTurnInFlight=false;\}/);
+  const reset=source.slice(source.indexOf('function resetHandPresentationState'),source.indexOf('function fullSizeSourceRect'));
+  assert.match(reset,/presentation\.blankTurnInFlight=false/);
+});
+
 test('No Winner authority requires both hands, blank opportunities, turns, and decisions to be exhausted',()=>{
   let state=exhaustedState();
   assert.equal(extractedEngine.isHandExhausted(state),true);
