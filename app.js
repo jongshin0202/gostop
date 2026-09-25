@@ -590,7 +590,7 @@
     });
   }
 
-  let handPointerGesture=null,handClickSuppressUntil=0;
+  let handPointerGesture=null,suppressNextDraggedHandClick=false,dragClickResetTimer=null;
   function handSlotAtPoint(x,y){
     const hit=document.elementFromPoint?.(x,y);
     return hit?.closest?.('.hand-card-slot')&&els.playerHand.contains(hit.closest('.hand-card-slot'))?hit.closest('.hand-card-slot'):null;
@@ -610,11 +610,17 @@
   }
   function endHandPointerGesture(event){
     const gesture=handPointerGesture;if(!gesture||gesture.id!==event.pointerId)return;
-    if(gesture.moved)handClickSuppressUntil=Date.now()+500;
+    if(gesture.moved){
+      suppressNextDraggedHandClick=true;
+      if(dragClickResetTimer)clearTimeout(dragClickResetTimer);
+      dragClickResetTimer=setTimeout(()=>{suppressNextDraggedHandClick=false;dragClickResetTimer=null;},350);
+    }
     handPointerGesture=null;
   }
   function suppressDraggedHandClick(event){
-    if(Date.now()>=handClickSuppressUntil)return false;
+    if(!suppressNextDraggedHandClick)return false;
+    suppressNextDraggedHandClick=false;
+    if(dragClickResetTimer){clearTimeout(dragClickResetTimer);dragClickResetTimer=null;}
     event.preventDefault();event.stopPropagation();return true;
   }
   els.playerHand.addEventListener('pointerdown',beginHandPointerGesture);
