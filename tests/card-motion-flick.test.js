@@ -78,7 +78,7 @@ test('second tap and upward flick request direct hand activation before syntheti
   assert.match(presentation,/if\(handled\)return true/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
   assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
-  assert.match(app,/if\(onlineMode\)\{[\s\S]*if\(!rankedHandInputEnabled\(\)\)return;[\s\S]*event\.preventDefault\(\);void humanPlay\(cardId,live\);return;/);
+  assert.match(app,/if\(onlineMode\)\{[\s\S]*if\(!rankedHandTurnAvailable\(\)\)return;[\s\S]*event\.preventDefault\(\);void humanPlay\(cardId,live\);return;/);
 });
 
 test('ranked gesture activation dispatches by stable card ID before consulting the live DOM',()=>{
