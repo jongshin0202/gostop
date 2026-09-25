@@ -15,6 +15,7 @@ function mobileHarness(){
     getAttribute(){return null;},
     closest(selector){if(selector==='#playerHand .hand-card')return this;if(selector==='.hand-card-slot')return slot;return null;},
     getBoundingClientRect(){return {left:100,top:500,width:58,height:94};},
+    cloneNode(){return {style:{},classList:classList(),tabIndex:0,removeAttribute(){},setAttribute(){},remove(){}};},
     click(){activations.push({cardId:'m1-1',blank:false});}
   };
   const hand={
