@@ -955,11 +955,14 @@
   document.addEventListener('gostop-hand-activate',event=>{
     const detail=event.detail||{},cardId=String(detail.cardId||'');
     if(!cardId)return;
-    event.preventDefault();
-    if(detail.blank===true||cardId.startsWith('blank-')){void humanUseBombBlank();return;}
+    if(detail.blank===true||cardId.startsWith('blank-')){
+      if((onlineMode?state?.human?.bombFreeTurns:state?.human?.bombFreeTurns)<=0)return;
+      event.preventDefault();void humanUseBombBlank();return;
+    }
+    if(!state?.human?.hand?.some(card=>card.id===cardId))return;
     const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId);
     if(!live||live.disabled)return;
-    void humanPlay(cardId,live);
+    event.preventDefault();void humanPlay(cardId,live);
   });
 
   async function aiTurn(){
