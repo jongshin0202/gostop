@@ -24,6 +24,6 @@ test('attract-mode click capture is active only while attract leaderboard is vis
 
 test('render-time ranked input repair clears pending ids that no longer own a tracked action',()=>{
   assert.match(app,/function repairOrphanedRankedPendingAction\(\)[\s\S]*?if\(!pendingActionId\|\|onlineActions\.has\(pendingActionId\)\)return false;[\s\S]*?session\.pendingActionId=null/);
-  assert.match(app,/function rankedHandInputEnabled\(\)[\s\S]*?repairOrphanedRankedPendingAction\(\)/);
+  assert.match(app,/function rankedHandTurnAvailable\(\)[\s\S]*?repairOrphanedRankedPendingAction\(\)/);
   assert.match(app,/addEventListener\('disconnected',[\s\S]*?onlineActions\.clear\(\);adapter\.pendingActionId=null;onlinePendingCardId=null/);
 });
