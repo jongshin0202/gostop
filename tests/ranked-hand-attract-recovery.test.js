@@ -5,14 +5,15 @@ const fs=require('node:fs');
 const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
 
-test('ranked hand follows authority while action serialization cannot make the DOM unreachable',()=>{
-  assert.match(app,/function rankedHandTurnAvailable\(\)\{[\s\S]*viewerCanInteract\?\.\(snapshot,\{connected,pendingActionId:null,blocked\}\)/);
-  assert.match(app,/function rankedHandInputEnabled\(\)\{[\s\S]*if\(!rankedHandTurnAvailable\(\)\)return false;[\s\S]*return !session\?\.pendingActionId/);
-  assert.match(app,/const handInputDisabled=onlineMode\?!rankedHandTurnAvailable\(\):\(presentation\.locked\|\|state\.turn!==PLAYER_A\)/);
+test('active ranked hand stays physically reachable while server remains the legality authority',()=>{
+  assert.match(app,/const rankedSessionEnded=!!latestOnlineSnapshot\?\.sessionFlow\?\.ended\|\|!!latestOnlineSnapshot\?\.terminalResult/);
+  assert.match(app,/const handInputDisabled=onlineMode\?rankedSessionEnded:\(presentation\.locked\|\|state\.turn!==PLAYER_A\)/);
   assert.match(app,/el\.disabled=handInputDisabled/);
-  assert.match(app,/const blankInputDisabled=onlineMode\?!rankedHandTurnAvailable\(\):\(state\.turn!==PLAYER_A[\s\S]*presentation\.blankTurnInFlight[\s\S]*presentation\.activePhysicalMotions>0/);
+  assert.match(app,/const blankInputDisabled=onlineMode\?rankedSessionEnded:/);
   assert.match(app,/blank\.disabled=blankInputDisabled/);
-  assert.doesNotMatch(app,/blank\.disabled=handInputDisabled/);
+  const human=app.slice(app.indexOf('async function humanPlay'),app.indexOf('async function aiTurn'));
+  assert.match(human,/if\(onlineMode\)\{/);
+  assert.match(human,/onlineSubmit|submitOnlineCardPlay/);
 });
 
 test('ranked hand remains blocked during active physical motion and session-flow blockers',()=>{
