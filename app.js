@@ -546,7 +546,7 @@
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
-      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',event=>{if(suppressDraggedHandClick(event))return;void humanPlay(card.id,el);});slot.appendChild(el);}
+      if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',()=>{void humanPlay(card.id,el);});slot.appendChild(el);}
       el.disabled=handInputDisabled;
       el.classList.toggle('matchable',card.id===presentation.hintCardId);
       el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
@@ -559,7 +559,7 @@
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
       blank.disabled=blankInputDisabled;
       blank.innerHTML='<span aria-hidden="true">—</span>';
-      blank.addEventListener('click',event=>{if(suppressDraggedHandClick(event))return;void humanUseBombBlank();});
+      blank.addEventListener('click',()=>{void humanUseBombBlank();});
       const slot=document.createElement('div'); slot.className='hand-card-slot';slot.dataset.handKey=`blank-${i}`; slot.appendChild(blank); desired.push(slot);
     }
     existing.forEach(node=>node.remove());desired.forEach(node=>els.playerHand.appendChild(node));
@@ -590,43 +590,6 @@
     });
   }
 
-  let handPointerGesture=null,suppressNextDraggedHandClick=false,dragClickResetTimer=null;
-  function handSlotAtPoint(x,y){
-    const hit=document.elementFromPoint?.(x,y);
-    return hit?.closest?.('.hand-card-slot')&&els.playerHand.contains(hit.closest('.hand-card-slot'))?hit.closest('.hand-card-slot'):null;
-  }
-  function beginHandPointerGesture(event){
-    if(event.pointerType==='mouse'||event.button>0)return;
-    const slot=event.target?.closest?.('.hand-card-slot');if(!slot||!els.playerHand.contains(slot))return;
-    handPointerGesture={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};
-    if(!slot.dataset.handKey.startsWith('blank-'))setActiveHoveredHandCard(slot.dataset.handKey);
-  }
-  function moveHandPointerGesture(event){
-    const gesture=handPointerGesture;if(!gesture||gesture.id!==event.pointerId)return;
-    if(Math.hypot(event.clientX-gesture.x,event.clientY-gesture.y)>9)gesture.moved=true;
-    if(!gesture.moved)return;
-    const slot=handSlotAtPoint(event.clientX,event.clientY);
-    if(slot&&!slot.dataset.handKey.startsWith('blank-'))setActiveHoveredHandCard(slot.dataset.handKey);
-  }
-  function endHandPointerGesture(event){
-    const gesture=handPointerGesture;if(!gesture||gesture.id!==event.pointerId)return;
-    if(gesture.moved){
-      suppressNextDraggedHandClick=true;
-      if(dragClickResetTimer)clearTimeout(dragClickResetTimer);
-      dragClickResetTimer=setTimeout(()=>{suppressNextDraggedHandClick=false;dragClickResetTimer=null;},350);
-    }
-    handPointerGesture=null;
-  }
-  function suppressDraggedHandClick(event){
-    if(!suppressNextDraggedHandClick)return false;
-    suppressNextDraggedHandClick=false;
-    if(dragClickResetTimer){clearTimeout(dragClickResetTimer);dragClickResetTimer=null;}
-    event.preventDefault();event.stopPropagation();return true;
-  }
-  els.playerHand.addEventListener('pointerdown',beginHandPointerGesture);
-  els.playerHand.addEventListener('pointermove',moveHandPointerGesture);
-  els.playerHand.addEventListener('pointerup',endHandPointerGesture);
-  els.playerHand.addEventListener('pointercancel',endHandPointerGesture);
 
 
   function playerDoubleLabel(player){
