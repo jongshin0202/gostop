@@ -819,6 +819,41 @@
   }
   function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
+  async function submitOnlineCardPlay(){
+    const cardId=onlinePendingCardId;
+    if(!cardId)return false;
+    const card=state?.human?.hand?.find(item=>item.id===cardId);
+    let targetId=null;
+    if(card&&!state?.pendingDecision&&latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'){
+      const matches=matchesFor(card);
+      if(matches.length===2){
+        presentation.pendingHumanCardId=cardId;
+        const target=await chooseFloorTarget(matches,'Choose which floor card to hit',{cancelable:true});
+        if(!target){
+          const next=presentation.queuedHumanCardSwitch;
+          presentation.queuedHumanCardSwitch=null;
+          presentation.pendingHumanCardId=null;
+          presentation.locked=false;
+          onlineHandSourceRects.delete(cardId);
+          onlinePendingCardId=null;
+          els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
+          render();
+          if(next){await nextFrame();return humanPlay(next.cardId,next.clickedEl);}
+          return false;
+        }
+        targetId=target.id;
+        presentation.pendingHumanCardId=null;
+        presentation.queuedHumanCardSwitch=null;
+        presentation.locked=false;
+      }
+    }
+    if(onlineSubmit({type:'playCard',cardId,targetId}))return true;
+    onlineHandSourceRects.delete(cardId);
+    onlinePendingCardId=null;
+    els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
+    return false;
+  }
+
   async function humanUseBombBlank(){
     if(presentation.targetChoice?.cancelable&&presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
     if(onlineMode){onlineSubmit({type:'useBombBlank'});return;}
@@ -2832,40 +2867,6 @@
       else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       if(onlineAnonymousMode&&snapshot.terminalResult)globalThis.GoStopRanked?.handleFriendlyTerminal?.(snapshot);
       await driveOnline(snapshot,presentationEvents);
-    }
-    async function submitOnlineCardPlay(){
-      const cardId=onlinePendingCardId;
-      if(!cardId)return false;
-      const card=state?.human?.hand?.find(item=>item.id===cardId);
-      let targetId=null;
-      if(card&&!state?.pendingDecision&&latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'){
-        const matches=matchesFor(card);
-        if(matches.length===2){
-          presentation.pendingHumanCardId=cardId;
-          const target=await chooseFloorTarget(matches,'Choose which floor card to hit',{cancelable:true});
-          if(!target){
-            const next=presentation.queuedHumanCardSwitch;
-            presentation.queuedHumanCardSwitch=null;
-            presentation.pendingHumanCardId=null;
-            presentation.locked=false;
-            onlineHandSourceRects.delete(cardId);
-            onlinePendingCardId=null;
-            els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
-            render();
-            if(next){await nextFrame();return humanPlay(next.cardId,next.clickedEl);}
-            return false;
-          }
-          targetId=target.id;
-          presentation.pendingHumanCardId=null;
-          presentation.queuedHumanCardSwitch=null;
-          presentation.locked=false;
-        }
-      }
-      if(onlineSubmit({type:'playCard',cardId,targetId}))return true;
-      onlineHandSourceRects.delete(cardId);
-      onlinePendingCardId=null;
-      els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
-      return false;
     }
     function enterOnlineMatchView(anonymous){
       if(anonymous){if(freeFriendPanel)freeFriendPanel.hidden=true;}

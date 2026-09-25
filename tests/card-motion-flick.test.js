@@ -52,15 +52,31 @@ test('horizontal browse, upward flick, and tap are separate deterministic outcom
   assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
   assert.match(presentation,/const browsed=!flick&&\(state\.intent==='browse'\|\|Math\.abs\(dx\)>=18&&Math\.abs\(dx\)>Math\.abs\(dy\)\*\.9\)/);
   assert.match(presentation,/const tap=Math\.abs\(dx\)<=28&&Math\.abs\(dy\)<=28&&endTime-state\.startTime<=1000/);
-  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
-  assert.match(presentation,/suppressNextClick\(state\.cardId\)/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId,180\)/);
+  assert.match(presentation,/if\(pointerState\)recoverStalePointer\(\)/);
+  assert.match(presentation,/addEventListener\('lostpointercapture'/);
+  assert.match(presentation,/if\(!touchCapable\)return/);
 });
 
 test('browse release clears the raised hover instead of leaving the last card sticking out',()=>{
-  const pointerEnd=presentation.slice(presentation.indexOf("doc.addEventListener('pointerup'"),presentation.indexOf("doc.addEventListener('pointercancel'"));
-  assert.match(pointerEnd,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
-  const browseBranch=pointerEnd.slice(pointerEnd.indexOf('if(browsed){'),pointerEnd.indexOf('const tap='));
+  const finish=presentation.slice(presentation.indexOf('const finishPointerGesture'),presentation.indexOf("doc.addEventListener('pointerdown'"));
+  assert.match(finish,/if\(browsed\)\{[\s\S]*clearSelection\(\);return true;/);
+  const browseBranch=finish.slice(finish.indexOf('if(browsed){'),finish.indexOf('const tap='));
   assert.doesNotMatch(browseBranch,/commitSelection/);
+});
+
+test('Pointer Events recover a missed release instead of permanently blocking the next card press',()=>{
+  assert.match(presentation,/const recoverStalePointer=\(\)=>\{[\s\S]*pointerState=null;[\s\S]*finishPointerGesture\(stale,stale\.lastX,stale\.lastY\)/);
+  assert.match(presentation,/if\(pointerState\)recoverStalePointer\(\)/);
+  const pointerUp=presentation.slice(presentation.indexOf("doc.addEventListener('pointerup'"),presentation.indexOf("doc.addEventListener('lostpointercapture'"));
+  assert.doesNotMatch(pointerUp,/touchPointer\(event\)/);
+});
+
+test('touch-capable browsers have a click fallback when Pointer Event completion is lost',()=>{
+  const click=presentation.slice(presentation.indexOf("doc.addEventListener('click'"),presentation.indexOf("doc.addEventListener('pointermove'",presentation.indexOf("doc.addEventListener('click'")));
+  assert.match(click,/if\(!touchCapable\)return/);
+  assert.match(click,/if\(pointerState\)\{const stale=pointerState;pointerState=null;restoreGhost\(stale\)/);
+  assert.match(click,/if\(selectedCardId===id\)\{clearSelection\(\);triggerPlay\(card\);\}/);
 });
 
 test('native Touch path commits second tap and upward flick on touch-capable Android',()=>{
