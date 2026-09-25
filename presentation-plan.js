@@ -52,7 +52,7 @@
     let suppressGeneratedClickUntil=0;
     let suppressGeneratedClickCardId='';
     const nativeTouchSupported=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
-    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
+    const pointerTouchSupported=typeof globalThis.PointerEvent==='function'&&!nativeTouchSupported;
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
@@ -215,7 +215,7 @@
       },{capture:true,passive:false});
     }
 
-    if(nativeTouchSupported&&!pointerTouchSupported){
+    if(nativeTouchSupported){
       const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
       doc.addEventListener('touchstart',event=>{
         if(event.touches.length!==1)return;
@@ -265,7 +265,7 @@
         const endTime=now(),dx=touch.clientX-state.startX,dy=touch.clientY-state.startY;
         const flick=state.intent!=='browse'&&isUpwardFlick(
           {startX:state.startX,startY:state.startY,endX:touch.clientX,endY:touch.clientY,duration:Math.max(1,endTime-state.startTime)},
-          {minUpwardDistance:10,minTravelDistance:22,maxDuration:750,minSpeed:.035,maxHorizontalRatio:.95}
+          {minUpwardDistance:8,minTravelDistance:16,maxDuration:900,minSpeed:.02,maxHorizontalRatio:1.15}
         );
         const browsed=state.intent==='browse';
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
@@ -275,7 +275,7 @@
         if(browsed){
           event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();return;
         }
-        const tap=Math.abs(dx)<=22&&Math.abs(dy)<=22&&endTime-state.startTime<=800;
+        const tap=Math.abs(dx)<=28&&Math.abs(dy)<=28&&endTime-state.startTime<=1000;
         if(!tap){clearSelection();return;}
         event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);
         const live=cardByIdentity(state.cardId)||state.card;
