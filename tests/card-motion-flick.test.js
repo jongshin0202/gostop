@@ -69,12 +69,13 @@ test('modern pointer path commits the second tap and upward flick without synthe
   assert.match(pointer,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId,420\)/);
 });
 
-test('second tap and upward flick play through the live card click handler',()=>{
+test('second tap and upward flick dispatch the hand action directly without Android synthesized-click timing',()=>{
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(presentation,/bypassClickCard=card;[\s\S]*card\.click\(\);[\s\S]*bypassClickCard=null/);
-  assert.match(app,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(app,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
+  assert.match(presentation,/new EventCtor\('gostop-hand-activate',\{detail:\{cardId,blank:/);
+  assert.match(presentation,/doc\.dispatchEvent\(/);
+  assert.match(app,/document\.addEventListener\('gostop-hand-activate'/);
+  assert.match(app,/void humanPlay\(cardId,live\)/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
