@@ -96,7 +96,7 @@
       selectedCardId=null;clearVisual();
       let handled=false;
       if(typeof globalThis.CustomEvent==='function'){
-        const request=new CustomEvent('gostop-hand-play-request',{cancelable:true,detail:{cardId,kind}});
+        const request=new CustomEvent('gostop-hand-activate',{cancelable:true,detail:{cardId,blank:kind==='blank'}});
         handled=!doc.dispatchEvent(request);
       }
       if(handled)return true;
