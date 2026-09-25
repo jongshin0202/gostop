@@ -849,6 +849,7 @@
   function reachedNewFinishScore(total,previous){ return total>=finishThreshold && total>previous; }
 
   async function humanUseBombBlank(){
+    if(presentation.targetChoice?.cancelable&&presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
     if(onlineMode){onlineSubmit({type:'useBombBlank'});return;}
     if(presentation.targetChoiceCleanup&&presentation.pendingHumanCardId){presentation.targetChoiceCleanup();return;}
     if(state.turn!==PLAYER_A||state.winner||state.human.bombFreeTurns<=0||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||state.pendingDecision||presentation.targetChoice||presentation.shakeResolver||presentation.bombResolver)return;
