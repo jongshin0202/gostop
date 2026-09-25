@@ -95,6 +95,15 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
+test('touch phones activate main-menu buttons on short pointer release and suppress the delayed native click',()=>{
+  assert.match(source,/let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0/);
+  assert.match(source,/overlay\.addEventListener\('pointerdown',event=>\{[\s\S]*event\.pointerType!=='touch'[\s\S]*fastMenuTapState=\{id:event\.pointerId,button,x:event\.clientX,y:event\.clientY,at:Date\.now\(\)\}/);
+  assert.match(source,/overlay\.addEventListener\('pointerup',event=>\{[\s\S]*dx>14\|\|dy>14\|\|elapsed>700[\s\S]*state\.button\.click\(\)/);
+  assert.match(source,/fastMenuTapSuppressButton=state\.button;fastMenuTapSuppressUntil=Date\.now\(\)\+700/);
+  assert.match(source,/if\(!event\.isTrusted\)return;[\s\S]*event\.stopImmediatePropagation\(\)/);
+  assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
+});
+
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
   assert.match(source,/const ATTRACT_IDLE_MS=15000;/);
   assert.match(source,/const LEADERBOARD_ROTATE_MS=5000;/);
