@@ -48,9 +48,10 @@
     if(!isMobileFullscreenEligible(globalThis))return false;
     const root=doc?.documentElement;
     if(doc?.fullscreenElement){mainMenuFullscreenArmed=false;return false;}
-    mainMenuFullscreenArmed=true;
     const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||doc?.documentElement?.classList?.contains('gostop-performance-lite');
-    if(!userGesture&&(lite||mainMenuAutoAttempted))return false;
+    if(lite){mainMenuFullscreenArmed=false;return false;}
+    mainMenuFullscreenArmed=true;
+    if(!userGesture&&mainMenuAutoAttempted)return false;
     if(!root||typeof root.requestFullscreen!=='function')return false;
     if(!userGesture)mainMenuAutoAttempted=true;
     try{
@@ -73,6 +74,8 @@
 
   function handleFullscreenClick(event){
     if(!isMobileFullscreenEligible(globalThis))return;
+    const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement?.classList?.contains('gostop-performance-lite');
+    if(lite)return;
     if((mainMenuFullscreenArmed||isStartScreenButton(event.target,document))&&isMainMenuInteraction(event.target,document)){
       requestMainMenuFullscreen(document,{userGesture:true});
       return;
