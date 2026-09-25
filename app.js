@@ -794,11 +794,13 @@
   }
   els.floor.addEventListener('click',event=>{const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
   els.floor.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
-  document.addEventListener('click',event=>{
+  const cancelPrecommitTargetChoiceFromOutside=event=>{
     if(!presentation.targetChoice?.cancelable||!presentation.targetChoiceCleanup||!presentation.pendingHumanCardId)return;
     if(targetChoiceCardId(event)||els.playerHand.contains(event.target))return;
     presentation.targetChoiceCleanup();
-  });
+  };
+  document.addEventListener('pointerdown',cancelPrecommitTargetChoiceFromOutside,true);
+  document.addEventListener('click',cancelPrecommitTargetChoiceFromOutside);
 
   async function previewAiTarget(target){
     if(!target)return;
