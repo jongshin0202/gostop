@@ -31,26 +31,26 @@ test('touch selection is card-identity based and resets every new hand/game',()=
   assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
 });
 
-test('pointer events own modern phone hand gestures with native touch as fallback',()=>{
+test('native touch owns real phone hand gestures while pointer events remain the non-touch fallback',()=>{
   assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'&&!nativeTouchSupported/);
   assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
-  assert.match(presentation,/if\(nativeTouchSupported&&!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
 });
 
 test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{
   assert.match(presentation,/sideways>=10&&sideways>Math\.max\(8,Math\.abs\(up\)\*1\.10\)/);
-  assert.match(presentation,/up>=10&&up>sideways\*1\.05/);
+  assert.match(presentation,/up>=10&&up>sideways\*1\.05|up>=8&&up>sideways\*\.9/);
   assert.match(presentation,/state\.intent='browse'/);
   assert.match(presentation,/state\.intent='flick'/);
   assert.match(presentation,/const flick=state\.intent!=='browse'&&isUpwardFlick/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:22,maxDuration:750,minSpeed:\.035,maxHorizontalRatio:\.95/);
+  assert.match(presentation,/minUpwardDistance:8,minTravelDistance:16,maxDuration:900,minSpeed:\.02,maxHorizontalRatio:1\.15/);
   assert.match(presentation,/const browsed=state\.intent==='browse'/);
-  assert.match(presentation,/const tap=Math\.abs\(dx\)<=22&&Math\.abs\(dy\)<=22&&endTime-state\.startTime<=800/);
+  assert.match(presentation,/const tap=Math\.abs\(dx\)<=28&&Math\.abs\(dy\)<=28&&endTime-state\.startTime<=1000/);
   assert.match(presentation,/clearPreviousClickSuppression\(\)/);
   assert.match(presentation,/suppressNextClick\(state\.cardId\)/);
 });
@@ -62,11 +62,11 @@ test('browse release clears the raised hover instead of leaving the last card st
   assert.doesNotMatch(browseBranch,/commitSelection/);
 });
 
-test('modern pointer path commits the second tap and upward flick without synthesized click timing',()=>{
-  const pointer=presentation.slice(presentation.indexOf('if(pointerTouchSupported){'),presentation.indexOf('if(nativeTouchSupported&&!pointerTouchSupported){'));
-  assert.match(pointer,/if\(flick\)\{clearSelection\(\);triggerPlay\(state\.cardId\);return;\}/);
-  assert.match(pointer,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(pointer,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId,420\)/);
+test('native touch path commits the second tap and upward flick without Android synthesized-click timing',()=>{
+  const touch=presentation.slice(presentation.indexOf('if(nativeTouchSupported){'),presentation.indexOf("doc.addEventListener('click'",presentation.indexOf('if(nativeTouchSupported){')));
+  assert.match(touch,/if\(flick\)\{[\s\S]*clearSelection\(\);triggerPlay\(state\.cardId\);return;/);
+  assert.match(touch,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(touch,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId\)/);
 });
 
 test('second tap and upward flick dispatch the hand action directly without Android synthesized-click timing',()=>{
