@@ -54,6 +54,7 @@
     let suppressTouchClicksUntil=0;
     let pointerState=null;
     let suppressPointerClicksUntil=0;
+    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
 
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const requestFrame=globalThis.requestAnimationFrame?.bind(globalThis)||(callback=>setTimeout(callback,16));
@@ -68,10 +69,12 @@
       const hand=playerHand()?.getBoundingClientRect?.()||null;
       const cards=allHandCards().map(card=>{
         const rect=card.getBoundingClientRect();
-        return {card,centerX:rect.left+rect.width/2,rect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height}};
+        return {card,id:cardIdentity(card),centerX:rect.left+rect.width/2,rect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height}};
       });
       return {top:hand?.top??-Infinity,bottom:hand?.bottom??Infinity,cards};
     };
+
+    const cardByIdentity=id=>id?[...doc.querySelectorAll('#playerHand .hand-card')].find(card=>cardIdentity(card)===id)||null:null;
 
     const clearSelection=()=>{
       touchSelectedCardId=null;
@@ -105,35 +108,34 @@
 
     const nearestHandCard=(state,x,y)=>{
       const geometry=state?.handGeometry;
-      if(!geometry||y<geometry.top-28||y>geometry.bottom+24)return null;
+      if(!geometry||y<geometry.top-32||y>geometry.bottom+32)return null;
       let best=null,bestDistance=Infinity;
       for(const entry of geometry.cards){
-        if(!canUseCard(entry.card))continue;
+        const live=cardByIdentity(entry.id)||entry.card;
+        if(!canUseCard(live))continue;
         const distance=Math.abs(x-entry.centerX);
-        if(distance<bestDistance){best=entry.card;bestDistance=distance;}
+        if(distance<bestDistance){best=live;bestDistance=distance;}
       }
       return best;
     };
 
     const geometryRectFor=(state,card,raised=false)=>{
-      const rect=state?.handGeometry?.cards?.find(entry=>entry.card===card)?.rect;
+      const id=cardIdentity(card);
+      const rect=state?.handGeometry?.cards?.find(entry=>entry.id===id)?.rect;
       if(rect)return {left:rect.left,top:rect.top-(raised?18:0),width:rect.width,height:rect.height};
       const measured=card?.getBoundingClientRect?.();
       return measured?{left:measured.left,top:measured.top,width:measured.width,height:measured.height}:{left:0,top:0,width:0,height:0};
     };
 
-    const removeGhost=state=>{
-      state?.ghost?.remove?.();
-      if(state)state.ghost=null;
-    };
-
+    const removeGhost=state=>{state?.ghost?.remove?.();if(state)state.ghost=null;};
     const restoreDraggedCard=state=>{
       if(!state)return;
       removeGhost(state);
-      if(state.card){
-        state.card.style.visibility=state.previousVisibility;
-        state.card.style.transform=state.previousTransform;
-        state.card.style.zIndex=state.previousZIndex;
+      const card=cardByIdentity(state.cardId)||state.card;
+      if(card){
+        card.style.visibility=state.previousVisibility||'';
+        card.style.transform=state.previousTransform||'';
+        card.style.zIndex=state.previousZIndex||'';
       }
     };
 
@@ -145,29 +147,20 @@
       while(state.samples.length>2&&state.samples[0].t<cutoff)state.samples.shift();
     };
 
-    const recentFlickSample=(state,endX,endY,endTime=now())=>{
-      const points=[...(state.samples||[]),{x:endX,y:endY,t:endTime}].filter(point=>Number.isFinite(point.x)&&Number.isFinite(point.y)&&Number.isFinite(point.t));
-      if(!points.length)return null;
-      const cutoff=endTime-320;
-      const recent=points.filter(point=>point.t>=cutoff);
-      const start=(recent.length>=2?recent[0]:points[0])||points[0];
-      return {startX:start.x,startY:start.y,endX,endY,duration:Math.max(1,endTime-start.t)};
-    };
-
     const markBrowsing=state=>{
       if(!state||state.browsing)return;
       state.browsing=true;
       playerHand()?.classList.add('gostop-touch-browsing');
     };
 
-    const setActiveCard=(state,card,x,y)=>{
-      if(!state||!canUseCard(card)||card===state.card)return;
+    const setActiveCard=(state,card)=>{
+      if(!state||!canUseCard(card)||cardIdentity(card)===state.cardId)return;
       restoreDraggedCard(state);
       selectCard(card);
-      const rect=geometryRectFor(state,card,true);
       state.card=card;
+      state.cardId=cardIdentity(card);
       state.wasSelected=false;
-      state.startRect=rect;
+      state.startRect=geometryRectFor(state,card,true);
       state.previousVisibility=card.style.visibility;
       state.previousTransform=card.style.transform;
       state.previousZIndex=card.style.zIndex;
@@ -178,129 +171,21 @@
 
     const ensureGhost=state=>{
       if(!state||state.ghost)return state?.ghost||null;
-      const ghost=state.card.cloneNode(true);
-      ghost.removeAttribute('id');
-      ghost.removeAttribute('disabled');
-      ghost.setAttribute('aria-hidden','true');
-      ghost.tabIndex=-1;
+      const card=cardByIdentity(state.cardId)||state.card;
+      if(!canUseCard(card))return null;
+      const ghost=card.cloneNode(true);
+      ghost.removeAttribute('id');ghost.removeAttribute('disabled');ghost.setAttribute('aria-hidden','true');ghost.tabIndex=-1;
       ghost.classList.add('gostop-flick-ghost');
-      ghost.style.left=`${state.startRect.left}px`;
-      ghost.style.top=`${state.startRect.top}px`;
-      ghost.style.width=`${state.startRect.width}px`;
-      ghost.style.height=`${state.startRect.height}px`;
+      ghost.style.left=`${state.startRect.left}px`;ghost.style.top=`${state.startRect.top}px`;
+      ghost.style.width=`${state.startRect.width}px`;ghost.style.height=`${state.startRect.height}px`;
       ghost.style.transform='translate3d(0,0,0)';
       (doc.getElementById('cardMotionLayer')||doc.body).appendChild(ghost);
-      state.ghost=ghost;
-      state.card.style.visibility='hidden';
+      state.ghost=ghost;card.style.visibility='hidden';
       return ghost;
     };
 
-    const beginTouch=(event,touch,card)=>{
-      if(!canUseCard(card))return false;
-      const wasSelected=!!cardIdentity(card)&&touchSelectedCardId===cardIdentity(card);
-      const handGeometry=snapshotHandGeometry();
-      selectCard(card);
-      const startTime=now();
-      touchState={
-        id:touch.identifier,
-        card,
-        wasSelected,
-        switched:false,
-        browsing:false,
-        dragging:false,
-        intent:null,
-        anchorX:touch.clientX,
-        anchorY:touch.clientY,
-        anchorTime:startTime,
-        lastX:touch.clientX,
-        lastY:touch.clientY,
-        startRect:geometryRectFor({handGeometry},card,!wasSelected),
-        previousVisibility:card.style.visibility,
-        previousTransform:card.style.transform,
-        previousZIndex:card.style.zIndex,
-        ghost:null,
-        handGeometry,
-        samples:[],
-        pendingMove:null,
-        moveFrame:null
-      };
-      pushSample(touchState,touch.clientX,touch.clientY,startTime);
-      suppressTouchClicksUntil=Date.now()+900;
-      event.preventDefault();
-      return true;
-    };
-
-    const processTouchMove=(state,x,y)=>{
-      if(!state||touchState!==state)return;
-      const up=state.anchorY-y;
-      const horizontal=x-state.anchorX;
-      const sideways=Math.abs(horizontal);
-
-      if(!state.intent){
-        const upwardIntent=up>=10&&up>=sideways*.75;
-        const browseIntent=sideways>=14&&sideways>Math.max(10,Math.abs(up)*1.25);
-        if(upwardIntent){
-          state.intent='flick';
-          state.dragging=true;
-          state.wasSelected=false;
-        }else if(browseIntent){
-          state.intent='browse';
-          markBrowsing(state);
-        }else{
-          return false;
-        }
-      }
-
-      if(state.intent==='browse'){
-        const hovered=nearestHandCard(state,x,y);
-        if(hovered&&hovered!==state.card)setActiveCard(state,hovered,x,y);
-        return false;
-      }
-
-      if(state.intent==='flick'){
-        const ghost=ensureGhost(state);
-        if(ghost){
-          const dx=x-state.anchorX;
-          const dy=y-state.anchorY;
-          ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
-        }
-        const time=now();
-        const flickSample={startX:state.anchorX,startY:state.anchorY,endX:x,endY:y,duration:Math.max(1,time-state.anchorTime)};
-        if(isUpwardFlick(flickSample)){
-          const card=state.card;
-          restoreDraggedCard(state);
-          playerHand()?.classList.remove('gostop-touch-browsing');
-          touchState=null;
-          suppressTouchClicksUntil=Date.now()+900;
-          triggerPlay(card);
-          return true;
-        }
-      }
-      return false;
-    };
-
-    const queueTouchMove=(state,x,y)=>{
-      if(!state)return;
-      state.pendingMove={x,y};
-      if(state.moveFrame!=null)return;
-      state.moveFrame=requestFrame(()=>{
-        state.moveFrame=null;
-        if(touchState!==state)return;
-        const pending=state.pendingMove;
-        state.pendingMove=null;
-        if(pending)processTouchMove(state,pending.x,pending.y);
-      });
-    };
-
-    const flushTouchMove=state=>{
-      if(!state)return;
-      if(state.moveFrame!=null){cancelFrame(state.moveFrame);state.moveFrame=null;}
-      const pending=state.pendingMove;
-      state.pendingMove=null;
-      if(pending)processTouchMove(state,pending.x,pending.y);
-    };
-
-    const triggerPlay=card=>{
+    const triggerPlay=cardOrId=>{
+      const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
       if(!canUseCard(card))return false;
       touchSelectedCardId=null;
       playerHand()?.classList.remove('gostop-touch-browsing');
@@ -309,117 +194,122 @@
       return true;
     };
 
-    const finishTouch=(event,touch)=>{
-      const state=touchState;
-      if(!state)return;
-      flushTouchMove(state);
-      const endX=touch?.clientX??state.lastX;
-      const endY=touch?.clientY??state.lastY;
-      const endTime=now();
-      pushSample(state,endX,endY,endTime);
-      const flickSample={startX:state.anchorX,startY:state.anchorY,endX,endY,duration:Math.max(1,endTime-state.anchorTime)};
-      const card=state.card;
-      const browsed=state.intent==='browse'||state.browsing||state.switched;
-      const flick=!browsed&&isUpwardFlick(flickSample);
-      const secondTap=!browsed&&state.wasSelected&&Math.abs(endX-state.anchorX)<28&&Math.abs(endY-state.anchorY)<28;
-
-      restoreDraggedCard(state);
-      playerHand()?.classList.remove('gostop-touch-browsing');
-      touchState=null;
-      event.preventDefault();
-      event.stopPropagation();
-
-      if(flick){
-        triggerPlay(card);
-      }else if(browsed){
-        clearSelection();
-      }else if(secondTap){
-        triggerPlay(card);
-      }else{
-        selectCard(card);
+    const classifyMove=(state,x,y)=>{
+      const dx=x-state.anchorX,dy=y-state.anchorY,up=-dy,sideways=Math.abs(dx);
+      if(!state.intent){
+        if(sideways>=16&&sideways>Math.max(12,Math.abs(up)*1.20)){state.intent='browse';markBrowsing(state);}
+        else if(up>=12&&up>=sideways*.72){state.intent='flick';state.dragging=true;state.wasSelected=false;}
       }
-    };
-
-    const cancelTouch=event=>{
-      if(!touchState)return;
-      const state=touchState;
-      if(state.moveFrame!=null){cancelFrame(state.moveFrame);state.moveFrame=null;}
-      const card=state.card;
-      const browsed=state.intent==='browse'||state.browsing||state.switched;
-      restoreDraggedCard(state);
-      playerHand()?.classList.remove('gostop-touch-browsing');
-      touchState=null;
-      event?.preventDefault?.();
-      if(browsed)clearSelection();else selectCard(card);
-    };
-
-    const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
-
-    doc.addEventListener('touchstart',event=>{
-      if(event.touches.length!==1)return;
-      const card=cardFromTarget(event.target);
-      if(!card){
-        if(touchSelectedCardId&&!event.target?.closest?.('#playerHand'))clearSelection();
+      if(state.intent==='browse'){
+        const hovered=nearestHandCard(state,x,y);
+        if(hovered)setActiveCard(state,hovered);
         return;
       }
-      const touch=event.touches[0];
-      beginTouch(event,touch,card);
-    },{capture:true,passive:false});
+      if(state.intent==='flick'){
+        const ghost=ensureGhost(state);
+        if(ghost)ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
+      }
+    };
 
-    doc.addEventListener('touchmove',event=>{
-      if(!touchState)return;
-      const touch=touchById(event.touches,touchState.id);
-      if(!touch){cancelTouch(event);return;}
-      const time=now();
-      touchState.lastX=touch.clientX;
-      touchState.lastY=touch.clientY;
-      pushSample(touchState,touch.clientX,touch.clientY,time);
-      queueTouchMove(touchState,touch.clientX,touch.clientY);
+    const finishGesture=(state,endX,endY,endTime,event)=>{
+      if(!state)return;
+      const dx=endX-state.anchorX,dy=endY-state.anchorY;
+      const browsed=state.intent==='browse'||state.browsing||state.switched;
+      const flick=!browsed&&isUpwardFlick({startX:state.anchorX,startY:state.anchorY,endX,endY,duration:Math.max(1,endTime-state.anchorTime)});
+      const tap=!browsed&&Math.abs(dx)<=18&&Math.abs(dy)<=18&&endTime-state.anchorTime<=650;
+      const cardId=state.cardId;
+      restoreDraggedCard(state);
+      playerHand()?.classList.remove('gostop-touch-browsing');
+      event?.preventDefault?.();event?.stopPropagation?.();
+
+      if(flick){triggerPlay(cardId);return;}
+      if(browsed){const live=cardByIdentity(cardId);if(live)selectCard(live);return;}
+      if(tap&&state.wasSelected){triggerPlay(cardId);return;}
+      if(tap){const live=cardByIdentity(cardId);if(live)selectCard(live);return;}
+      clearSelection();
+    };
+
+    const beginPointerTouch=event=>{
+      if(event.pointerType!=='touch'||!event.isPrimary)return false;
+      const card=cardFromTarget(event.target);
+      if(!canUseCard(card))return false;
+      const t=now(),id=cardIdentity(card),handGeometry=snapshotHandGeometry();
+      pointerState={
+        id:event.pointerId,kind:'touch',card,cardId:id,wasSelected:!!id&&touchSelectedCardId===id,
+        anchorX:event.clientX,anchorY:event.clientY,anchorTime:t,lastX:event.clientX,lastY:event.clientY,
+        intent:null,browsing:false,switched:false,dragging:false,handGeometry,
+        startRect:geometryRectFor({handGeometry},card,!!id&&touchSelectedCardId!==id),
+        previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,ghost:null
+      };
+      selectCard(card);
+      suppressPointerClicksUntil=Date.now()+1000;
+      try{card.setPointerCapture?.(event.pointerId);}catch(_){}
       event.preventDefault();
-    },{capture:true,passive:false});
-
-    doc.addEventListener('touchend',event=>{
-      if(!touchState)return;
-      const touch=touchById(event.changedTouches,touchState.id);
-      finishTouch(event,touch);
-    },{capture:true,passive:false});
-
-    doc.addEventListener('touchcancel',event=>cancelTouch(event),{capture:true,passive:false});
+      return true;
+    };
 
     doc.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='touch'||event.button!==0)return;
-      const card=cardFromTarget(event.target);
-      if(!canUseCard(card))return;
-      const time=now();
-      pointerState={id:event.pointerId,card,startX:event.clientX,startY:event.clientY,samples:[]};
-      pushSample(pointerState,event.clientX,event.clientY,time);
-    },true);
-
-    doc.addEventListener('pointermove',event=>{
-      const state=pointerState;
-      if(!state||event.pointerId!==state.id)return;
-      const time=now();
-      pushSample(state,event.clientX,event.clientY,time);
-      const sample=recentFlickSample(state,event.clientX,event.clientY,time);
-      if(!isUpwardFlick(sample))return;
-      pointerState=null;
-      suppressPointerClicksUntil=Date.now()+900;
-      event.preventDefault();
-      event.stopPropagation();
-      triggerPlay(state.card);
+      if(event.pointerType==='touch'){beginPointerTouch(event);return;}
+      if(event.button!==0)return;
+      const card=cardFromTarget(event.target);if(!canUseCard(card))return;
+      const t=now();pointerState={id:event.pointerId,kind:'mouse',card,cardId:cardIdentity(card),anchorX:event.clientX,anchorY:event.clientY,anchorTime:t,lastX:event.clientX,lastY:event.clientY,intent:null,browsing:false,switched:false,handGeometry:snapshotHandGeometry()};
     },{capture:true,passive:false});
 
-    const finishPointer=event=>{if(pointerState&&event.pointerId===pointerState.id)pointerState=null;};
-    doc.addEventListener('pointerup',finishPointer,true);
-    doc.addEventListener('pointercancel',finishPointer,true);
+    doc.addEventListener('pointermove',event=>{
+      const state=pointerState;if(!state||event.pointerId!==state.id)return;
+      state.lastX=event.clientX;state.lastY=event.clientY;
+      if(state.kind==='touch'){
+        classifyMove(state,event.clientX,event.clientY);
+        if(state.intent)event.preventDefault();
+        return;
+      }
+      const sample={startX:state.anchorX,startY:state.anchorY,endX:event.clientX,endY:event.clientY,duration:Math.max(1,now()-state.anchorTime)};
+      if(!isUpwardFlick(sample))return;
+      pointerState=null;suppressPointerClicksUntil=Date.now()+900;event.preventDefault();event.stopPropagation();triggerPlay(state.cardId);
+    },{capture:true,passive:false});
+
+    doc.addEventListener('pointerup',event=>{
+      const state=pointerState;if(!state||event.pointerId!==state.id)return;
+      pointerState=null;
+      if(state.kind==='touch'){
+        suppressPointerClicksUntil=Date.now()+1000;
+        finishGesture(state,event.clientX,event.clientY,now(),event);
+      }
+    },{capture:true,passive:false});
+    doc.addEventListener('pointercancel',event=>{
+      const state=pointerState;if(!state||event.pointerId!==state.id)return;
+      pointerState=null;restoreDraggedCard(state);playerHand()?.classList.remove('gostop-touch-browsing');
+    },{capture:true,passive:false});
+
+    // Legacy TouchEvent fallback for browsers without Pointer Events.
+    if(!pointerTouchSupported){
+      const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
+      doc.addEventListener('touchstart',event=>{
+        if(event.touches.length!==1)return;
+        const card=cardFromTarget(event.target);
+        if(!card){if(touchSelectedCardId&&!event.target?.closest?.('#playerHand'))clearSelection();return;}
+        if(!canUseCard(card))return;
+        const touch=event.touches[0],t=now(),id=cardIdentity(card),handGeometry=snapshotHandGeometry();
+        touchState={id:touch.identifier,card,cardId:id,wasSelected:!!id&&touchSelectedCardId===id,anchorX:touch.clientX,anchorY:touch.clientY,anchorTime:t,lastX:touch.clientX,lastY:touch.clientY,intent:null,browsing:false,switched:false,dragging:false,handGeometry,startRect:geometryRectFor({handGeometry},card,!!id&&touchSelectedCardId!==id),previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,ghost:null};
+        selectCard(card);suppressTouchClicksUntil=Date.now()+1000;event.preventDefault();
+      },{capture:true,passive:false});
+      doc.addEventListener('touchmove',event=>{
+        if(!touchState)return;const touch=touchById(event.touches,touchState.id);if(!touch)return;
+        touchState.lastX=touch.clientX;touchState.lastY=touch.clientY;classifyMove(touchState,touch.clientX,touch.clientY);if(touchState.intent)event.preventDefault();
+      },{capture:true,passive:false});
+      doc.addEventListener('touchend',event=>{
+        if(!touchState)return;const state=touchState;touchState=null;const touch=touchById(event.changedTouches,state.id);if(!touch)return;
+        suppressTouchClicksUntil=Date.now()+1000;finishGesture(state,touch.clientX,touch.clientY,now(),event);
+      },{capture:true,passive:false});
+      doc.addEventListener('touchcancel',event=>{if(!touchState)return;const state=touchState;touchState=null;restoreDraggedCard(state);clearSelection();event.preventDefault();},{capture:true,passive:false});
+    }
 
     doc.addEventListener('click',event=>{
       const card=cardFromTarget(event.target);
       if(!card)return;
       if(card===bypassClickCard)return;
       if(Date.now()<suppressTouchClicksUntil||Date.now()<suppressPointerClicksUntil){
-        event.preventDefault();
-        event.stopImmediatePropagation();
+        event.preventDefault();event.stopImmediatePropagation();
       }
     },true);
 
