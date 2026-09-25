@@ -93,8 +93,13 @@
       if(!canUseCard(card))return false;
       const cardId=cardIdentity(card);
       selectedCardId=null;clearVisual();
-      bypassClickCard=card;
-      try{card.click();}finally{bypassClickCard=null;}
+      const EventCtor=globalThis.CustomEvent;
+      if(typeof EventCtor==='function'){
+        doc.dispatchEvent(new EventCtor('gostop-hand-activate',{detail:{cardId,blank:card.classList?.contains?.('blank-turn-card')===true}}));
+      }else{
+        bypassClickCard=card;
+        try{card.click();}finally{bypassClickCard=null;}
+      }
       return true;
     };
 
