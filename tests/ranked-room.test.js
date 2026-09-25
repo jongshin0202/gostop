@@ -269,6 +269,15 @@ test('ranked Solo disconnect freezes the five-point settlement and stops the com
 
 test('ranked Solo browser return during reconnect grace restores the same seat and game with no coin settlement',async()=>{
   const {core,user,socket,accountStore}=await soloRoom();
+  // Secure-random Solo setup can very rarely finish before this reconnect scenario starts.
+  // Normalize only the current hand to an active user turn so the test always owns the
+  // reconnect window instead of inheriting a randomly completed hand.
+  const record=core.authority.exportMatch(core.room.matchId),userSide=user.seatId==='playerA'?'human':'ai';
+  record.state.terminalResult=null;record.state.winner=null;record.state.pendingDecision=null;record.state.pendingTurn=null;record.state.turn=user.seatId;record.completedAt=null;
+  record.state[userSide].turnsTaken=Math.max(1,Number(record.state[userSide].turnsTaken)||0);
+  core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);
+  core.room.terminalResult=null;core.room.status='ready';core.room.sessionFlow.ended=false;core.room.sessionFlow.endedBy=null;core.room.sessionFlow.replayReady={playerA:false,playerB:false};await core.persist();
+
   const oldMatch=core.room.matchId,oldSequence=core.room.gameSequence,oldWallet=core.room.participants.find(item=>item.playerId===user.playerId).walletCoins;
   const settlementsBefore=accountStore.calls.filter(call=>call.path==='/internal/game/settle'||call.path==='/internal/force-quit').length;
   await core.disconnect(socket);
