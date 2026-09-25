@@ -1632,7 +1632,7 @@
     presentation.stagedCards.forEach(el=>{el?.getAnimations?.().forEach(animation=>animation.cancel());el?.remove?.();});
     presentation.stagedCards.clear();presentation.floorSlotReservations.clear();onlineHandSourceRects.clear();presentation.activeHoveredHandCardId=null;
     presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;presentation.blankTurnInFlight=false;
-    if(!TEST_MODE){document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
+    if(!TEST_MODE){document.dispatchEvent(new Event('gostop-hand-reset'));document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
   }
 
   function fullSizeSourceRect(sourceRect){
