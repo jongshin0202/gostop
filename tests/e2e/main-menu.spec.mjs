@@ -217,6 +217,64 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
 });
 
 
+test('Android touch path activates menu taps, second-card tap, and upward flick without native click dependence',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+  const page=await context.newPage();
+  const errors=[];page.on('pageerror',error=>errors.push(error));
+  await page.addInitScript(()=>{
+    let fullscreenElement=null;
+    Object.defineProperty(Document.prototype,'fullscreenElement',{configurable:true,get(){return fullscreenElement;}});
+    Element.prototype.requestFullscreen=function(){fullscreenElement=this;document.dispatchEvent(new Event('fullscreenchange'));return Promise.resolve();};
+  });
+  await installHarness(page);
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await expect(page.locator('#gostopBootSplash.gostop-boot-ready')).toBeVisible();
+  const splash=await page.locator('#gostopBootSplash').boundingBox();
+  await page.touchscreen.tap(splash.x+splash.width/2,splash.y+splash.height/2);
+  await expect(page.locator('#competitiveGamingBtn')).toBeVisible();
+
+  const competitive=await page.locator('#competitiveGamingBtn').boundingBox();
+  await page.touchscreen.tap(competitive.x+competitive.width/2,competitive.y+competitive.height/2);
+  await expect(page.locator('#competitiveGamingBtn')).toHaveAttribute('aria-expanded','true');
+
+  await page.evaluate(()=>{
+    const hand=document.getElementById('playerHand');
+    hand.replaceChildren();
+    Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147480000',visibility:'visible'});
+    const slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey='gesture-test';
+    const card=document.createElement('button');card.type='button';card.className='card hand-card';card.dataset.cardId='gesture-test';
+    Object.assign(card.style,{width:'64px',height:'104px',display:'block'});
+    slot.appendChild(card);hand.appendChild(slot);
+    globalThis.__gestureActivations=[];
+    document.addEventListener('gostop-hand-activate',event=>{globalThis.__gestureActivations.push(event.detail?.cardId||'');event.preventDefault();event.stopImmediatePropagation();},{capture:true});
+  });
+  const card=await page.locator('#playerHand .hand-card').boundingBox();
+  const x=card.x+card.width/2,y=card.y+card.height/2;
+  await page.touchscreen.tap(x,y);
+  expect(await page.evaluate(()=>globalThis.__gestureActivations.length)).toBe(0);
+  await page.touchscreen.tap(x,y);
+  expect(await page.evaluate(()=>globalThis.__gestureActivations)).toEqual(['gesture-test']);
+
+  await page.evaluate(()=>{
+    globalThis.__gestureActivations=[];
+    const card=document.querySelector('#playerHand .hand-card'),rect=card.getBoundingClientRect();
+    const fire=(type,points,changed=[])=>{
+      const event=new Event(type,{bubbles:true,cancelable:true});
+      Object.defineProperty(event,'touches',{value:points});
+      Object.defineProperty(event,'changedTouches',{value:changed});
+      card.dispatchEvent(event);
+    };
+    const start={identifier:7,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height*.75};
+    const end={identifier:7,clientX:start.clientX+3,clientY:start.clientY-70};
+    fire('touchstart',[start]);
+    fire('touchmove',[end]);
+    fire('touchend',[],[end]);
+  });
+  expect(await page.evaluate(()=>globalThis.__gestureActivations)).toEqual(['gesture-test']);
+  expect(errors.map(error=>error.message)).toEqual([]);
+  await context.close();
+});
+
 test('Training Mode launches a real local game and Your Captured Cards opens the complete score breakdown',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#friendlyGamingBtn').click();
