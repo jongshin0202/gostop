@@ -14,7 +14,8 @@ function mobileHarness(){
     dataset:{cardId:'m1-1'},disabled:false,style:{},classList:classList(),isConnected:true,
     getAttribute(){return null;},
     closest(selector){if(selector==='#playerHand .hand-card')return this;if(selector==='.hand-card-slot')return slot;return null;},
-    getBoundingClientRect(){return {left:100,top:500,width:58,height:94};}
+    getBoundingClientRect(){return {left:100,top:500,width:58,height:94};},
+    click(){activations.push({cardId:'m1-1',blank:false});}
   };
   const hand={
     classList:classList(),scrollLeft:0,
@@ -31,7 +32,7 @@ function mobileHarness(){
       return [];
     },
     addEventListener(type,fn,options){if(!listeners.has(type))listeners.set(type,[]);listeners.get(type).push({fn,options});},
-    dispatchEvent(event){if(event?.type==='gostop-hand-activate')activations.push(event.detail);return true;}
+    dispatchEvent(){return true;}
   };
   const fire=(type,event)=>{for(const item of listeners.get(type)||[])item.fn(event);};
   const touch=(identifier,x,y)=>({identifier,clientX:x,clientY:y});
@@ -43,12 +44,10 @@ test('Android devices with PointerEvent still use native touch, second tap commi
   const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
   const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
   const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
-  const customDescriptor=Object.getOwnPropertyDescriptor(globalThis,'CustomEvent');
   try{
     Object.defineProperty(globalThis,'PointerEvent',{value:function PointerEvent(){},configurable:true});
     Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:5},configurable:true});
     Object.defineProperty(globalThis,'ontouchstart',{value:null,configurable:true});
-    Object.defineProperty(globalThis,'CustomEvent',{value:class CustomEvent{constructor(type,init={}){this.type=type;this.detail=init.detail;}},configurable:true});
 
     const h=mobileHarness();
     assert.equal(plan.installHandFlickGestures(h.doc),true);
@@ -72,6 +71,5 @@ test('Android devices with PointerEvent still use native touch, second tap commi
     if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
     if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
     if(touchDescriptor)Object.defineProperty(globalThis,'ontouchstart',touchDescriptor);else delete globalThis.ontouchstart;
-    if(customDescriptor)Object.defineProperty(globalThis,'CustomEvent',customDescriptor);else delete globalThis.CustomEvent;
   }
 });
