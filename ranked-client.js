@@ -682,6 +682,28 @@
   function installImmediateMobileTap(button){
     if(!button)return;
     let press=null;
+    const activate=()=>{
+      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+650;
+      immediateMenuProgrammaticTarget=button;
+      try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
+    };
+    const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
+    if(touchCapable){
+      button.addEventListener('touchstart',event=>{
+        if(event.touches.length!==1){press=null;return;}
+        const touch=event.touches[0];press={id:touch.identifier,x:touch.clientX,y:touch.clientY};
+      },{passive:true});
+      button.addEventListener('touchend',event=>{
+        if(!press)return;
+        const touch=[...event.changedTouches].find(item=>item.identifier===press.id),start=press;press=null;
+        if(!touch)return;
+        const distance=Math.hypot(touch.clientX-start.x,touch.clientY-start.y);
+        if(distance>18)return;
+        event.preventDefault();event.stopPropagation();activate();
+      },{passive:false});
+      button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
+      return;
+    }
     button.addEventListener('pointerdown',event=>{
       if(event.pointerType==='mouse')return;
       press={id:event.pointerId,x:event.clientX,y:event.clientY};
@@ -689,11 +711,8 @@
     button.addEventListener('pointerup',event=>{
       if(!press||event.pointerId!==press.id||event.pointerType==='mouse')return;
       const distance=Math.hypot(event.clientX-press.x,event.clientY-press.y);press=null;
-      if(distance>16)return;
-      event.preventDefault();
-      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+650;
-      immediateMenuProgrammaticTarget=button;
-      try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
+      if(distance>18)return;
+      event.preventDefault();activate();
     },{passive:false});
     button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
   }
