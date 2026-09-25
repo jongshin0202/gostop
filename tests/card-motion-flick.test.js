@@ -44,6 +44,6 @@ test('gesture layer reuses canonical click path without ranked authority logic',
   assert.doesNotMatch(gesture,/matchesFor\(/);
   assert.doesNotMatch(gesture,/chooseFloorTarget\(/);
   const online=app.slice(app.indexOf('async function humanPlay'),app.indexOf('// While choosing between two floor targets'));
-  assert.match(online,/\{type:'playCard',cardId,targetId:null\}/);
-  assert.match(online,/needsPrePlayDecision\?\{type:'attemptPlayCard',cardId\}/);
+  assert.match(online,/if\(needsPrePlayDecision\)\{[\s\S]*onlineSubmit\(\{type:'attemptPlayCard',cardId\}\)/);
+  assert.match(online,/await submitOnlineCardPlay\(\)/);
 });
