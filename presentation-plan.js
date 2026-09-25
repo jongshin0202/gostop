@@ -48,7 +48,7 @@
     (doc.head||doc.documentElement).appendChild(style);
 
     let touchState=null;
-    let touchSelectedCard=null;
+    let touchSelectedCardId=null;
     let visualSelectedSlot=null;
     let bypassClickCard=null;
     let suppressTouchClicksUntil=0;
@@ -60,6 +60,7 @@
     const cancelFrame=globalThis.cancelAnimationFrame?.bind(globalThis)||(id=>clearTimeout(id));
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
+    const cardIdentity=card=>String(card?.dataset?.cardId||card?.closest?.('.hand-card-slot')?.dataset?.handKey||'');
     const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
     const allHandCards=()=>[...doc.querySelectorAll('#playerHand .hand-card')].filter(canUseCard);
 
@@ -73,7 +74,7 @@
     };
 
     const clearSelection=()=>{
-      touchSelectedCard=null;
+      touchSelectedCardId=null;
       const hand=playerHand();
       hand?.classList.add('gostop-touch-selection-cleared');
       hand?.classList.remove('gostop-touch-browsing');
@@ -90,7 +91,7 @@
       if(!canUseCard(card))return false;
       const slot=card.closest('.hand-card-slot');
       if(!slot)return false;
-      touchSelectedCard=card;
+      touchSelectedCardId=cardIdentity(card);
       playerHand()?.classList.remove('gostop-touch-selection-cleared');
       if(visualSelectedSlot?.isConnected&&visualSelectedSlot!==slot)visualSelectedSlot.classList.remove('is-hovered');
       else if(!visualSelectedSlot?.isConnected){
@@ -196,7 +197,7 @@
 
     const beginTouch=(event,touch,card)=>{
       if(!canUseCard(card))return false;
-      const wasSelected=touchSelectedCard===card;
+      const wasSelected=!!cardIdentity(card)&&touchSelectedCardId===cardIdentity(card);
       const handGeometry=snapshotHandGeometry();
       selectCard(card);
       const startTime=now();
@@ -301,7 +302,7 @@
 
     const triggerPlay=card=>{
       if(!canUseCard(card))return false;
-      touchSelectedCard=null;
+      touchSelectedCardId=null;
       playerHand()?.classList.remove('gostop-touch-browsing');
       bypassClickCard=card;
       try{card.click();}finally{bypassClickCard=null;}
@@ -320,7 +321,7 @@
       const card=state.card;
       const browsed=state.intent==='browse'||state.browsing||state.switched;
       const flick=!browsed&&isUpwardFlick(flickSample);
-      const secondTap=!state.dragging&&!browsed&&state.wasSelected&&Math.abs(endX-state.anchorX)<18&&Math.abs(endY-state.anchorY)<18;
+      const secondTap=!browsed&&state.wasSelected&&Math.abs(endX-state.anchorX)<28&&Math.abs(endY-state.anchorY)<28;
 
       restoreDraggedCard(state);
       playerHand()?.classList.remove('gostop-touch-browsing');
@@ -358,7 +359,7 @@
       if(event.touches.length!==1)return;
       const card=cardFromTarget(event.target);
       if(!card){
-        if(touchSelectedCard&&!event.target?.closest?.('#playerHand'))clearSelection();
+        if(touchSelectedCardId&&!event.target?.closest?.('#playerHand'))clearSelection();
         return;
       }
       const touch=event.touches[0];
