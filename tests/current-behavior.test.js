@@ -2978,7 +2978,7 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird an
 test('mobile hand browsing, second tap, and flick share one deterministic native-touch path',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank:kind==='blank'\}\}\)/);
+  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank\}\}\)/);
   assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
   assert.match(source,/if\(!state\?\.human\?\.hand\?\.some\(card=>card\.id===cardId\)\)return/);
   assert.match(source,/event\.preventDefault\(\);void humanPlay\(cardId,live\)/);
