@@ -131,7 +131,7 @@ test('online browser mode has a fail-closed authority boundary and no AI turn pa
 });
 
 test('online transitions reuse the canonical Solo animation and event presenters',()=>{
-  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),online=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),onlineStart=source.indexOf('async function presentOnlineTransition'),online=source.slice(onlineStart,source.indexOf('function enterOnlineMatchView',onlineStart));
   assert.match(online,/animateHandCardSlap\(side,event\.card,source,target\)/);
   assert.match(online,/side==='human'.*approximateAiSource\(\)/s);
   assert.match(online,/animateDeckLiftFlip\(side,event\.card\)/);assert.match(online,/animateStagedSlap\(/);
@@ -153,7 +153,7 @@ test('online opening and private Shake evidence remain gated and viewer-safe',as
 });
 
 test('Online match boundaries own one authoritative viewer-relative dice/deal presentation and canonical unlocking',()=>{
-  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay')),drive=source.slice(source.indexOf('async function driveOnline'),source.indexOf('function onlineStateFromSnapshot'));
+  const source=readFileSync(join(__dirname,'..','app.js'),'utf8'),transitionStart=source.indexOf('async function presentOnlineTransition'),transition=source.slice(transitionStart,source.indexOf('function enterOnlineMatchView',transitionStart)),drive=source.slice(source.indexOf('async function driveOnline'),source.indexOf('function onlineStateFromSnapshot'));
   assert.match(transition,/snapshot\.matchId!==onlinePresentedMatchId/);assert.match(transition,/presentOpeningSequence\(state\.startingPlayerId,true\)/);assert.equal((transition.match(/presentOpeningSequence\(/g)||[]).length,1);assert.doesNotMatch(transition,/presentOpeningSequence\([^)]*false|presentOpeningSequence\(state\.startingPlayerId,true\);await presentDealSequence/);
   assert.match(source,/openingStarterMessage\(starter\)/);assert.match(source,/viewerId===PLAYER_B\?swapId\(item\):item/);
   assert.match(drive,/viewerCanInteract\(snapshot/);assert.match(drive,/readyState===WebSocket\.OPEN/);assert.match(drive,/decision\?\.type==='shakeDecision'/);assert.match(drive,/snapshot\.nextAction/);
