@@ -658,31 +658,27 @@
 
   let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0;
   const fastMenuTapButton=target=>target?.closest?.('button');
-  const fastMenuTouchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
-  overlay.addEventListener('touchstart',event=>{
-    if(event.touches.length!==1){fastMenuTapState=null;return;}
+  overlay.addEventListener('pointerdown',event=>{
+    if(event.pointerType!=='touch'||!event.isPrimary)return;
     const button=fastMenuTapButton(event.target);
     if(!button||button.disabled||!overlay.contains(button)){fastMenuTapState=null;return;}
-    const touch=event.touches[0];
-    fastMenuTapState={id:touch.identifier,button,x:touch.clientX,y:touch.clientY,maxDx:0,maxDy:0,at:Date.now()};
+    fastMenuTapState={id:event.pointerId,button,x:event.clientX,y:event.clientY,maxDx:0,maxDy:0,at:Date.now()};
   },{capture:true,passive:true});
-  overlay.addEventListener('touchmove',event=>{
-    const state=fastMenuTapState;if(!state)return;
-    const touch=fastMenuTouchById(event.touches,state.id);if(!touch){fastMenuTapState=null;return;}
-    state.maxDx=Math.max(state.maxDx,Math.abs(touch.clientX-state.x));
-    state.maxDy=Math.max(state.maxDy,Math.abs(touch.clientY-state.y));
+  overlay.addEventListener('pointermove',event=>{
+    const state=fastMenuTapState;if(!state||event.pointerId!==state.id)return;
+    state.maxDx=Math.max(state.maxDx,Math.abs(event.clientX-state.x));
+    state.maxDy=Math.max(state.maxDy,Math.abs(event.clientY-state.y));
   },{capture:true,passive:true});
-  overlay.addEventListener('touchend',event=>{
-    const state=fastMenuTapState;fastMenuTapState=null;
-    if(!state||state.button.disabled||!state.button.isConnected)return;
-    const touch=fastMenuTouchById(event.changedTouches,state.id);if(!touch)return;
-    const dx=Math.abs(touch.clientX-state.x),dy=Math.abs(touch.clientY-state.y),elapsed=Date.now()-state.at;
+  overlay.addEventListener('pointerup',event=>{
+    const state=fastMenuTapState;if(!state||event.pointerId!==state.id)return;fastMenuTapState=null;
+    if(state.button.disabled||!state.button.isConnected)return;
+    const dx=Math.abs(event.clientX-state.x),dy=Math.abs(event.clientY-state.y),elapsed=Date.now()-state.at;
     if(Math.max(dx,state.maxDx)>24||Math.max(dy,state.maxDy)>24||elapsed>1000)return;
     fastMenuTapSuppressButton=state.button;fastMenuTapSuppressUntil=Date.now()+900;
     event.preventDefault();event.stopPropagation();
     state.button.click();
   },{capture:true,passive:false});
-  overlay.addEventListener('touchcancel',()=>{fastMenuTapState=null;},{capture:true});
+  overlay.addEventListener('pointercancel',event=>{if(fastMenuTapState?.id===event.pointerId)fastMenuTapState=null;},{capture:true});
   overlay.addEventListener('click',event=>{
     if(!event.isTrusted)return;
     const button=fastMenuTapButton(event.target);
