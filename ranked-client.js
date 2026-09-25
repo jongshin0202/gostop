@@ -657,7 +657,8 @@
   menu.append(rankedGroup,freeGroup,utilities);overlay.appendChild(menu);
 
   let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0;
-  const fastMenuUsePointerEvents=typeof globalThis.PointerEvent==='function';
+  const fastMenuNativeTouch=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
+  const fastMenuUsePointerEvents=typeof globalThis.PointerEvent==='function'&&!fastMenuNativeTouch;
   const fastMenuTapButton=target=>target?.closest?.('button');
   overlay.addEventListener('pointerdown',event=>{
     if(event.pointerType!=='touch'||!event.isPrimary||!fastMenuUsePointerEvents)return;
