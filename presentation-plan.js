@@ -185,14 +185,14 @@
         const browsed=state.intent==='browse';
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
         if(flick){
-          event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();triggerPlay(state.cardId);return;
+          event.preventDefault();event.stopPropagation();suppressNextClick();clearSelection();triggerPlay(state.cardId);return;
         }
         if(browsed){
-          event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();return;
+          event.preventDefault();event.stopPropagation();suppressNextClick();clearSelection();return;
         }
         const tap=Math.abs(dx)<=18&&Math.abs(dy)<=18&&endTime-state.startTime<=700;
         if(!tap){clearSelection();return;}
-        event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);
+        event.preventDefault();event.stopPropagation();suppressNextClick();
         const live=cardByIdentity(state.cardId)||state.card;
         if(state.wasSelected){clearSelection();triggerPlay(state.cardId);}
         else commitSelection(live);
