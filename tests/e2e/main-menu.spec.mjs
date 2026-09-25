@@ -239,8 +239,9 @@ test('Android touch path activates menu taps, second-card tap, and upward flick 
 
   await page.evaluate(()=>{
     const hand=document.getElementById('playerHand');
+    document.body.appendChild(hand);
     hand.replaceChildren();
-    Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147480000',visibility:'visible'});
+    Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147483000',visibility:'visible',pointerEvents:'auto'});
     const slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey='gesture-test';
     const card=document.createElement('button');card.type='button';card.className='card hand-card';card.dataset.cardId='gesture-test';
     Object.assign(card.style,{width:'64px',height:'104px',display:'block'});
