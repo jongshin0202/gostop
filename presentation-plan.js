@@ -78,9 +78,13 @@
       if(!canUseCard(card))return false;
       selectedCardId=cardIdentity(card);showVisual(card);return true;
     };
-    const suppressNextClick=cardId=>{
+    const suppressNextClick=(cardId,ms=140)=>{
       suppressGeneratedClickCardId=String(cardId||'');
-      suppressGeneratedClickUntil=Date.now()+700;
+      suppressGeneratedClickUntil=Date.now()+Math.max(80,Number(ms)||140);
+    };
+    const clearPreviousClickSuppression=()=>{
+      suppressGeneratedClickUntil=0;
+      suppressGeneratedClickCardId='';
     };
     const triggerPlay=cardOrId=>{
       const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
@@ -144,6 +148,7 @@
           return;
         }
         if(!canUseCard(card))return;
+        clearPreviousClickSuppression();
         const touch=event.touches[0],id=cardIdentity(card);
         touchState={
           id:touch.identifier,card,cardId:id,wasSelected:selectedCardId===id,
@@ -159,8 +164,8 @@
         state.lastX=touch.clientX;state.lastY=touch.clientY;
         const dx=touch.clientX-state.startX,dy=touch.clientY-state.startY,up=-dy,sideways=Math.abs(dx);
         if(!state.intent){
-          if(sideways>=12&&sideways>Math.max(10,Math.abs(up)*1.15))state.intent='browse';
-          else if(up>=14&&up>=sideways*.65)state.intent='flick';
+          if(sideways>=10&&sideways>Math.max(8,Math.abs(up)*1.10))state.intent='browse';
+          else if(up>=10&&up>sideways*1.05)state.intent='flick';
         }
         if(state.intent==='browse'){
           playerHand()?.classList.add('gostop-touch-browsing');
@@ -181,18 +186,21 @@
         const touch=touchById(event.changedTouches,state.id);touchState=null;
         if(!touch){restoreGhost(state);clearSelection();return;}
         const endTime=now(),dx=touch.clientX-state.startX,dy=touch.clientY-state.startY;
-        const flick=state.intent==='flick'&&isUpwardFlick({startX:state.startX,startY:state.startY,endX:touch.clientX,endY:touch.clientY,duration:Math.max(1,endTime-state.startTime)});
+        const flick=state.intent!=='browse'&&isUpwardFlick(
+          {startX:state.startX,startY:state.startY,endX:touch.clientX,endY:touch.clientY,duration:Math.max(1,endTime-state.startTime)},
+          {minUpwardDistance:10,minTravelDistance:22,maxDuration:750,minSpeed:.035,maxHorizontalRatio:.95}
+        );
         const browsed=state.intent==='browse';
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
         if(flick){
-          event.preventDefault();event.stopPropagation();suppressNextClick();clearSelection();triggerPlay(state.cardId);return;
+          event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();triggerPlay(state.cardId);return;
         }
         if(browsed){
-          event.preventDefault();event.stopPropagation();suppressNextClick();clearSelection();return;
+          event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();return;
         }
-        const tap=Math.abs(dx)<=18&&Math.abs(dy)<=18&&endTime-state.startTime<=700;
+        const tap=Math.abs(dx)<=22&&Math.abs(dy)<=22&&endTime-state.startTime<=800;
         if(!tap){clearSelection();return;}
-        event.preventDefault();event.stopPropagation();suppressNextClick();
+        event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);
         const live=cardByIdentity(state.cardId)||state.card;
         if(state.wasSelected){clearSelection();triggerPlay(state.cardId);}
         else commitSelection(live);
