@@ -31,7 +31,7 @@ const profileFor=id=>id==='acct-other'?{
   headToHead:{sessionsPlayedTogether:0,gamesPlayedTogether:0,wins:0,losses:0,coinsWon:0,coinsLost:0,netCoins:0}
 };
 
-async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false,notificationPermission=null}={}){
+async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false,notificationPermission=null,account=selfAccount}={}){
   await page.addInitScript(({account,other,notificationPermission})=>{
     localStorage.setItem('gostop-auth-token','e2e-token');
     localStorage.setItem('gostop-account-cache',JSON.stringify(account));
@@ -56,7 +56,7 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
       Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:{register:async()=>({showNotification:async()=>{}})}});
       Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:notificationPermission==='granted'?'granted':notificationPermission==='denied'?'denied':'prompt',addEventListener:()=>{}})}});
     }
-  },{account:selfAccount,other:otherPlayer,notificationPermission});
+  },{account,other:otherPlayer,notificationPermission});
 
   await page.route('https://commons.wikimedia.org/**',route=>route.abort());
   await page.route(authority+'/**',async route=>{
@@ -69,7 +69,7 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
     };
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
     let body={ok:true};
-    if(path==='/api/me')body={ok:true,account:selfAccount,notices:[]};
+    if(path==='/api/me')body={ok:true,account,notices:[]};
     else if(path==='/api/leaderboards')body={ok:true,month:'2026-09',global:boards.global,monthly:boards.monthly};
     else if(path==='/api/player-profile'){
       if(profileFailure)return route.abort();
@@ -80,19 +80,20 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
     else if(path==='/api/social/request')body={ok:true,state:'outgoing',accountId:'acct-other'};
     else if(path==='/api/social/respond')body={ok:true,state:'friend'};
     else if(path==='/api/social/unfriend')body={ok:true,state:'none'};
-    else if(path==='/api/auth/login')body={ok:true,account:selfAccount,session:{token:'e2e-login-token'},notices:[]};
-    else if(path==='/api/auth/register')body={ok:true,account:selfAccount,session:{token:'e2e-register-token'},notices:[],awards:{signupCoins:100,dailyCoins:100}};
+    else if(path==='/api/auth/login')body={ok:true,account,session:{token:'e2e-login-token'},notices:[]};
+    else if(path==='/api/auth/register')body={ok:true,account,session:{token:'e2e-register-token'},notices:[],awards:{signupCoins:100,dailyCoins:100}};
     else if(path==='/api/rooms')body={ok:true,room:{roomCode:'ABCDEFGHJK2345',credential:'host-credential',seatId:'playerA',status:'waiting',ranked:false,rankedMode:'free'}};
+    else if(path==='/api/solo/leave-for-challenge')body={ok:true,account:{...account,activeRanked:null}};
     else if(path==='/api/referrals/create')body={ok:true,referralToken:'a'.repeat(64)};
     else if(path==='/api/auth/logout')body={ok:true};
     return route.fulfill({status:200,headers,body:JSON.stringify(body)});
   });
 }
 
-async function openMenu(page,{mobile=false,boards,socialSnapshot,profileFailure=false,notificationPermission=null}={}){
+async function openMenu(page,{mobile=false,boards,socialSnapshot,profileFailure=false,notificationPermission=null,account=selfAccount}={}){
   if(mobile)await page.setViewportSize({width:390,height:844});
   const pageErrors=[];page.on('pageerror',error=>pageErrors.push(error));
-  await installHarness(page,{boards,socialSnapshot,profileFailure,notificationPermission});
+  await installHarness(page,{boards,socialSnapshot,profileFailure,notificationPermission,account});
   await page.goto('/',{waitUntil:'domcontentloaded'});
   await expect(page.locator('.main-menu-title')).toContainText('GoStop');
   await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toBeVisible();
@@ -187,6 +188,20 @@ test('main menu accordion starts simple, slides one category open at a time, and
   await page.locator('#friendlyGamingBtn').click();
   await expect(page.locator('#friendlyGamingBtn')).toHaveAttribute('aria-expanded','false');
   await expect(page.locator('#freeFriendBtn')).toBeHidden();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('declining an active Solo resume clears the Solo reservation and immediately re-enables Online Play',async({page})=>{
+  const activeAccount={...selfAccount,activeRanked:{mode:'solo',roomCode:'ABCDEFGHJK2345',sessionId:'session-solo',connected:true}};
+  const errors=await openMenu(page,{mobile:true,account:activeAccount});
+  await expect(page.locator('#returnGameDialog')).toHaveJSProperty('open',true);
+  await page.locator('#returnGameNo').click();
+  await expect(page.locator('#returnGameDialog')).toHaveJSProperty('open',false);
+  await page.locator('#competitiveGamingBtn').click();
+  await expect(page.locator('#rankedSoloBtn')).toBeEnabled();
+  await expect(page.locator('#onlinePlayMenuBtn')).toBeEnabled();
+  await expect(page.locator('#rankedSoloBtn')).toHaveText('Solo Play');
+  await expect(page.locator('#onlinePlayMenuBtn')).toHaveText('Online Play');
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
@@ -300,6 +315,16 @@ test('Training Mode launches a real local game and Your Captured Cards opens the
   await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:12000});
   await expect(page.locator('#table')).toBeVisible();
   await expect(page.locator('[data-score-owner="player"]')).toBeVisible();
+  const playable=page.locator('#playerHand .hand-card:not(:disabled)');
+  await expect(playable.first()).toBeVisible({timeout:12000});
+  const before=await page.locator('#playerHand .hand-card').count();
+  const safeIndex=await page.evaluate(()=>{
+    const cards=[...document.querySelectorAll('#playerHand .hand-card:not(:disabled)')];
+    const floor=[...document.querySelectorAll('#floor [data-month]')];
+    return Math.max(0,cards.findIndex(card=>floor.filter(item=>item.dataset.month===card.dataset.month).length!==2));
+  });
+  await playable.nth(safeIndex).click();
+  await expect.poll(()=>page.locator('#playerHand .hand-card').count(),{timeout:5000}).toBeLessThan(before);
   await page.locator('[data-score-owner="player"]').click();
   await expect(page.locator('#scoreDialog')).toHaveJSProperty('open',true);
   await expect(page.locator('#scoreBreakdownContent')).toContainText('Bright');
