@@ -553,8 +553,13 @@
     if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
     const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
-    const handInputDisabled=onlineMode?!rankedHandTurnAvailable():(presentation.locked||state.turn!==PLAYER_A);
-    const blankInputDisabled=onlineMode?!rankedHandTurnAvailable():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
+    // In ranked play the server is the final authority. Never make the physical hand
+    // unreachable with a derived client-side turn gate: a stale presentation/snapshot
+    // flag would otherwise prevent click/touch from reaching the recovery/submission path.
+    // Terminal sessions are the only ranked state that physically disables the hand.
+    const rankedSessionEnded=!!latestOnlineSnapshot?.sessionFlow?.ended||!!latestOnlineSnapshot?.terminalResult;
+    const handInputDisabled=onlineMode?rankedSessionEnded:(presentation.locked||state.turn!==PLAYER_A);
+    const blankInputDisabled=onlineMode?rankedSessionEnded:(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
