@@ -24,7 +24,7 @@
     const root=doc?.documentElement;
     if(!root||doc.fullscreenElement||typeof root.requestFullscreen!=='function')return false;
     try{
-      const request=root.requestFullscreen();
+      const request=root.requestFullscreen({navigationUI:'hide'});
       if(request&&typeof request.catch==='function')request.catch(()=>{});
       return true;
     }catch(_){
@@ -46,11 +46,13 @@
       const finish=()=>{
         initialMenuGateComplete=true;
         initialMenuGatePromise=null;
+        mainMenuAutoAttempted=true;
+        mainMenuFullscreenArmed=false;
         splash.classList.remove('gostop-boot-ready');
         delete splash.dataset.startLabel;
         resolve(true);
       };
-      const arm=()=>splash.addEventListener('click',enter,{once:true});
+      const arm=()=>splash.addEventListener('pointerup',enter,{once:true});
       const verify=()=>{
         if(doc.fullscreenElement){finish();return;}
         if(attempts<3){splash.dataset.startLabel='Tap Again for Full Screen';arm();return;}
@@ -59,7 +61,7 @@
       const enter=()=>{
         attempts++;
         let request;
-        try{request=root.requestFullscreen();}
+        try{request=root.requestFullscreen({navigationUI:'hide'});}
         catch(_){verify();return;}
         if(request&&typeof request.then==='function')request.then(verify).catch(verify);
         else verify();
@@ -87,6 +89,7 @@
     if(!isMobileFullscreenEligible(globalThis))return false;
     const root=doc?.documentElement;
     if(doc?.fullscreenElement){mainMenuFullscreenArmed=false;return false;}
+    if(initialMenuGateComplete){mainMenuFullscreenArmed=false;return false;}
     const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||doc?.documentElement?.classList?.contains('gostop-performance-lite');
     if(lite){mainMenuFullscreenArmed=false;return false;}
     mainMenuFullscreenArmed=true;
@@ -94,7 +97,7 @@
     if(!root||typeof root.requestFullscreen!=='function')return false;
     if(!userGesture)mainMenuAutoAttempted=true;
     try{
-      const request=root.requestFullscreen();
+      const request=root.requestFullscreen({navigationUI:'hide'});
       if(request&&typeof request.then==='function'){
         request.then(()=>{mainMenuFullscreenArmed=false;}).catch(()=>{mainMenuFullscreenArmed=true;});
       }else{
