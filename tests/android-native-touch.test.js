@@ -83,3 +83,45 @@ test('Android Chrome prefers Pointer Events, second tap commits, upward flick co
     if(touchDescriptor)Object.defineProperty(globalThis,'ontouchstart',touchDescriptor);else delete globalThis.ontouchstart;
   }
 });
+
+
+test('second tap still emits the stable card activation when the rendered card disappears before commit',()=>{
+  const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
+  const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
+  const customEventDescriptor=Object.getOwnPropertyDescriptor(globalThis,'CustomEvent');
+  try{
+    Object.defineProperty(globalThis,'PointerEvent',{value:function PointerEvent(){},configurable:true});
+    Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:5},configurable:true});
+    Object.defineProperty(globalThis,'ontouchstart',{value:null,configurable:true});
+    if(typeof globalThis.CustomEvent!=='function'){
+      Object.defineProperty(globalThis,'CustomEvent',{value:class CustomEvent{constructor(type,init={}){this.type=type;this.detail=init.detail;this.cancelable=!!init.cancelable;this.defaultPrevented=false;}preventDefault(){if(this.cancelable)this.defaultPrevented=true;}},configurable:true});
+    }
+
+    const h=mobileHarness();
+    let present=true;
+    const originalQuery=h.doc.querySelectorAll;
+    h.doc.querySelectorAll=selector=>selector==='#playerHand .hand-card'?(present?[h.card]:[]):originalQuery(selector);
+    const direct=[];
+    h.doc.dispatchEvent=event=>{
+      if(event?.type==='gostop-hand-activate'){direct.push(event.detail);event.preventDefault?.();return false;}
+      return true;
+    };
+    assert.equal(plan.installHandFlickGestures(h.doc),true);
+    const pointerEvent=(id,x,y)=>({...h.eventBase(),target:h.card,pointerId:id,pointerType:'touch',clientX:x,clientY:y});
+
+    h.fire('pointerdown',pointerEvent(1,125,550));
+    h.fire('pointerup',pointerEvent(1,125,550));
+    assert.equal(direct.length,0);
+
+    h.fire('pointerdown',pointerEvent(2,125,550));
+    present=false;
+    h.fire('pointerup',pointerEvent(2,125,550));
+    assert.deepEqual(direct,[{cardId:'m1-1',blank:false}]);
+  }finally{
+    if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
+    if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
+    if(touchDescriptor)Object.defineProperty(globalThis,'ontouchstart',touchDescriptor);else delete globalThis.ontouchstart;
+    if(customEventDescriptor)Object.defineProperty(globalThis,'CustomEvent',customEventDescriptor);else delete globalThis.CustomEvent;
+  }
+});
