@@ -515,13 +515,18 @@
     session.pendingActionId=null;
     return true;
   }
-  function rankedHandInputEnabled(){
+  function rankedHandTurnAvailable(){
     if(!onlineMode)return false;
     repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open||presentation.activePhysicalMotions>0);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
-    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:session?.pendingActionId,blocked});
+    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:null,blocked});
+  }
+  function rankedHandInputEnabled(){
+    if(!rankedHandTurnAvailable())return false;
+    const session=globalThis.goStopOnlineSession;
+    return !session?.pendingActionId;
   }
 
   function render() {
@@ -548,8 +553,8 @@
     if(els.aiSessionStats)els.aiSessionStats.textContent=stats(PLAYER_B);
 
     const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
-    const handInputDisabled=onlineMode?!rankedHandInputEnabled():(presentation.locked||state.turn!==PLAYER_A);
-    const blankInputDisabled=onlineMode?!rankedHandInputEnabled():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
+    const handInputDisabled=onlineMode?!rankedHandTurnAvailable():(presentation.locked||state.turn!==PLAYER_A);
+    const blankInputDisabled=onlineMode?!rankedHandTurnAvailable():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice||!!presentation.shakeResolver||!!presentation.bombResolver);
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
@@ -970,7 +975,7 @@
     if(!state?.human?.hand?.some(card=>card.id===cardId))return;
     const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId)||null;
     if(onlineMode){
-      if(!rankedHandInputEnabled())return;
+      if(!rankedHandTurnAvailable())return;
       event.preventDefault();void humanPlay(cardId,live);return;
     }
     if(!live||live.disabled)return;
