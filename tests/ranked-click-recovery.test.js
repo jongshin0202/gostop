@@ -8,7 +8,7 @@ const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
 const ranked=fs.readFileSync(path.join(root,'ranked-client.js'),'utf8');
 
 test('ranked card input self-recovers from stale client action bookkeeping',()=>{
-  const block=app.slice(app.indexOf('async function humanPlay'),app.indexOf('async function submitOnlineCardPlay'));
+  const humanStart=app.indexOf('async function humanPlay'),block=app.slice(humanStart,app.indexOf('async function aiTurn',humanStart));
   assert.match(block,/if\(onlineActions\.size>0\)\{[\s\S]*pendingActionId[\s\S]*if\(pendingActionId\)return;[\s\S]*onlineActions\.clear\(\)/);
   assert.doesNotMatch(block,/if\(onlineActions\.size>0\)return;/);
 });
