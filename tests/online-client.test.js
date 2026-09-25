@@ -21,12 +21,12 @@ test('accepted, rejected, and ordinary transport messages each emit exactly once
   }
 });
 
-test('snapshot-before-ack keeps input locked until acknowledgement then unlocks only the authoritative viewer',()=>{
-  const client=adapter(),snapshot={seatId:'playerB',revision:8,state:{turn:'playerB',legalActions:['attemptPlayCard']}};client.pendingActionId='go-action';
+test('newer authoritative snapshot releases an in-flight action lock even before acknowledgement',()=>{
+  const client=adapter(),snapshot={seatId:'playerB',revision:8,state:{turn:'playerB',legalActions:['attemptPlayCard']}};
+  client.revision=7;client.pendingActionId='go-action';client.pendingActionRevision=7;
   client.receive(message('snapshot',{snapshot,events:[{type:'goDeclared',actorId:'playerA'}]}));
-  assert.equal(client.pendingActionId,'go-action');assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),false);
-  client.receive(message('actionAccepted',{actionId:'go-action'}));
-  assert.equal(client.pendingActionId,null);assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),true);
+  assert.equal(client.pendingActionId,null);assert.equal(client.pendingActionRevision,null);
+  assert.equal(viewerCanInteract(snapshot,{connected:true,pendingActionId:client.pendingActionId}),true);
   assert.equal(viewerCanInteract({...snapshot,seatId:'playerA'},{connected:true}),false);
 });
 
