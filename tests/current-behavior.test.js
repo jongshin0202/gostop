@@ -2975,19 +2975,19 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird an
   assert.match(source,/The highlighted floor card is the stronger target/);
 });
 
-test('mobile hand browsing uses pointer gestures on modern phones with TouchEvent fallback',()=>{
+test('mobile hand browsing prefers native touch on phones and commits flick or second tap directly',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.doesNotMatch(source,/handPointerGesture|suppressDraggedHandClick|suppressNextDraggedHandClick/);
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/doc\.addEventListener\('pointerdown',event=>\{[\s\S]*event\.pointerType==='touch'[\s\S]*beginPointerTouch\(event\)/);
-  assert.match(presentation,/doc\.addEventListener\('pointerup',event=>\{[\s\S]*finishGesture\(state,event\.clientX,event\.clientY,now\(\),event\)/);
+  assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(presentation,/if\(nativeTouchSupported\|\|!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/addEventListener\('touchend'[\s\S]*finishGesture\(state,touch\.clientX,touch\.clientY,now\(\),event\)/);
   assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(\{startX:state\.anchorX,startY:state\.anchorY,endX,endY,duration:/);
   assert.match(presentation,/if\(flick\)\{triggerPlay\(cardId\);return;\}/);
   assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
-  assert.match(presentation,/if\(!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
-  assert.match(presentation,/suppressPointerClicksUntil=Date\.now\(\)\+1000/);
+  assert.match(presentation,/new CustomEventCtor\('gostop-hand-activate'/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
 
