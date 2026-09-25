@@ -217,7 +217,7 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
 });
 
 
-test('Android touch path activates menu taps, second-card tap, and upward flick without native click dependence',async({browser})=>{
+test('Android touch path keeps menu taps, second tap, flick, and browse release deterministic',async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
   const page=await context.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(error));
@@ -239,37 +239,48 @@ test('Android touch path activates menu taps, second-card tap, and upward flick 
 
   await page.evaluate(()=>{
     const hand=document.getElementById('playerHand');
-    document.body.appendChild(hand);
-    hand.replaceChildren();
+    document.body.appendChild(hand);hand.replaceChildren();
     Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147483000',visibility:'visible',pointerEvents:'auto'});
-    const slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey='gesture-test';
-    const card=document.createElement('button');card.type='button';card.className='card hand-card';card.dataset.cardId='gesture-test';
-    Object.assign(card.style,{width:'64px',height:'104px',display:'block'});
-    slot.appendChild(card);hand.appendChild(slot);
-    globalThis.__gestureActivations=[];
-    document.addEventListener('gostop-hand-activate',event=>{globalThis.__gestureActivations.push(event.detail?.cardId||'');event.preventDefault();event.stopImmediatePropagation();},{capture:true});
+    globalThis.__gestureClicks=[];
+    for(const id of ['gesture-a','gesture-b']){
+      const slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=id;
+      const card=document.createElement('button');card.type='button';card.className='card hand-card';card.dataset.cardId=id;
+      Object.assign(card.style,{width:'64px',height:'104px',display:'block'});
+      card.addEventListener('click',()=>globalThis.__gestureClicks.push(id));
+      slot.appendChild(card);hand.appendChild(slot);
+    }
   });
-  const card=await page.locator('#playerHand .hand-card').boundingBox();
-  const x=card.x+card.width/2,y=card.y+card.height/2;
-  await page.touchscreen.tap(x,y);
-  expect(await page.evaluate(()=>globalThis.__gestureActivations.length)).toBe(0);
-  await page.touchscreen.tap(x,y);
-  expect(await page.evaluate(()=>globalThis.__gestureActivations)).toEqual(['gesture-test']);
 
+  const first=await page.locator('#playerHand .hand-card').nth(0).boundingBox();
+  const x=first.x+first.width/2,y=first.y+first.height/2;
+  await page.touchscreen.tap(x,y);
+  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual([]);
+  await expect(page.locator('#playerHand .hand-card-slot').nth(0)).toHaveClass(/is-hovered/);
+  await page.touchscreen.tap(x,y);
+  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual(['gesture-a']);
+
+  await page.evaluate(()=>{globalThis.__gestureClicks=[];});
   await page.evaluate(()=>{
-    globalThis.__gestureActivations=[];
     const card=document.querySelector('#playerHand .hand-card'),rect=card.getBoundingClientRect();
     const startX=rect.left+rect.width/2,startY=rect.top+rect.height*.75,identifier=77;
     const touch=(x,y)=>new Touch({identifier,target:card,clientX:x,clientY:y,screenX:x,screenY:y,pageX:x,pageY:y,radiusX:1,radiusY:1,rotationAngle:0,force:.5});
-    const fire=(type,x,y)=>{
-      const current=touch(x,y),ending=type==='touchend'||type==='touchcancel';
-      card.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,touches:ending?[]:[current],targetTouches:ending?[]:[current],changedTouches:[current]}));
-    };
-    fire('touchstart',startX,startY);
-    fire('touchmove',startX+3,startY-70);
-    fire('touchend',startX+3,startY-70);
+    const fire=(type,x,y)=>{const current=touch(x,y),ending=type==='touchend'||type==='touchcancel';card.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,touches:ending?[]:[current],targetTouches:ending?[]:[current],changedTouches:[current]}));};
+    fire('touchstart',startX,startY);fire('touchmove',startX+3,startY-70);fire('touchend',startX+3,startY-70);
   });
-  expect(await page.evaluate(()=>globalThis.__gestureActivations)).toEqual(['gesture-test']);
+  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual(['gesture-a']);
+
+  await page.evaluate(()=>{globalThis.__gestureClicks=[];});
+  await page.evaluate(()=>{
+    const cards=[...document.querySelectorAll('#playerHand .hand-card')],a=cards[0].getBoundingClientRect(),b=cards[1].getBoundingClientRect(),identifier=88;
+    const startX=a.left+a.width/2,startY=a.top+a.height*.65,endX=b.left+b.width/2,endY=b.top+b.height*.65;
+    const touch=(target,x,y)=>new Touch({identifier,target,clientX:x,clientY:y,screenX:x,screenY:y,pageX:x,pageY:y,radiusX:1,radiusY:1,rotationAngle:0,force:.5});
+    const start=touch(cards[0],startX,startY),move=touch(cards[0],endX,endY);
+    cards[0].dispatchEvent(new TouchEvent('touchstart',{bubbles:true,cancelable:true,touches:[start],targetTouches:[start],changedTouches:[start]}));
+    cards[0].dispatchEvent(new TouchEvent('touchmove',{bubbles:true,cancelable:true,touches:[move],targetTouches:[move],changedTouches:[move]}));
+    cards[0].dispatchEvent(new TouchEvent('touchend',{bubbles:true,cancelable:true,touches:[],targetTouches:[],changedTouches:[move]}));
+  });
+  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual([]);
+  await expect(page.locator('#playerHand .hand-card-slot.is-hovered')).toHaveCount(0);
   expect(errors.map(error=>error.message)).toEqual([]);
   await context.close();
 });
