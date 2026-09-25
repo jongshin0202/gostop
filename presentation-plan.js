@@ -45,12 +45,14 @@
     (doc.head||doc.documentElement).appendChild(style);
 
     let touchState=null;
+    let pointerState=null;
     let selectedCardId=null;
     let visualSelectedSlot=null;
     let bypassClickCard=null;
     let suppressGeneratedClickUntil=0;
     let suppressGeneratedClickCardId='';
     const nativeTouchSupported=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
+    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
@@ -134,11 +136,81 @@
     };
     const resetGestureState=()=>{
       if(touchState)restoreGhost(touchState);
-      touchState=null;playerHand()?.classList.remove('gostop-touch-browsing');clearSelection();
+      if(pointerState)restoreGhost(pointerState);
+      touchState=null;pointerState=null;playerHand()?.classList.remove('gostop-touch-browsing');clearSelection();
     };
     doc.addEventListener('gostop-hand-reset',resetGestureState);
 
-    if(nativeTouchSupported){
+    if(pointerTouchSupported){
+      const touchPointer=event=>event.pointerType==='touch'||event.pointerType==='pen';
+      doc.addEventListener('pointerdown',event=>{
+        if(!touchPointer(event)||pointerState)return;
+        const card=cardFromTarget(event.target);
+        if(!card){
+          if(selectedCardId&&!event.target?.closest?.('#playerHand'))clearSelection();
+          return;
+        }
+        if(!canUseCard(card))return;
+        clearPreviousClickSuppression();
+        const id=cardIdentity(card);
+        pointerState={
+          id:event.pointerId,card,cardId:id,wasSelected:selectedCardId===id,
+          startX:event.clientX,startY:event.clientY,lastX:event.clientX,lastY:event.clientY,startTime:now(),
+          intent:null,geometry:snapshotHandGeometry(),ghost:null,hiddenCard:null,previousVisibility:''
+        };
+        showVisual(card);
+        try{card.setPointerCapture?.(event.pointerId);}catch(_){}
+        event.preventDefault();
+      },{capture:true,passive:false});
+
+      doc.addEventListener('pointermove',event=>{
+        const state=pointerState;if(!state||event.pointerId!==state.id||!touchPointer(event))return;
+        state.lastX=event.clientX;state.lastY=event.clientY;
+        const dx=event.clientX-state.startX,dy=event.clientY-state.startY,up=-dy,sideways=Math.abs(dx);
+        if(!state.intent){
+          if(sideways>=10&&sideways>Math.max(8,Math.abs(up)*1.10))state.intent='browse';
+          else if(up>=8&&up>sideways*.9)state.intent='flick';
+        }
+        if(state.intent==='browse'){
+          playerHand()?.classList.add('gostop-touch-browsing');
+          const hovered=nearestHandCard(state,event.clientX,event.clientY);
+          if(hovered){state.card=hovered;state.cardId=cardIdentity(hovered);showVisual(hovered);}
+          event.preventDefault();return;
+        }
+        if(state.intent==='flick'){
+          const ghost=makeGhost(state);
+          if(ghost)ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
+          event.preventDefault();
+        }
+      },{capture:true,passive:false});
+
+      doc.addEventListener('pointerup',event=>{
+        const state=pointerState;if(!state||event.pointerId!==state.id||!touchPointer(event))return;
+        pointerState=null;
+        const endTime=now(),dx=event.clientX-state.startX,dy=event.clientY-state.startY;
+        const flick=state.intent!=='browse'&&isUpwardFlick(
+          {startX:state.startX,startY:state.startY,endX:event.clientX,endY:event.clientY,duration:Math.max(1,endTime-state.startTime)},
+          {minUpwardDistance:8,minTravelDistance:18,maxDuration:900,minSpeed:.025,maxHorizontalRatio:1.15}
+        );
+        const browsed=state.intent==='browse';
+        restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
+        event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId,420);
+        if(flick){clearSelection();triggerPlay(state.cardId);return;}
+        if(browsed){clearSelection();return;}
+        const tap=Math.abs(dx)<=28&&Math.abs(dy)<=28&&endTime-state.startTime<=1000;
+        if(!tap){clearSelection();return;}
+        const live=cardByIdentity(state.cardId)||state.card;
+        if(state.wasSelected){clearSelection();triggerPlay(state.cardId);}
+        else commitSelection(live);
+      },{capture:true,passive:false});
+
+      doc.addEventListener('pointercancel',event=>{
+        if(!pointerState||event.pointerId!==pointerState.id)return;
+        const state=pointerState;pointerState=null;restoreGhost(state);clearSelection();event.preventDefault();
+      },{capture:true,passive:false});
+    }
+
+    if(nativeTouchSupported&&!pointerTouchSupported){
       const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
       doc.addEventListener('touchstart',event=>{
         if(event.touches.length!==1)return;
