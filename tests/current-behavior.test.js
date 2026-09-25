@@ -3017,10 +3017,14 @@ test('ranked Solo launch stays covered until the opening presentation is visible
   assert.ok(opening.indexOf("els.openingOverlay.classList.add('show')")<opening.indexOf("els.soloStartOverlay.hidden=true"),'opening overlay must be visible before launch cover is removed');
 });
 
-test('score pill and Captured Cards title open the same complete score breakdown',()=>{
+test('score pill, Captured Cards title, and entire capture panels open the same complete score breakdown',()=>{
   const appSource=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),htmlSource=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   assert.match(appSource,/\.human-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_A\);\}\)/);
   assert.match(appSource,/\.cpu-chip \.score-pill'\)\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(PLAYER_B\);\}\)/);
   assert.match(htmlSource,/capture-summary-trigger" data-score-owner="player" role="button" tabindex="0"/);
   assert.match(appSource,/capture-summary-trigger\[data-score-owner\]/);assert.match(appSource,/openScoreBreakdown\(playerId\)/);
+  assert.match(appSource,/querySelectorAll\('\.game-capture-panel'\)\.forEach\(panel=>\{/);
+  assert.match(appSource,/panel\.contains\(els\.playerCaptured\)\?PLAYER_A:PLAYER_B/);
+  assert.match(appSource,/panel\.addEventListener\('click',event=>\{if\(event\.defaultPrevented\)return;event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(playerId\);\}\)/);
+  assert.doesNotMatch(appSource,/btn\.addEventListener\('click',\(\)=>openCapturedGroup/);
 });
