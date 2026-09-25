@@ -69,12 +69,12 @@ test('native Touch Events commit the second tap and upward flick directly on And
   assert.match(touch,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId\)/);
 });
 
-test('second tap and upward flick dispatch the hand action directly without Android synthesized-click timing',()=>{
+test('second tap and upward flick activate the real card button directly',()=>{
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(presentation,/new EventCtor\('gostop-hand-activate',\{detail:\{cardId,blank:/);
-  assert.match(presentation,/doc\.dispatchEvent\(/);
-  assert.match(app,/document\.addEventListener\('gostop-hand-activate'/);
+  assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
+  assert.doesNotMatch(presentation,/new EventCtor\('gostop-hand-activate'/);
+  assert.match(app,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
   assert.match(app,/void humanPlay\(cardId,live\)/);
 });
 
