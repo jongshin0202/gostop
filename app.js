@@ -509,8 +509,15 @@
     const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=alt; img.draggable=false; return img;
   }
 
+  function repairOrphanedRankedPendingAction(){
+    const session=globalThis.goStopOnlineSession,pendingActionId=session?.pendingActionId;
+    if(!pendingActionId||onlineActions.has(pendingActionId))return false;
+    session.pendingActionId=null;
+    return true;
+  }
   function rankedHandInputEnabled(){
     if(!onlineMode)return false;
+    repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open||presentation.activePhysicalMotions>0);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
@@ -2896,7 +2903,7 @@
       adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready){enterOnlineMatchView(anonymous);announceFriendlyJoin();}activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
-      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
+      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();adapter.pendingActionId=null;onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
       adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
