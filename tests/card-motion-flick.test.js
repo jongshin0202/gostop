@@ -31,9 +31,10 @@ test('touch selection is card-identity based and resets every new hand/game',()=
   assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
 });
 
-test('Pointer Events own Android Chrome gestures and native Touch Events remain the fallback',()=>{
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/const nativeTouchSupported=!pointerTouchSupported&&\(\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0\)/);
+test('touch-capable Android prefers native Touch Events and keeps Pointer Events as the non-touch fallback',()=>{
+  assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(presentation,/const nativeTouchSupported=touchCapable/);
+  assert.match(presentation,/const pointerTouchSupported=!touchCapable&&typeof globalThis\.PointerEvent==='function'/);
   assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
@@ -62,20 +63,22 @@ test('browse release clears the raised hover instead of leaving the last card st
   assert.doesNotMatch(browseBranch,/commitSelection/);
 });
 
-test('native Touch fallback still commits second tap and upward flick when Pointer Events are unavailable',()=>{
+test('native Touch path commits second tap and upward flick on touch-capable Android',()=>{
   const touch=presentation.slice(presentation.indexOf('if(nativeTouchSupported){'),presentation.indexOf("doc.addEventListener('click'"));
   assert.match(touch,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(touch,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
   assert.match(touch,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId\)/);
 });
 
-test('second tap and upward flick activate the real card button directly',()=>{
+test('second tap and upward flick request direct hand activation before synthetic-click fallback',()=>{
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/new CustomEvent\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank:kind==='blank'\}\}\)/);
+  assert.match(presentation,/handled=!doc\.dispatchEvent\(request\)/);
+  assert.match(presentation,/if\(handled\)return true/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
-  assert.doesNotMatch(presentation,/new EventCtor\('gostop-hand-activate'/);
-  assert.match(app,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(app,/void humanPlay\(cardId,live\)/);
+  assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(app,/event\.preventDefault\(\);void humanPlay\(cardId,live\)/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
