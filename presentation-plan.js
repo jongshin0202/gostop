@@ -52,8 +52,8 @@
     let suppressGeneratedClickUntil=0;
     let suppressGeneratedClickCardId='';
     const touchCapable=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
-    const nativeTouchSupported=touchCapable;
-    const pointerTouchSupported=!touchCapable&&typeof globalThis.PointerEvent==='function';
+    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
+    const nativeTouchSupported=touchCapable&&!pointerTouchSupported;
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
@@ -167,7 +167,7 @@
         };
         showVisual(card);
         try{card.setPointerCapture?.(event.pointerId);}catch(_){}
-        event.preventDefault();
+        if(event.pointerType==='pen')event.preventDefault();
       },{capture:true,passive:false});
 
       doc.addEventListener('pointermove',event=>{
@@ -201,7 +201,7 @@
         );
         const browsed=!flick&&(state.intent==='browse'||Math.abs(dx)>=18&&Math.abs(dx)>Math.abs(dy)*.9);
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
-        event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId,420);
+        event.preventDefault();suppressNextClick(state.cardId,260);
         if(flick){clearSelection();triggerPlay(state.cardId);return;}
         if(browsed){clearSelection();return;}
         const tap=Math.abs(dx)<=28&&Math.abs(dy)<=28&&endTime-state.startTime<=1000;
