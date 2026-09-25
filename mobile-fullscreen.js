@@ -8,6 +8,8 @@
   let orientationRecoveryArmed=false;
   let mainMenuFullscreenArmed=false;
   let mainMenuAutoAttempted=false;
+  let initialMenuGateComplete=false;
+  let initialMenuGatePromise=null;
 
   function isMobileFullscreenEligible(env=globalThis){
     const touchPoints=Number(env.navigator?.maxTouchPoints||0);
@@ -28,6 +30,33 @@
     }catch(_){
       return false;
     }
+  }
+
+  function gateInitialMainMenuFullscreen(doc=document){
+    if(initialMenuGateComplete||!isMobileFullscreenEligible(globalThis))return null;
+    const root=doc?.documentElement,splash=doc?.getElementById?.('gostopBootSplash');
+    if(doc?.fullscreenElement){initialMenuGateComplete=true;return null;}
+    if(!root||typeof root.requestFullscreen!=='function'||!splash){initialMenuGateComplete=true;return null;}
+    if(initialMenuGatePromise)return initialMenuGatePromise;
+    splash.classList.add('gostop-boot-ready');
+    splash.setAttribute('aria-hidden','false');
+    initialMenuGatePromise=new Promise(resolve=>{
+      const finish=()=>{
+        initialMenuGateComplete=true;
+        initialMenuGatePromise=null;
+        splash.classList.remove('gostop-boot-ready');
+        resolve(true);
+      };
+      const enter=()=>{
+        let request;
+        try{request=root.requestFullscreen();}
+        catch(_){finish();return;}
+        if(request&&typeof request.then==='function')request.then(finish).catch(finish);
+        else finish();
+      };
+      splash.addEventListener('click',enter,{once:true});
+    });
+    return initialMenuGatePromise;
   }
 
   function isStartScreenButton(target,doc=document){
@@ -123,18 +152,19 @@
     document.head.appendChild(style);
   }
 
-  globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible});
+  globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible,gateInitialMainMenuFullscreen});
   document.addEventListener('click',handleFullscreenClick,{capture:true});
   document.addEventListener('fullscreenchange',handleFullscreenChange);
   globalThis.addEventListener?.('orientationchange',handleOrientationChange);
 
   if(globalThis.GOSTOP_TEST_MODE===true){
     globalThis.GOSTOP_FULLSCREEN_TEST_API=Object.freeze({
-      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,
+      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,
       handleFullscreenClick,handleFullscreenChange,handleOrientationChange,
       isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
       isMainMenuFullscreenArmed:()=>mainMenuFullscreenArmed,
-      isMainMenuAutoAttempted:()=>mainMenuAutoAttempted
+      isMainMenuAutoAttempted:()=>mainMenuAutoAttempted,
+      isInitialMenuGateComplete:()=>initialMenuGateComplete
     });
   }
 })();
