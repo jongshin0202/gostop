@@ -97,9 +97,9 @@ test('manual leaderboard background click and Return restore the main menu witho
 
 test('touch phones activate main-menu buttons directly from native touchend with pointer fallback',()=>{
   assert.match(source,/let fastMenuTapState=null,fastMenuTapSuppressButton=null,fastMenuTapSuppressUntil=0/);
-  assert.match(source,/const fastMenuUseTouchEvents=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
-  assert.match(source,/overlay\.addEventListener\('pointerdown',event=>\{[\s\S]*fastMenuUseTouchEvents\)return/);
-  assert.match(source,/if\(fastMenuUseTouchEvents\)\{[\s\S]*overlay\.addEventListener\('touchstart'/);
+  assert.match(source,/const fastMenuUsePointerEvents=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(source,/overlay\.addEventListener\('pointerdown',event=>\{[\s\S]*!fastMenuUsePointerEvents\)return/);
+  assert.match(source,/if\(!fastMenuUsePointerEvents\)\{[\s\S]*overlay\.addEventListener\('touchstart'/);
   assert.match(source,/overlay\.addEventListener\('touchend',event=>\{[\s\S]*state\.button\.click\(\)/);
   assert.match(source,/fastMenuTapSuppressButton=state\.button;fastMenuTapSuppressUntil=Date\.now\(\)\+900/);
   assert.match(source,/if\(!event\.isTrusted\)return;[\s\S]*event\.stopImmediatePropagation\(\)/);
