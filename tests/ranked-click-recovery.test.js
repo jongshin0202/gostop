@@ -20,3 +20,12 @@ test('disconnect cleanup cannot leave ranked hand permanently blocked',()=>{
 test('attract-mode click capture is active only while attract leaderboard is visible',()=>{
   assert.match(ranked,/if\(!attractMode\|\|leaderboardScreen\.hidden\|\|globalThis\.goStopOnlineSession\)return;/);
 });
+
+
+test('ranked playCard submission helper is in the same lexical scope as humanPlay',()=>{
+  const submit=app.indexOf('async function submitOnlineCardPlay()');
+  const human=app.indexOf('async function humanPlay(cardId, clickedEl)');
+  const production=app.indexOf("}else{\n    preloadCardFaces();");
+  assert.ok(submit>=0&&submit<human,'submitOnlineCardPlay must be declared before humanPlay');
+  assert.ok(production>human,'humanPlay and submitOnlineCardPlay must both remain outside the production-only block');
+});
