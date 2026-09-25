@@ -6,7 +6,7 @@
     minTravelDistance:36,
     maxDuration:500,
     minSpeed:.11,
-    maxHorizontalRatio:3
+    maxHorizontalRatio:1.35
   });
 
   function isUpwardFlick(sample,options={}){
@@ -317,10 +317,10 @@
       const endTime=now();
       pushSample(state,endX,endY,endTime);
       const flickSample={startX:state.anchorX,startY:state.anchorY,endX,endY,duration:Math.max(1,endTime-state.anchorTime)};
-      const flick=state.intent==='flick'&&isUpwardFlick(flickSample);
       const card=state.card;
-      const secondTap=!state.dragging&&!state.browsing&&!state.switched&&state.wasSelected&&Math.abs(endX-state.anchorX)<8&&Math.abs(endY-state.anchorY)<8;
       const browsed=state.intent==='browse'||state.browsing||state.switched;
+      const flick=!browsed&&isUpwardFlick(flickSample);
+      const secondTap=!state.dragging&&!browsed&&state.wasSelected&&Math.abs(endX-state.anchorX)<18&&Math.abs(endY-state.anchorY)<18;
 
       restoreDraggedCard(state);
       playerHand()?.classList.remove('gostop-touch-browsing');
