@@ -87,6 +87,7 @@
     targetChoice:null,
     pendingHumanCardId:null,
     queuedHumanCardSwitch:null,
+    blankTurnInFlight:false,
     shakeResolver:null,
     bombResolver:null,
     aiTurnInProgress:false,
@@ -541,6 +542,7 @@
 
     const existing=new Map([...els.playerHand.querySelectorAll('.hand-card-slot[data-hand-key]')].map(node=>[node.dataset.handKey,node]));
     const handInputDisabled=onlineMode?!rankedHandInputEnabled():(presentation.locked||state.turn!==PLAYER_A);
+    const blankInputDisabled=onlineMode?!rankedHandInputEnabled():(state.turn!==PLAYER_A||!!state.winner||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||!!state.pendingDecision||!!presentation.targetChoice);
     const desired=[];
     [...bottomPlayer.hand].sort(sortCards).forEach(card=>{
       let slot=existing.get(card.id);let el=slot?.querySelector('.hand-card');
@@ -555,7 +557,7 @@
       blank.type='button'; blank.className='card hand-card blank-turn-card';
       blank.setAttribute('aria-label','Use empty Bomb turn and flip from the deck');
       blank.title='Bomb empty turn: click to skip playing a hand card and flip the deck';
-      blank.disabled=handInputDisabled;
+      blank.disabled=blankInputDisabled;
       blank.innerHTML='<span aria-hidden="true">—</span>';
       blank.addEventListener('click',humanUseBombBlank);
       const slot=document.createElement('div'); slot.className='hand-card-slot';slot.dataset.handKey=`blank-${i}`; slot.appendChild(blank); desired.push(slot);
@@ -791,6 +793,11 @@
   }
   els.floor.addEventListener('click',event=>{const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
   els.floor.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;const cardId=targetChoiceCardId(event);if(!cardId)return;event.preventDefault();event.stopPropagation();finishTargetChoice(cardId);});
+  document.addEventListener('click',event=>{
+    if(onlineMode||!presentation.targetChoiceCleanup||!presentation.pendingHumanCardId)return;
+    if(targetChoiceCardId(event))return;
+    presentation.targetChoiceCleanup();
+  });
 
   async function previewAiTarget(target){
     if(!target)return;
@@ -811,9 +818,10 @@
 
   async function humanUseBombBlank(){
     if(onlineMode){onlineSubmit({type:'useBombBlank'});return;}
-    if(presentation.locked || state.turn!==PLAYER_A || state.winner || state.human.bombFreeTurns<=0)return;
-    clearTrainingCoach();presentation.locked=true; render();
-    await executeDeckOnlyTurn('human');
+    if(state.turn!==PLAYER_A||state.winner||state.human.bombFreeTurns<=0||presentation.blankTurnInFlight||presentation.activePhysicalMotions>0||state.pendingDecision||presentation.targetChoice)return;
+    clearTrainingCoach();presentation.blankTurnInFlight=true;presentation.locked=true;render();
+    try{await executeDeckOnlyTurn('human');}
+    finally{presentation.blankTurnInFlight=false;}
   }
 
   async function humanPlay(cardId, clickedEl){
@@ -1599,7 +1607,7 @@
     if(presentation.goCalloutTimer){clearTimeout(presentation.goCalloutTimer);presentation.goCalloutTimer=null;}
     presentation.stagedCards.forEach(el=>{el?.getAnimations?.().forEach(animation=>animation.cancel());el?.remove?.();});
     presentation.stagedCards.clear();presentation.floorSlotReservations.clear();onlineHandSourceRects.clear();presentation.activeHoveredHandCardId=null;
-    presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;
+    presentation.pendingHumanCardId=null;presentation.queuedHumanCardSwitch=null;presentation.blankTurnInFlight=false;
     if(!TEST_MODE){document.querySelectorAll('.physical-card,.capture-ghost,.floor-slot-proxy,.impact-ring').forEach(node=>{node.getAnimations?.().forEach(animation=>animation.cancel());node.remove();});document.querySelectorAll('.canonical-card-face[style*="visibility"]').forEach(node=>node.style.visibility='');if(els.impactLayer)els.impactLayer.innerHTML='';}
   }
 
