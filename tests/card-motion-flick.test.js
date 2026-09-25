@@ -23,22 +23,44 @@ test('staged physical card owns visibility until shared cleanup',()=>{
   assert.match(app,/function removeStage\(id\)[\s\S]*style\.visibility=''\);/);
 });
 
-test('touch selection survives hand rerenders by card identity instead of DOM identity',()=>{
-  assert.match(presentation,/let touchSelectedCardId=null/);
+test('touch selection is card-identity based and resets every new hand/game',()=>{
+  assert.match(presentation,/let selectedCardId=null/);
   assert.match(presentation,/const cardIdentity=card=>String\(card\?\.dataset\?\.cardId\|\|card\?\.closest\?\.\('\.hand-card-slot'\)\?\.dataset\?\.handKey\|\|''\)/);
-  assert.match(presentation,/touchSelectedCardId=cardIdentity\(card\)/);
-  assert.match(presentation,/touchSelectedCardId===id/);
-  assert.doesNotMatch(presentation,/touchSelectedCard===card/);
+  assert.match(presentation,/selectedCardId=cardIdentity\(card\)/);
+  assert.match(presentation,/doc\.addEventListener\('gostop-hand-reset',resetGestureState\)/);
+  assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
 });
 
-test('mobile gestures prefer native TouchEvents on real touch devices and use PointerEvents only as fallback',()=>{
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+test('native touch owns phone hand gestures with no parallel touch-pointer owner',()=>{
   assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const usePointerTouch=pointerTouchSupported&&!nativeTouchSupported/);
-  assert.match(presentation,/if\(event\.pointerType==='touch'\)\{[\s\S]*if\(usePointerTouch\)beginPointerTouch\(event\)/);
-  assert.match(presentation,/if\(!usePointerTouch&&nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
-  assert.match(presentation,/const tap=!browsed&&Math\.abs\(dx\)<=18&&Math\.abs\(dy\)<=18&&endTime-state\.anchorTime<=650/);
-  assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
+  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/addEventListener\('touchmove'/);
+  assert.match(presentation,/addEventListener\('touchend'/);
+  assert.doesNotMatch(presentation,/usePointerTouch|beginPointerTouch|suppressPointerClicksUntil/);
+});
+
+test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{
+  assert.match(presentation,/sideways>=12&&sideways>Math\.max\(10,Math\.abs\(up\)\*1\.15\)/);
+  assert.match(presentation,/up>=14&&up>=sideways\*\.65/);
+  assert.match(presentation,/state\.intent='browse'/);
+  assert.match(presentation,/state\.intent='flick'/);
+  assert.match(presentation,/const flick=state\.intent==='flick'&&isUpwardFlick/);
+  assert.match(presentation,/const browsed=state\.intent==='browse'/);
+  assert.match(presentation,/const tap=Math\.abs\(dx\)<=18&&Math\.abs\(dy\)<=18&&endTime-state\.startTime<=700/);
+});
+
+test('browse release clears the raised hover instead of leaving the last card sticking out',()=>{
+  const end=presentation.slice(presentation.indexOf("doc.addEventListener('touchend'"),presentation.indexOf("doc.addEventListener('touchcancel'"));
+  assert.match(end,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
+  assert.doesNotMatch(end,/if\(browsed\)[\s\S]*commitSelection/);
+});
+
+test('second tap and upward flick play through the live card click handler',()=>{
+  assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
+  assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/bypassClickCard=card;[\s\S]*card\.click\(\);[\s\S]*bypassClickCard=null/);
+  assert.match(app,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
+  assert.match(app,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
@@ -47,41 +69,4 @@ test('flick classifier tolerates slower phones while rejecting jitter and horizo
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:210,duration:80}),false);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:104,endY:160,duration:700}),false);
   assert.equal(plan.isUpwardFlick({startX:100,startY:220,endX:400,endY:190,duration:100}),false);
-});
-
-test('pointer intent separates horizontal browsing from upward flicking',()=>{
-  assert.match(presentation,/sideways>=16&&sideways>Math\.max\(12,Math\.abs\(up\)\*1\.20\)/);
-  assert.match(presentation,/up>=12&&up>=sideways\*\.72/);
-  assert.match(presentation,/state\.intent='flick'/);
-  assert.match(presentation,/state\.intent='browse'/);
-  assert.match(presentation,/if\(state\.intent==='browse'\)[\s\S]*nearestHandCard/);
-  assert.match(presentation,/if\(state\.intent==='flick'\)[\s\S]*ensureGhost/);
-});
-
-test('pointerup classifies flick and second tap even if move delivery was sparse',()=>{
-  assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(\{startX:state\.anchorX,startY:state\.anchorY,endX,endY,duration:/);
-  assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
-  assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:108,endY:445,duration:180}),true);
-  assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:170,endY:485,duration:180}),false);
-});
-
-test('touch pointers commit on pointerup and suppress generated browser clicks',()=>{
-  assert.match(presentation,/addEventListener\('pointerdown'[\s\S]*beginPointerTouch\(event\)/);
-  assert.match(presentation,/addEventListener\('pointermove'[\s\S]*classifyMove\(state,event\.clientX,event\.clientY\)/);
-  assert.match(presentation,/addEventListener\('pointerup'[\s\S]*finishGesture\(state,event\.clientX,event\.clientY,now\(\),event\)/);
-  assert.match(presentation,/Date\.now\(\)<suppressTouchClicksUntil\|\|Date\.now\(\)<suppressPointerClicksUntil/);
-});
-
-test('gesture layer activates the canonical game input directly before falling back to click',()=>{
-  const gesture=presentation.slice(presentation.indexOf('function installHandFlickGestures'),presentation.indexOf('function pendingOnlineStageIds'));
-  assert.match(gesture,/new CustomEventCtor\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank:/);
-  assert.match(gesture,/const unhandled=doc\.dispatchEvent\(activation\);[\s\S]*if\(!unhandled\)return true;[\s\S]*card\.click\(\)/);
-  assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
-  assert.match(app,/void humanPlay\(cardId,live\)/);
-  assert.doesNotMatch(gesture,/onlineSubmit\(/);
-  assert.doesNotMatch(gesture,/matchesFor\(/);
-  assert.doesNotMatch(gesture,/chooseFloorTarget\(/);
-  const online=app.slice(app.indexOf('async function humanPlay'),app.indexOf('// While choosing between two floor targets'));
-  assert.match(online,/if\(needsPrePlayDecision\)\{[\s\S]*onlineSubmit\(\{type:'attemptPlayCard',cardId\}\)/);
-  assert.match(online,/await submitOnlineCardPlay\(\)/);
 });
