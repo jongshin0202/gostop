@@ -952,6 +952,16 @@
     await playFullTurn('human',playedEvent.card,sourceRect,target,matches.length,true,epoch);
   }
 
+  document.addEventListener('gostop-hand-activate',event=>{
+    const detail=event.detail||{},cardId=String(detail.cardId||'');
+    if(!cardId)return;
+    event.preventDefault();
+    if(detail.blank===true||cardId.startsWith('blank-')){void humanUseBombBlank();return;}
+    const live=[...els.playerHand.querySelectorAll('.hand-card')].find(card=>card.dataset.cardId===cardId||card.closest('.hand-card-slot')?.dataset.handKey===cardId);
+    if(!live||live.disabled)return;
+    void humanPlay(cardId,live);
+  });
+
   async function aiTurn(){
     if(onlineMode)return;
     const epoch=gameplayPresentationEpoch;
