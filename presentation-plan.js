@@ -140,14 +140,14 @@
       if(!state)return;
       if(!state.samples)state.samples=[];
       state.samples.push({x,y,t:time});
-      const cutoff=time-240;
+      const cutoff=time-360;
       while(state.samples.length>2&&state.samples[0].t<cutoff)state.samples.shift();
     };
 
     const recentFlickSample=(state,endX,endY,endTime=now())=>{
       const points=[...(state.samples||[]),{x:endX,y:endY,t:endTime}].filter(point=>Number.isFinite(point.x)&&Number.isFinite(point.y)&&Number.isFinite(point.t));
       if(!points.length)return null;
-      const cutoff=endTime-180;
+      const cutoff=endTime-320;
       const recent=points.filter(point=>point.t>=cutoff);
       const start=(recent.length>=2?recent[0]:points[0])||points[0];
       return {startX:start.x,startY:start.y,endX,endY,duration:Math.max(1,endTime-start.t)};
