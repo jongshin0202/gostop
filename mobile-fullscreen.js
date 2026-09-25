@@ -59,7 +59,7 @@
       const enter=()=>{
         attempts++;
         let request;
-        try{request=root.requestFullscreen({navigationUI:'hide'});}
+        try{request=root.requestFullscreen();}
         catch(_){verify();return;}
         if(request&&typeof request.then==='function')request.then(verify).catch(verify);
         else verify();
