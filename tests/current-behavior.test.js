@@ -2981,7 +2981,12 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
   assert.match(source,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
   assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/addEventListener\('pointermove'/);
+  assert.match(presentation,/addEventListener\('pointerup'/);
+  assert.match(presentation,/state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/if\(nativeTouchSupported&&!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
   assert.match(presentation,/clearPreviousClickSuppression\(\)/);
@@ -2992,6 +2997,8 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*card\.click\(\)/);
+  assert.match(presentation,/minUpwardDistance:8,minTravelDistance:18,maxDuration:900,minSpeed:\.025,maxHorizontalRatio:1\.15/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId,420\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
 
