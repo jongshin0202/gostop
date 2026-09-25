@@ -16,7 +16,7 @@
   }
   function viewerCanInteract(snapshot,{connected,pendingActionId=null,blocked=false}={}){return !!connected&&!pendingActionId&&!blocked&&viewerCanStartTurn(snapshot);}
   class OnlineSessionAdapter extends EventTarget{
-    constructor({baseUrl=globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL,WebSocketImpl=WebSocket,authToken=null,anonymous=false}={}){super();this.baseUrl=String(baseUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');this.WebSocketImpl=WebSocketImpl;this.authToken=authToken;this.anonymous=!!anonymous;this.room=null;this.revision=0;this.pendingActionId=null;this.socket=null;this.explicitlyClosed=false;this.reconnectTimer=null;this.reconnectAttempts=0;}
+    constructor({baseUrl=globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL,WebSocketImpl=WebSocket,authToken=null,anonymous=false}={}){super();this.baseUrl=String(baseUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');this.WebSocketImpl=WebSocketImpl;this.authToken=authToken;this.anonymous=!!anonymous;this.room=null;this.revision=0;this.pendingActionId=null;this.pendingActionRevision=null;this.socket=null;this.explicitlyClosed=false;this.reconnectTimer=null;this.reconnectAttempts=0;}
     currentAuthToken(){return this.anonymous?null:(this.authToken||globalThis.GoStopRanked?.getAuthToken?.()||null);}
     setAuthToken(token){this.authToken=token||null;return this;}
     requestUrl(path){const sameOrigin=typeof location!=='undefined'&&/^(?:www\.)?gostoplive\.com$/i.test(location.hostname)&&String(path||'').startsWith('/api/');return sameOrigin?`${location.origin}${path}`:`${this.baseUrl}${path}`;}
@@ -29,20 +29,20 @@
       const url=new URL(`${this.baseUrl}/api/rooms/${room.roomCode}/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';const socket=new this.WebSocketImpl(url,`gostop-token.${room.credential}`);this.socket=socket;
       socket.onopen=()=>{this.reconnectAttempts=0;};
       socket.onmessage=event=>this.receive(JSON.parse(event.data));
-      socket.onclose=event=>{const takenOver=Number(event?.code)===4001;if(takenOver)this.explicitlyClosed=true;if(this.socket===socket)this.socket=null;this.pendingActionId=null;this.emit('disconnected',{takenOver,code:event?.code||0});globalThis.dispatchEvent?.(new CustomEvent('gostop-online-message',{detail:{type:takenOver?'sessionTakenOver':'selfDisconnected',code:event?.code||0}}));if(!takenOver&&!this.explicitlyClosed&&this.room){const delay=Math.min(5000,750+this.reconnectAttempts*750);this.reconnectAttempts++;this.reconnectTimer=setTimeout(()=>{this.reconnectTimer=null;if(!this.explicitlyClosed&&this.room)this.connect(this.room);},delay);}};
+      socket.onclose=event=>{const takenOver=Number(event?.code)===4001;if(takenOver)this.explicitlyClosed=true;if(this.socket===socket)this.socket=null;this.pendingActionId=null;this.pendingActionRevision=null;this.emit('disconnected',{takenOver,code:event?.code||0});globalThis.dispatchEvent?.(new CustomEvent('gostop-online-message',{detail:{type:takenOver?'sessionTakenOver':'selfDisconnected',code:event?.code||0}}));if(!takenOver&&!this.explicitlyClosed&&this.room){const delay=Math.min(5000,750+this.reconnectAttempts*750);this.reconnectAttempts++;this.reconnectTimer=setTimeout(()=>{this.reconnectTimer=null;if(!this.explicitlyClosed&&this.room)this.connect(this.room);},delay);}};
       socket.onerror=()=>{};return socket;
     }
     receive(message){
       globalThis.dispatchEvent?.(new CustomEvent('gostop-online-message',{detail:message}));
       if(message.protocolVersion!==PROTOCOL_VERSION){this.emit('error',{code:'UNSUPPORTED_PROTOCOL'});return;}
-      if(message.type==='snapshot'){this.revision=message.snapshot.revision;this.emit('snapshot',{snapshot:message.snapshot,events:message.events||[]});return;}
-      if(message.type==='actionAccepted'||message.type==='actionRejected')this.pendingActionId=null;
+      if(message.type==='snapshot'){const nextRevision=message.snapshot.revision;if(this.pendingActionId&&Number.isInteger(this.pendingActionRevision)&&nextRevision>this.pendingActionRevision){this.pendingActionId=null;this.pendingActionRevision=null;}this.revision=nextRevision;this.emit('snapshot',{snapshot:message.snapshot,events:message.events||[]});return;}
+      if(message.type==='actionAccepted'||message.type==='actionRejected'){this.pendingActionId=null;this.pendingActionRevision=null;}
       this.emit(message.type,message);
     }
-    submit(action){if(this.pendingActionId)throw new Error('An action is already awaiting the server.');if(!this.socket||this.socket.readyState!==this.WebSocketImpl.OPEN)throw new Error('The game is reconnecting.');const actionId=crypto.randomUUID();this.pendingActionId=actionId;this.socket.send(JSON.stringify({type:'action',protocolVersion:PROTOCOL_VERSION,actionId,expectedRevision:this.revision,action}));return actionId;}
+    submit(action){if(this.pendingActionId)throw new Error('An action is already awaiting the server.');if(!this.socket||this.socket.readyState!==this.WebSocketImpl.OPEN)throw new Error('The game is reconnecting.');const actionId=crypto.randomUUID();this.pendingActionId=actionId;this.pendingActionRevision=this.revision;this.socket.send(JSON.stringify({type:'action',protocolVersion:PROTOCOL_VERSION,actionId,expectedRevision:this.revision,action}));return actionId;}
     sync(){if(this.socket?.readyState===this.WebSocketImpl.OPEN)this.socket.send(JSON.stringify({type:'syncRequest',protocolVersion:PROTOCOL_VERSION,sinceRevision:this.revision}));}
     sendFriendlyReferral(status,stage){if(!this.anonymous||!this.socket||this.socket.readyState!==this.WebSocketImpl.OPEN)return false;this.socket.send(JSON.stringify({type:'friendlyReferral',protocolVersion:PROTOCOL_VERSION,status,stage}));return true;}
-    close(){this.explicitlyClosed=true;if(this.reconnectTimer){clearTimeout(this.reconnectTimer);this.reconnectTimer=null;}if(this.socket){this.socket.close();this.socket=null;}this.pendingActionId=null;this.room=null;}
+    close(){this.explicitlyClosed=true;if(this.reconnectTimer){clearTimeout(this.reconnectTimer);this.reconnectTimer=null;}if(this.socket){this.socket.close();this.socket=null;}this.pendingActionId=null;this.pendingActionRevision=null;this.room=null;}
     emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail}));}
   }
   const api=Object.freeze({OnlineSessionAdapter,PROTOCOL_VERSION,viewerCanStartTurn,viewerCanInteract});
