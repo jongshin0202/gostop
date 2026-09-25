@@ -687,7 +687,7 @@
         if((c.flags.includes('doublePi')||(c.id==='m9-1'&&owner.gukjinMode==='pi'))){const badge=document.createElement('span');badge.className='double-single-badge';badge.textContent='×2';stack.appendChild(badge);}
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
-      btn.append(head,stack); btn.addEventListener('click',()=>openCapturedGroup(ownerId,group,groupCards)); root.appendChild(btn);
+      btn.append(head,stack); root.appendChild(btn);
     });
   }
 
@@ -2437,6 +2437,10 @@
   setupLanguageMenu();
   document.querySelector('.human-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_A);});
   document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_B);});
+  document.querySelectorAll('.game-capture-panel').forEach(panel=>{
+    const playerId=panel.contains(els.playerCaptured)?PLAYER_A:PLAYER_B;
+    panel.addEventListener('click',event=>{if(event.defaultPrevented)return;event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(playerId);});
+  });
   document.querySelectorAll('.capture-summary-trigger[data-score-owner]').forEach(trigger=>{
     const playerId=trigger.dataset.scoreOwner==='player'?PLAYER_A:PLAYER_B;
     const open=event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(playerId);};
