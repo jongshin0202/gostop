@@ -310,6 +310,9 @@ test('clean seven-point Solo Stop settles and records exactly seven with no hidd
   record.state.terminalResult={type:'stop',winnerId:seatId,score:7,settlement:{baseTotal:7,total:7,goBonus:0,reasons:[],formulaSteps:['Base 7']}};
   record.state.winner=seatId;record.completedAt=now();
   core.authority=core.authorityFactory({crypto:webcrypto,now,trustedRuntime:true});core.authority.restoreMatch(record);
+  // Secure random setup can very rarely finish the hand before this synthetic settlement is injected.
+  // This test owns the current game settlement, so remove only that game's prior marker before asserting it.
+  const gameId=core.currentGameId();core.room.settledGameIds=(core.room.settledGameIds||[]).filter(id=>id!==gameId);
   const snapshot=core.authority.getSnapshot({matchId:core.room.matchId,viewerId:user.playerId});
   await core.settleTerminal(snapshot);
   const call=accountStore.calls.findLast(item=>item.path==='/internal/game/settle');
