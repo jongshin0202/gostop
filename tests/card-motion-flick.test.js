@@ -26,7 +26,7 @@ test('staged physical card owns visibility until shared cleanup',()=>{
 test('touch flick sampling retains the full gesture window for slower phones',()=>{
   assert.match(presentation,/const cutoff=time-360/);
   assert.match(presentation,/const cutoff=endTime-320/);
-  assert.match(presentation,/const secondTap=!state\.dragging&&!state\.browsing&&!state\.switched&&state\.wasSelected/);
+  assert.match(presentation,/const secondTap=!state\.dragging&&!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<18&&Math\.abs\(endY-state\.anchorY\)<18/);
 });
 
 test('flick classifier tolerates slower phones while rejecting jitter and horizontal browsing',()=>{
@@ -45,6 +45,13 @@ test('touch intent locks upward flicks before horizontal browsing can switch car
   assert.match(presentation,/if\(state\.intent==='browse'\)[\s\S]*nearestHandCard/);
   assert.match(presentation,/if\(state\.intent==='flick'\)[\s\S]*startX:state\.anchorX,startY:state\.anchorY/);
   assert.doesNotMatch(presentation,/state\.anchorX=x;[\s\S]{0,120}state\.anchorY=y/);
+});
+
+test('touchend can classify an upward flick even when a slow phone skipped intermediate touchmove delivery',()=>{
+  assert.match(presentation,/const flick=!browsed&&isUpwardFlick\(flickSample\)/);
+  assert.match(presentation,/const secondTap=!state\.dragging&&!browsed&&state\.wasSelected&&Math\.abs\(endX-state\.anchorX\)<18&&Math\.abs\(endY-state\.anchorY\)<18/);
+  assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:108,endY:445,duration:180}),true);
+  assert.equal(plan.isUpwardFlick({startX:100,startY:500,endX:170,endY:485,duration:180}),false);
 });
 
 test('touch and pointer flicks commit before release and suppress generated clicks',()=>{
