@@ -152,10 +152,13 @@ test('Online semantic floor candidates collapse every registered stack but retai
   useState(stateWith({floor:[card('m2-1')]}));assert.equal(api.effectiveFloorMatchCards(played).map(item=>item.id).join(','),'m2-1');
   useState(stateWith({floor:[card('m3-1')]}));assert.equal(api.effectiveFloorMatchCards(played).length,0);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),submit=source.slice(source.indexOf('async function submitOnlineCardPlay'),source.indexOf('const beginOnline'));
-  // Ranked authority, not the browser, owns floor matching. The client must send the
-  // card targetless so zero/one/two-match resolution uses the same authoritative path.
-  assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId:null\}\)/);
-  assert.doesNotMatch(submit,/matchesFor\(/);
+  // Ranked play still resolves on the authority, but an ordinary two-target hand card
+  // stays uncommitted until the player chooses one highlighted legal target.
+  assert.match(submit,/let targetId=null/);
+  assert.match(submit,/const matches=matchesFor\(card\)/);
+  assert.match(submit,/if\(matches\.length===2\)[\s\S]*chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/targetId=target\.id/);
+  assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
   assert.doesNotMatch(submit,/state\.floor\.filter\(item=>item\.month===card\.month\)/);
 });
 
@@ -2672,7 +2675,7 @@ test('Online hand play captures the live source before animation and preserves e
   api.rememberOnlineHandSource('m2-1',exact);api.resetHandPresentationState();assert.equal(api.takeOnlineHandSource('m2-1'),null);
   const onlineClick=source.slice(source.indexOf('async function humanPlay'),source.indexOf('// While choosing between two floor targets'));
   const remembered=onlineClick.indexOf('rememberOnlineHandSource(cardId,clickedEl)');
-  const submitted=onlineClick.indexOf('onlineSubmit(action)');
+  const submitted=onlineClick.indexOf('await submitOnlineCardPlay()');
   assert.ok(remembered>=0&&submitted>remembered);
   const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
   assert.match(transition,/side==='human'\?takeOnlineHandSource\(event\.card\.id\)\|\|els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
@@ -2970,6 +2973,17 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird an
   assert.match(source,/trainingRecommendedFloorCardId/);
   assert.match(source,/showTrainingCoach\('Opening Strategy'/);
   assert.match(source,/The highlighted floor card is the stronger target/);
+});
+
+test('mobile hand browsing suppresses the synthetic click after a finger drag',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
+  assert.match(source,/function beginHandPointerGesture\(event\)/);
+  assert.match(source,/Math\.hypot\(event\.clientX-gesture\.x,event\.clientY-gesture\.y\)>9/);
+  assert.match(source,/handClickSuppressUntil=Date\.now\(\)\+500/);
+  assert.match(source,/function suppressDraggedHandClick\(event\)[\s\S]*event\.preventDefault\(\);event\.stopPropagation\(\);return true/);
+  assert.match(source,/el\.addEventListener\('click',event=>\{if\(suppressDraggedHandClick\(event\)\)return;void humanPlay\(card\.id,el\);\}\)/);
+  assert.match(source,/blank\.addEventListener\('click',event=>\{if\(suppressDraggedHandClick\(event\)\)return;void humanUseBombBlank\(\);\}\)/);
+  assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });
 
 test('How to Play includes device-specific click, touch navigation, and flick controls',()=>{
