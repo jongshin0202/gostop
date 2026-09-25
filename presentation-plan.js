@@ -85,10 +85,6 @@
       suppressGeneratedClickCardId=String(cardId||'');
       suppressGeneratedClickUntil=Date.now()+Math.max(80,Number(ms)||140);
     };
-    const clearPreviousClickSuppression=()=>{
-      suppressGeneratedClickUntil=0;
-      suppressGeneratedClickCardId='';
-    };
     const triggerPlay=cardOrId=>{
       const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
       if(!canUseCard(card))return false;
