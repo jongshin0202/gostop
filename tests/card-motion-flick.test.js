@@ -31,11 +31,12 @@ test('touch selection survives hand rerenders by card identity instead of DOM id
   assert.doesNotMatch(presentation,/touchSelectedCard===card/);
 });
 
-test('mobile gestures prefer native TouchEvents on touch phones and tolerate low-end tap jitter',()=>{
+test('mobile gestures use one PointerEvent pipeline when available and keep TouchEvents as fallback only',()=>{
   assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
   assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/if\(event\.pointerType==='touch'\)\{[\s\S]*if\(nativeTouchSupported\)return;[\s\S]*beginPointerTouch\(event\)/);
-  assert.match(presentation,/if\(nativeTouchSupported\|\|!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/const usePointerTouch=pointerTouchSupported/);
+  assert.match(presentation,/if\(event\.pointerType==='touch'\)\{[\s\S]*if\(usePointerTouch\)beginPointerTouch\(event\)/);
+  assert.match(presentation,/if\(!usePointerTouch&&nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/const tap=!browsed&&Math\.abs\(dx\)<=18&&Math\.abs\(dy\)<=18&&endTime-state\.anchorTime<=650/);
   assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
 });
