@@ -39,22 +39,32 @@
     if(!root||typeof root.requestFullscreen!=='function'||!splash){initialMenuGateComplete=true;return null;}
     if(initialMenuGatePromise)return initialMenuGatePromise;
     splash.classList.add('gostop-boot-ready');
+    splash.dataset.startLabel='Tap to Start';
     splash.setAttribute('aria-hidden','false');
     initialMenuGatePromise=new Promise(resolve=>{
+      let attempts=0;
       const finish=()=>{
         initialMenuGateComplete=true;
         initialMenuGatePromise=null;
         splash.classList.remove('gostop-boot-ready');
+        delete splash.dataset.startLabel;
         resolve(true);
       };
-      const enter=()=>{
-        let request;
-        try{request=root.requestFullscreen();}
-        catch(_){finish();return;}
-        if(request&&typeof request.then==='function')request.then(finish).catch(finish);
-        else finish();
+      const arm=()=>splash.addEventListener('click',enter,{once:true});
+      const verify=()=>{
+        if(doc.fullscreenElement){finish();return;}
+        if(attempts<3){splash.dataset.startLabel='Tap Again for Full Screen';arm();return;}
+        finish();
       };
-      splash.addEventListener('click',enter,{once:true});
+      const enter=()=>{
+        attempts++;
+        let request;
+        try{request=root.requestFullscreen({navigationUI:'hide'});}
+        catch(_){verify();return;}
+        if(request&&typeof request.then==='function')request.then(verify).catch(verify);
+        else verify();
+      };
+      arm();
     });
     return initialMenuGatePromise;
   }
