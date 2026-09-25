@@ -2994,7 +2994,9 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
-  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
+  assert.match(presentation,/if\(pointerState\)recoverStalePointer\(\)/);
+  assert.match(presentation,/addEventListener\('lostpointercapture'/);
+  assert.match(presentation,/if\(!touchCapable\)return/);
   assert.match(presentation,/Date\.now\(\)\+Math\.max\(80,Number\(ms\)\|\|140\)/);
   assert.doesNotMatch(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
   assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
