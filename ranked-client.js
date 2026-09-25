@@ -687,9 +687,9 @@
       immediateMenuProgrammaticTarget=button;
       try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
     };
-    const pointerCapable=typeof globalThis.PointerEvent==='function';
     const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
-    if(!pointerCapable&&touchCapable){
+    const pointerCapable=!touchCapable&&typeof globalThis.PointerEvent==='function';
+    if(touchCapable){
       button.addEventListener('touchstart',event=>{
         if(event.touches.length!==1){press=null;return;}
         const touch=event.touches[0];press={id:touch.identifier,x:touch.clientX,y:touch.clientY};
