@@ -2,11 +2,11 @@
   'use strict';
 
   const FLICK_DEFAULTS=Object.freeze({
-    minUpwardDistance:18,
-    minTravelDistance:42,
-    maxDuration:320,
-    minSpeed:.20,
-    maxHorizontalRatio:4
+    minUpwardDistance:16,
+    minTravelDistance:34,
+    maxDuration:520,
+    minSpeed:.11,
+    maxHorizontalRatio:3
   });
 
   function isUpwardFlick(sample,options={}){
@@ -166,9 +166,6 @@
       const rect=geometryRectFor(state,card,true);
       state.card=card;
       state.wasSelected=false;
-      state.anchorX=x;
-      state.anchorY=y;
-      state.anchorTime=now();
       state.startRect=rect;
       state.previousVisibility=card.style.visibility;
       state.previousTransform=card.style.transform;
@@ -176,8 +173,6 @@
       state.dragging=false;
       state.switched=true;
       markBrowsing(state);
-      state.samples=[];
-      pushSample(state,x,y,state.anchorTime);
     };
 
     const ensureGhost=state=>{
@@ -212,6 +207,7 @@
         switched:false,
         browsing:false,
         dragging:false,
+        intent:null,
         anchorX:touch.clientX,
         anchorY:touch.clientY,
         anchorTime:startTime,
@@ -236,24 +232,31 @@
     const processTouchMove=(state,x,y)=>{
       if(!state||touchState!==state)return;
       const up=state.anchorY-y;
-      const sideways=Math.abs(x-state.anchorX);
-      const radialIntent=up>=14&&(up>=sideways*.28||y<state.startRect.top-8);
+      const horizontal=x-state.anchorX;
+      const sideways=Math.abs(horizontal);
 
-      if(!state.dragging&&!radialIntent){
-        if(sideways>=10)markBrowsing(state);
-        const hovered=nearestHandCard(state,x,y);
-        if(hovered&&hovered!==state.card){
-          setActiveCard(state,hovered,x,y);
-          return;
+      if(!state.intent){
+        const upwardIntent=up>=10&&up>=sideways*.75;
+        const browseIntent=sideways>=14&&sideways>Math.max(10,Math.abs(up)*1.25);
+        if(upwardIntent){
+          state.intent='flick';
+          state.dragging=true;
+          state.wasSelected=false;
+        }else if(browseIntent){
+          state.intent='browse';
+          markBrowsing(state);
+        }else{
+          return false;
         }
       }
 
-      if(!state.dragging&&radialIntent){
-        state.dragging=true;
-        state.wasSelected=false;
+      if(state.intent==='browse'){
+        const hovered=nearestHandCard(state,x,y);
+        if(hovered&&hovered!==state.card)setActiveCard(state,hovered,x,y);
+        return false;
       }
 
-      if(state.dragging){
+      if(state.intent==='flick'){
         const ghost=ensureGhost(state);
         if(ghost){
           const dx=x-state.anchorX;
@@ -261,7 +264,7 @@
           ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
         }
         const time=now();
-        const flickSample=recentFlickSample(state,x,y,time);
+        const flickSample={startX:state.anchorX,startY:state.anchorY,endX:x,endY:y,duration:Math.max(1,time-state.anchorTime)};
         if(isUpwardFlick(flickSample)){
           const card=state.card;
           restoreDraggedCard(state);
@@ -313,11 +316,11 @@
       const endY=touch?.clientY??state.lastY;
       const endTime=now();
       pushSample(state,endX,endY,endTime);
-      const flickSample=recentFlickSample(state,endX,endY,endTime);
-      const flick=state.dragging&&isUpwardFlick(flickSample);
+      const flickSample={startX:state.anchorX,startY:state.anchorY,endX,endY,duration:Math.max(1,endTime-state.anchorTime)};
+      const flick=state.intent==='flick'&&isUpwardFlick(flickSample);
       const card=state.card;
       const secondTap=!state.dragging&&!state.browsing&&!state.switched&&state.wasSelected&&Math.abs(endX-state.anchorX)<8&&Math.abs(endY-state.anchorY)<8;
-      const browsed=state.browsing||state.switched;
+      const browsed=state.intent==='browse'||state.browsing||state.switched;
 
       restoreDraggedCard(state);
       playerHand()?.classList.remove('gostop-touch-browsing');
@@ -341,7 +344,7 @@
       const state=touchState;
       if(state.moveFrame!=null){cancelFrame(state.moveFrame);state.moveFrame=null;}
       const card=state.card;
-      const browsed=state.browsing||state.switched;
+      const browsed=state.intent==='browse'||state.browsing||state.switched;
       restoreDraggedCard(state);
       playerHand()?.classList.remove('gostop-touch-browsing');
       touchState=null;
