@@ -56,6 +56,7 @@
     let suppressPointerClicksUntil=0;
     const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
     const nativeTouchSupported=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
+    const usePointerTouch=pointerTouchSupported;
 
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const requestFrame=globalThis.requestAnimationFrame?.bind(globalThis)||(callback=>setTimeout(callback,16));
@@ -258,8 +259,8 @@
 
     doc.addEventListener('pointerdown',event=>{
       if(event.pointerType==='touch'){
-        if(nativeTouchSupported)return;
-        beginPointerTouch(event);return;
+        if(usePointerTouch)beginPointerTouch(event);
+        return;
       }
       if(event.button!==0)return;
       const card=cardFromTarget(event.target);if(!canUseCard(card))return;
@@ -292,9 +293,10 @@
       pointerState=null;restoreDraggedCard(state);playerHand()?.classList.remove('gostop-touch-browsing');
     },{capture:true,passive:false});
 
-    // Prefer native TouchEvents on touch devices. Some low-end Android browsers
-    // expose PointerEvent but deliver pointerup/cancel unreliably during card gestures.
-    if(nativeTouchSupported||!pointerTouchSupported){
+    // Pointer Events are the primary touch path when the browser supports them.
+    // Running TouchEvents and PointerEvents together can double-own the same gesture
+    // and suppress the second tap/flick on lower-end Android devices.
+    if(!usePointerTouch&&nativeTouchSupported){
       const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
       doc.addEventListener('touchstart',event=>{
         if(event.touches.length!==1)return;
