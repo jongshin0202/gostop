@@ -39,80 +39,70 @@
         #playerHand .hand-card:hover{transform:none!important}
         #playerHand .hand-card-slot.is-hovered{z-index:40!important}
         #playerHand .hand-card-slot.is-hovered .hand-card{transform:translate3d(0,-18px,0) rotate(-1deg)!important;box-shadow:0 12px 18px rgba(0,0,0,.38)!important}
-        #playerHand.gostop-touch-selection-cleared .hand-card-slot.is-hovered{z-index:auto!important}
-        #playerHand.gostop-touch-selection-cleared .hand-card-slot.is-hovered .hand-card{transform:none!important;box-shadow:0 7px 10px rgba(0,0,0,.34)!important}
         #playerHand.gostop-touch-browsing .hand-card{transition:none!important}
-        #playerHand.gostop-touch-browsing .hand-card-slot.is-hovered .hand-card{box-shadow:0 7px 10px rgba(0,0,0,.34)!important;will-change:transform}
       }
     `;
     (doc.head||doc.documentElement).appendChild(style);
 
     let touchState=null;
-    let touchSelectedCardId=null;
+    let selectedCardId=null;
     let visualSelectedSlot=null;
     let bypassClickCard=null;
-    let suppressTouchClicksUntil=0;
-    let pointerState=null;
-    let suppressPointerClicksUntil=0;
-    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
+    let suppressGeneratedClickUntil=0;
+    let suppressGeneratedClickCardId='';
     const nativeTouchSupported=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
-    // Android devices can expose PointerEvents while delivering delayed/cancelled touch pointers.
-    // Prefer native TouchEvents whenever the browser reports real touch capability.
-    const usePointerTouch=pointerTouchSupported&&!nativeTouchSupported;
-
     const now=()=>globalThis.performance?.now?.()??Date.now();
-    const requestFrame=globalThis.requestAnimationFrame?.bind(globalThis)||(callback=>setTimeout(callback,16));
-    const cancelFrame=globalThis.cancelAnimationFrame?.bind(globalThis)||(id=>clearTimeout(id));
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
     const cardIdentity=card=>String(card?.dataset?.cardId||card?.closest?.('.hand-card-slot')?.dataset?.handKey||'');
-    const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute('aria-disabled')!=='true';
-    const allHandCards=()=>[...doc.querySelectorAll('#playerHand .hand-card')].filter(canUseCard);
-
-    const snapshotHandGeometry=()=>{
-      const hand=playerHand()?.getBoundingClientRect?.()||null;
-      const cards=allHandCards().map(card=>{
-        const rect=card.getBoundingClientRect();
-        return {card,id:cardIdentity(card),centerX:rect.left+rect.width/2,rect:{left:rect.left,top:rect.top,width:rect.width,height:rect.height}};
-      });
-      return {top:hand?.top??-Infinity,bottom:hand?.bottom??Infinity,cards};
-    };
-
+    const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute?.('aria-disabled')!=='true';
     const cardByIdentity=id=>id?[...doc.querySelectorAll('#playerHand .hand-card')].find(card=>cardIdentity(card)===id)||null:null;
 
-    const clearSelection=()=>{
-      touchSelectedCardId=null;
-      const hand=playerHand();
-      hand?.classList.add('gostop-touch-selection-cleared');
-      hand?.classList.remove('gostop-touch-browsing');
+    const clearVisual=()=>{
       if(visualSelectedSlot?.isConnected)visualSelectedSlot.classList.remove('is-hovered');
       visualSelectedSlot=null;
-      doc.querySelectorAll('#playerHand .hand-card-slot.is-hovered').forEach(slot=>{
-        slot.classList.remove('is-hovered');
-        const card=slot.querySelector('.hand-card');
-        if(card)card.title='';
-      });
+      doc.querySelectorAll('#playerHand .hand-card-slot.is-hovered').forEach(slot=>slot.classList.remove('is-hovered'));
     };
-
-    const selectCard=card=>{
+    const showVisual=card=>{
       if(!canUseCard(card))return false;
-      const slot=card.closest('.hand-card-slot');
-      if(!slot)return false;
-      touchSelectedCardId=cardIdentity(card);
-      playerHand()?.classList.remove('gostop-touch-selection-cleared');
+      const slot=card.closest?.('.hand-card-slot');if(!slot)return false;
       if(visualSelectedSlot?.isConnected&&visualSelectedSlot!==slot)visualSelectedSlot.classList.remove('is-hovered');
-      else if(!visualSelectedSlot?.isConnected){
-        const stale=doc.querySelector('#playerHand .hand-card-slot.is-hovered');
-        if(stale&&stale!==slot)stale.classList.remove('is-hovered');
-      }
-      slot.classList.add('is-hovered');
-      visualSelectedSlot=slot;
+      slot.classList.add('is-hovered');visualSelectedSlot=slot;return true;
+    };
+    const clearSelection=()=>{
+      selectedCardId=null;
+      playerHand()?.classList.remove('gostop-touch-browsing');
+      clearVisual();
+    };
+    const commitSelection=card=>{
+      if(!canUseCard(card))return false;
+      selectedCardId=cardIdentity(card);showVisual(card);return true;
+    };
+    const suppressNextClick=cardId=>{
+      suppressGeneratedClickCardId=String(cardId||'');
+      suppressGeneratedClickUntil=Date.now()+700;
+    };
+    const triggerPlay=cardOrId=>{
+      const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
+      if(!canUseCard(card))return false;
+      const cardId=cardIdentity(card);
+      selectedCardId=null;clearVisual();
+      bypassClickCard=card;
+      try{card.click();}finally{bypassClickCard=null;}
       return true;
     };
 
+    const snapshotHandGeometry=()=>{
+      const hand=playerHand()?.getBoundingClientRect?.()||null;
+      const cards=[...doc.querySelectorAll('#playerHand .hand-card')].filter(canUseCard).map(card=>{
+        const rect=card.getBoundingClientRect();
+        return {id:cardIdentity(card),centerX:rect.left+rect.width/2,card};
+      });
+      return {top:hand?.top??-Infinity,bottom:hand?.bottom??Infinity,cards};
+    };
     const nearestHandCard=(state,x,y)=>{
-      const geometry=state?.handGeometry;
-      if(!geometry||y<geometry.top-32||y>geometry.bottom+32)return null;
+      const geometry=state?.geometry;
+      if(!geometry||y<geometry.top-36||y>geometry.bottom+36)return null;
       let best=null,bestDistance=Infinity;
       for(const entry of geometry.cards){
         const live=cardByIdentity(entry.id)||entry.card;
@@ -122,240 +112,132 @@
       }
       return best;
     };
-
-    const geometryRectFor=(state,card,raised=false)=>{
-      const id=cardIdentity(card);
-      const rect=state?.handGeometry?.cards?.find(entry=>entry.id===id)?.rect;
-      if(rect)return {left:rect.left,top:rect.top-(raised?18:0),width:rect.width,height:rect.height};
-      const measured=card?.getBoundingClientRect?.();
-      return measured?{left:measured.left,top:measured.top,width:measured.width,height:measured.height}:{left:0,top:0,width:0,height:0};
-    };
-
-    const removeGhost=state=>{state?.ghost?.remove?.();if(state)state.ghost=null;};
-    const restoreDraggedCard=state=>{
-      if(!state)return;
-      removeGhost(state);
-      const card=cardByIdentity(state.cardId)||state.card;
-      if(card){
-        card.style.visibility=state.previousVisibility||'';
-        card.style.transform=state.previousTransform||'';
-        card.style.zIndex=state.previousZIndex||'';
-      }
-    };
-
-    const pushSample=(state,x,y,time=now())=>{
-      if(!state)return;
-      if(!state.samples)state.samples=[];
-      state.samples.push({x,y,t:time});
-      const cutoff=time-360;
-      while(state.samples.length>2&&state.samples[0].t<cutoff)state.samples.shift();
-    };
-
-    const markBrowsing=state=>{
-      if(!state||state.browsing)return;
-      state.browsing=true;
-      playerHand()?.classList.add('gostop-touch-browsing');
-    };
-
-    const setActiveCard=(state,card)=>{
-      if(!state||!canUseCard(card)||cardIdentity(card)===state.cardId)return;
-      restoreDraggedCard(state);
-      selectCard(card);
-      state.card=card;
-      state.cardId=cardIdentity(card);
-      state.wasSelected=false;
-      state.startRect=geometryRectFor(state,card,true);
-      state.previousVisibility=card.style.visibility;
-      state.previousTransform=card.style.transform;
-      state.previousZIndex=card.style.zIndex;
-      state.dragging=false;
-      state.switched=true;
-      markBrowsing(state);
-    };
-
-    const ensureGhost=state=>{
-      if(!state||state.ghost)return state?.ghost||null;
+    const makeGhost=(state)=>{
+      if(state.ghost)return state.ghost;
       const card=cardByIdentity(state.cardId)||state.card;
       if(!canUseCard(card))return null;
-      const ghost=card.cloneNode(true);
-      ghost.removeAttribute('id');ghost.removeAttribute('disabled');ghost.setAttribute('aria-hidden','true');ghost.tabIndex=-1;
-      ghost.classList.add('gostop-flick-ghost');
-      ghost.style.left=`${state.startRect.left}px`;ghost.style.top=`${state.startRect.top}px`;
-      ghost.style.width=`${state.startRect.width}px`;ghost.style.height=`${state.startRect.height}px`;
-      ghost.style.transform='translate3d(0,0,0)';
+      const rect=card.getBoundingClientRect();
+      const ghost=card.cloneNode(true);ghost.removeAttribute('disabled');ghost.setAttribute('aria-hidden','true');ghost.tabIndex=-1;ghost.classList.add('gostop-flick-ghost');
+      ghost.style.left=`${rect.left}px`;ghost.style.top=`${rect.top}px`;ghost.style.width=`${rect.width}px`;ghost.style.height=`${rect.height}px`;
       (doc.getElementById('cardMotionLayer')||doc.body).appendChild(ghost);
-      state.ghost=ghost;card.style.visibility='hidden';
+      state.ghost=ghost;state.hiddenCard=card;state.previousVisibility=card.style.visibility;card.style.visibility='hidden';
       return ghost;
     };
-
-    const triggerPlay=cardOrId=>{
-      const card=typeof cardOrId==='string'?cardByIdentity(cardOrId):cardOrId;
-      if(!canUseCard(card))return false;
-      const cardId=cardIdentity(card);
-      touchSelectedCardId=null;
-      playerHand()?.classList.remove('gostop-touch-browsing');
-      const CustomEventCtor=globalThis.CustomEvent;
-      if(typeof CustomEventCtor==='function'){
-        const activation=new CustomEventCtor('gostop-hand-activate',{cancelable:true,detail:{cardId,blank:card.classList?.contains?.('blank-turn-card')===true}});
-        const unhandled=doc.dispatchEvent(activation);
-        if(!unhandled)return true;
-      }
-      bypassClickCard=card;
-      try{card.click();}finally{bypassClickCard=null;}
-      return true;
+    const restoreGhost=(state)=>{
+      state?.ghost?.remove?.();
+      if(state?.hiddenCard?.isConnected)state.hiddenCard.style.visibility=state.previousVisibility||'';
+      if(state){state.ghost=null;state.hiddenCard=null;}
     };
-
-    const classifyMove=(state,x,y)=>{
-      const dx=x-state.anchorX,dy=y-state.anchorY,up=-dy,sideways=Math.abs(dx);
-      if(!state.intent){
-        if(sideways>=16&&sideways>Math.max(12,Math.abs(up)*1.20)){state.intent='browse';markBrowsing(state);}
-        else if(up>=12&&up>=sideways*.72){state.intent='flick';state.dragging=true;state.wasSelected=false;}
-      }
-      if(state.intent==='browse'){
-        const hovered=nearestHandCard(state,x,y);
-        if(hovered)setActiveCard(state,hovered);
-        return;
-      }
-      if(state.intent==='flick'){
-        const ghost=ensureGhost(state);
-        if(ghost)ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
-      }
+    const resetGestureState=()=>{
+      if(touchState)restoreGhost(touchState);
+      touchState=null;playerHand()?.classList.remove('gostop-touch-browsing');clearSelection();
     };
+    doc.addEventListener('gostop-hand-reset',resetGestureState);
 
-    const finishGesture=(state,endX,endY,endTime,event)=>{
-      if(!state)return;
-      const dx=endX-state.anchorX,dy=endY-state.anchorY;
-      const browsed=state.intent==='browse'||state.browsing||state.switched;
-      const flick=!browsed&&isUpwardFlick({startX:state.anchorX,startY:state.anchorY,endX,endY,duration:Math.max(1,endTime-state.anchorTime)});
-      const tap=!browsed&&Math.abs(dx)<=18&&Math.abs(dy)<=18&&endTime-state.anchorTime<=650;
-      const cardId=state.cardId;
-      restoreDraggedCard(state);
-      playerHand()?.classList.remove('gostop-touch-browsing');
-      event?.preventDefault?.();event?.stopPropagation?.();
-
-      if(flick){triggerPlay(cardId);return;}
-      if(browsed){const live=cardByIdentity(cardId);if(live)selectCard(live);return;}
-      if(tap&&state.wasSelected){triggerPlay(cardId);return;}
-      if(tap){const live=cardByIdentity(cardId);if(live)selectCard(live);return;}
-      clearSelection();
-    };
-
-    const beginPointerTouch=event=>{
-      if(event.pointerType!=='touch'||!event.isPrimary)return false;
-      const card=cardFromTarget(event.target);
-      if(!canUseCard(card))return false;
-      const t=now(),id=cardIdentity(card),handGeometry=snapshotHandGeometry();
-      pointerState={
-        id:event.pointerId,kind:'touch',card,cardId:id,wasSelected:!!id&&touchSelectedCardId===id,
-        anchorX:event.clientX,anchorY:event.clientY,anchorTime:t,lastX:event.clientX,lastY:event.clientY,
-        intent:null,browsing:false,switched:false,dragging:false,handGeometry,
-        startRect:geometryRectFor({handGeometry},card,!!id&&touchSelectedCardId!==id),
-        previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,ghost:null
-      };
-      selectCard(card);
-      suppressPointerClicksUntil=Date.now()+1000;
-      try{card.setPointerCapture?.(event.pointerId);}catch(_){}
-      event.preventDefault();
-      return true;
-    };
-
-    doc.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='touch'){
-        if(usePointerTouch)beginPointerTouch(event);
-        return;
-      }
-      if(event.button!==0)return;
-      const card=cardFromTarget(event.target);if(!canUseCard(card))return;
-      const t=now();pointerState={id:event.pointerId,kind:'mouse',card,cardId:cardIdentity(card),anchorX:event.clientX,anchorY:event.clientY,anchorTime:t,lastX:event.clientX,lastY:event.clientY,intent:null,browsing:false,switched:false,handGeometry:snapshotHandGeometry()};
-    },{capture:true,passive:false});
-
-    doc.addEventListener('pointermove',event=>{
-      const state=pointerState;if(!state||event.pointerId!==state.id)return;
-      state.lastX=event.clientX;state.lastY=event.clientY;
-      if(state.kind==='touch'){
-        classifyMove(state,event.clientX,event.clientY);
-        if(state.intent)event.preventDefault();
-        return;
-      }
-      const sample={startX:state.anchorX,startY:state.anchorY,endX:event.clientX,endY:event.clientY,duration:Math.max(1,now()-state.anchorTime)};
-      if(!isUpwardFlick(sample))return;
-      pointerState=null;suppressPointerClicksUntil=Date.now()+900;event.preventDefault();event.stopPropagation();triggerPlay(state.cardId);
-    },{capture:true,passive:false});
-
-    doc.addEventListener('pointerup',event=>{
-      const state=pointerState;if(!state||event.pointerId!==state.id)return;
-      pointerState=null;
-      if(state.kind==='touch'){
-        suppressPointerClicksUntil=Date.now()+1000;
-        finishGesture(state,event.clientX,event.clientY,now(),event);
-      }
-    },{capture:true,passive:false});
-    doc.addEventListener('pointercancel',event=>{
-      const state=pointerState;if(!state||event.pointerId!==state.id)return;
-      pointerState=null;restoreDraggedCard(state);playerHand()?.classList.remove('gostop-touch-browsing');
-    },{capture:true,passive:false});
-
-    // Native TouchEvents own real phone gestures. PointerEvents are only a fallback
-    // when touch capability is not exposed, so one gesture never has two owners.
-    if(!usePointerTouch&&nativeTouchSupported){
+    if(nativeTouchSupported){
       const touchById=(list,id)=>Array.from(list||[]).find(touch=>touch.identifier===id)||null;
       doc.addEventListener('touchstart',event=>{
         if(event.touches.length!==1)return;
         const card=cardFromTarget(event.target);
-        if(!card){if(touchSelectedCardId&&!event.target?.closest?.('#playerHand'))clearSelection();return;}
+        if(!card){
+          if(selectedCardId&&!event.target?.closest?.('#playerHand'))clearSelection();
+          return;
+        }
         if(!canUseCard(card))return;
-        const touch=event.touches[0],t=now(),id=cardIdentity(card),handGeometry=snapshotHandGeometry();
-        touchState={id:touch.identifier,card,cardId:id,wasSelected:!!id&&touchSelectedCardId===id,anchorX:touch.clientX,anchorY:touch.clientY,anchorTime:t,lastX:touch.clientX,lastY:touch.clientY,intent:null,browsing:false,switched:false,dragging:false,handGeometry,startRect:geometryRectFor({handGeometry},card,!!id&&touchSelectedCardId!==id),previousVisibility:card.style.visibility,previousTransform:card.style.transform,previousZIndex:card.style.zIndex,ghost:null};
-        selectCard(card);suppressTouchClicksUntil=Date.now()+1000;event.preventDefault();
-      },{capture:true,passive:false});
+        const touch=event.touches[0],id=cardIdentity(card);
+        touchState={
+          id:touch.identifier,card,cardId:id,wasSelected:selectedCardId===id,
+          startX:touch.clientX,startY:touch.clientY,lastX:touch.clientX,lastY:touch.clientY,startTime:now(),
+          intent:null,geometry:snapshotHandGeometry(),ghost:null,hiddenCard:null,previousVisibility:''
+        };
+        showVisual(card);
+      },{capture:true,passive:true});
+
       doc.addEventListener('touchmove',event=>{
-        if(!touchState)return;const touch=touchById(event.touches,touchState.id);if(!touch)return;
-        touchState.lastX=touch.clientX;touchState.lastY=touch.clientY;classifyMove(touchState,touch.clientX,touch.clientY);if(touchState.intent)event.preventDefault();
+        const state=touchState;if(!state)return;
+        const touch=touchById(event.touches,state.id);if(!touch)return;
+        state.lastX=touch.clientX;state.lastY=touch.clientY;
+        const dx=touch.clientX-state.startX,dy=touch.clientY-state.startY,up=-dy,sideways=Math.abs(dx);
+        if(!state.intent){
+          if(sideways>=12&&sideways>Math.max(10,Math.abs(up)*1.15))state.intent='browse';
+          else if(up>=14&&up>=sideways*.65)state.intent='flick';
+        }
+        if(state.intent==='browse'){
+          playerHand()?.classList.add('gostop-touch-browsing');
+          const hovered=nearestHandCard(state,touch.clientX,touch.clientY);
+          if(hovered){state.card=hovered;state.cardId=cardIdentity(hovered);showVisual(hovered);}
+          event.preventDefault();
+          return;
+        }
+        if(state.intent==='flick'){
+          const ghost=makeGhost(state);
+          if(ghost)ghost.style.transform=`translate3d(${dx}px,${dy}px,0)`;
+          event.preventDefault();
+        }
       },{capture:true,passive:false});
+
       doc.addEventListener('touchend',event=>{
-        if(!touchState)return;const state=touchState;touchState=null;const touch=touchById(event.changedTouches,state.id);if(!touch)return;
-        suppressTouchClicksUntil=Date.now()+1000;finishGesture(state,touch.clientX,touch.clientY,now(),event);
+        const state=touchState;if(!state)return;
+        const touch=touchById(event.changedTouches,state.id);touchState=null;
+        if(!touch){restoreGhost(state);clearSelection();return;}
+        const endTime=now(),dx=touch.clientX-state.startX,dy=touch.clientY-state.startY;
+        const flick=state.intent==='flick'&&isUpwardFlick({startX:state.startX,startY:state.startY,endX:touch.clientX,endY:touch.clientY,duration:Math.max(1,endTime-state.startTime)});
+        const browsed=state.intent==='browse';
+        restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
+        if(flick){
+          event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();triggerPlay(state.cardId);return;
+        }
+        if(browsed){
+          event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);clearSelection();return;
+        }
+        const tap=Math.abs(dx)<=18&&Math.abs(dy)<=18&&endTime-state.startTime<=700;
+        if(!tap){clearSelection();return;}
+        event.preventDefault();event.stopPropagation();suppressNextClick(state.cardId);
+        const live=cardByIdentity(state.cardId)||state.card;
+        if(state.wasSelected){clearSelection();triggerPlay(state.cardId);}
+        else commitSelection(live);
       },{capture:true,passive:false});
-      doc.addEventListener('touchcancel',event=>{if(!touchState)return;const state=touchState;touchState=null;restoreDraggedCard(state);clearSelection();event.preventDefault();},{capture:true,passive:false});
+
+      doc.addEventListener('touchcancel',event=>{
+        if(!touchState)return;const state=touchState;touchState=null;restoreGhost(state);clearSelection();event.preventDefault();
+      },{capture:true,passive:false});
     }
 
     doc.addEventListener('click',event=>{
-      const card=cardFromTarget(event.target);
-      if(!card)return;
+      const card=cardFromTarget(event.target);if(!card)return;
       if(card===bypassClickCard)return;
-      if(Date.now()<suppressTouchClicksUntil||Date.now()<suppressPointerClicksUntil){
-        event.preventDefault();event.stopImmediatePropagation();
+      const id=cardIdentity(card);
+      if(Date.now()<suppressGeneratedClickUntil&&(!suppressGeneratedClickCardId||suppressGeneratedClickCardId===id)){
+        event.preventDefault();event.stopImmediatePropagation();return;
       }
+      if(!nativeTouchSupported)return;
+      event.preventDefault();event.stopImmediatePropagation();
+      if(selectedCardId===id){clearSelection();triggerPlay(card);}
+      else commitSelection(card);
     },true);
 
+    doc.addEventListener('pointermove',event=>{
+      if(event.pointerType!=='mouse'||event.buttons!==1)return;
+      const card=cardFromTarget(event.target);if(!canUseCard(card))return;
+      const state={startX:event.clientX,startY:event.clientY,endX:event.clientX,endY:event.clientY,duration:1};
+      if(isUpwardFlick(state)){triggerPlay(card);}
+    },{capture:true,passive:true});
+
     const isGameSurface=target=>!!target?.closest?.('#appShell,#scoreDialog,#captureDialog,#resultDialog');
-    doc.addEventListener('contextmenu',event=>{
-      if(isGameSurface(event.target))event.preventDefault();
-    },{capture:true});
+    doc.addEventListener('contextmenu',event=>{if(isGameSurface(event.target))event.preventDefault();},{capture:true});
 
     const scoreDialog=doc.getElementById('scoreDialog');
     if(scoreDialog){
       let dismissPointer=null;
-      scoreDialog.addEventListener('pointerdown',event=>{
-        if(!scoreDialog.open)return;
-        dismissPointer={id:event.pointerId,x:event.clientX,y:event.clientY};
-      });
+      scoreDialog.addEventListener('pointerdown',event=>{if(scoreDialog.open)dismissPointer={id:event.pointerId,x:event.clientX,y:event.clientY};});
       scoreDialog.addEventListener('pointerup',event=>{
         if(!scoreDialog.open||!dismissPointer||dismissPointer.id!==event.pointerId)return;
-        const distance=Math.hypot(event.clientX-dismissPointer.x,event.clientY-dismissPointer.y);
-        dismissPointer=null;
-        if(distance<10)scoreDialog.close();
+        const distance=Math.hypot(event.clientX-dismissPointer.x,event.clientY-dismissPointer.y);dismissPointer=null;if(distance<10)scoreDialog.close();
       });
       scoreDialog.addEventListener('pointercancel',()=>{dismissPointer=null;});
     }
-
     const captureDialog=doc.getElementById('captureDialog');
-    if(captureDialog){
-      captureDialog.addEventListener('click',()=>{
-        if(captureDialog.open)captureDialog.close();
-      });
-    }
-
+    if(captureDialog)captureDialog.addEventListener('click',()=>{if(captureDialog.open)captureDialog.close();});
     return true;
   }
 
