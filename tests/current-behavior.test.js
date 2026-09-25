@@ -3023,6 +3023,11 @@ test('ranked Solo launch stays covered until the opening presentation is visible
   assert.match(entry,/overlay\.dataset\.launching='true'/);
   assert.match(entry,/if\(kind==='solo'\)setSoloLaunchCover\(true\)/);
   assert.match(rankedSource,/\.solo-start-overlay\[data-launching="true"\]/);
+  assert.match(rankedSource,/\.solo-start-overlay\[data-launching="true"\]>\*:not\(\.solo-launch-message\)\{display:none!important\}/);
+  assert.match(rankedSource,/\.solo-launch-message\{display:none;position:absolute;inset:0;z-index:90;place-items:center;text-align:center/);
+  assert.match(rankedSource,/const soloLaunchMessage=document\.createElement\('div'\);soloLaunchMessage\.className='solo-launch-message'/);
+  assert.match(entry,/soloLaunchMessage\.textContent=rt\('starting'\)/);
+  assert.doesNotMatch(rankedSource,/data-launching-text/);
   const snapshot=appSource.slice(appSource.indexOf("adapter.addEventListener('snapshot'"),appSource.indexOf("adapter.addEventListener('actionAccepted'"));
   assert.match(snapshot,/snapshot\?\.ranked&&els\.soloStartOverlay\?\.dataset\.launching!=='true'/);
   const opening=appSource.slice(appSource.indexOf('async function presentOpeningSequence'),appSource.indexOf('async function presentDealSequence'));
