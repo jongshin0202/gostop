@@ -133,7 +133,7 @@ test('mobile boot gate waits for splash tap, verifies fullscreen, then releases 
   assert.equal(calls,0);
   assert.equal(splashClasses.has('gostop-boot-ready'),true);
   assert.equal(splash.dataset.startLabel,'Tap to Start');
-  splashListeners.pointerup();
+  splashListeners.touchend({preventDefault(){}});
   await gate;
   assert.equal(calls,1);
   assert.equal(api.isInitialMenuGateComplete(),true);
@@ -145,9 +145,9 @@ test('completed splash gate suppresses later main-menu fullscreen retries when C
   let calls=0;
   const {api,splashListeners,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.resolve();}});
   const gate=api.gateInitialMainMenuFullscreen(document);
-  splashListeners.pointerup();await Promise.resolve();
-  splashListeners.pointerup();await Promise.resolve();
-  splashListeners.pointerup();await gate;
+  splashListeners.touchend({preventDefault(){}});await Promise.resolve();
+  splashListeners.touchend({preventDefault(){}});await Promise.resolve();
+  splashListeners.touchend({preventDefault(){}});await gate;
   assert.equal(calls,3);
   assert.equal(api.isInitialMenuGateComplete(),true);
   assert.equal(api.requestMainMenuFullscreen(document,{userGesture:true}),false);
@@ -159,13 +159,13 @@ test('mobile boot gate retries fullscreen instead of revealing the menu after a 
   let calls=0;
   const {api,splashListeners,splash,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.resolve();}});
   const gate=api.gateInitialMainMenuFullscreen(document);
-  splashListeners.pointerup();
+  splashListeners.touchend({preventDefault(){}});
   await Promise.resolve();
   assert.equal(calls,1);
   assert.equal(api.isInitialMenuGateComplete(),false);
   assert.equal(splash.dataset.startLabel,'Tap Again for Full Screen');
   document.fullscreenElement=document.documentElement;
-  splashListeners.pointerup();
+  splashListeners.touchend({preventDefault(){}});
   await gate;
   assert.equal(calls,2);
   assert.equal(api.isInitialMenuGateComplete(),true);
@@ -194,8 +194,11 @@ test('rotation-related fullscreen exit is re-armed only for the next gameplay ge
   assert.equal(api.isOrientationRecoveryArmed(),false);
 });
 
-test('fullscreen integration preserves click propagation and portrait stack order',()=>{
-  assert.doesNotMatch(source,/preventDefault\s*\(|stopPropagation\s*\(/);
+test('fullscreen integration preserves gameplay click propagation while splash touch owns only its start gesture',()=>{
+  assert.doesNotMatch(source,/stopPropagation\s*\(/);
+  assert.match(source,/const nativeTouch=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(source,/splash\.addEventListener\('touchend',enter,\{once:true,passive:false\}\)/);
+  assert.match(source,/event\?\.preventDefault\?\.\(\)/);
   assert.match(source,/doc\?\.documentElement/);
   assert.match(source,/addEventListener\('click',handleFullscreenClick,\{capture:true\}\)/);
   assert.match(source,/fullscreenchange/);
