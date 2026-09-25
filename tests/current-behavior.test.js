@@ -1110,7 +1110,7 @@ test('Shake viewer projection reveals the decision only to its acting player',()
 
 test('Shake sound presentation is driven only by public shakeDeclared events',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
-  const humanStart=source.indexOf("const attempted=applyNormalAction(normalAction('human'"));const humanFlow=source.slice(humanStart,source.indexOf("document.addEventListener('gostop-hand-activate'",humanStart));
+  const humanStart=source.indexOf("const attempted=applyNormalAction(normalAction('human'");const humanFlow=source.slice(humanStart,source.indexOf("document.addEventListener('gostop-hand-activate'",humanStart));
   const shakeButton=source.slice(source.indexOf("if(els.shakeBtn)"),source.indexOf("if(els.keepSecretBtn)"));
   assert.match(humanFlow,/presentShakeDeclaration\(declared\.events(?:,epoch)?\)/);
   assert.equal(shakeButton.includes('playShakeSound'),false);
