@@ -1485,7 +1485,24 @@
     try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode,{resumeExisting:true}));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
     catch(error){returnReconnectState=null;returnReconnectBusy=false;closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);await refreshAccount();revealCurrentMainMenu();}
   });
-  $('returnGameNo').addEventListener('click',()=>{if(activeReconnectPending())void finishReconnectAsAbandonment();else{closeReturnGameDialog();revealCurrentMainMenu();}});
+  $('returnGameNo').addEventListener('click',async()=>{
+    if(returnReconnectBusy)return;
+    if(activeReconnectPending()){void finishReconnectAsAbandonment();return;}
+    const active=returnReconnectState||account?.activeRanked;
+    if(active?.mode==='solo'&&active.roomCode){
+      returnReconnectBusy=true;
+      const no=$('returnGameNo'),yes=$('returnGameYes');if(no)no.disabled=true;if(yes)yes.disabled=true;
+      try{
+        const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
+        captureAccountPayload(data);
+        try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+        returnReconnectState=null;closeReturnGameDialog();syncRankedButtons();renderAccountBox();revealCurrentMainMenu();
+      }catch(error){showToast(localizedError(error),6000);}
+      finally{returnReconnectBusy=false;if(no)no.disabled=false;if(yes)yes.disabled=false;}
+      return;
+    }
+    returnReconnectState=null;closeReturnGameDialog();revealCurrentMainMenu();
+  });
   $('returnGameOk').addEventListener('click',async()=>{const ok=$('returnGameOk');if(ok.disabled)return;ok.disabled=true;closeReturnGameDialog();await refreshAccount();revealCurrentMainMenu();ok.disabled=false;});
   returnGameDialog.addEventListener('cancel',event=>event.preventDefault());
   function clearVerificationTokenFromUrl(){try{const clean=new URL(location.href);clean.searchParams.delete('verify');if(/^#verify=/i.test(clean.hash))clean.hash='';history.replaceState(null,'',clean.pathname+clean.search+clean.hash);}catch(_){}}
