@@ -95,11 +95,14 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('touch phones use native button activation without synthetic touch or pointer clicks',()=>{
-  assert.match(source,/Main-menu buttons use the browser's native click\/tap path/);
+test('coarse mobile pointers activate main-menu buttons immediately on clean pointer-up',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
-  assert.doesNotMatch(source,/fastMenuTapState|fastMenuTapSuppressButton|fastMenuUsePointerEvents/);
-  assert.doesNotMatch(source,/state\.button\.click\(\)/);
+  assert.match(source,/const fastMenuEligible=\(\)=>globalThis\.matchMedia\?\.\('\(pointer:coarse\)'\)\?\.matches===true&&globalThis\.innerWidth<=760/);
+  assert.match(source,/overlay\.addEventListener\('pointerdown'/);
+  assert.match(source,/overlay\.addEventListener\('pointerup'/);
+  assert.match(source,/distance>14\|\|elapsed>900/);
+  assert.match(source,/fastMenuSyntheticClick=true;[\s\S]*state\.button\.click\(\)/);
+  assert.match(source,/Date\.now\(\)<fastMenuSuppressUntil/);
 });
 
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
