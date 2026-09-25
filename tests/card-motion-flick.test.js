@@ -39,11 +39,31 @@ test('touch and pointer flicks commit before release and suppress generated clic
 
 test('gesture layer reuses canonical click path without ranked authority logic',()=>{
   const gesture=presentation.slice(presentation.indexOf('function installHandFlickGestures'),presentation.indexOf('function pendingOnlineStageIds'));
-  assert.match(gesture,/const triggerPlay=card=>[\s\S]*card\.click\(\)/);
+  assert.match(gesture,/const triggerPlay=card=>[\s\S]*liveCard\.click\(\)/);
   assert.doesNotMatch(gesture,/onlineSubmit\(/);
   assert.doesNotMatch(gesture,/matchesFor\(/);
   assert.doesNotMatch(gesture,/chooseFloorTarget\(/);
   const online=app.slice(app.indexOf('async function humanPlay'),app.indexOf('// While choosing between two floor targets'));
   assert.match(online,/\{type:'playCard',cardId,targetId:null\}/);
   assert.match(online,/needsPrePlayDecision\?\{type:'attemptPlayCard',cardId\}/);
+});
+
+test('touch selection survives hand rerenders and commits the current live card',()=>{
+  const gesture=presentation.slice(presentation.indexOf('function installHandFlickGestures'),presentation.indexOf('function pendingOnlineStageIds'));
+  assert.match(gesture,/let touchSelectedCardId=null/);
+  assert.match(gesture,/const liveHandCard=card=>[\s\S]*dataset\.cardId/);
+  assert.match(gesture,/const wasSelected=touchSelectedCardId===card\.dataset\.cardId/);
+  assert.match(gesture,/const liveCard=liveHandCard\(card\)/);
+  assert.match(gesture,/bypassClickCard=liveCard[\s\S]*liveCard\.click\(\)/);
+  assert.doesNotMatch(gesture,/touchSelectedCard===card/);
+});
+
+test('double tap tolerates normal finger movement without becoming hand browsing',()=>{
+  assert.match(presentation,/if\(sideways>=18\)markBrowsing\(state\)/);
+  assert.match(presentation,/Math\.abs\(endX-state\.anchorX\)<=18&&Math\.abs\(endY-state\.anchorY\)<=18/);
+});
+
+test('production entrypoint cache-busts the gesture and gameplay scripts together',()=>{
+  assert.match(html,/presentation-plan\.js\?v=20260925-1/);
+  assert.match(html,/app\.js\?v=20260925-7/);
 });
