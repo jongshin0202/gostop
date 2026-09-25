@@ -31,9 +31,9 @@ test('touch selection is card-identity based and resets every new hand/game',()=
   assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
 });
 
-test('native Touch Events own mobile hand gestures even when Pointer Events also exist',()=>{
-  assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const pointerTouchSupported=!nativeTouchSupported&&typeof globalThis\.PointerEvent==='function'/);
+test('Pointer Events own Android Chrome gestures and native Touch Events remain the fallback',()=>{
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const nativeTouchSupported=!pointerTouchSupported&&\(\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0\)/);
   assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
@@ -62,7 +62,7 @@ test('browse release clears the raised hover instead of leaving the last card st
   assert.doesNotMatch(browseBranch,/commitSelection/);
 });
 
-test('native Touch Events commit the second tap and upward flick directly on Android',()=>{
+test('native Touch fallback still commits second tap and upward flick when Pointer Events are unavailable',()=>{
   const touch=presentation.slice(presentation.indexOf('if(nativeTouchSupported){'),presentation.indexOf("doc.addEventListener('click'"));
   assert.match(touch,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(touch,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
