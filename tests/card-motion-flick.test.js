@@ -40,13 +40,16 @@ test('native touch owns phone hand gestures with no parallel touch-pointer owner
 });
 
 test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{
-  assert.match(presentation,/sideways>=12&&sideways>Math\.max\(10,Math\.abs\(up\)\*1\.15\)/);
-  assert.match(presentation,/up>=14&&up>=sideways\*\.65/);
+  assert.match(presentation,/sideways>=10&&sideways>Math\.max\(8,Math\.abs\(up\)\*1\.10\)/);
+  assert.match(presentation,/up>=10&&up>sideways\*1\.05/);
   assert.match(presentation,/state\.intent='browse'/);
   assert.match(presentation,/state\.intent='flick'/);
-  assert.match(presentation,/const flick=state\.intent==='flick'&&isUpwardFlick/);
+  assert.match(presentation,/const flick=state\.intent!=='browse'&&isUpwardFlick/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:22,maxDuration:750,minSpeed:\.035,maxHorizontalRatio:\.95/);
   assert.match(presentation,/const browsed=state\.intent==='browse'/);
-  assert.match(presentation,/const tap=Math\.abs\(dx\)<=18&&Math\.abs\(dy\)<=18&&endTime-state\.startTime<=700/);
+  assert.match(presentation,/const tap=Math\.abs\(dx\)<=22&&Math\.abs\(dy\)<=22&&endTime-state\.startTime<=800/);
+  assert.match(presentation,/clearPreviousClickSuppression\(\)/);
+  assert.match(presentation,/suppressNextClick\(state\.cardId\)/);
 });
 
 test('browse release clears the raised hover instead of leaving the last card sticking out',()=>{
