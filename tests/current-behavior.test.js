@@ -2982,7 +2982,7 @@ test('mobile hand browsing prefers native touch on phones and commits flick or s
   assert.match(source,/blank\.addEventListener\('click',\(\)=>\{void humanUseBombBlank\(\);\}\)/);
   assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
   assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const usePointerTouch=pointerTouchSupported/);
+  assert.match(presentation,/const usePointerTouch=pointerTouchSupported&&!nativeTouchSupported/);
   assert.match(presentation,/if\(event\.pointerType==='touch'\)\{[\s\S]*if\(usePointerTouch\)beginPointerTouch\(event\)/);
   assert.match(presentation,/if\(!usePointerTouch&&nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchend'[\s\S]*finishGesture\(state,touch\.clientX,touch\.clientY,now\(\),event\)/);
