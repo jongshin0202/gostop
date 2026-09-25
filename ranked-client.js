@@ -700,6 +700,33 @@
     }
   }
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
+  let immediateMenuProgrammaticTarget=null,immediateMenuSuppressTarget=null,immediateMenuSuppressUntil=0;
+  overlay.addEventListener('click',event=>{
+    const button=event.target?.closest?.('button');if(!button)return;
+    if(button===immediateMenuProgrammaticTarget)return;
+    if(button===immediateMenuSuppressTarget&&Date.now()<immediateMenuSuppressUntil){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+  },true);
+  function installImmediateMobileTap(button){
+    if(!button)return;
+    let press=null;
+    button.addEventListener('pointerdown',event=>{
+      if(event.pointerType==='mouse')return;
+      press={id:event.pointerId,x:event.clientX,y:event.clientY};
+    },{passive:true});
+    button.addEventListener('pointerup',event=>{
+      if(!press||event.pointerId!==press.id||event.pointerType==='mouse')return;
+      const distance=Math.hypot(event.clientX-press.x,event.clientY-press.y);press=null;
+      if(distance>16)return;
+      event.preventDefault();
+      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+650;
+      immediateMenuProgrammaticTarget=button;
+      try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
+    },{passive:false});
+    button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
+  }
+  [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
