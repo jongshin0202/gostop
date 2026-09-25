@@ -383,6 +383,7 @@
     html.gostop-performance-lite .menu-category-toggle:before{display:none!important}
     html.gostop-performance-lite .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important;box-shadow:0 10px 22px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.025)!important}
     html.gostop-performance-lite .menu-category-toggle{filter:none!important;transition:transform .10s ease,border-radius .10s ease!important;box-shadow:inset 0 1px rgba(255,255,255,.13),0 4px 9px rgba(0,0,0,.20)!important}
+    .menu-category-toggle,.menu-submenu>button,.menu-utility,.account-menu-actions button,.account-menu-control{touch-action:manipulation}
     html.gostop-performance-lite .menu-submenu{will-change:auto!important;transform:none!important;transition:opacity .12s ease,visibility 0s linear .12s!important}
     html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{transition:opacity .12s ease!important}
     html.gostop-performance-lite .menu-category-chevron{transition:transform .12s ease!important}
@@ -652,8 +653,14 @@
   let expandedMenuSection=null;
   function setMenuSection(section=null){
     expandedMenuSection=section==='competitive'||section==='friendly'?section:null;
+    const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement.classList.contains('gostop-performance-lite');
     for(const [name,group,toggle,submenu] of [['competitive',rankedGroup,rankedToggle,rankedSubmenu],['friendly',freeGroup,freeToggle,freeSubmenu]]){
-      const open=expandedMenuSection===name;if(open)submenu.style.setProperty('--submenu-open-height',`${submenu.scrollHeight+24}px`);group.classList.toggle('expanded',open);toggle.setAttribute('aria-expanded',open?'true':'false');submenu.setAttribute('aria-hidden',open?'false':'true');submenu.inert=!open;
+      const open=expandedMenuSection===name;
+      if(open){
+        const height=lite?(submenu.children.length*52+24):submenu.scrollHeight+24;
+        submenu.style.setProperty('--submenu-open-height',`${height}px`);
+      }
+      group.classList.toggle('expanded',open);toggle.setAttribute('aria-expanded',open?'true':'false');submenu.setAttribute('aria-hidden',open?'false':'true');submenu.inert=!open;
     }
   }
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
