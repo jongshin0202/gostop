@@ -4,7 +4,7 @@
   const FLICK_DEFAULTS=Object.freeze({
     minUpwardDistance:16,
     minTravelDistance:34,
-    maxDuration:520,
+    maxDuration:500,
     minSpeed:.11,
     maxHorizontalRatio:3
   });
