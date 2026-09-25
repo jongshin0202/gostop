@@ -31,8 +31,11 @@ test('touch selection survives hand rerenders by card identity instead of DOM id
   assert.doesNotMatch(presentation,/touchSelectedCard===card/);
 });
 
-test('modern mobile gestures use pointer identity and tolerate low-end phone tap jitter',()=>{
+test('mobile gestures prefer native TouchEvents on touch phones and tolerate low-end tap jitter',()=>{
   assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
+  assert.match(presentation,/if\(event\.pointerType==='touch'\)\{[\s\S]*if\(nativeTouchSupported\)return;[\s\S]*beginPointerTouch\(event\)/);
+  assert.match(presentation,/if\(nativeTouchSupported\|\|!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/const tap=!browsed&&Math\.abs\(dx\)<=18&&Math\.abs\(dy\)<=18&&endTime-state\.anchorTime<=650/);
   assert.match(presentation,/if\(tap&&state\.wasSelected\)\{triggerPlay\(cardId\);return;\}/);
 });
@@ -68,9 +71,12 @@ test('touch pointers commit on pointerup and suppress generated browser clicks',
   assert.match(presentation,/Date\.now\(\)<suppressTouchClicksUntil\|\|Date\.now\(\)<suppressPointerClicksUntil/);
 });
 
-test('gesture layer reuses canonical click path without ranked authority logic',()=>{
+test('gesture layer activates the canonical game input directly before falling back to click',()=>{
   const gesture=presentation.slice(presentation.indexOf('function installHandFlickGestures'),presentation.indexOf('function pendingOnlineStageIds'));
-  assert.match(gesture,/const triggerPlay=cardOrId=>[\s\S]*card\.click\(\)/);
+  assert.match(gesture,/new CustomEventCtor\('gostop-hand-activate',\{cancelable:true,detail:\{cardId,blank:/);
+  assert.match(gesture,/const unhandled=doc\.dispatchEvent\(activation\);[\s\S]*if\(!unhandled\)return true;[\s\S]*card\.click\(\)/);
+  assert.match(app,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(app,/void humanPlay\(cardId,live\)/);
   assert.doesNotMatch(gesture,/onlineSubmit\(/);
   assert.doesNotMatch(gesture,/matchesFor\(/);
   assert.doesNotMatch(gesture,/chooseFloorTarget\(/);
