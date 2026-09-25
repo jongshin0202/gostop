@@ -2979,8 +2979,9 @@ test('mobile hand browsing suppresses the synthetic click after a finger drag',(
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),css=fs.readFileSync(path.join(__dirname,'..','styles.css'),'utf8');
   assert.match(source,/function beginHandPointerGesture\(event\)/);
   assert.match(source,/Math\.hypot\(event\.clientX-gesture\.x,event\.clientY-gesture\.y\)>9/);
-  assert.match(source,/handClickSuppressUntil=Date\.now\(\)\+500/);
-  assert.match(source,/function suppressDraggedHandClick\(event\)[\s\S]*event\.preventDefault\(\);event\.stopPropagation\(\);return true/);
+  assert.match(source,/suppressNextDraggedHandClick=true/);
+  assert.match(source,/setTimeout\(\(\)=>\{suppressNextDraggedHandClick=false;dragClickResetTimer=null;\},350\)/);
+  assert.match(source,/function suppressDraggedHandClick\(event\)[\s\S]*suppressNextDraggedHandClick=false[\s\S]*event\.preventDefault\(\);event\.stopPropagation\(\);return true/);
   assert.match(source,/el\.addEventListener\('click',event=>\{if\(suppressDraggedHandClick\(event\)\)return;void humanPlay\(card\.id,el\);\}\)/);
   assert.match(source,/blank\.addEventListener\('click',event=>\{if\(suppressDraggedHandClick\(event\)\)return;void humanUseBombBlank\(\);\}\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
