@@ -31,12 +31,15 @@ test('touch selection is card-identity based and resets every new hand/game',()=
   assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
 });
 
-test('native touch owns phone hand gestures with no parallel touch-pointer owner',()=>{
+test('pointer events own modern phone hand gestures with native touch as fallback',()=>{
   assert.match(presentation,/const nativeTouchSupported=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
+  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
+  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/addEventListener\('pointermove'/);
+  assert.match(presentation,/addEventListener\('pointerup'/);
+  assert.match(presentation,/if\(nativeTouchSupported&&!pointerTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
-  assert.doesNotMatch(presentation,/usePointerTouch|beginPointerTouch|suppressPointerClicksUntil/);
 });
 
 test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{
@@ -57,6 +60,13 @@ test('browse release clears the raised hover instead of leaving the last card st
   assert.match(end,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
   const browseBranch=end.slice(end.indexOf('if(browsed){'),end.indexOf('const tap='));
   assert.doesNotMatch(browseBranch,/commitSelection/);
+});
+
+test('modern pointer path commits the second tap and upward flick without synthesized click timing',()=>{
+  const pointer=presentation.slice(presentation.indexOf('if(pointerTouchSupported){'),presentation.indexOf('if(nativeTouchSupported&&!pointerTouchSupported){'));
+  assert.match(pointer,/if\(flick\)\{clearSelection\(\);triggerPlay\(state\.cardId\);return;\}/);
+  assert.match(pointer,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(pointer,/event\.preventDefault\(\);event\.stopPropagation\(\);suppressNextClick\(state\.cardId,420\)/);
 });
 
 test('second tap and upward flick play through the live card click handler',()=>{
