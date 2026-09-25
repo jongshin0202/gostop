@@ -102,15 +102,15 @@ test('repeated automatic main-menu reveals do not repeatedly request fullscreen'
   assert.equal(api.isMainMenuFullscreenArmed(),true);
 });
 
-test('lite phones defer fullscreen until the first real menu gesture',async()=>{
+test('lite phones never request fullscreen, including on menu gestures',async()=>{
   let calls=0;
   const {api,listeners,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{calls++;return Promise.resolve();}});
   assert.equal(api.requestMainMenuFullscreen(document),false);
   assert.equal(calls,0);
-  assert.equal(api.isMainMenuFullscreenArmed(),true);
+  assert.equal(api.isMainMenuFullscreenArmed(),false);
   const menuSurface={closest(selector){return selector==='#soloStartOverlay, .topbar'?this:null;}};
   listeners.click.fn({target:menuSurface});
-  assert.equal(calls,1);
+  assert.equal(calls,0);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(api.isMainMenuFullscreenArmed(),false);
 });
@@ -170,5 +170,5 @@ test('fullscreen integration preserves click propagation and portrait stack orde
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
-  assert.match(generator,/mobile-fullscreen\.js\?v=20260924-2/);
+  assert.match(generator,/mobile-fullscreen\.js\?v=20260924-3/);
 });
