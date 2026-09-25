@@ -2996,7 +2996,8 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
-  assert.match(presentation,/bypassClickCard=card;[\s\S]*card\.click\(\)/);
+  assert.match(presentation,/new EventCtor\('gostop-hand-activate',\{detail:\{cardId,blank:/);
+  assert.match(source,/document\.addEventListener\('gostop-hand-activate'/);
   assert.match(presentation,/minUpwardDistance:8,minTravelDistance:18,maxDuration:900,minSpeed:\.025,maxHorizontalRatio:1\.15/);
   assert.match(presentation,/suppressNextClick\(state\.cardId,420\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
