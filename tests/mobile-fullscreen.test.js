@@ -9,7 +9,7 @@ const source=fs.readFileSync(path.join(root,'mobile-fullscreen.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'mobile-fullscreen.css'),'utf8');
 const generator=fs.readFileSync(path.join(root,'scripts','write-runtime-config.mjs'),'utf8');
 
-function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayHidden=false,fullscreenElement=null,requestFullscreen=()=>Promise.resolve()}={}){
+function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayHidden=false,fullscreenElement=null,requestFullscreen=()=>Promise.resolve(),performanceLite=false}={}){
   const listeners={};
   const windowListeners={};
   const overlay={hidden:overlayHidden};
@@ -23,7 +23,7 @@ function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayH
     addEventListener(type,fn,opts){listeners[type]={fn,opts};}
   };
   const context={
-    GOSTOP_TEST_MODE:true,document,
+    GOSTOP_TEST_MODE:true,GOSTOP_PERFORMANCE_LITE:performanceLite,document,
     navigator:{maxTouchPoints:touchPoints},
     innerWidth:width,innerHeight:height,
     matchMedia(){return {matches:coarse};},
@@ -90,6 +90,31 @@ test('main-menu reveal attempts fullscreen and a denied automatic request stays 
   assert.equal(api.isMainMenuFullscreenArmed(),false);
 });
 
+test('repeated automatic main-menu reveals do not repeatedly request fullscreen',async()=>{
+  let calls=0;
+  const {api,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.reject(new Error('user activation required'));}});
+  assert.equal(api.requestMainMenuFullscreen(document),true);
+  assert.equal(api.requestMainMenuFullscreen(document),false);
+  assert.equal(api.requestMainMenuFullscreen(document),false);
+  assert.equal(calls,1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isMainMenuAutoAttempted(),true);
+  assert.equal(api.isMainMenuFullscreenArmed(),true);
+});
+
+test('lite phones defer fullscreen until the first real menu gesture',async()=>{
+  let calls=0;
+  const {api,listeners,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{calls++;return Promise.resolve();}});
+  assert.equal(api.requestMainMenuFullscreen(document),false);
+  assert.equal(calls,0);
+  assert.equal(api.isMainMenuFullscreenArmed(),true);
+  const menuSurface={closest(selector){return selector==='#soloStartOverlay, .topbar'?this:null;}};
+  listeners.click.fn({target:menuSurface});
+  assert.equal(calls,1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isMainMenuFullscreenArmed(),false);
+});
+
 test('rotation-related fullscreen exit is re-armed only for the next gameplay gesture',()=>{
   let calls=0;
   const {api,listeners,windowListeners,document}=loadFullscreen({overlayHidden:true,requestFullscreen:()=>{calls++;return Promise.resolve();}});
@@ -144,5 +169,6 @@ test('fullscreen integration preserves click propagation and portrait stack orde
   assert.match(css,/:fullscreen \.table-center\{inset:2px 6px 2px\}/);
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
-  assert.match(generator,/mobile-fullscreen\.js/);
+  assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
+  assert.match(generator,/mobile-fullscreen\.js\?v=20260924-2/);
 });
