@@ -241,12 +241,12 @@ test('Android pointer path keeps menu taps, second tap, flick, and browse releas
     const hand=document.getElementById('playerHand');
     document.body.appendChild(hand);hand.replaceChildren();
     Object.assign(hand.style,{display:'flex',position:'fixed',left:'40px',bottom:'40px',width:'300px',height:'120px',zIndex:'2147483000',visibility:'visible',pointerEvents:'auto'});
-    globalThis.__gestureClicks=[];
+    globalThis.__gestureActions=[];
+    document.addEventListener('gostop-hand-activate',event=>globalThis.__gestureActions.push(event.detail?.cardId||''));
     for(const id of ['gesture-a','gesture-b']){
       const slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=id;
       const card=document.createElement('button');card.type='button';card.className='card hand-card';card.dataset.cardId=id;
       Object.assign(card.style,{width:'64px',height:'104px',display:'block'});
-      card.addEventListener('click',()=>globalThis.__gestureClicks.push(id));
       slot.appendChild(card);hand.appendChild(slot);
     }
   });
@@ -261,28 +261,28 @@ test('Android pointer path keeps menu taps, second tap, flick, and browse releas
     },{cardId,pointerId});
   };
   await pointerTap('gesture-a',71);
-  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual([]);
+  expect(await page.evaluate(()=>globalThis.__gestureActions)).toEqual([]);
   await expect(page.locator('#playerHand .hand-card-slot').nth(0)).toHaveClass(/is-hovered/);
   await pointerTap('gesture-a',72);
-  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual(['gesture-a']);
+  expect(await page.evaluate(()=>globalThis.__gestureActions)).toEqual(['gesture-a']);
 
-  await page.evaluate(()=>{globalThis.__gestureClicks=[];});
+  await page.evaluate(()=>{globalThis.__gestureActions=[];});
   await page.evaluate(()=>{
     const card=document.querySelector('#playerHand .hand-card'),rect=card.getBoundingClientRect(),pointerId=77;
     const startX=rect.left+rect.width/2,startY=rect.top+rect.height*.75;
     const fire=(type,x,y,buttons)=>card.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId,pointerType:'touch',isPrimary:true,clientX:x,clientY:y,buttons,button:0}));
     fire('pointerdown',startX,startY,1);fire('pointermove',startX+3,startY-70,1);fire('pointerup',startX+3,startY-70,0);
   });
-  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual(['gesture-a']);
+  expect(await page.evaluate(()=>globalThis.__gestureActions)).toEqual(['gesture-a']);
 
-  await page.evaluate(()=>{globalThis.__gestureClicks=[];});
+  await page.evaluate(()=>{globalThis.__gestureActions=[];});
   await page.evaluate(()=>{
     const cards=[...document.querySelectorAll('#playerHand .hand-card')],a=cards[0].getBoundingClientRect(),b=cards[1].getBoundingClientRect(),pointerId=88;
     const startX=a.left+a.width/2,startY=a.top+a.height*.65,endX=b.left+b.width/2,endY=b.top+b.height*.65;
     const fire=(type,x,y,buttons)=>cards[0].dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId,pointerType:'touch',isPrimary:true,clientX:x,clientY:y,buttons,button:0}));
     fire('pointerdown',startX,startY,1);fire('pointermove',endX,endY,1);fire('pointerup',endX,endY,0);
   });
-  expect(await page.evaluate(()=>globalThis.__gestureClicks)).toEqual([]);
+  expect(await page.evaluate(()=>globalThis.__gestureActions)).toEqual([]);
   await expect(page.locator('#playerHand .hand-card-slot.is-hovered')).toHaveCount(0);
   expect(errors.map(error=>error.message)).toEqual([]);
   await context.close();
