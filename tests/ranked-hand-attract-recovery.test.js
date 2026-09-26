@@ -15,8 +15,10 @@ test('ranked hand follows authority while action serialization cannot make the D
   assert.doesNotMatch(app,/blank\.disabled=handInputDisabled/);
 });
 
-test('ranked hand remains blocked during active physical motion and session-flow blockers',()=>{
-  assert.match(app,/flow\?\.ended\|\|flow\?\.replayReady\?\.you\|\|flow\?\.newGameRequest\|\|flow\?\.opponentReconnectUntil\|\|els\.quitConfirmDialog\?\.open\|\|presentation\.activePhysicalMotions>0/);
+test('ranked hand is blocked only by authoritative/session flow, never stale presentation motion state',()=>{
+  const gate=app.slice(app.indexOf('function rankedHandTurnAvailable'),app.indexOf('function rankedHandInputEnabled'));
+  assert.match(gate,/flow\?\.ended\|\|flow\?\.replayReady\?\.you\|\|flow\?\.newGameRequest\|\|flow\?\.opponentReconnectUntil\|\|els\.quitConfirmDialog\?\.open/);
+  assert.doesNotMatch(gate,/presentation\.activePhysicalMotions/);
 });
 
 test('fifteen-second main-menu attract eligibility ignores stale gameplay dialogs but blocks account warnings',()=>{

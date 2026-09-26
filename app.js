@@ -71,6 +71,7 @@
     return [...onlineHandSourceRects.keys()].some(cardId=>!incomingIds.has(cardId));
   }
   const onlineActions=new Map();
+  const onlineActionSubmittedAt=new Map();
   let onlineMode=false,onlinePendingCardId=null,onlineLastEvents=[],onlineSubmit=()=>null,onlinePlayAgain=()=>false,onlineQuitFromResult=false,latestOnlineSnapshot=null;
   const soloAuthority=!TEST_MODE?authorityApi.createSessionAuthority({trustedRuntime:true}):null;
   let soloMatchId=null,soloRevision=0,soloActionSequence=0;
@@ -509,17 +510,33 @@
     const img=document.createElement('img'); img.src=artUrl(card.file); img.alt=alt; img.draggable=false; return img;
   }
 
+  const RANKED_ACTION_LOCK_TIMEOUT_MS=3500;
+  function clearRankedActionLock(actionId=null){
+    const session=globalThis.goStopOnlineSession,id=String(actionId||session?.pendingActionId||'');
+    if(id){onlineActions.delete(id);onlineActionSubmittedAt.delete(id);}
+    if(session&&(!id||session.pendingActionId===id))session.pendingActionId=null;
+    if(!id||!onlineActions.size){
+      onlinePendingCardId=null;
+      els.playerHand?.querySelectorAll?.('.pending-card')?.forEach?.(node=>node.classList.remove('pending-card'));
+    }
+  }
   function repairOrphanedRankedPendingAction(){
     const session=globalThis.goStopOnlineSession,pendingActionId=session?.pendingActionId;
-    if(!pendingActionId||onlineActions.has(pendingActionId))return false;
-    session.pendingActionId=null;
-    return true;
+    if(!pendingActionId)return false;
+    if(!onlineActions.has(pendingActionId)){clearRankedActionLock(pendingActionId);return true;}
+    const submittedAt=onlineActionSubmittedAt.get(pendingActionId);
+    if(Number.isFinite(submittedAt)&&Date.now()-submittedAt>=RANKED_ACTION_LOCK_TIMEOUT_MS){
+      clearRankedActionLock(pendingActionId);
+      try{session.sync?.();}catch(_){}
+      return true;
+    }
+    return false;
   }
   function rankedHandTurnAvailable(){
     if(!onlineMode)return false;
     repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
-    const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open||presentation.activePhysicalMotions>0);
+    const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
     return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:null,blocked});
   }
@@ -843,12 +860,13 @@
 
   async function humanPlay(cardId, clickedEl){
     if(onlineMode){
+      repairOrphanedRankedPendingAction();
       // Exactly one ranked action may be in flight. Rapid/repeated taps must not create
       // competing revisions or duplicate card plays before the authority responds.
       if(onlineActions.size>0){
         const pendingActionId=globalThis.goStopOnlineSession?.pendingActionId;
         if(pendingActionId)return;
-        onlineActions.clear();
+        onlineActions.clear();onlineActionSubmittedAt.clear();
       }
       if(presentation.targetChoice){
         if(presentation.targetChoice.cancelable&&presentation.pendingHumanCardId){
@@ -2665,7 +2683,7 @@
     const isOnlinePresentationCurrent=epoch=>onlineMode&&epoch===onlinePresentationEpoch;
     onlineSubmit=function(action){
       if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
-      try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);presentation.locked=true;return id;}catch(error){activeOnlineStatus.textContent=error.message;return null;}
+      try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);onlineActionSubmittedAt.set(id,Date.now());presentation.locked=true;return id;}catch(error){activeOnlineStatus.textContent=error.message;return null;}
     };
     onlinePlayAgain=async function(){
       if(canSubmitPlayAgain(latestOnlineSnapshot)){
@@ -2908,11 +2926,11 @@
       adapter.addEventListener('connected',event=>{if(!isCurrent())return;const ready=event.detail?.status==='ready'||!!event.detail?.matchId;if(ready){enterOnlineMatchView(anonymous);announceFriendlyJoin();}activeOnlineStatus.textContent=ready?t('matchReady'):(anonymous?t('waitingForOpponent'):t('roomWaitingOpponent',{roomCode:room.roomCode}));});
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
-      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();adapter.pendingActionId=null;onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
+      adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlineActionSubmittedAt.clear();adapter.pendingActionId=null;onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();onlineActionSubmittedAt.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
-        const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
+        const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);onlineActionSubmittedAt.delete(event.detail.actionId);
         await onlinePresentationQueue;
         if(!isCurrent())return;
         const authoritativeTargetChoice=state.pendingDecision?.type==='chooseFloorTarget'||latestOnlineSnapshot?.nextAction?.type==='chooseFloorTarget';
@@ -2925,7 +2943,7 @@
       });
       adapter.addEventListener('actionRejected',event=>{
         if(!isCurrent())return;
-        const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);
+        const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);onlineActionSubmittedAt.delete(event.detail.actionId);
         if(action?.cardId){
           onlineHandSourceRects.delete(action.cardId);
           if(onlinePendingCardId===action.cardId)onlinePendingCardId=null;

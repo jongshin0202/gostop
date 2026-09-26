@@ -22,8 +22,11 @@ test('attract-mode click capture is active only while attract leaderboard is vis
 });
 
 
-test('render-time ranked input repair clears pending ids that no longer own a tracked action',()=>{
-  assert.match(app,/function repairOrphanedRankedPendingAction\(\)[\s\S]*?if\(!pendingActionId\|\|onlineActions\.has\(pendingActionId\)\)return false;[\s\S]*?session\.pendingActionId=null/);
-  assert.match(app,/function rankedHandTurnAvailable\(\)[\s\S]*?repairOrphanedRankedPendingAction\(\)/);
-  assert.match(app,/addEventListener\('disconnected',[\s\S]*?onlineActions\.clear\(\);adapter\.pendingActionId=null;onlinePendingCardId=null/);
+test('ranked input repairs orphaned and timed-out action locks instead of freezing the hand',()=>{
+  assert.match(app,/const RANKED_ACTION_LOCK_TIMEOUT_MS=3500/);
+  assert.match(app,/function clearRankedActionLock\(actionId=null\)[\s\S]*?session\.pendingActionId=null/);
+  assert.match(app,/function repairOrphanedRankedPendingAction\(\)[\s\S]*?if\(!onlineActions\.has\(pendingActionId\)\)\{clearRankedActionLock\(pendingActionId\);return true;\}/);
+  assert.match(app,/Date\.now\(\)-submittedAt>=RANKED_ACTION_LOCK_TIMEOUT_MS[\s\S]*?clearRankedActionLock\(pendingActionId\)[\s\S]*?session\.sync\?\.\(\)/);
+  assert.match(app,/async function humanPlay\(cardId, clickedEl\)\{[\s\S]*?if\(onlineMode\)\{\s*repairOrphanedRankedPendingAction\(\)/);
+  assert.match(app,/addEventListener\('disconnected',[\s\S]*?onlineActions\.clear\(\);onlineActionSubmittedAt\.clear\(\);adapter\.pendingActionId=null;onlinePendingCardId=null/);
 });
