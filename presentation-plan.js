@@ -52,8 +52,8 @@
     let suppressGeneratedClickUntil=0;
     let suppressGeneratedClickCardId='';
     const touchCapable=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
-    const pointerTouchSupported=typeof globalThis.PointerEvent==='function';
-    const nativeTouchSupported=touchCapable&&!pointerTouchSupported;
+    const nativeTouchSupported=touchCapable;
+    const pointerTouchSupported=!touchCapable&&typeof globalThis.PointerEvent==='function';
     const now=()=>globalThis.performance?.now?.()??Date.now();
     const playerHand=()=>doc.getElementById('playerHand');
     const cardFromTarget=target=>target?.closest?.('#playerHand .hand-card');
