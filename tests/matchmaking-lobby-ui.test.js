@@ -254,9 +254,10 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
 
-test('production browser REST calls use same-origin while lobby WebSocket remains direct',()=>{
-  const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
-  assert.match(client,/productionSameOriginRest/);
-  assert.match(client,/location\.origin/);
-  assert.match(client,/\/api\/lobby\/ws/);
+test('production browser REST and lobby transport use direct authority endpoints on static hosting',()=>{
+  assert.match(client,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
+  assert.doesNotMatch(client,/productionSameOriginRest/);
+  assert.match(client,/fetch\(apiUrl\(path\)/);
+  assert.match(client,/function lobbyUrl\(\)\{const url=new URL\(\`\$\{baseUrl\}\/api\/lobby\/ws\`\)/);
+  assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
 });
