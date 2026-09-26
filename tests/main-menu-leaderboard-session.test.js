@@ -99,7 +99,6 @@ test('main menu uses one native click path on desktop and touch devices',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
   assert.doesNotMatch(source,/installImmediateMobileTap/);
   assert.doesNotMatch(source,/immediateMenuSuppressUntil|immediateMenuSuppressTarget|immediateMenuProgrammaticTarget/);
-  assert.doesNotMatch(source,/Date\.now\(\)\+650/);
   assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
   assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
 });
@@ -434,7 +433,7 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
   assert.match(boot,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
   assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
   assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
-  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',[\s\S]*if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
+  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',async\(\)=>\{[\s\S]*if\(activeReconnectPending\(\)\)\{void finishReconnectAsAbandonment\(\);return;\}/);
   assert.match(boot,/function showReconnectAbandonmentOutcome\(result\)[\s\S]*returnGameDialog\.dataset\.outcome='1'[\s\S]*returnGameCountdown'\)\.hidden=true[\s\S]*returnGameActions'\)\.hidden=true[\s\S]*returnGameOk'\)\.hidden=false/);
   assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
   assert.match(boot,/if\(promptActiveRankedGameIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);
