@@ -675,9 +675,15 @@
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
+  let suppressFastMenuTrustedClickUntil=0;
+  document.addEventListener('click',event=>{
+    if(!event.isTrusted||Date.now()>=suppressFastMenuTrustedClickUntil)return;
+    suppressFastMenuTrustedClickUntil=0;
+    event.preventDefault();event.stopImmediatePropagation();
+  },{capture:true});
   function installImmediateMenuPointer(button){
     if(!button)return;
-    let press=null,suppressTrustedClickUntil=0;
+    let press=null;
     button.style.touchAction='manipulation';
     button.addEventListener('pointerdown',event=>{
       if(event.button!==undefined&&event.button!==0)return;
@@ -688,14 +694,11 @@
       if(!start||start.pointerId!==event.pointerId||button.disabled)return;
       const elapsed=performance.now()-start.at,dx=Math.abs(event.clientX-start.x),dy=Math.abs(event.clientY-start.y);
       if(elapsed>900||dx>18||dy>18)return;
-      suppressTrustedClickUntil=Date.now()+700;
+      suppressFastMenuTrustedClickUntil=Date.now()+700;
       event.preventDefault();event.stopPropagation();
       button.click();
     },{passive:false});
     button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
-    button.addEventListener('click',event=>{
-      if(event.isTrusted&&Date.now()<suppressTrustedClickUntil){event.preventDefault();event.stopImmediatePropagation();}
-    },{capture:true});
   }
   [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMenuPointer);
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
