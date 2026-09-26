@@ -31,16 +31,16 @@ test('touch selection is card-identity based and resets every new hand/game',()=
   assert.match(app,/document\.dispatchEvent\(new Event\('gostop-hand-reset'\)\)/);
 });
 
-test('Android prefers Pointer Events and keeps native Touch Events only as a fallback',()=>{
+test('Android prefers native Touch Events and keeps Pointer Events as a non-touch fallback',()=>{
   assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
-  assert.match(presentation,/const nativeTouchSupported=touchCapable&&!pointerTouchSupported/);
-  assert.match(presentation,/const pointerTouchSupported=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
-  assert.match(presentation,/addEventListener\('pointermove'/);
-  assert.match(presentation,/addEventListener\('pointerup'/);
+  assert.match(presentation,/const nativeTouchSupported=touchCapable/);
+  assert.match(presentation,/const pointerTouchSupported=!touchCapable&&typeof globalThis\.PointerEvent==='function'/);
   assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
+  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/addEventListener\('pointermove'/);
+  assert.match(presentation,/addEventListener\('pointerup'/);
 });
 
 test('horizontal browse, upward flick, and tap are separate deterministic outcomes',()=>{

@@ -538,7 +538,10 @@
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
-    return !!globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected,pendingActionId:null,blocked});
+    if(!connected||blocked)return false;
+    if(globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected:true,pendingActionId:null,blocked:false}))return true;
+    if(snapshot?.nextAction)return false;
+    return !!state&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
   }
   function rankedHandInputEnabled(){
     if(!rankedHandTurnAvailable())return false;
