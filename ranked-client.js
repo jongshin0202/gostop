@@ -161,7 +161,7 @@
   async function api(path,{method='GET',body,auth=true}={}){
     if(!baseUrl)throw new Error(rt('serverUnavailable'));
     const headers={};if(body!==undefined)headers['content-type']='application/json';if(auth&&authToken)headers.authorization=`Bearer ${authToken}`;
-    const response=await fetch(apiUrl(path,method),{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json().catch(()=>({}));
+    const response=await fetch(apiUrl(path),{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json().catch(()=>({}));
     if(!response.ok){const error=Object.assign(new Error(data.error?.message||rt('requestFailed')),data.error||{});error.status=response.status;error.message=localizedError(error);throw error;}return data;
   }
   function getAuthToken(){return authToken;}
