@@ -95,16 +95,13 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('coarse mobile menu uses one immediate pointer-up activation path without competing handlers',()=>{
+test('main menu uses one native click path on desktop and touch devices',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
-  assert.match(source,/function installImmediateMobileTap\(button\)/);
-  assert.match(source,/\[rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo\]\.forEach\(installImmediateMobileTap\)/);
-  assert.doesNotMatch(source,/\[rankedToggle,freeToggle[^\]]*\]\.forEach\(installImmediateMobileTap\)/);
-  assert.match(source,/button\.addEventListener\('pointerdown'/);
-  assert.match(source,/button\.addEventListener\('touchend'/);
-  assert.match(source,/if\(distance>18\)return/);
-  assert.match(source,/immediateMenuProgrammaticTarget=button;[\s\S]*button\.click\(\)/);
-  assert.doesNotMatch(source,/fastMenuPointer|fastMenuSyntheticClick|fastMenuSuppressUntil/);
+  assert.doesNotMatch(source,/installImmediateMobileTap/);
+  assert.doesNotMatch(source,/immediateMenuSuppressUntil|immediateMenuSuppressTarget|immediateMenuProgrammaticTarget/);
+  assert.doesNotMatch(source,/Date\.now\(\)\+650/);
+  assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
+  assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
 });
 
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
@@ -349,14 +346,12 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/max-height:var\(--submenu-open-height,240px\)/);
-  assert.match(source,/const height=lite\?\(submenu\.children\.length\*52\+24\):submenu\.scrollHeight\+24/);assert.match(source,/touch-action:manipulation/);
-  assert.match(source,/function installImmediateMobileTap\(button\)/);
-  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
-  assert.match(source,/const pointerCapable=typeof globalThis\.PointerEvent==='function'/);
-  assert.match(source,/if\(!pointerCapable&&touchCapable\)[\s\S]*button\.addEventListener\('touchend',[\s\S]*activate\(\)/);
-  assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*activate\(\)/);
-  assert.match(source,/immediateMenuSuppressUntil=Date\.now\(\)\+650/);
+  assert.match(source,/\.menu-submenu\{display:none!important/);
+  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{display:grid!important;pointer-events:auto\}/);
+  assert.match(source,/submenu\.hidden=!open/);
+  assert.doesNotMatch(source,/submenu\.scrollHeight|--submenu-open-height|max-height \.46s/);
+  assert.doesNotMatch(source,/installImmediateMobileTap|immediateMenuSuppressUntil/);
+  assert.match(source,/touch-action:manipulation/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
