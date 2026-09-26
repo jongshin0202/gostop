@@ -345,11 +345,15 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/\.menu-submenu\{display:none!important/);
-  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{display:grid!important;pointer-events:auto\}/);
-  assert.match(source,/submenu\.hidden=!open/);
-  assert.doesNotMatch(source,/submenu\.scrollHeight|--submenu-open-height|max-height \.46s/);
-  assert.doesNotMatch(source,/installImmediateMobileTap|immediateMenuSuppressUntil/);
+  assert.match(source,/\.menu-submenu\{display:grid!important[^]*?max-height:0[^]*?opacity:0[^]*?visibility:hidden/);
+  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{max-height:var\(--submenu-open-height,240px\)[^]*?opacity:1[^]*?visibility:visible[^]*?pointer-events:auto/);
+  assert.match(source,/submenu\.children\.length\*52\+24/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
+  assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
+  assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
+  assert.doesNotMatch(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
+  assert.doesNotMatch(source,/\.menu-category-toggle,\.menu-category-chevron,\.menu-utility\{transition:none!important\}/);
   assert.match(source,/touch-action:manipulation/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
@@ -443,16 +447,17 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
 
 
 
-test('production static hosting sends API requests directly to Cloudflare authority and main buttons activate on pointerup',()=>{
+test('production static hosting keeps direct authority routing and native first-touch menu activation',()=>{
   assert.match(source,/const apiUrl=path=>`\$\{baseUrl\}\$\{path\}`/);
   assert.doesNotMatch(source,/productionSameOriginRest/);
-  assert.match(source,/function installImmediateMenuPointer\(button\)/);
-  assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*?button\.click\(\)/);
-  assert.match(source,/let suppressFastMenuTrustedClickUntil=0/);
-  assert.match(source,/document\.addEventListener\('click',event=>\{[\s\S]*!event\.isTrusted\|\|Date\.now\(\)>=suppressFastMenuTrustedClickUntil[\s\S]*event\.stopImmediatePropagation\(\)/);
-  assert.match(source,/\.gostop-main-menu button\{touch-action:manipulation!important\}/);
-  assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
-  assert.match(source,/backdrop-filter:none!important/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/button\.addEventListener\('touchstart'/);
+  assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
+  assert.match(source,/immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date\.now\(\)\+650/);
+  assert.match(source,/overlay\.addEventListener\('click'/);
+  assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
+  assert.match(source,/@keyframes mainMenuChoiceSweep/);
+  assert.match(source,/\.menu-category-chevron\{[^]*?transition:transform \.24s/);
 });
 
 test('declining active Solo clears the client lock before account refresh',()=>{
