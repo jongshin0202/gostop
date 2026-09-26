@@ -41,7 +41,7 @@ function mobileHarness(){
   return {doc,card,slot,hand,listeners,activations,fire,touch,eventBase};
 }
 
-test('Android Chrome prefers Pointer Events, second tap commits, upward flick commits, and horizontal browse never commits',()=>{
+test('Android Chrome uses native touch: second tap commits, upward flick commits, and horizontal browse never commits',()=>{
   const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
   const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
   const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
@@ -52,30 +52,32 @@ test('Android Chrome prefers Pointer Events, second tap commits, upward flick co
 
     const h=mobileHarness();
     assert.equal(plan.installHandFlickGestures(h.doc),true);
-    assert.equal(h.listeners.has('pointerdown'),true);
-    assert.equal(h.listeners.has('pointermove'),true);
-    assert.equal(h.listeners.has('pointerup'),true);
-    assert.equal(h.listeners.has('touchstart'),false,'Pointer Events own Android hand gestures when supported');
+    assert.equal(h.listeners.has('touchstart'),true);
+    assert.equal(h.listeners.has('touchmove'),true);
+    assert.equal(h.listeners.has('touchend'),true);
+    assert.equal(h.listeners.has('pointerdown'),false,'native Touch Events own Android hand gestures on touch devices');
 
-    const pointerEvent=(id,x,y)=>({...h.eventBase(),target:h.card,pointerId:id,pointerType:'touch',clientX:x,clientY:y});
+    const touchStart=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
+    const touchMove=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
+    const touchEnd=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[],changedTouches:[h.touch(id,x,y)]});
 
-    h.fire('pointerdown',pointerEvent(1,125,550));
-    h.fire('pointerup',pointerEvent(1,125,550));
+    h.fire('touchstart',touchStart(1,125,550));
+    h.fire('touchend',touchEnd(1,125,550));
     assert.equal(h.activations.length,0,'first tap only selects the card');
     assert.equal(h.slot.classList.contains('is-hovered'),true);
 
-    h.fire('pointerdown',pointerEvent(2,125,550));
-    h.fire('pointerup',pointerEvent(2,125,550));
+    h.fire('touchstart',touchStart(2,125,550));
+    h.fire('touchend',touchEnd(2,125,550));
     assert.deepEqual(h.activations,[{cardId:'m1-1',blank:false}],'second tap commits the same selected card');
 
-    h.fire('pointerdown',pointerEvent(3,125,550));
-    h.fire('pointermove',pointerEvent(3,128,525));
-    h.fire('pointerup',pointerEvent(3,128,505));
+    h.fire('touchstart',touchStart(3,125,550));
+    h.fire('touchmove',touchMove(3,128,525));
+    h.fire('touchend',touchEnd(3,128,505));
     assert.deepEqual(h.activations,[{cardId:'m1-1',blank:false},{cardId:'m1-1',blank:false}],'upward flick commits immediately');
 
-    h.fire('pointerdown',pointerEvent(4,125,550));
-    h.fire('pointermove',pointerEvent(4,180,548));
-    h.fire('pointerup',pointerEvent(4,190,548));
+    h.fire('touchstart',touchStart(4,125,550));
+    h.fire('touchmove',touchMove(4,180,548));
+    h.fire('touchend',touchEnd(4,190,548));
     assert.equal(h.activations.length,2,'horizontal browse must never submit a card');
   }finally{
     if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
@@ -85,7 +87,7 @@ test('Android Chrome prefers Pointer Events, second tap commits, upward flick co
 });
 
 
-test('second tap still emits the stable card activation when the rendered card disappears before commit',()=>{
+test('native-touch second tap still emits stable card activation when the rendered card disappears before commit',()=>{
   const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
   const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
   const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
@@ -108,15 +110,16 @@ test('second tap still emits the stable card activation when the rendered card d
       return true;
     };
     assert.equal(plan.installHandFlickGestures(h.doc),true);
-    const pointerEvent=(id,x,y)=>({...h.eventBase(),target:h.card,pointerId:id,pointerType:'touch',clientX:x,clientY:y});
+    const touchStart=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
+    const touchEnd=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[],changedTouches:[h.touch(id,x,y)]});
 
-    h.fire('pointerdown',pointerEvent(1,125,550));
-    h.fire('pointerup',pointerEvent(1,125,550));
+    h.fire('touchstart',touchStart(1,125,550));
+    h.fire('touchend',touchEnd(1,125,550));
     assert.equal(direct.length,0);
 
-    h.fire('pointerdown',pointerEvent(2,125,550));
+    h.fire('touchstart',touchStart(2,125,550));
     present=false;
-    h.fire('pointerup',pointerEvent(2,125,550));
+    h.fire('touchend',touchEnd(2,125,550));
     assert.deepEqual(direct,[{cardId:'m1-1',blank:false}]);
   }finally{
     if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
