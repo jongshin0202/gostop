@@ -106,7 +106,8 @@ test('normal play and hand input are frozen while opponent reconnect window is a
   assert.match(app,/flow\?\.opponentReconnectUntil/);
   const hand=app.slice(app.indexOf('function rankedHandTurnAvailable'),app.indexOf('function render()'));
   assert.match(hand,/flow\?\.opponentReconnectUntil/);
-  assert.match(hand,/viewerCanInteract\?\.\(snapshot,\{connected,pendingActionId:null,blocked\}\)/);
+  assert.match(hand,/if\(!connected\|\|blocked\)return false/);
+  assert.match(hand,/viewerCanInteract\?\.\(snapshot,\{connected:true,pendingActionId:null,blocked:false\}\)/);
 });
 
 test('active ranked room credential persists on device but resumes only after explicit mode selection',()=>{
