@@ -95,12 +95,15 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('main menu uses one native click path on desktop and touch devices',()=>{
+test('main menu keeps native desktop clicks while touch phones use per-button first-touch activation',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
-  assert.doesNotMatch(source,/installImmediateMobileTap/);
-  assert.doesNotMatch(source,/immediateMenuSuppressUntil|immediateMenuSuppressTarget|immediateMenuProgrammaticTarget/);
+  assert.match(source,/function installImmediateMobileTap\(button\)/);
+  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
+  assert.match(source,/if\(!touchCapable\)return/);
+  assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
   assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
   assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
+  assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
 });
 
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
