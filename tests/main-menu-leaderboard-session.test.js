@@ -452,7 +452,7 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
 
 test('production static hosting keeps direct authority routing and native first-touch menu activation',()=>{
   assert.match(source,/productionSameOriginRest/);
-  assert.match(source,/apiUrl=\\(path,method='GET'\\)=>productionSameOriginRest&&method!=='GET'/);
+  assert.ok(source.includes("const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'"));
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/button\.addEventListener\('touchstart'/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
