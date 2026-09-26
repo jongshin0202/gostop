@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
 const server=fs.readFileSync(new URL('../server/lobby.mjs',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const online=fs.readFileSync(new URL('../online-client.js',import.meta.url),'utf8');
 
 test('connection protection signup notice stays short and action-focused',()=>{
   assert.ok(client.includes("signupPolicyText:'If you disconnect during a Coin game, you have 1 minute to return.\\n\\nYour first forced disconnect each month is protected, so no Coins are deducted. After that, a disconnect may count as a loss if your opponent was ahead.\\n\\nPress OK to continue.'"));
@@ -246,17 +247,18 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20260925-5/);
   assert.match(index,/styles\.css\?v=20260925-2/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20260925-26/);
-  assert.match(index,/online-client\.js\?v=20260925-3/);
+  assert.match(index,/ranked-client\.js\?v=20260926-27/);
+  assert.match(index,/online-client\.js\?v=20260926-4/);
   assert.match(index,/app\.js\?v=20260925-12/);
   assert.match(index,/presentation-plan\.js\?v=20260925-20/);
   assert.match(index,/diagnostics\.js\?v=20260925-2/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
 
-test('production browser REST calls use same-origin while lobby WebSocket remains direct',()=>{
-  const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
-  assert.match(client,/productionSameOriginRest/);
-  assert.match(client,/location\.origin/);
-  assert.match(client,/\/api\/lobby\/ws/);
+test('production browser REST and lobby transport use direct authority endpoints on static hosting',()=>{
+  assert.match(client,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
+  assert.doesNotMatch(client,/productionSameOriginRest/);
+  assert.match(client,/fetch\(apiUrl\(path\)/);
+  assert.match(client,/function lobbyUrl\(\)\{const url=new URL\(\`\$\{baseUrl\}\/api\/lobby\/ws\`\)/);
+  assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
 });

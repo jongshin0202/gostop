@@ -19,7 +19,7 @@
     constructor({baseUrl=globalThis.GOSTOP_CONFIG?.serverUrl||DEFAULT_SERVER_URL,WebSocketImpl=WebSocket,authToken=null,anonymous=false}={}){super();this.baseUrl=String(baseUrl||DEFAULT_SERVER_URL).replace(/\/$/,'');this.WebSocketImpl=WebSocketImpl;this.authToken=authToken;this.anonymous=!!anonymous;this.room=null;this.revision=0;this.pendingActionId=null;this.socket=null;this.explicitlyClosed=false;this.reconnectTimer=null;this.reconnectAttempts=0;}
     currentAuthToken(){return this.anonymous?null:(this.authToken||globalThis.GoStopRanked?.getAuthToken?.()||null);}
     setAuthToken(token){this.authToken=token||null;return this;}
-    requestUrl(path){const sameOrigin=typeof location!=='undefined'&&/^(?:www\.)?gostoplive\.com$/i.test(location.hostname)&&String(path||'').startsWith('/api/');return sameOrigin?`${location.origin}${path}`:`${this.baseUrl}${path}`;}
+    requestUrl(path){return `${this.baseUrl}${path}`;}
     async request(path,body){const headers={'content-type':'application/json'},token=this.currentAuthToken();if(token)headers.authorization=`Bearer ${token}`;const response=await fetch(this.requestUrl(path),{method:'POST',headers,body:JSON.stringify(body||{})});const data=await response.json();if(!response.ok)throw Object.assign(new Error(data.error?.message||'Room request failed.'),data.error);return data.room;}
     assertConfigured(){if(!this.baseUrl)throw Object.assign(new Error('Online play is unavailable because the server URL is not configured.'),{code:'ONLINE_NOT_CONFIGURED'});}
     async create(){this.assertConfigured();this.room=await this.request('/api/rooms');globalThis.dispatchEvent?.(new CustomEvent('gostop-online-room-created',{detail:{room:this.room,adapter:this}}));return this.room;}
