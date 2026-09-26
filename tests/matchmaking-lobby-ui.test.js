@@ -257,8 +257,8 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
 
 test('production browser REST and lobby transport use direct authority endpoints on static hosting',()=>{
   assert.match(client,/productionSameOriginRest/);
-  assert.match(client,/apiUrl=\\(path,method='GET'\\)=>productionSameOriginRest&&method!=='GET'/);
-  assert.match(client,/fetch\\(apiUrl\\(path,method\\)/);
+  assert.ok(client.includes("const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'"));
+  assert.ok(client.includes('fetch(apiUrl(path,method)'));
   assert.match(client,/function lobbyUrl\(\)\{const url=new URL\(\`\$\{baseUrl\}\/api\/lobby\/ws\`\)/);
   assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
 });
