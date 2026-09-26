@@ -361,7 +361,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260926-28/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260926-29/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
@@ -451,8 +451,8 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
 
 
 test('production static hosting keeps direct authority routing and native first-touch menu activation',()=>{
-  assert.match(source,/const apiUrl=path=>`\$\{baseUrl\}\$\{path\}`/);
-  assert.doesNotMatch(source,/productionSameOriginRest/);
+  assert.match(source,/productionSameOriginRest/);
+  assert.ok(source.includes("const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'"));
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/button\.addEventListener\('touchstart'/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);

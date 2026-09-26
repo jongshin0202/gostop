@@ -247,7 +247,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20260925-5/);
   assert.match(index,/styles\.css\?v=20260925-2/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20260926-28/);
+  assert.match(index,/ranked-client\.js\?v=20260926-29/);
   assert.match(index,/online-client\.js\?v=20260926-4/);
   assert.match(index,/app\.js\?v=20260926-13/);
   assert.match(index,/presentation-plan\.js\?v=20260926-21/);
@@ -256,9 +256,9 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
 });
 
 test('production browser REST and lobby transport use direct authority endpoints on static hosting',()=>{
-  assert.match(client,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
-  assert.doesNotMatch(client,/productionSameOriginRest/);
-  assert.match(client,/fetch\(apiUrl\(path\)/);
+  assert.match(client,/productionSameOriginRest/);
+  assert.ok(client.includes("const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'"));
+  assert.ok(client.includes('fetch(apiUrl(path,method)'));
   assert.match(client,/function lobbyUrl\(\)\{const url=new URL\(\`\$\{baseUrl\}\/api\/lobby\/ws\`\)/);
   assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
 });
