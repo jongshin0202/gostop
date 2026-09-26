@@ -448,7 +448,8 @@ test('production static hosting sends API requests directly to Cloudflare author
   assert.doesNotMatch(source,/productionSameOriginRest/);
   assert.match(source,/function installImmediateMenuPointer\(button\)/);
   assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*?button\.click\(\)/);
-  assert.match(source,/event\.isTrusted&&Date\.now\(\)<suppressTrustedClickUntil/);
+  assert.match(source,/let suppressFastMenuTrustedClickUntil=0/);
+  assert.match(source,/document\.addEventListener\('click',event=>\{[\s\S]*!event\.isTrusted\|\|Date\.now\(\)>=suppressFastMenuTrustedClickUntil[\s\S]*event\.stopImmediatePropagation\(\)/);
   assert.match(source,/\.gostop-main-menu button\{touch-action:manipulation!important\}/);
   assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
   assert.match(source,/backdrop-filter:none!important/);
