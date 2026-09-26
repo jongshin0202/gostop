@@ -18,8 +18,10 @@ test('low-end phones automatically use the lightweight motion profile without ch
   assert.match(ranked,/html\.gostop-performance-lite \.ambient-room\{filter:none!important;transform:none!important\}/);
   assert.match(ranked,/html\.gostop-performance-lite dialog::backdrop\{backdrop-filter:none!important\}/);
   assert.match(ranked,/html\.gostop-performance-lite \.leaderboard-card-fan\{display:none!important\}/);
-  assert.doesNotMatch(ranked,/submenu\.scrollHeight|--submenu-open-height/);
-  assert.match(ranked,/submenu\.hidden=!open/);
+  assert.doesNotMatch(ranked,/submenu\.scrollHeight/);
+  assert.match(ranked,/submenu\.children\.length\*52\+24/);
+  assert.match(ranked,/--submenu-open-height/);
+  assert.match(ranked,/html\.gostop-performance-lite \.menu-submenu\{[^]*?transition:opacity \.12s ease/);
   assert.match(ranked,/touch-action:manipulation/);
   assert.match(app,/const performanceLite=\(\)=>globalThis\.GOSTOP_PERFORMANCE_LITE===true/);
   assert.match(app,/const motionDuration=ms=>performanceLite\(\)\?Math\.max\(110,Math\.round\(ms\*\.58\)\):ms/);
