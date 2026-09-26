@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const client=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
 const server=fs.readFileSync(new URL('../server/lobby.mjs',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const online=fs.readFileSync(new URL('../online-client.js',import.meta.url),'utf8');
 
 test('connection protection signup notice stays short and action-focused',()=>{
   assert.ok(client.includes("signupPolicyText:'If you disconnect during a Coin game, you have 1 minute to return.\\n\\nYour first forced disconnect each month is protected, so no Coins are deducted. After that, a disconnect may count as a loss if your opponent was ahead.\\n\\nPress OK to continue.'"));
