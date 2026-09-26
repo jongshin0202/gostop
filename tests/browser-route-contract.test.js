@@ -31,10 +31,14 @@ test('release route contract: every literal player REST endpoint used by the bro
   }
 });
 
-test('release route contract: static production sends Player Info directly to Worker CORS API',()=>{
-  assert.match(ranked,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
-  assert.doesNotMatch(ranked,/productionSameOriginRest/);
-  assert.match(ranked,/fetch\(apiUrl\(path\)/);
+test('release route contract: production POSTs use the same-origin API proxy while reads remain direct',()=>{
+  const proxy=(vercel.rewrites||[]).find(rule=>rule.source==='/api/:path*');
+  assert.ok(proxy,'Production must proxy authenticated API writes');
+  assert.equal(proxy.destination,'https://gostop-authority.jwshin1.workers.dev/api/:path*');
+  assert.match(ranked,/productionSameOriginRest/);
+  assert.match(ranked,/apiUrl=\(path,method='GET'\)=>productionSameOriginRest&&method!=='GET'/);
+  assert.match(ranked,/fetch\(apiUrl\(path,method\)/);
+  assert.match(ranked,/api\('\/api\/solo',\{method:'POST'/);
   assert.match(ranked,/api\('\/api\/player-profile',\{method:'POST'/);
 });
 
@@ -76,9 +80,10 @@ test('release transport contract: Online room HTTP and WebSocket both target the
 });
 
 
-test('release transport contract: all player REST reads and writes remain on direct Worker CORS path',()=>{
-  assert.match(ranked,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
+test('release transport contract: player reads stay direct while Competitive Solo writes use production proxy',()=>{
+  assert.match(ranked,/apiUrl=\(path,method='GET'\)=>productionSameOriginRest&&method!=='GET'/);
   assert.match(ranked,/refreshLeaderboardData[^]*api\('\/api\/leaderboards',\{auth:false\}\)/);
   assert.match(ranked,/refreshAccount[^]*api\('\/api\/me'\)/);
+  assert.match(ranked,/api\('\/api\/solo',\{method:'POST'/);
   assert.match(ranked,/api\('\/api\/solo\/leave-for-challenge',\{method:'POST'/);
 });
