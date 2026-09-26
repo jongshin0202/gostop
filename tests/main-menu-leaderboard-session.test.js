@@ -354,7 +354,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260925-26/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260926-27/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
@@ -441,3 +441,25 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
   assert.match(appSource,/onlineSkipInitialOpening=!!resumeExisting/);
 });
 
+
+
+test('production static hosting sends API requests directly to Cloudflare authority and main buttons activate on pointerup',()=>{
+  assert.match(source,/const apiUrl=path=>`\$\{baseUrl\}\$\{path\}`/);
+  assert.doesNotMatch(source,/productionSameOriginRest/);
+  assert.match(source,/function installImmediateMenuPointer\(button\)/);
+  assert.match(source,/button\.addEventListener\('pointerup',[\s\S]*?button\.click\(\)/);
+  assert.match(source,/event\.isTrusted&&Date\.now\(\)<suppressTrustedClickUntil/);
+  assert.match(source,/\.gostop-main-menu button\{touch-action:manipulation!important\}/);
+  assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
+  assert.match(source,/backdrop-filter:none!important/);
+});
+
+test('declining active Solo clears the client lock before account refresh',()=>{
+  const start=source.indexOf("$('returnGameNo').addEventListener('click'");
+  const end=source.indexOf("$('returnGameOk').addEventListener('click'",start);
+  const block=source.slice(start,end);
+  assert.match(block,/account=\{\.\.\.account,activeRanked:null\}/);
+  assert.match(block,/localStorage\.removeItem\(ACTIVE_RANKED_ROOM_KEY\)/);
+  assert.match(block,/api\('\/api\/solo\/leave-for-challenge'/);
+  assert.match(block,/await refreshAccount\(\)/);
+});
