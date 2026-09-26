@@ -178,3 +178,10 @@ test('socket disconnect clears an in-flight action lock before reconnect',()=>{
   FakeSocket.last.onclose?.({code:1006});
   assert.equal(client.pendingActionId,null);
 });
+
+
+test('room REST always targets the authority base URL on static production hosting',()=>{
+  class Socket{}
+  const client=new OnlineSessionAdapter({baseUrl:'https://authority.example',WebSocketImpl:Socket});
+  assert.equal(client.requestUrl('/api/rooms'),'https://authority.example/api/rooms');
+});

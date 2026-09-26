@@ -153,8 +153,7 @@
   }
   function persistAccountCache(){try{if(authToken&&account)localStorage.setItem(ACCOUNT_CACHE_KEY,JSON.stringify(account));else localStorage.removeItem(ACCOUNT_CACHE_KEY);}catch(_){}}
   try{authToken=localStorage.getItem(TOKEN_KEY)||null;const cached=JSON.parse(localStorage.getItem(ACCOUNT_CACHE_KEY)||'null');if(authToken&&cached&&typeof cached==='object'&&cached.nickname){account=cached;readAcknowledgedNoticeCache(account.id);}}catch(_){ }
-  const productionSameOriginRest=typeof location!=='undefined'&&/^(?:www\.)?gostoplive\.com$/i.test(location.hostname);
-  const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'&&String(path||'').startsWith('/api/')?`${location.origin}${path}`:`${baseUrl}${path}`;
+  const apiUrl=path=>`${baseUrl}${path}`;
   const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[char]));
   const fmtScore=value=>Number(value||0).toFixed(2).replace(/\.00$/,'');
   const flagEmoji=country=>{const code=String(country||'').toUpperCase();return /^[A-Z]{2}$/.test(code)?String.fromCodePoint(...[...code].map(char=>127397+char.charCodeAt(0))):'🌐';};
@@ -162,7 +161,7 @@
   async function api(path,{method='GET',body,auth=true}={}){
     if(!baseUrl)throw new Error(rt('serverUnavailable'));
     const headers={};if(body!==undefined)headers['content-type']='application/json';if(auth&&authToken)headers.authorization=`Bearer ${authToken}`;
-    const response=await fetch(apiUrl(path,method),{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json().catch(()=>({}));
+    const response=await fetch(apiUrl(path),{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json().catch(()=>({}));
     if(!response.ok){const error=Object.assign(new Error(data.error?.message||rt('requestFailed')),data.error||{});error.status=response.status;error.message=localizedError(error);throw error;}return data;
   }
   function getAuthToken(){return authToken;}
@@ -591,7 +590,11 @@
     .gostop-main-menu.main-menu-accordion:before{content:none!important;display:none!important}
     .menu-category-block{display:grid!important;gap:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;border-radius:16px!important;overflow:visible!important}.menu-category-block:before,.menu-category-block:after{content:none!important;display:none!important}
     .menu-category-toggle{position:relative;overflow:hidden;width:100%;min-height:72px;border-radius:12px;border:2px solid;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 18px;color:#fff;cursor:pointer;text-align:left;box-shadow:inset 0 1px rgba(255,255,255,.18),0 8px 18px rgba(0,0,0,.25);transition:transform .08s ease,filter .08s ease,border-radius .08s ease,box-shadow .08s ease}.menu-category-toggle>*{position:relative;z-index:1}.menu-category-toggle:before{content:"";position:absolute;z-index:0;top:-90%;left:-24%;width:18%;height:280%;pointer-events:none;opacity:0;background:linear-gradient(90deg,transparent,rgba(255,247,211,.34),transparent);transform:rotate(18deg);animation:mainMenuChoiceSweep 5.8s ease-in-out infinite}.menu-category-friendly:before{animation-delay:2.9s}.menu-category-toggle:hover,.menu-category-toggle:focus-visible{transform:translateY(-1px) scale(1.004);filter:brightness(1.10);outline:none;box-shadow:inset 0 1px rgba(255,255,255,.20),0 10px 22px rgba(0,0,0,.29),0 0 18px rgba(235,186,82,.10)}.menu-category-toggle:active{transform:translateY(0) scale(.994)}.menu-category-competitive{border-color:#efc66b;background:radial-gradient(circle at 20% 0%,rgba(255,224,142,.14),transparent 35%),linear-gradient(180deg,#a97628,#754617)}.menu-category-friendly{border-color:#8cc89a;background:radial-gradient(circle at 78% 0%,rgba(191,242,201,.11),transparent 35%),linear-gradient(180deg,#31693f,#234c30)}@keyframes mainMenuChoiceSweep{0%,68%{left:-24%;opacity:0}73%{opacity:.62}88%{left:112%;opacity:.42}94%,100%{left:112%;opacity:0}}
-    .menu-category-copy{display:grid;gap:2px}.solo-start-overlay .menu-category-title{font:800 clamp(36px,3.05vw,42px)/.98 Georgia,serif!important;letter-spacing:0;white-space:nowrap}.menu-category-note{font:750 10px/1.1 system-ui,sans-serif;letter-spacing:.05em;opacity:.88}.menu-category-chevron{font:800 24px/1 system-ui,sans-serif;transition:transform .1s ease}.menu-category-block.expanded .menu-category-toggle{border-radius:13px 13px 8px 8px}.menu-category-block.expanded .menu-category-chevron{transform:rotate(180deg)}
+    .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important}
+    .gostop-main-menu button{touch-action:manipulation!important}
+    .menu-category-toggle:before{display:none!important;animation:none!important}
+    .menu-category-toggle,.menu-category-chevron,.menu-utility{transition:none!important}
+        .menu-category-copy{display:grid;gap:2px}.solo-start-overlay .menu-category-title{font:800 clamp(36px,3.05vw,42px)/.98 Georgia,serif!important;letter-spacing:0;white-space:nowrap}.menu-category-note{font:750 10px/1.1 system-ui,sans-serif;letter-spacing:.05em;opacity:.88}.menu-category-chevron{font:800 24px/1 system-ui,sans-serif;transition:transform .1s ease}.menu-category-block.expanded .menu-category-toggle{border-radius:13px 13px 8px 8px}.menu-category-block.expanded .menu-category-chevron{transform:rotate(180deg)}
     .menu-submenu{display:none!important;grid-template-columns:1fr;gap:7px;overflow:hidden;pointer-events:none;margin:0 10px;padding:8px 9px 9px;border:1px solid transparent;border-top:0;border-radius:0 0 13px 13px}.menu-submenu[hidden]{display:none!important}.menu-category-block.expanded .menu-submenu{display:grid!important;pointer-events:auto}.ranked-menu-group.expanded .menu-submenu{border-color:rgba(239,198,107,.34);background:linear-gradient(180deg,rgba(99,60,20,.44),rgba(40,24,12,.72))}.free-menu-group.expanded .menu-submenu{border-color:rgba(140,200,154,.30);background:linear-gradient(180deg,rgba(40,83,49,.46),rgba(19,43,27,.72))}.menu-submenu>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800}
     .menu-training{background:linear-gradient(180deg,#24201d,#100e0d);border:1px solid #6e6257;color:#f4eadb;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.08),0 7px 16px rgba(0,0,0,.28)}.menu-training:hover,.menu-training:focus-visible{filter:brightness(1.14);outline:none}
     .main-menu-utilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:2px}.menu-utility{min-height:40px!important;border:1px solid rgba(218,177,91,.43)!important;border-radius:11px!important;background:linear-gradient(180deg,rgba(62,37,23,.96),rgba(32,20,14,.98))!important;color:#f5e8ce!important;font:800 14px/1.1 Georgia,serif!important;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.04),0 7px 15px rgba(0,0,0,.20);transition:transform .14s ease,filter .14s ease}.menu-utility:hover,.menu-utility:focus-visible{transform:translateY(-1px);filter:brightness(1.12);outline:none}.menu-utility:before{display:inline-block;margin-right:7px;font-family:system-ui,sans-serif;font-size:14px;vertical-align:-1px}.menu-utility-friends:before{content:"👥"}.menu-utility-leaderboards:before{content:"🏆"}.menu-utility-help:before{content:"?"}.ranked-menu-group.referral-focus .menu-category-toggle{animation:referralFocus 1.1s ease-in-out 3;box-shadow:0 0 0 3px rgba(240,204,123,.34),0 0 32px rgba(240,204,123,.32)}
@@ -672,6 +675,32 @@
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
+  let suppressFastMenuTrustedClickUntil=0;
+  document.addEventListener('click',event=>{
+    if(!event.isTrusted||Date.now()>=suppressFastMenuTrustedClickUntil)return;
+    suppressFastMenuTrustedClickUntil=0;
+    event.preventDefault();event.stopImmediatePropagation();
+  },{capture:true});
+  function installImmediateMenuPointer(button){
+    if(!button)return;
+    let press=null;
+    button.style.touchAction='manipulation';
+    button.addEventListener('pointerdown',event=>{
+      if(event.button!==undefined&&event.button!==0)return;
+      press={pointerId:event.pointerId,x:event.clientX,y:event.clientY,at:performance.now()};
+    },{passive:true});
+    button.addEventListener('pointerup',event=>{
+      const start=press;press=null;
+      if(!start||start.pointerId!==event.pointerId||button.disabled)return;
+      const elapsed=performance.now()-start.at,dx=Math.abs(event.clientX-start.x),dy=Math.abs(event.clientY-start.y);
+      if(elapsed>900||dx>18||dy>18)return;
+      suppressFastMenuTrustedClickUntil=Date.now()+700;
+      event.preventDefault();event.stopPropagation();
+      button.click();
+    },{passive:false});
+    button.addEventListener('pointercancel',()=>{press=null;},{passive:true});
+  }
+  [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMenuPointer);
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
   ['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'].forEach((id,index)=>{const card=deck.find(item=>item.id===id);if(!card)return;const img=document.createElement('img');img.className='main-menu-floor-card';img.alt='';img.decoding='async';img.src=cardFaceUrl(card.file);img.style.setProperty('--floor-index',String(index));floorCards.appendChild(img);});
   if(menuTitle)menuTitle.after(floorCards);else overlay.prepend(floorCards);menu.after(accountBox);
@@ -1489,18 +1518,21 @@
   $('returnGameNo').addEventListener('click',async()=>{
     if(activeReconnectPending()){void finishReconnectAsAbandonment();return;}
     const active=returnReconnectState||account?.activeRanked;
+    const no=$('returnGameNo');if(no.disabled)return;no.disabled=true;
     if(active?.mode==='solo'&&active?.roomCode){
-      const no=$('returnGameNo');if(no.disabled)return;no.disabled=true;
+      if(account)account={...account,activeRanked:null};
+      try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+      syncRankedButtons();renderAccountBox();patchGameIdentity();
       try{
         const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
-        if(data?.account){account=data.account;renderAccountBox();patchGameIdentity();}
-        try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+        if(data?.account)account=data.account;
       }catch(error){showToast(localizedError(error),6000);}
-      finally{no.disabled=false;}
     }
     closeReturnGameDialog();
     await refreshAccount();
+    syncRankedButtons();renderAccountBox();patchGameIdentity();
     revealCurrentMainMenu();
+    no.disabled=false;
   });
   $('returnGameOk').addEventListener('click',async()=>{const ok=$('returnGameOk');if(ok.disabled)return;ok.disabled=true;closeReturnGameDialog();await refreshAccount();revealCurrentMainMenu();ok.disabled=false;});
   returnGameDialog.addEventListener('cancel',event=>event.preventDefault());

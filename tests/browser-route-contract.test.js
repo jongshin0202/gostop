@@ -31,14 +31,10 @@ test('release route contract: every literal player REST endpoint used by the bro
   }
 });
 
-test('release route contract: production has a same-origin catch-all API proxy and Player Info uses it',()=>{
-  const proxy=(vercel.rewrites||[]).find(rule=>rule.source==='/api/:path*');
-  assert.ok(proxy,'Production must proxy all /api REST traffic');
-  assert.equal(proxy.destination,'https://gostop-authority.jwshin1.workers.dev/api/:path*');
-  assert.match(ranked,/productionSameOriginRest/);
-  assert.match(ranked,/apiUrl=\(path,method='GET'\)=>productionSameOriginRest&&method!=='GET'/);
-  assert.match(ranked,/fetch\(apiUrl\(path,method\)/);
-  assert.match(ranked,/startsWith\('\/api\/'\)/);
+test('release route contract: static production sends Player Info directly to Worker CORS API',()=>{
+  assert.match(ranked,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
+  assert.doesNotMatch(ranked,/productionSameOriginRest/);
+  assert.match(ranked,/fetch\(apiUrl\(path\)/);
   assert.match(ranked,/api\('\/api\/player-profile',\{method:'POST'/);
 });
 
@@ -73,16 +69,16 @@ test('release route integration: main-menu Player Info succeeds through the actu
   const profile=await profileResponse.json();assert.equal(profile.player.accountId,registered.account.id);assert.equal(profile.player.nickname,'RouteProfile');
 });
 
-test('release transport contract: Online room HTTP uses same-origin production proxy but room WebSocket stays direct',()=>{
-  assert.match(online,/requestUrl\(path\)/);
-  assert.ok(online.includes('gostoplive\\.com'));
+test('release transport contract: Online room HTTP and WebSocket both target the Worker directly',()=>{
+  assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
   assert.match(online,/fetch\(this\.requestUrl\(path\)/);
   assert.match(online,/new URL\(\`\$\{this\.baseUrl\}\/api\/rooms\/\$\{room\.roomCode\}\/ws\`\)/);
 });
 
 
-test('release transport contract: player GET reads remain on direct Worker CORS path',()=>{
-  assert.match(ranked,/apiUrl=\(path,method='GET'\)=>productionSameOriginRest&&method!=='GET'/);
+test('release transport contract: all player REST reads and writes remain on direct Worker CORS path',()=>{
+  assert.match(ranked,/const apiUrl=path=>\`\$\{baseUrl\}\$\{path\}\`/);
   assert.match(ranked,/refreshLeaderboardData[^]*api\('\/api\/leaderboards',\{auth:false\}\)/);
   assert.match(ranked,/refreshAccount[^]*api\('\/api\/me'\)/);
+  assert.match(ranked,/api\('\/api\/solo\/leave-for-challenge',\{method:'POST'/);
 });
