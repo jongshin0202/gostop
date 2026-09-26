@@ -116,5 +116,8 @@ export default {async fetch(request,env){
       const stub=env.GAME_ROOMS.get(env.GAME_ROOMS.idFromName(match[1]));return stub.fetch(new Request('https://room/connect',{headers:request.headers}));
     }
     return withCors(json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404),origin);
-  }catch(_){return withCors(json({ok:false,error:{code:'INTERNAL_ERROR',message:'The service could not complete the request.'}},500),origin);}
+  }catch(error){
+    console.error('gostop-authority request failed',{method:request.method,path:url.pathname,name:error?.name||'Error',message:error?.message||String(error)});
+    return withCors(json({ok:false,error:{code:'INTERNAL_ERROR',message:'The service could not complete the request.'}},500),origin);
+  }
 }};
