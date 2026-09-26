@@ -210,7 +210,7 @@ test('active Competitive game can continue on a second device and reconnect coun
   assert.match(flow,/reconnecting=active\?\.connected===false&&reconnectUntil>Date\.now\(\)/);
   assert.match(flow,/joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
   assert.match(flow,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
-  assert.match(flow,/if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
+  assert.match(flow,/if\(activeReconnectPending\(\)\)\{void finishReconnectAsAbandonment\(\);return;\}/);
 });
 
 test('Competitive direct link lets a guest play first while logged-in invitees stay Competitive',()=>{
@@ -246,7 +246,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20260925-5/);
   assert.match(index,/styles\.css\?v=20260925-2/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20260925-25/);
+  assert.match(index,/ranked-client\.js\?v=20260925-26/);
   assert.match(index,/online-client\.js\?v=20260925-3/);
   assert.match(index,/app\.js\?v=20260925-11/);
   assert.match(index,/presentation-plan\.js\?v=20260925-20/);

@@ -127,3 +127,13 @@ test('reconnect modal is the disconnect UI and old 45-second toast is not emitte
 });
 
 test('reconnect countdown formats 60 seconds as 1:00',()=>{assert.match(ranked,/Math\.floor\(seconds\/60\).*seconds%60/);assert.doesNotMatch(ranked,/`0:\$\{String\(seconds\)/);});
+
+
+test('declining a connected Solo resume clears the stale active Solo before returning to menu',()=>{
+  const handler=ranked.slice(ranked.indexOf("$('returnGameNo').addEventListener"),ranked.indexOf("$('returnGameOk').addEventListener"));
+  assert.match(handler,/active\?\.mode==='solo'&&active\?\.roomCode/);
+  assert.match(handler,/api\('\/api\/solo\/leave-for-challenge',\{method:'POST',body:\{\}\}\)/);
+  assert.match(handler,/localStorage\.removeItem\(ACTIVE_RANKED_ROOM_KEY\)/);
+  assert.match(handler,/await refreshAccount\(\)/);
+  assert.match(handler,/revealCurrentMainMenu\(\)/);
+});
