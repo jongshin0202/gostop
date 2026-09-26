@@ -866,7 +866,7 @@
       if(onlineActions.size>0){
         const pendingActionId=globalThis.goStopOnlineSession?.pendingActionId;
         if(pendingActionId)return;
-        onlineActions.clear();
+        onlineActions.clear();onlineActionSubmittedAt.clear();
       }
       if(presentation.targetChoice){
         if(presentation.targetChoice.cancelable&&presentation.pendingHumanCardId){
