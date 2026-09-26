@@ -210,7 +210,7 @@ test('active Competitive game can continue on a second device and reconnect coun
   assert.match(flow,/reconnecting=active\?\.connected===false&&reconnectUntil>Date\.now\(\)/);
   assert.match(flow,/joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
   assert.match(flow,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
-  assert.match(flow,/if\(activeReconnectPending\(\)\)void finishReconnectAsAbandonment\(\);else/);
+  assert.match(flow,/if\(activeReconnectPending\(\)\)\{void finishReconnectAsAbandonment\(\);return;\}/);
 });
 
 test('Competitive direct link lets a guest play first while logged-in invitees stay Competitive',()=>{
