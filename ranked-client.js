@@ -612,15 +612,38 @@
       .main-menu-utilities{gap:5px!important;margin-top:3px!important}.menu-utility{min-height:34px!important;padding:4px!important}
       .account-menu-box{padding:7px 10px!important;margin-top:40px!important}
     }
-    /* Fast menu response: preserve the accordion animation but avoid long layout/repaint work. */
-    .menu-category-toggle{transition:transform .07s ease,border-radius .07s ease,box-shadow .07s ease!important}
+    /* Immediate accordion response: animate a 0fr/1fr grid track instead of max-height.
+       This starts on the same frame as the click and avoids repeatedly laying out a large
+       max-height box while the two category buttons move. */
+    .menu-category-toggle{transition:transform .06s ease,border-radius .06s ease,box-shadow .06s ease!important}
     .menu-category-toggle:hover,.menu-category-toggle:focus-visible{filter:none!important}
-    .menu-submenu{will-change:opacity,transform!important;transition:max-height .12s cubic-bezier(.2,.8,.2,1),opacity .08s linear,transform .10s ease-out,padding .10s ease,border-color .10s ease,visibility 0s linear .12s!important}
-    .menu-category-block.expanded .menu-submenu{transition-delay:0s!important}
+    .menu-submenu{
+      display:grid!important;grid-template-columns:1fr!important;grid-template-rows:0fr!important;
+      gap:0!important;max-height:none!important;opacity:0!important;visibility:hidden!important;
+      overflow:hidden!important;pointer-events:none;margin:0 10px;padding:0 9px!important;
+      transform:translate3d(0,-6px,0)!important;will-change:grid-template-rows,opacity,transform!important;
+      contain:paint;transition:grid-template-rows .14s cubic-bezier(.2,.86,.2,1),opacity .08s linear,transform .12s ease-out,padding .12s ease,border-color .10s ease,background .10s ease,visibility 0s linear .14s!important
+    }
+    .menu-submenu-inner{min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px}
+    .menu-category-block.expanded .menu-submenu{
+      grid-template-rows:1fr!important;opacity:1!important;visibility:visible!important;pointer-events:auto;
+      transform:translate3d(0,0,0)!important;padding:8px 9px 9px!important;transition-delay:0s!important
+    }
+    .menu-submenu-inner>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800;touch-action:manipulation}
     .menu-category-chevron{transition:transform .10s ease!important}
-    .menu-utility{transition:transform .07s ease,box-shadow .07s ease!important}
-    .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu>button:hover,.menu-submenu>button:focus-visible{filter:none!important}
+    .menu-utility{transition:transform .06s ease,box-shadow .06s ease!important}
+    .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
+    html.gostop-performance-lite .menu-submenu{
+      grid-template-rows:0fr!important;transform:translate3d(0,-5px,0)!important;visibility:hidden!important;
+      will-change:grid-template-rows,opacity,transform!important;
+      transition:grid-template-rows .12s cubic-bezier(.2,.86,.2,1),opacity .07s linear,transform .10s ease-out,padding .10s ease,visibility 0s linear .12s!important
+    }
+    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{
+      grid-template-rows:1fr!important;transform:translate3d(0,0,0)!important;visibility:visible!important;transition-delay:0s!important
+    }
+    @media(max-width:760px){.menu-submenu-inner>button{min-height:40px;font-size:15px}}
+    @media(max-height:760px){.menu-category-block.expanded .menu-submenu{padding:5px 6px 6px!important}.menu-submenu-inner{gap:5px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
 
   `;document.head.appendChild(style);
 
@@ -653,12 +676,12 @@
   const rankedGroup=document.createElement('section');rankedGroup.className='menu-category-block ranked-menu-group';rankedGroup.dataset.section='competitive';
   const rankedToggle=document.createElement('button');rankedToggle.type='button';rankedToggle.id='competitiveGamingBtn';rankedToggle.className='menu-category-toggle menu-category-competitive';rankedToggle.setAttribute('aria-expanded','false');rankedToggle.setAttribute('aria-controls','competitiveGamingSubmenu');rankedToggle.innerHTML='<span class="menu-category-copy"><strong class="menu-category-title">Competitive Gaming</strong><small class="menu-category-note">Coins + Rankings</small></span><span class="menu-category-chevron" aria-hidden="true">⌄</span>';
   const rankedTitle=rankedToggle.querySelector('.menu-category-title'),rankedGroupNote=rankedToggle.querySelector('.menu-category-note');
-  const rankedSubmenu=document.createElement('div');rankedSubmenu.id='competitiveGamingSubmenu';rankedSubmenu.className='menu-submenu competitive-submenu';rankedSubmenu.setAttribute('aria-hidden','true');rankedSubmenu.inert=true;rankedSubmenu.append(rankedSolo,onlinePlay);rankedGroup.append(rankedToggle,rankedSubmenu);
+  const rankedSubmenu=document.createElement('div');rankedSubmenu.id='competitiveGamingSubmenu';rankedSubmenu.className='menu-submenu competitive-submenu';rankedSubmenu.setAttribute('aria-hidden','true');rankedSubmenu.inert=true;const rankedSubmenuInner=document.createElement('div');rankedSubmenuInner.className='menu-submenu-inner';rankedSubmenuInner.append(rankedSolo,onlinePlay);rankedSubmenu.append(rankedSubmenuInner);rankedGroup.append(rankedToggle,rankedSubmenu);
 
   const freeGroup=document.createElement('section');freeGroup.className='menu-category-block free-menu-group';freeGroup.dataset.section='friendly';
   const freeToggle=document.createElement('button');freeToggle.type='button';freeToggle.id='friendlyGamingBtn';freeToggle.className='menu-category-toggle menu-category-friendly';freeToggle.setAttribute('aria-expanded','false');freeToggle.setAttribute('aria-controls','friendlyGamingSubmenu');freeToggle.innerHTML='<span class="menu-category-copy"><strong class="menu-category-title">Friendly Gaming</strong><small class="menu-category-note">Just Play & Have Fun</small></span><span class="menu-category-chevron" aria-hidden="true">⌄</span>';
   const freeTitle=freeToggle.querySelector('.menu-category-title'),freeGroupNote=freeToggle.querySelector('.menu-category-note');
-  const freeSubmenu=document.createElement('div');freeSubmenu.id='friendlyGamingSubmenu';freeSubmenu.className='menu-submenu friendly-submenu';freeSubmenu.setAttribute('aria-hidden','true');freeSubmenu.inert=true;freeSubmenu.append(playPractice,freeFriendBtn,trainingBtn);freeGroup.append(freeToggle,freeSubmenu);
+  const freeSubmenu=document.createElement('div');freeSubmenu.id='friendlyGamingSubmenu';freeSubmenu.className='menu-submenu friendly-submenu';freeSubmenu.setAttribute('aria-hidden','true');freeSubmenu.inert=true;const freeSubmenuInner=document.createElement('div');freeSubmenuInner.className='menu-submenu-inner';freeSubmenuInner.append(playPractice,freeFriendBtn,trainingBtn);freeSubmenu.append(freeSubmenuInner);freeGroup.append(freeToggle,freeSubmenu);
 
   const utilities=document.createElement('nav');utilities.className='main-menu-utilities';utilities.setAttribute('aria-label','GoStop Live menu');
   const friendsBtn=document.createElement('button');friendsBtn.type='button';friendsBtn.className='menu-utility menu-utility-friends';friendsBtn.textContent='Friends';friendsBtn.id='friendsMenuBtn';
@@ -672,7 +695,6 @@
     expandedMenuSection=section==='competitive'||section==='friendly'?section:null;
     for(const [name,group,toggle,submenu] of [['competitive',rankedGroup,rankedToggle,rankedSubmenu],['friendly',freeGroup,freeToggle,freeSubmenu]]){
       const open=expandedMenuSection===name;
-      if(open)submenu.style.setProperty('--submenu-open-height',`${submenu.children.length*52+24}px`);
       group.classList.toggle('expanded',open);
       toggle.setAttribute('aria-expanded',open?'true':'false');
       submenu.setAttribute('aria-hidden',open?'false':'true');

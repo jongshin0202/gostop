@@ -313,8 +313,8 @@ test('Settings dialog owns Language and Notifications while legacy Room code Joi
 
 test('main menu uses two exclusive accordion choices with Training inside Friendly and compact utility navigation',()=>{
   assert.match(source,/rankedToggle\.id='competitiveGamingBtn'/);assert.match(source,/freeToggle\.id='friendlyGamingBtn'/);
-  assert.match(source,/rankedSubmenu\.append\(rankedSolo,onlinePlay\)/);
-  assert.match(source,/freeSubmenu\.append\(playPractice,freeFriendBtn,trainingBtn\)/);
+  assert.match(source,/rankedSubmenuInner\.append\(rankedSolo,onlinePlay\);rankedSubmenu\.append\(rankedSubmenuInner\)/);
+  assert.match(source,/freeSubmenuInner\.append\(playPractice,freeFriendBtn,trainingBtn\);freeSubmenu\.append\(freeSubmenuInner\)/);
   assert.match(source,/trainingBtn\.className='menu-training'/);
   assert.match(source,/utilities\.className='main-menu-utilities'/);assert.match(source,/utilities\.append\(friendsBtn,leaderboardBtn\)/);
   assert.match(source,/menu\.append\(rankedGroup,freeGroup,utilities\)/);
@@ -348,9 +348,10 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/\.menu-submenu\{display:grid!important[^]*?max-height:0[^]*?opacity:0[^]*?visibility:hidden/);
-  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{max-height:var\(--submenu-open-height,240px\)[^]*?opacity:1[^]*?visibility:visible[^]*?pointer-events:auto/);
-  assert.match(source,/submenu\.children\.length\*52\+24/);
+  assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:0!important[^]*?transform:translate3d\(0,-6px,0\)!important/);
+  assert.match(source,/\.menu-submenu-inner\{min-height:0;overflow:hidden;display:grid/);
+  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?grid-template-rows:1fr!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
+  assert.doesNotMatch(source,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
@@ -361,7 +362,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260927-30/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260927-32/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
