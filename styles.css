@@ -735,6 +735,13 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 #trainingCoachDismiss:hover,#trainingCoachDismiss:focus-visible{background:#ffffff16;outline:2px solid rgba(242,199,90,.65);outline-offset:2px}
 .floor .floor-card.training-recommended{z-index:22;outline:4px solid #ffd65e;outline-offset:4px;box-shadow:0 0 0 7px rgba(255,214,94,.18),0 0 28px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42);animation:trainingTargetPulse .72s ease-in-out infinite alternate}
 .floor .floor-card.training-recommended.training-warning{outline-color:#ffca52;box-shadow:0 0 0 7px rgba(228,59,50,.16),0 0 18px rgba(228,59,50,.42),0 0 30px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42)}
+.hand-card.training-referenced,.floor .floor-card.training-referenced{
+  outline:4px solid #74d9ff!important;outline-offset:4px;
+  box-shadow:0 0 0 7px rgba(116,217,255,.18),0 0 28px rgba(116,217,255,.72),0 10px 20px rgba(0,0,0,.42)!important;
+  z-index:21;
+}
+.hand-card.training-referenced{transform:translateY(-8px);z-index:13}
+.floor .floor-card.training-referenced.training-recommended{outline-color:#ffe37a!important;box-shadow:0 0 0 7px rgba(116,217,255,.16),0 0 22px rgba(116,217,255,.52),0 0 30px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42)!important}
 @keyframes trainingTargetPulse{from{filter:brightness(1)}to{filter:brightness(1.2)}}
 .tutorial-platform-guide{margin-top:12px;padding:14px;border:1px solid #ffffff18;border-radius:12px;background:#ffffff0b}
 .tutorial-platform-guide h4{margin:0 0 8px;color:#ffd677}.tutorial-platform-guide[hidden]{display:none!important}
@@ -744,6 +751,7 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .training-coach-copy strong{font-size:10px}.training-coach-copy p{font-size:11px;line-height:1.32}
   #trainingCoachDismiss{width:29px;height:29px;flex-basis:29px;font-size:18px}
   .floor .floor-card.training-recommended{outline-width:3px;outline-offset:2px;box-shadow:0 0 0 4px rgba(255,214,94,.17),0 0 20px rgba(255,214,94,.62),0 7px 14px rgba(0,0,0,.4)}
+  .hand-card.training-referenced,.floor .floor-card.training-referenced{outline-width:3px!important;outline-offset:2px;box-shadow:0 0 0 4px rgba(116,217,255,.16),0 0 20px rgba(116,217,255,.62),0 7px 14px rgba(0,0,0,.4)!important}
 }
 @media(max-height:540px) and (orientation:landscape){
   .training-coach-panel{top:43px;max-width:62vw;padding:6px 8px}
