@@ -21,7 +21,7 @@ test('main menu opens its submenu on the same frame with a fast grid-track slide
   assert.match(ranked,/toggleMenuSection\(section\)/);
   assert.match(ranked,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
   assert.match(ranked,/\.gostop-main-menu\.main-menu-accordion\{backdrop-filter:none!important\}/);
-  assert.doesNotMatch(ranked,/visibility:hidden!important;[\s\S]*Zero-delay accordion/);
+  assert.match(ranked,/visibility:hidden!important;[\s\S]*visibility 0s linear \.18s!important/);
 });
 
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
