@@ -459,6 +459,10 @@ test('production static hosting keeps direct authority routing and native first-
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
   assert.match(source,/immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date\.now\(\)\+280/);
   assert.match(source,/overlay\.addEventListener\('click'/);
+  assert.match(source,/function installImmediateDesktopAccordion\(button,section\)/);
+  assert.match(source,/button\.addEventListener\('pointerdown',event=>\{/);
+  assert.match(source,/installImmediateDesktopAccordion\(rankedToggle,'competitive'\)/);
+  assert.match(source,/installImmediateDesktopAccordion\(freeToggle,'friendly'\)/);
   assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
   assert.match(source,/@keyframes mainMenuChoiceSweep/);
   assert.match(source,/\.menu-category-chevron\{[^]*?transition:transform \.24s/);
