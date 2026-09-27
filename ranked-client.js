@@ -612,39 +612,50 @@
       .main-menu-utilities{gap:5px!important;margin-top:3px!important}.menu-utility{min-height:34px!important;padding:4px!important}
       .account-menu-box{padding:7px 10px!important;margin-top:40px!important}
     }
-    /* Immediate accordion response: animate a 0fr/1fr grid track instead of max-height.
-       This starts on the same frame as the click and avoids repeatedly laying out a large
-       max-height box while the two category buttons move. */
+    /* Zero-delay accordion: state changes on pointer-down for mouse/pen.
+       The outer row expands immediately; only the inner buttons animate, so there is
+       no discrete visibility step that can make the submenu "pop" in late. */
+    .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important}
     .menu-category-toggle{transition:border-radius .08s ease,box-shadow .08s ease!important}
+    .menu-category-toggle:before{display:none!important;animation:none!important}
     .menu-category-toggle:hover,.menu-category-toggle:focus-visible{transform:none!important;filter:none!important}
     .menu-category-toggle:active{transform:none!important}
     .menu-submenu{
       display:grid!important;grid-template-columns:1fr!important;grid-template-rows:0fr!important;
-      gap:0!important;max-height:none!important;opacity:0!important;visibility:hidden!important;
+      gap:0!important;max-height:none!important;opacity:1!important;visibility:visible!important;
       overflow:hidden!important;pointer-events:none;margin:0 10px;padding:0 9px!important;
-      transform:translate3d(0,-2px,0)!important;will-change:grid-template-rows,opacity,transform!important;
-      contain:paint;transition:grid-template-rows .18s cubic-bezier(.16,1,.3,1),opacity .12s ease-out,transform .16s cubic-bezier(.16,1,.3,1),padding .16s cubic-bezier(.16,1,.3,1),border-color .12s ease,background .12s ease,visibility 0s linear .18s!important
+      transform:none!important;will-change:grid-template-rows!important;contain:paint;
+      transition:grid-template-rows .18s cubic-bezier(.16,1,.3,1),border-color .12s ease,background .12s ease!important
     }
-    .menu-submenu-inner{min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px}
+    .menu-submenu-inner{
+      min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px;padding:8px 0 9px;
+      opacity:0;transform:translate3d(0,-10px,0);will-change:opacity,transform;
+      transition:opacity .09s linear,transform .18s cubic-bezier(.16,1,.3,1)
+    }
     .menu-category-block.expanded .menu-submenu{
       grid-template-rows:1fr!important;opacity:1!important;visibility:visible!important;pointer-events:auto;
-      transform:translate3d(0,0,0)!important;padding:8px 9px 9px!important;transition-delay:0s!important
+      transform:none!important;padding:0 9px!important;transition-delay:0s!important
     }
+    .menu-category-block.expanded .menu-submenu-inner{opacity:1;transform:translate3d(0,0,0)}
     .menu-submenu-inner>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800;touch-action:manipulation}
-    .menu-category-chevron{transition:transform .10s ease!important}
+    .menu-category-chevron{transition:transform .08s ease!important}
     .menu-utility{transition:transform .06s ease,box-shadow .06s ease!important}
     .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
     html.gostop-performance-lite .menu-submenu{
-      grid-template-rows:0fr!important;transform:translate3d(0,-2px,0)!important;visibility:hidden!important;
-      will-change:grid-template-rows,opacity,transform!important;
-      transition:grid-template-rows .16s cubic-bezier(.16,1,.3,1),opacity .10s ease-out,transform .14s cubic-bezier(.16,1,.3,1),padding .14s ease,visibility 0s linear .16s!important
+      grid-template-rows:0fr!important;transform:none!important;visibility:visible!important;
+      will-change:grid-template-rows!important;
+      transition:grid-template-rows .15s cubic-bezier(.16,1,.3,1)!important
+    }
+    html.gostop-performance-lite .menu-submenu-inner{
+      transform:translate3d(0,-8px,0);transition:opacity .07s linear,transform .15s cubic-bezier(.16,1,.3,1)
     }
     html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{
-      grid-template-rows:1fr!important;transform:translate3d(0,0,0)!important;visibility:visible!important;transition-delay:0s!important
+      grid-template-rows:1fr!important;transform:none!important;visibility:visible!important;transition-delay:0s!important
     }
+    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu-inner{transform:translate3d(0,0,0)}
     @media(max-width:760px){.menu-submenu-inner>button{min-height:40px;font-size:15px}}
-    @media(max-height:760px){.menu-category-block.expanded .menu-submenu{padding:5px 6px 6px!important}.menu-submenu-inner{gap:5px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
+    @media(max-height:760px){.menu-submenu-inner{gap:5px;padding:5px 0 6px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
 
   `;document.head.appendChild(style);
 
@@ -738,6 +749,16 @@
     button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
   }
   [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
+  function installImmediateDesktopAccordion(button,section){
+    if(!button)return;
+    button.addEventListener('pointerdown',event=>{
+      if(event.pointerType==='touch'||event.button!==0)return;
+      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+500;
+      toggleMenuSection(section);
+    });
+  }
+  installImmediateDesktopAccordion(rankedToggle,'competitive');
+  installImmediateDesktopAccordion(freeToggle,'friendly');
   rankedToggle.addEventListener('click',()=>toggleMenuSection('competitive'));
   freeToggle.addEventListener('click',()=>toggleMenuSection('friendly'));
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
