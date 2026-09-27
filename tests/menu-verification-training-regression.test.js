@@ -10,11 +10,11 @@ test('main menu opens its submenu on the same frame with a fast grid-track slide
   assert.match(ranked,/immediateMenuSuppressUntil=Date\.now\(\)\+280/);
   assert.match(ranked,/grid-template-rows:0fr!important/);
   assert.match(ranked,/grid-template-rows:1fr!important/);
-  assert.match(ranked,/transition:grid-template-rows \.14s/);
+  assert.match(ranked,/transition:grid-template-rows \.18s/);
   assert.match(ranked,/menu-submenu-inner/);
   assert.doesNotMatch(ranked,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(ranked,/\.menu-category-chevron\{transition:transform \.10s ease!important\}/);
-  assert.match(ranked,/\.menu-category-toggle:hover,\.menu-category-toggle:focus-visible\{filter:none!important\}/);
+  assert.match(ranked,/\.menu-category-toggle:hover,\.menu-category-toggle:focus-visible\{transform:none!important;filter:none!important\}/);assert.match(ranked,/\.menu-category-toggle:active\{transform:none!important\}/);
 });
 
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
@@ -38,8 +38,18 @@ test('Training coach values public-state month control and discounts no-Pi bombs
 
 test('Training opening strategy stays pinned until user input, then normal five-second coaching resumes',()=>{
   assert.match(app,/trainingCoachPinned:false/);
-  assert.match(app,/showTrainingCoach\('Opening Strategy',openingAdvice,\{pinned:true\}\)/);
+  assert.match(app,/showTrainingCoach\('Opening Strategy',openingPlan\.text,\{pinned:true,cardIds:openingPlan\.cardIds\}\)/);
   assert.match(app,/if\(presentation\.trainingCoachPinned\)return;[\s\S]*setTimeout\(\(\)=>\{[\s\S]*\},5000\)/);
   assert.match(app,/document\.addEventListener\('pointerdown',event=>\{[\s\S]*presentation\.trainingCoachPinned[\s\S]*hideTrainingCoach\(\)[\s\S]*armTrainingCoach/);
   assert.match(app,/if\(!presentation\.trainingCoachPinned\)clearTrainingCoach\(\)/);
+});
+
+
+test('Training opening advice identifies referenced cards visually and uses Bright Stripe Single Picture priority',()=>{
+  assert.match(app,/trainingReferenceCardIds:\[\]/);
+  assert.match(app,/classList\.toggle\('training-referenced',presentation\.trainingReferenceCardIds\.includes\(card\.id\)\)/);
+  assert.match(app,/function trainingCaptureCategoryPriority\(card\)/);
+  assert.match(app,/card\.type==='bright'\?4:card\.type==='ribbon'\?3:card\.type==='pi'\?2:card\.type==='animal'\?1/);
+  assert.match(app,/cleanControlMonths[\s\S]*b\.best\.capturePriority-a\.best\.capturePriority/);
+  assert.match(app,/Stripe capture takes priority over the Picture capture|trainingCapturePriorityLabel/);
 });
