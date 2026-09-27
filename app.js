@@ -98,7 +98,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,trainingRecommendedFloorCardId:null,trainingTurnRecommendation:null,trainingCoachPinned:false,
+    trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,trainingRecommendedFloorCardId:null,trainingTurnRecommendation:null,trainingCoachPinned:false,trainingReferenceCardIds:[],
     dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null,activePhysicalMotions:0,rendersDuringPhysicalMotion:0,goCalloutTimer:null
   };
 
@@ -583,6 +583,7 @@
       if(!slot){slot=document.createElement('div');slot.className='hand-card-slot';slot.dataset.handKey=card.id;slot.addEventListener('pointerenter',()=>setActiveHoveredHandCard(card.id));el=createCardEl(card,'card hand-card');el.dataset.hoverTitle=el.title;el.title='';el.addEventListener('click',()=>{void humanPlay(card.id,el);});slot.appendChild(el);}
       el.disabled=handInputDisabled;
       el.classList.toggle('matchable',card.id===presentation.hintCardId);
+      el.classList.toggle('training-referenced',presentation.trainingReferenceCardIds.includes(card.id));
       el.classList.toggle('armed-bomb-card',bottomPlayer.armedBombMonths?.includes(card.month));
       desired.push(slot);existing.delete(card.id);
     });
@@ -673,6 +674,7 @@
           const el=createCardEl(c,'card floor-card stacked-floor-card');
           el.classList.toggle('training-warning',c.id===presentation.trainingWarningFloorCardId);
           el.classList.toggle('training-recommended',c.id===presentation.trainingRecommendedFloorCardId);
+          el.classList.toggle('training-referenced',presentation.trainingReferenceCardIds.includes(c.id));
           el.style.setProperty('--stack-angle',`${stableStackAngle(stack,c,i)}deg`);
           el.style.setProperty('--stack-x',`${i*5}px`);
           el.style.setProperty('--stack-y',`${i*3}px`);
@@ -687,6 +689,7 @@
           const el=createCardEl(card,'card floor-card');
           el.classList.toggle('training-warning',card.id===presentation.trainingWarningFloorCardId);
           el.classList.toggle('training-recommended',card.id===presentation.trainingRecommendedFloorCardId);
+          el.classList.toggle('training-referenced',presentation.trainingReferenceCardIds.includes(card.id));
           el.style.setProperty('--tilt',`${stableFloorTilt(card)}deg`);
           slotEl.appendChild(el);
         }
@@ -1563,9 +1566,9 @@
     }
     if(!isGameplayPresentationCurrent(epoch))return;
     presentation.locked=false; render();
-    const openingAdvice=presentation.trainingMode?trainingOpeningStrategy():'';
+    const openingPlan=presentation.trainingMode?trainingOpeningPlan():null;
     scheduleTurnStart();
-    if(openingAdvice)showTrainingCoach('Opening Strategy',openingAdvice,{pinned:true});
+    if(openingPlan?.text)showTrainingCoach('Opening Strategy',openingPlan.text,{pinned:true,cardIds:openingPlan.cardIds});
   }
 
   function presentChongtong(event,epoch=gameplayPresentationEpoch){
@@ -2504,43 +2507,61 @@
     const prefix=chosenAnalysis?.target?`Your selected ${localizedMonth(chosen.month)} card can capture, but `:`Your selected ${localizedMonth(chosen.month)} card has no immediate floor capture, so `;
     return `${prefix}the highlighted ${localizedMonth(recommended.card.month)} play is stronger. ${recommended.reason}`;
   }
-  function trainingOpeningStrategy(){
-    if(!state?.human)return '';
+  function trainingReferenceIds(cards=[]){
+    return [...new Set(cards.flat().filter(Boolean).map(card=>typeof card==='string'?card:card.id).filter(Boolean))];
+  }
+  function trainingOpeningPlan(){
+    if(!state?.human)return {text:'',cardIds:[]};
     const hand=state.human.hand||[],floor=state.floor||[];
+    const plan=(text,cards=[])=>({text,cardIds:trainingReferenceIds(cards)});
     const openingCandidates=hand.map(card=>trainingCandidate(card)).filter(Boolean),secured=openingCandidates.find(item=>item.target&&item.gudeunja),contestable=openingCandidates.find(item=>item.target&&!item.gudeunja);
-    if(secured&&contestable)return `Opening strategy: save the ${localizedMonth(secured.card.month)} 굳은자 for later because that capture is already yours. Take contestable floor cards such as ${localizedMonth(contestable.card.month)} first, before the computer can take them.`;
+    if(secured&&contestable)return plan(`Opening strategy: save the highlighted ${localizedMonth(secured.card.month)} 굳은자 for later because that capture is already yours. Take the highlighted contestable ${localizedMonth(contestable.card.month)} cards first, before the computer can take them.`,[secured.card,secured.target,contestable.card,contestable.target]);
     for(const card of hand){
       const facts=trainingMonthFacts(card.month),matches=matchesFor(card);
       if(facts.hand.length===2&&matches.length===1&&!trainingBombOpportunity(card,matches)){
-        return `Opening strategy: you control three of the four ${localizedMonth(card.month)} cards between your hand and the floor. Take the clean match first and keep the second card to control the remaining ${localizedMonth(card.month)} card.`;
+        return plan(`Opening strategy: the highlighted cards are the ${localizedMonth(card.month)} cards. You control three of the four between your hand and the floor. Take the clean match first and keep the second card to control the remaining ${localizedMonth(card.month)} card.`,[...facts.hand,...matches]);
       }
     }
     const reachable=target=>hand.some(card=>card.month===target.month);
     const handGodori=hand.filter(card=>card.flags.includes('godori')),floorGodori=floor.filter(card=>card.flags.includes('godori')&&reachable(card));
-    if(handGodori.length>=2&&floorGodori.length)return `Opening strategy: you have ${handGodori.length} bird Pictures in your hand and a reachable bird Picture is already on the floor. Prioritize those months and build toward Godori (5-Birdies).`;
-    if(handGodori.length>=2)return `Opening strategy: you start with ${handGodori.length} bird Pictures. Protect opportunities to capture them and look for the remaining Godori bird.`;
+    if(handGodori.length>=2&&floorGodori.length)return plan(`Opening strategy: the highlighted cards are your Godori path. You have ${handGodori.length} bird Pictures in your hand and a reachable bird Picture on the floor. Prioritize those months and build toward Godori (5-Birdies).`,[...handGodori,...floorGodori]);
+    if(handGodori.length>=2)return plan(`Opening strategy: the highlighted cards are your ${handGodori.length} bird Pictures. Protect opportunities to capture them and look for the remaining Godori bird.`,handGodori);
     for(const family of ['red','blue','grass']){
       const familyInHand=hand.filter(card=>card.ribbonSet===family),reachableFamily=floor.filter(card=>card.ribbonSet===family&&reachable(card));
-      if(familyInHand.length>=2&&reachableFamily.length)return `Opening strategy: you hold ${familyInHand.length} ${trainingRibbonName(family)} Stripes and can reach another on the floor. Build toward the 3-Stripe set before the computer can cut it.`;
+      if(familyInHand.length>=2&&reachableFamily.length)return plan(`Opening strategy: the highlighted cards are the ${trainingRibbonName(family)} Stripes involved. You hold ${familyInHand.length} and can reach another on the floor. Build toward the 3-Stripe set before the computer can cut it.`,[...familyInHand,...reachableFamily]);
     }
-    const brights=hand.filter(card=>card.type==='bright').length,reachableBright=floor.some(card=>card.type==='bright'&&reachable(card));
-    if(brights>=2&&reachableBright)return `Opening strategy: you have ${brights} Brights and another reachable Bright is visible. Prioritize Bright months while avoiding unnecessary high-value discards.`;
+    const handBrights=hand.filter(card=>card.type==='bright'),floorBrights=floor.filter(card=>card.type==='bright'&&reachable(card));
+    if(handBrights.length>=2&&floorBrights.length)return plan(`Opening strategy: the highlighted cards are the Brights involved. You have ${handBrights.length} Brights and another reachable Bright is visible. Prioritize those months while avoiding unnecessary high-value discards.`,[...handBrights,...floorBrights]);
     const triple=state.human.hiddenTripleMonths?.[0]||state.human.armedBombMonths?.[0];
     if(triple){
-      const opponentPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount;
-      return opponentPi>0?`Opening strategy: you hold three cards from ${localizedMonth(triple)}. Keep the Bomb option available, but compare its Single steal and four-card capture against any clean month-control play before spending all three cards.`:`Opening strategy: you hold three cards from ${localizedMonth(triple)}, but the computer has no Single to surrender. Do not rush the Bomb; preserve it unless it creates a major score or defensive swing.`;
+      const opponentPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount,cards=[...hand.filter(card=>card.month===triple),...floor.filter(card=>card.month===triple)];
+      return plan(opponentPi>0?`Opening strategy: the highlighted cards are your ${localizedMonth(triple)} Bomb option. Keep it available, but compare its Single steal and four-card capture against any clean month-control play before spending all three cards.`:`Opening strategy: the highlighted cards are your ${localizedMonth(triple)} Bomb option, but the computer has no Single to surrender. Do not rush the Bomb; preserve it unless it creates a major score or defensive swing.`,cards);
     }
     const best=trainingRecommendation();
-    return best?`Opening strategy: start by controlling months you hold in multiples, then complete scoring sets and deny immediate threats. First look: ${best.reason}`:'Opening strategy: favor clean captures that preserve control of a month, protect Brights and set cards, and watch the computer’s captured groups for the next scoring threshold.';
+    return best?plan(`Opening strategy: start by controlling months you hold in multiples, then complete scoring sets and deny immediate threats. The highlighted cards show the first play I am referring to. ${best.reason}`,[best.card,best.target]):plan('Opening strategy: favor clean captures that preserve control of a month, protect Brights and set cards, and watch the computer’s captured groups for the next scoring threshold.');
   }
-  function showTrainingCoach(title,text,{pinned=false}={}){
+  function trainingOpeningStrategy(){return trainingOpeningPlan().text;}
+  function syncTrainingReferenceHighlights(){
+    if(TEST_MODE)return;
+    const ids=new Set(presentation.trainingReferenceCardIds);
+    els.playerHand?.querySelectorAll?.('.hand-card[data-card-id]')?.forEach?.(card=>card.classList.toggle('training-referenced',ids.has(card.dataset.cardId)));
+    els.floor?.querySelectorAll?.('.floor-card[data-card-id]')?.forEach?.(card=>card.classList.toggle('training-referenced',ids.has(card.dataset.cardId)));
+  }
+  function showTrainingCoach(title,text,{pinned=false,cardIds=[]}={}){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
     presentation.trainingCoachPinned=!!pinned;
+    presentation.trainingReferenceCardIds=trainingReferenceIds(cardIds);
     if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=title||'Training Coach';
     if(els.trainingCoachText)els.trainingCoachText.textContent=text;
     if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
+    syncTrainingReferenceHighlights();
   }
-  function hideTrainingCoach(){presentation.trainingCoachPinned=false;if(!TEST_MODE&&els.trainingCoachPanel)els.trainingCoachPanel.hidden=true;}
+  function hideTrainingCoach(){
+    presentation.trainingCoachPinned=false;
+    presentation.trainingReferenceCardIds=[];
+    if(!TEST_MODE&&els.trainingCoachPanel)els.trainingCoachPanel.hidden=true;
+    syncTrainingReferenceHighlights();
+  }
   function applyTrainingRecommendation(recommendation,{showMessage=true}={}){
     if(!recommendation)return;
     presentation.hintCardId=recommendation.card?.id||null;
@@ -2555,7 +2576,7 @@
   }
   function clearTrainingCoach(clearVisuals=true){
     if(presentation.trainingHintTimer){clearTimeout(presentation.trainingHintTimer);presentation.trainingHintTimer=null;}
-    if(clearVisuals){presentation.hintCardId=null;presentation.trainingWarningFloorCardId=null;presentation.trainingRecommendedFloorCardId=null;presentation.trainingTurnRecommendation=null;hideTrainingCoach();}
+    if(clearVisuals){presentation.hintCardId=null;presentation.trainingWarningFloorCardId=null;presentation.trainingRecommendedFloorCardId=null;presentation.trainingTurnRecommendation=null;presentation.trainingReferenceCardIds=[];hideTrainingCoach();}
   }
   function setTrainingMode(enabled){clearTrainingCoach();presentation.trainingMode=!!enabled;if(!enabled)hideTrainingCoach();}
   function armTrainingCoach(){
@@ -2783,7 +2804,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingIsGudeunja,trainingUnsecuredCaptureUrgency,trainingBombOpportunity,trainingProgressValue,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingIsGudeunja,trainingUnsecuredCaptureUrgency,trainingBombOpportunity,trainingProgressValue,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningPlan,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
@@ -2795,6 +2816,7 @@
           hintCardId:presentation.hintCardId,
           trainingMode:presentation.trainingMode,
           trainingCoachPinned:presentation.trainingCoachPinned,
+          trainingReferenceCardIds:[...presentation.trainingReferenceCardIds],
           trainingWarningFloorCardId:presentation.trainingWarningFloorCardId,
           trainingRecommendedFloorCardId:presentation.trainingRecommendedFloorCardId,
           sessionStarted:presentation.sessionStarted,
