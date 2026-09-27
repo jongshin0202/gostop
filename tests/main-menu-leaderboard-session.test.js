@@ -349,7 +349,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
   assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:1!important[^]*?visibility:visible!important[^]*?transform:none!important/);assert.match(source,/\.menu-submenu-inner\{[^]*?opacity:0;transform:translate3d\(0,-10px,0\)/);
-  assert.match(source,/\.menu-submenu-inner\{min-height:0;overflow:hidden;display:grid/);
+  assert.match(source,/\.menu-submenu-inner\{\s*min-height:0;overflow:hidden;display:grid/);
   assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?grid-template-rows:1fr!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
   assert.doesNotMatch(source,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
