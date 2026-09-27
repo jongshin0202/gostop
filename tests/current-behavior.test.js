@@ -3170,7 +3170,7 @@ test('Training capture priority is Bright then Stripe then Single then Picture',
   assert.equal(api.trainingCaptureCategoryPriority(card('m5-1')),1);
 });
 
-test('Training prefers the Stripe month-control line over an otherwise equivalent Picture line',()=>{
+test('Training prefers the Stripe month-control line over an otherwise equivalent lower-priority capture line',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m5-1'),card('m6-2')],
@@ -3182,7 +3182,7 @@ test('Training prefers the Stripe month-control line over an otherwise equivalen
   assert.equal(recommendation.target.id,'m6-2');
   assert.equal(recommendation.capturePriority,3);
   const opening=api.trainingOpeningPlan();
-  assert.match(opening.text,/Stripe capture takes priority over the Picture capture/);
+  assert.match(opening.text,/Stripe capture takes priority over the Single capture/);
   assert.deepEqual(new Set(opening.cardIds),new Set(['m6-3','m6-4','m6-2']));
 });
 
