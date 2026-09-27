@@ -3161,3 +3161,41 @@ test('Training Mode treats a ppeok recovery as a 굳은자 and defers it behind 
   assert.equal(recommendation.card.month,7);
   assert.equal(recommendation.gudeunja,false);
 });
+
+
+test('Training capture priority is Bright then Stripe then Single then Picture',()=>{
+  assert.equal(api.trainingCaptureCategoryPriority(card('m1-1')),4);
+  assert.equal(api.trainingCaptureCategoryPriority(card('m1-2')),3);
+  assert.equal(api.trainingCaptureCategoryPriority(card('m1-3')),2);
+  assert.equal(api.trainingCaptureCategoryPriority(card('m5-1')),1);
+});
+
+test('Training prefers the Stripe month-control line over an otherwise equivalent Picture line',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m5-1'),card('m6-2')],
+    human:api.makePlayer({hand:[card('m5-3'),card('m5-4'),card('m6-3'),card('m6-4')]}),
+    ai:api.makePlayer()
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.month,6);
+  assert.equal(recommendation.target.id,'m6-2');
+  assert.equal(recommendation.capturePriority,3);
+  const opening=api.trainingOpeningPlan();
+  assert.match(opening.text,/Stripe capture takes priority over the Picture capture/);
+  assert.deepEqual(new Set(opening.cardIds),new Set(['m6-3','m6-4','m6-2']));
+});
+
+test('Training opening advice returns concrete card ids so named months are visually identifiable',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m6-2')],
+    human:api.makePlayer({hand:[card('m6-3'),card('m6-4')]}),
+    ai:api.makePlayer()
+  }));
+  const opening=api.trainingOpeningPlan();
+  assert.ok(opening.cardIds.length>=3);
+  assert.ok(opening.cardIds.includes('m6-2'));
+  assert.ok(opening.cardIds.includes('m6-3'));
+  assert.ok(opening.cardIds.includes('m6-4'));
+});
