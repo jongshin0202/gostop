@@ -622,10 +622,10 @@
     .menu-category-toggle:active{transform:none!important}
     .menu-submenu{
       display:grid!important;grid-template-columns:1fr!important;grid-template-rows:0fr!important;
-      gap:0!important;max-height:none!important;opacity:1!important;visibility:visible!important;
+      gap:0!important;max-height:none!important;opacity:1!important;visibility:hidden!important;
       overflow:hidden!important;pointer-events:none;margin:0 10px;padding:0 9px!important;
       transform:none!important;will-change:grid-template-rows!important;contain:paint;
-      transition:grid-template-rows .18s cubic-bezier(.16,1,.3,1),border-color .12s ease,background .12s ease!important
+      transition:grid-template-rows .18s cubic-bezier(.16,1,.3,1),border-color .12s ease,background .12s ease,visibility 0s linear .18s!important
     }
     .menu-submenu-inner{
       min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px;padding:8px 0 9px;
@@ -643,9 +643,9 @@
     .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
     html.gostop-performance-lite .menu-submenu{
-      grid-template-rows:0fr!important;transform:none!important;visibility:visible!important;
+      grid-template-rows:0fr!important;transform:none!important;visibility:hidden!important;
       will-change:grid-template-rows!important;
-      transition:grid-template-rows .15s cubic-bezier(.16,1,.3,1)!important
+      transition:grid-template-rows .15s cubic-bezier(.16,1,.3,1),visibility 0s linear .15s!important
     }
     html.gostop-performance-lite .menu-submenu-inner{
       transform:translate3d(0,-8px,0);transition:opacity .07s linear,transform .15s cubic-bezier(.16,1,.3,1)
