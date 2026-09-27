@@ -249,7 +249,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/game-engine\.js\?v=20260925-2/);
   assert.match(index,/ranked-client\.js\?v=20260927-31/);
   assert.match(index,/online-client\.js\?v=20260926-4/);
-  assert.match(index,/app\.js\?v=20260927-14/);
+  assert.match(index,/app\.js\?v=20260927-15/);
   assert.match(index,/presentation-plan\.js\?v=20260926-21/);
   assert.match(index,/diagnostics\.js\?v=20260925-2/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
