@@ -98,7 +98,7 @@
     stagedCards:new Map(),
     floorSlotReservations:new Map(),
     locale:'en', sessionStarted:false, nextStarterId:null, deckDisplayCount:null,scoreBreakdownPlayerId:null,
-    trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,trainingRecommendedFloorCardId:null,trainingTurnRecommendation:null,
+    trainingMode:false,trainingHintTimer:null,trainingWarningFloorCardId:null,trainingRecommendedFloorCardId:null,trainingTurnRecommendation:null,trainingCoachPinned:false,
     dicePresentationCount:0,diceSoundCount:0,kissSoundCount:0,piTransferAnimationCount:0,audioTrace:[],activeHoveredHandCardId:null,activePhysicalMotions:0,rendersDuringPhysicalMotion:0,goCalloutTimer:null
   };
 
@@ -1467,7 +1467,7 @@
     if(TEST_MODE)return;
     if(onlineMode||!localGameActive)return;
     const generation=localGameGeneration;
-    clearTrainingCoach();
+    if(!presentation.trainingCoachPinned)clearTrainingCoach();
     if(!state||state.winner)return;
     const side=legacySideForPlayerId(state.turn), actor=state[side];
     if(side==='ai' && actor.bombFreeTurns>0){
@@ -1565,7 +1565,7 @@
     presentation.locked=false; render();
     const openingAdvice=presentation.trainingMode?trainingOpeningStrategy():'';
     scheduleTurnStart();
-    if(openingAdvice)showTrainingCoach('Opening Strategy',openingAdvice);
+    if(openingAdvice)showTrainingCoach('Opening Strategy',openingAdvice,{pinned:true});
   }
 
   function presentChongtong(event,epoch=gameplayPresentationEpoch){
@@ -2359,6 +2359,27 @@
     const known=Math.min(4,hand.length+floor.length+captured.length);
     return {hand,floor,captured,known,unseen:Math.max(0,4-known)};
   }
+  function trainingIsGudeunja(card,matches=matchesFor(card)){
+    if(!card||!state||!matches.length)return false;
+    const facts=trainingMonthFacts(card.month),stack=state.floorStacks?.[card.month]||null;
+    // 굳은자: every matching card of this month is already accounted for in public
+    // information, or a special stack/triple makes this capture effectively reserved.
+    if(stack&&facts.hand.length>=1)return true;
+    if(facts.hand.length>=3&&facts.floor.length>=1)return true;
+    if(facts.hand.length>=2&&facts.floor.length>=2)return true;
+    return facts.hand.length===1&&facts.floor.length===1&&facts.captured.length>=2;
+  }
+  function trainingUnsecuredCaptureUrgency(card,target,matches=matchesFor(card)){
+    if(!card||!target||trainingIsGudeunja(card,matches))return 0;
+    const facts=trainingMonthFacts(card.month);
+    let urgency=24+captureValue(target)*2;
+    if(facts.unseen>=2)urgency+=24;
+    else if(facts.unseen===1)urgency+=14;
+    if(target.type==='bright')urgency+=14;
+    if(target.flags?.includes('godori'))urgency+=12;
+    if(target.ribbonSet)urgency+=8;
+    return urgency;
+  }
   function trainingBombOpportunity(card,matches=matchesFor(card)){
     const facts=trainingMonthFacts(card?.month),player=state?.human;
     if(!card||!player||facts.hand.length<3||matches.length!==1)return false;
@@ -2428,10 +2449,10 @@
   }
   function trainingCandidate(card){
     if(!card||!state)return null;
-    const matches=matchesFor(card),facts=trainingMonthFacts(card.month);
+    const matches=matchesFor(card),facts=trainingMonthFacts(card.month),gudeunja=trainingIsGudeunja(card,matches);
     if(!matches.length){
       const retained=Math.max(0,facts.hand.length-1),retainBonus=retained>0?8:0;
-      return {card,target:null,score:-captureValue(card)*.75+retainBonus,reason:retained>0?`No floor card matches ${localizedMonth(card.month)}. If you must discard from this month, keeping your other ${localizedMonth(card.month)} card preserves a chance to recover it later.`:`No floor card matches this month, so playing it leaves a ${trainingCategoryName(card)} exposed. If you must discard, sacrifice the least valuable card and avoid feeding the computer a Bright, set card, or double Single.`};
+      return {card,target:null,score:-captureValue(card)*.75+retainBonus,reason:retained>0?`No floor card matches ${localizedMonth(card.month)}. If you must discard from this month, keeping your other ${localizedMonth(card.month)} card preserves a chance to recover it later.`:`No floor card matches this month, so playing it leaves a ${trainingCategoryName(card)} exposed. If you must discard, sacrifice the least valuable card and avoid feeding the computer a Bright, set card, or double Single.`,gudeunja:false,urgency:0};
     }
     let best=null;
     for(const target of matches){
@@ -2439,11 +2460,15 @@
       const immediate=gained.reduce((sum,item)=>sum+captureValue(item),0);
       const progressValue=trainingProgressValue(gained,state.human);
       const bombAdjustment=trainingBombAdjustment(card,matches,gained,blockValue,opportunity);
+      const urgency=trainingUnsecuredCaptureUrgency(card,target,matches);
       const twoFloorPenalty=matches.length===2?-8:0;
-      const value=immediate*1.05+progressValue+blockValue*.82+controlValue+bombAdjustment+twoFloorPenalty;
+      const gudeunjaHoldPenalty=gudeunja?-180:0;
+      const value=immediate*1.05+progressValue+blockValue*.82+controlValue+bombAdjustment+urgency+twoFloorPenalty+gudeunjaHoldPenalty;
       const controlReason=trainingMonthControlReason(card,matches),bombReason=trainingBombReason(card,matches,gained);
-      const reason=opportunity||trainingThreatReason(target,state.ai)||controlReason||(bombReason&&bombAdjustment<0?bombReason:'')||`This is the best balance of immediate capture, future month control, scoring progress, and defense among the visible plays.`;
-      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best={card,target,score:value,reason,bomb:trainingBombOpportunity(card,matches),controlValue,progressValue,blockValue};
+      const contestableReason=!gudeunja&&facts.unseen>0?`This ${localizedMonth(card.month)} floor card is still contestable because ${facts.unseen} matching card${facts.unseen===1?' remains':'s remain'} unseen. Capture it before the computer can take it.`:'';
+      const gudeunjaReason=gudeunja?`This is a 굳은자 (guaranteed capture). Only you can take it from the current public position, so save it for later while any contestable floor capture remains.`:'';
+      const reason=opportunity||trainingThreatReason(target,state.ai)||controlReason||contestableReason||(bombReason&&bombAdjustment<0?bombReason:'')||gudeunjaReason||`Take this capture now because it improves your visible scoring position without giving up a stronger future option.`;
+      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best={card,target,score:value,reason,bomb:trainingBombOpportunity(card,matches),controlValue,progressValue,blockValue,gudeunja,urgency};
     }
     return best;
   }
@@ -2455,13 +2480,22 @@
       if(candidate)candidates.push(candidate);
     }
     if(!candidates.length)return null;
-    const safeControl=candidates.filter(item=>item.controlValue>=80&&!item.bomb).sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
+    const captures=candidates.filter(item=>item.target);
+    const unsecuredCaptures=captures.filter(item=>!item.gudeunja);
+    let pool=unsecuredCaptures.length?unsecuredCaptures:(captures.length?captures:candidates);
+    const safeControl=pool.filter(item=>item.controlValue>=80&&!item.bomb).sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
     const noPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount<=0;
+    let best;
     if(safeControl&&noPi){
-      const bestBomb=candidates.filter(item=>item.bomb).sort((a,b)=>b.score-a.score)[0];
-      if(bestBomb&&bestBomb.progressValue<70&&bestBomb.blockValue<90)return safeControl;
+      const bestBomb=pool.filter(item=>item.bomb).sort((a,b)=>b.score-a.score)[0];
+      if(bestBomb&&bestBomb.progressValue<70&&bestBomb.blockValue<90)best=safeControl;
     }
-    return candidates.sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
+    if(!best)best=pool.sort((a,b)=>b.score-a.score||b.urgency-a.urgency||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
+    if(best&&unsecuredCaptures.length&&captures.some(item=>item.gudeunja)){
+      const saved=captures.find(item=>item.gudeunja);
+      return {...best,reason:`Take the contestable ${localizedMonth(best.card.month)} capture first. Your ${localizedMonth(saved.card.month)} match is a 굳은자 (guaranteed capture), so keep it in reserve until the other floor captures are gone. ${best.reason}`};
+    }
+    return best;
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
   function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
@@ -2473,6 +2507,8 @@
   function trainingOpeningStrategy(){
     if(!state?.human)return '';
     const hand=state.human.hand||[],floor=state.floor||[];
+    const openingCandidates=hand.map(card=>trainingCandidate(card)).filter(Boolean),secured=openingCandidates.find(item=>item.target&&item.gudeunja),contestable=openingCandidates.find(item=>item.target&&!item.gudeunja);
+    if(secured&&contestable)return `Opening strategy: save the ${localizedMonth(secured.card.month)} 굳은자 for later because that capture is already yours. Take contestable floor cards such as ${localizedMonth(contestable.card.month)} first, before the computer can take them.`;
     for(const card of hand){
       const facts=trainingMonthFacts(card.month),matches=matchesFor(card);
       if(facts.hand.length===2&&matches.length===1&&!trainingBombOpportunity(card,matches)){
@@ -2497,13 +2533,14 @@
     const best=trainingRecommendation();
     return best?`Opening strategy: start by controlling months you hold in multiples, then complete scoring sets and deny immediate threats. First look: ${best.reason}`:'Opening strategy: favor clean captures that preserve control of a month, protect Brights and set cards, and watch the computer’s captured groups for the next scoring threshold.';
   }
-  function showTrainingCoach(title,text){
+  function showTrainingCoach(title,text,{pinned=false}={}){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
+    presentation.trainingCoachPinned=!!pinned;
     if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=title||'Training Coach';
     if(els.trainingCoachText)els.trainingCoachText.textContent=text;
     if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
   }
-  function hideTrainingCoach(){if(!TEST_MODE&&els.trainingCoachPanel)els.trainingCoachPanel.hidden=true;}
+  function hideTrainingCoach(){presentation.trainingCoachPinned=false;if(!TEST_MODE&&els.trainingCoachPanel)els.trainingCoachPanel.hidden=true;}
   function applyTrainingRecommendation(recommendation,{showMessage=true}={}){
     if(!recommendation)return;
     presentation.hintCardId=recommendation.card?.id||null;
@@ -2522,11 +2559,12 @@
   }
   function setTrainingMode(enabled){clearTrainingCoach();presentation.trainingMode=!!enabled;if(!enabled)hideTrainingCoach();}
   function armTrainingCoach(){
+    if(presentation.trainingCoachPinned)return;
     clearTrainingCoach();
     if(!presentation.trainingMode||onlineMode||!state||state.winner||state.turn!==PLAYER_A||presentation.locked)return;
     presentation.trainingHintTimer=setTimeout(()=>{
       presentation.trainingHintTimer=null;
-      if(!presentation.trainingMode||onlineMode||!state||state.winner||state.turn!==PLAYER_A||presentation.locked)return;
+      if(presentation.trainingCoachPinned||!presentation.trainingMode||onlineMode||!state||state.winner||state.turn!==PLAYER_A||presentation.locked)return;
       applyTrainingRecommendation(trainingRecommendation());
     },5000);
   }
@@ -2603,6 +2641,11 @@
 
 
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
+  document.addEventListener('pointerdown',event=>{
+    if(!presentation.trainingMode||!presentation.trainingCoachPinned)return;
+    hideTrainingCoach();
+    if(!onlineMode&&state?.turn===PLAYER_A&&!state?.winner&&!presentation.locked)setTimeout(()=>armTrainingCoach(),0);
+  },{capture:true,passive:true});
   if(!TEST_MODE){addEventListener('resize',updateStageScale);updateStageScale();}
   setupLanguageMenu();
   document.querySelector('.human-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_A);});
@@ -2740,7 +2783,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingBombOpportunity,trainingProgressValue,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingIsGudeunja,trainingUnsecuredCaptureUrgency,trainingBombOpportunity,trainingProgressValue,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
@@ -2751,6 +2794,7 @@
           locked:presentation.locked,
           hintCardId:presentation.hintCardId,
           trainingMode:presentation.trainingMode,
+          trainingCoachPinned:presentation.trainingCoachPinned,
           trainingWarningFloorCardId:presentation.trainingWarningFloorCardId,
           trainingRecommendedFloorCardId:presentation.trainingRecommendedFloorCardId,
           sessionStarted:presentation.sessionStarted,
