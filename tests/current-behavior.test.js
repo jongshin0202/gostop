@@ -3118,3 +3118,46 @@ test('Training coach evaluates only public opponent information and never peeks 
   assert.doesNotMatch(training,/state\.ai\?*\.hand|state\.ai\.hand/);
   assert.match(training,/state\.ai\?\.captured/);
 });
+
+
+test('Training Mode saves a canonical 굳은자 while any contestable floor capture remains',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m11-4'),card('m6-4')],
+    human:api.makePlayer({hand:[card('m11-1'),card('m6-1')],captured:[card('m11-2')]}),
+    ai:api.makePlayer({captured:[card('m11-3')]})
+  }));
+  assert.equal(api.trainingIsGudeunja(card('m11-1')),true);
+  assert.equal(api.trainingIsGudeunja(card('m6-1')),false);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.month,6);
+  assert.equal(recommendation.gudeunja,false);
+  assert.match(recommendation.reason,/굳은자|guaranteed capture/);
+});
+
+test('Training Mode uses the 굳은자 once no other floor capture is available',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m11-4')],
+    human:api.makePlayer({hand:[card('m11-1'),card('m5-1')],captured:[card('m11-2')]}),
+    ai:api.makePlayer({captured:[card('m11-3')]})
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.month,11);
+  assert.equal(recommendation.gudeunja,true);
+});
+
+test('Training Mode treats a ppeok recovery as a 굳은자 and defers it behind an unsecured hit',()=>{
+  const stack=cards('m3-1','m3-2','m3-3');
+  useState(stateWith({
+    turn:'playerA',
+    floor:[...stack,card('m7-4')],
+    floorStacks:{3:{month:3,cardIds:stack.map(item=>item.id),source:'ppeok',owner:'playerB'}},
+    human:api.makePlayer({hand:[card('m3-4'),card('m7-1')]}),
+    ai:api.makePlayer()
+  }));
+  assert.equal(api.trainingIsGudeunja(card('m3-4')),true);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.month,7);
+  assert.equal(recommendation.gudeunja,false);
+});
