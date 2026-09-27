@@ -540,7 +540,10 @@
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
     if(!connected||blocked)return false;
     if(globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected:true,pendingActionId:null,blocked:false}))return true;
-    return !!state&&state.openingSpecialsComplete===true&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
+    const localPlayable=!!state&&state.openingSpecialsComplete===true&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
+    if(localPlayable)return true;
+    if(snapshot?.nextAction)return false;
+    return false;
   }
   function rankedHandInputEnabled(){
     if(!rankedHandTurnAvailable())return false;
