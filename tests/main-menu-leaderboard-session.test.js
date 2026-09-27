@@ -348,21 +348,21 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:0!important[^]*?transform:translate3d\(0,-2px,0\)!important/);
-  assert.match(source,/\.menu-submenu-inner\{min-height:0;overflow:hidden;display:grid/);
+  assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:1!important[^]*?visibility:hidden!important[^]*?transform:none!important[^]*?visibility 0s linear \.18s/);assert.match(source,/\.menu-submenu-inner\{[^]*?opacity:0;transform:translate3d\(0,-10px,0\)/);
+  assert.match(source,/\.menu-submenu-inner\{\s*min-height:0;overflow:hidden;display:grid/);
   assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?grid-template-rows:1fr!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
   assert.doesNotMatch(source,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
   assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
-  assert.doesNotMatch(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
+  assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
   assert.doesNotMatch(source,/\.menu-category-toggle,\.menu-category-chevron,\.menu-utility\{transition:none!important\}/);
   assert.match(source,/touch-action:manipulation/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260927-33/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260927-34/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
@@ -459,6 +459,10 @@ test('production static hosting keeps direct authority routing and native first-
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
   assert.match(source,/immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date\.now\(\)\+280/);
   assert.match(source,/overlay\.addEventListener\('click'/);
+  assert.match(source,/function installImmediateDesktopAccordion\(button,section\)/);
+  assert.match(source,/button\.addEventListener\('pointerdown',event=>\{/);
+  assert.match(source,/installImmediateDesktopAccordion\(rankedToggle,'competitive'\)/);
+  assert.match(source,/installImmediateDesktopAccordion\(freeToggle,'friendly'\)/);
   assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
   assert.match(source,/@keyframes mainMenuChoiceSweep/);
   assert.match(source,/\.menu-category-chevron\{[^]*?transition:transform \.24s/);

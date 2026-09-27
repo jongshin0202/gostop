@@ -13,8 +13,15 @@ test('main menu opens its submenu on the same frame with a fast grid-track slide
   assert.match(ranked,/transition:grid-template-rows \.18s/);
   assert.match(ranked,/menu-submenu-inner/);
   assert.doesNotMatch(ranked,/submenu\.style\.setProperty\('--submenu-open-height'/);
-  assert.match(ranked,/\.menu-category-chevron\{transition:transform \.10s ease!important\}/);
+  assert.match(ranked,/\.menu-category-chevron\{transition:transform \.08s ease!important\}/);
   assert.match(ranked,/\.menu-category-toggle:hover,\.menu-category-toggle:focus-visible\{transform:none!important;filter:none!important\}/);assert.match(ranked,/\.menu-category-toggle:active\{transform:none!important\}/);
+  assert.match(ranked,/function installImmediateDesktopAccordion\(button,section\)/);
+  assert.match(ranked,/button\.addEventListener\('pointerdown',event=>\{/);
+  assert.match(ranked,/if\(event\.pointerType==='touch'\|\|event\.button!==0\)return/);
+  assert.match(ranked,/toggleMenuSection\(section\)/);
+  assert.match(ranked,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
+  assert.match(ranked,/\.gostop-main-menu\.main-menu-accordion\{backdrop-filter:none!important\}/);
+  assert.match(ranked,/visibility:hidden!important;[\s\S]*visibility 0s linear \.18s!important/);
 });
 
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
