@@ -615,14 +615,15 @@
     /* Immediate accordion response: animate a 0fr/1fr grid track instead of max-height.
        This starts on the same frame as the click and avoids repeatedly laying out a large
        max-height box while the two category buttons move. */
-    .menu-category-toggle{transition:transform .06s ease,border-radius .06s ease,box-shadow .06s ease!important}
-    .menu-category-toggle:hover,.menu-category-toggle:focus-visible{filter:none!important}
+    .menu-category-toggle{transition:border-radius .08s ease,box-shadow .08s ease!important}
+    .menu-category-toggle:hover,.menu-category-toggle:focus-visible{transform:none!important;filter:none!important}
+    .menu-category-toggle:active{transform:none!important}
     .menu-submenu{
       display:grid!important;grid-template-columns:1fr!important;grid-template-rows:0fr!important;
       gap:0!important;max-height:none!important;opacity:0!important;visibility:hidden!important;
       overflow:hidden!important;pointer-events:none;margin:0 10px;padding:0 9px!important;
-      transform:translate3d(0,-6px,0)!important;will-change:grid-template-rows,opacity,transform!important;
-      contain:paint;transition:grid-template-rows .14s cubic-bezier(.2,.86,.2,1),opacity .08s linear,transform .12s ease-out,padding .12s ease,border-color .10s ease,background .10s ease,visibility 0s linear .14s!important
+      transform:translate3d(0,-2px,0)!important;will-change:grid-template-rows,opacity,transform!important;
+      contain:paint;transition:grid-template-rows .18s cubic-bezier(.16,1,.3,1),opacity .12s ease-out,transform .16s cubic-bezier(.16,1,.3,1),padding .16s cubic-bezier(.16,1,.3,1),border-color .12s ease,background .12s ease,visibility 0s linear .18s!important
     }
     .menu-submenu-inner{min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px}
     .menu-category-block.expanded .menu-submenu{
@@ -635,9 +636,9 @@
     .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
     html.gostop-performance-lite .menu-submenu{
-      grid-template-rows:0fr!important;transform:translate3d(0,-5px,0)!important;visibility:hidden!important;
+      grid-template-rows:0fr!important;transform:translate3d(0,-2px,0)!important;visibility:hidden!important;
       will-change:grid-template-rows,opacity,transform!important;
-      transition:grid-template-rows .12s cubic-bezier(.2,.86,.2,1),opacity .07s linear,transform .10s ease-out,padding .10s ease,visibility 0s linear .12s!important
+      transition:grid-template-rows .16s cubic-bezier(.16,1,.3,1),opacity .10s ease-out,transform .14s cubic-bezier(.16,1,.3,1),padding .14s ease,visibility 0s linear .16s!important
     }
     html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{
       grid-template-rows:1fr!important;transform:translate3d(0,0,0)!important;visibility:visible!important;transition-delay:0s!important
