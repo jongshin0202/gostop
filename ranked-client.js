@@ -619,14 +619,14 @@
     .menu-category-toggle:hover,.menu-category-toggle:focus-visible{filter:none!important}
     .menu-submenu{
       display:grid!important;grid-template-columns:1fr!important;grid-template-rows:0fr!important;
-      gap:0!important;max-height:none!important;opacity:0!important;visibility:visible!important;
+      gap:0!important;max-height:none!important;opacity:0!important;visibility:hidden!important;
       overflow:hidden!important;pointer-events:none;margin:0 10px;padding:0 9px!important;
       transform:translate3d(0,-6px,0)!important;will-change:grid-template-rows,opacity,transform!important;
-      contain:paint;transition:grid-template-rows .14s cubic-bezier(.2,.86,.2,1),opacity .08s linear,transform .12s ease-out,padding .12s ease,border-color .10s ease,background .10s ease!important
+      contain:paint;transition:grid-template-rows .14s cubic-bezier(.2,.86,.2,1),opacity .08s linear,transform .12s ease-out,padding .12s ease,border-color .10s ease,background .10s ease,visibility 0s linear .14s!important
     }
     .menu-submenu-inner{min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px}
     .menu-category-block.expanded .menu-submenu{
-      grid-template-rows:1fr!important;opacity:1!important;pointer-events:auto;
+      grid-template-rows:1fr!important;opacity:1!important;visibility:visible!important;pointer-events:auto;
       transform:translate3d(0,0,0)!important;padding:8px 9px 9px!important;transition-delay:0s!important
     }
     .menu-submenu-inner>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800;touch-action:manipulation}
@@ -635,12 +635,12 @@
     .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
     html.gostop-performance-lite .menu-submenu{
-      grid-template-rows:0fr!important;transform:translate3d(0,-5px,0)!important;
+      grid-template-rows:0fr!important;transform:translate3d(0,-5px,0)!important;visibility:hidden!important;
       will-change:grid-template-rows,opacity,transform!important;
-      transition:grid-template-rows .12s cubic-bezier(.2,.86,.2,1),opacity .07s linear,transform .10s ease-out,padding .10s ease!important
+      transition:grid-template-rows .12s cubic-bezier(.2,.86,.2,1),opacity .07s linear,transform .10s ease-out,padding .10s ease,visibility 0s linear .12s!important
     }
     html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{
-      grid-template-rows:1fr!important;transform:translate3d(0,0,0)!important;transition-delay:0s!important
+      grid-template-rows:1fr!important;transform:translate3d(0,0,0)!important;visibility:visible!important;transition-delay:0s!important
     }
     @media(max-width:760px){.menu-submenu-inner>button{min-height:40px;font-size:15px}}
     @media(max-height:760px){.menu-category-block.expanded .menu-submenu{padding:5px 6px 6px!important}.menu-submenu-inner{gap:5px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
