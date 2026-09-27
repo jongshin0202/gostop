@@ -127,7 +127,7 @@ test('Friendly Play With Friend offers signup after game ten and session end, th
   assert.match(ranked,/gostop-friendly-friend-joined/);assert.match(ranked,/Your friend joined! Have fun!/);
   assert.match(ranked,/friendlyReferralProgressHtml/);assert.match(ranked,/Help your friend earn 200 Coins/);assert.match(ranked,/referral progress:/);
   assert.match(ranked,/FRIENDLY_REFERRAL_PROGRESS_POLL_MS=15000/);assert.match(ranked,/syncFriendlyReferralProgressPoll/);
-  assert.match(ranked,/addEventListener\('storage'/);assert.match(ranked,/event\.key!==TOKEN_KEY/);assert.match(ranked,/showAccountSuccess\('verified',\{awards:\{referralCoins:200\}/);
+  assert.match(ranked,/addEventListener\('storage'/);assert.match(ranked,/event\.key!==TOKEN_KEY/);assert.match(ranked,/verificationSuccessData/);assert.match(ranked,/showAccountSuccess\('verified',verificationSuccessData/);
   assert.match(ranked,/id="registrationCompetitive"[^>]*hidden>Try Competitive Gaming</);assert.match(ranked,/focusCompetitiveGaming/);assert.match(ranked,/resumeFriendlyRoom\(context\.roomCode\)/);
   assert.match(ranked,/body\.referralToken=friendly\.token;body\.referralStage=friendly\.stage;body\.deviceId=friendlyDeviceId\(\)/);
   assert.match(ranked,/body:\{roomCode,deviceId:friendlyDeviceId\(\)\}/);
