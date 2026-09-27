@@ -3081,3 +3081,40 @@ test('score pill, Captured Cards title, and entire capture panels open the same 
   assert.match(appSource,/panel\.addEventListener\('click',event=>\{if\(event\.defaultPrevented\)return;event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(playerId\);\}\)/);
   assert.doesNotMatch(appSource,/btn\.addEventListener\('click',\(\)=>openCapturedGroup/);
 });
+
+
+test('Training Mode prefers three-of-four month control over a two-floor speculative hit',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m2-3'),card('m4-2'),card('m4-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m2-2'),card('m4-1')]}),
+    ai:api.makePlayer()
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.month,2);
+  assert.equal(recommendation.target.month,2);
+  assert.ok(recommendation.controlValue>=80);
+  assert.match(recommendation.reason,/control of three of the four|control/i);
+});
+
+test('Training Mode does not recommend a no-Single Bomb over a clean month-control capture',()=>{
+  const state=useState(stateWith({
+    turn:'playerA',
+    floor:[card('m9-4'),card('m2-3')],
+    human:api.makePlayer({hand:[card('m9-1'),card('m9-2'),card('m9-3'),card('m2-1'),card('m2-2')],hiddenTripleMonths:[9]}),
+    ai:api.makePlayer({captured:[]})
+  }));
+  assert.equal(api.trainingBombOpportunity(card('m9-1')),true);
+  assert.equal(api.score(state.ai.captured).piCount,0);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.bomb,false);
+  assert.equal(recommendation.card.month,2);
+  assert.match(recommendation.reason,/control/i);
+});
+
+test('Training coach evaluates only public opponent information and never peeks at the hidden AI hand',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const training=source.slice(source.indexOf('function trainingThreatValue'),source.indexOf('function showTrainingCoach'));
+  assert.doesNotMatch(training,/state\.ai\?*\.hand|state\.ai\.hand/);
+  assert.match(training,/state\.ai\?\.captured/);
+});
