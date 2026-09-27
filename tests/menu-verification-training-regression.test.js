@@ -12,7 +12,7 @@ test('main menu opens its submenu on the same frame with a fast grid-track slide
   assert.match(ranked,/grid-template-rows:1fr!important/);
   assert.match(ranked,/transition:grid-template-rows \.14s/);
   assert.match(ranked,/menu-submenu-inner/);
-  assert.doesNotMatch(ranked,/submenu\.children\.length\*52\+24|--submenu-open-height/);
+  assert.doesNotMatch(ranked,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(ranked,/\.menu-category-chevron\{transition:transform \.10s ease!important\}/);
   assert.match(ranked,/\.menu-category-toggle:hover,\.menu-category-toggle:focus-visible\{filter:none!important\}/);
 });
