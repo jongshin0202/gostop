@@ -29,5 +29,5 @@ test('Training coach values public-state month control and discounts no-Pi bombs
   assert.match(training,/function trainingBombAdjustment/);
   assert.match(training,/opponentPi>0\?18:-78/);
   assert.match(training,/if\(safeControl&&noPi\)/);
-  assert.doesNotMatch(training,/state\.ai(?:\?\.)?hand/);
+  assert.doesNotMatch(training,/state\.ai(?:\?\.|\.)hand/);
 });
