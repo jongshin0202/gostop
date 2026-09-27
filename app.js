@@ -2351,31 +2351,117 @@
     if(afterScore.total>beforeScore.total)return `This move raises your visible score from ${beforeScore.total} to ${afterScore.total}.`;
     return '';
   }
+  function trainingMonthFacts(month){
+    if(!state)return {hand:[],floor:[],captured:[],known:0,unseen:4};
+    const hand=(state.human?.hand||[]).filter(card=>card.month===month);
+    const floor=(state.floor||[]).filter(card=>card.month===month);
+    const captured=[...(state.human?.captured||[]),...(state.ai?.captured||[])].filter(card=>card.month===month);
+    const known=Math.min(4,hand.length+floor.length+captured.length);
+    return {hand,floor,captured,known,unseen:Math.max(0,4-known)};
+  }
+  function trainingBombOpportunity(card,matches=matchesFor(card)){
+    const facts=trainingMonthFacts(card?.month),player=state?.human;
+    if(!card||!player||facts.hand.length<3||matches.length!==1)return false;
+    return player.hiddenTripleMonths?.includes(card.month)||player.armedBombMonths?.includes(card.month);
+  }
+  function trainingGainedCards(card,target,matches){
+    if(trainingBombOpportunity(card,matches)){
+      const handCards=trainingMonthFacts(card.month).hand.slice(0,3);
+      return [...handCards,...expandedTargetCards(target)];
+    }
+    return [card,...expandedTargetCards(target)];
+  }
+  function trainingProgressValue(gained,human=state?.human){
+    if(!human||!gained?.length)return 0;
+    const captured=human.captured||[],after=[...captured,...gained],beforeScore=score(captured,human.gukjinMode||'animal'),afterScore=score(after,human.gukjinMode||'animal');
+    let value=(afterScore.total-beforeScore.total)*48+(afterScore.piCount-beforeScore.piCount)*3;
+    const count=(cards,predicate)=>cards.filter(predicate).length;
+    const brightBefore=count(captured,item=>item.type==='bright'),brightAfter=count(after,item=>item.type==='bright');
+    const animalBefore=count(captured,item=>item.type==='animal'),animalAfter=count(after,item=>item.type==='animal');
+    const ribbonBefore=count(captured,item=>item.type==='ribbon'),ribbonAfter=count(after,item=>item.type==='ribbon');
+    const godoriBefore=count(captured,item=>item.flags.includes('godori')),godoriAfter=count(after,item=>item.flags.includes('godori'));
+    value+=(brightAfter-brightBefore)*6+(animalAfter-animalBefore)*3+(ribbonAfter-ribbonBefore)*3+(godoriAfter-godoriBefore)*8;
+    if(brightBefore<3&&brightAfter>=3)value+=75;
+    if(animalBefore<5&&animalAfter>=5)value+=42;
+    if(ribbonBefore<5&&ribbonAfter>=5)value+=40;
+    if(godoriBefore<3&&godoriAfter>=3)value+=95;
+    if(beforeScore.piCount<10&&afterScore.piCount>=10)value+=70;
+    for(const family of ['red','blue','grass']){
+      const before=count(captured,item=>item.type==='ribbon'&&item.ribbonSet===family),afterCount=count(after,item=>item.type==='ribbon'&&item.ribbonSet===family);
+      if(before<3&&afterCount>=3)value+=78;
+      else value+=(afterCount-before)*4;
+    }
+    return value;
+  }
+  function trainingMonthControlValue(card,matches){
+    const facts=trainingMonthFacts(card.month),bomb=trainingBombOpportunity(card,matches);
+    if(bomb)return 0;
+    if(matches.length===1&&facts.hand.length>=2){
+      const controlled=Math.min(4,facts.hand.length+facts.floor.length+facts.captured.length);
+      return 68+(facts.hand.length-2)*10+(controlled>=3?22:0);
+    }
+    if(matches.length===2&&facts.hand.length===1)return -10;
+    if(!matches.length&&facts.hand.length>=2)return 6;
+    return 0;
+  }
+  function trainingMonthControlReason(card,matches){
+    const facts=trainingMonthFacts(card.month);
+    if(trainingBombOpportunity(card,matches)||matches.length!==1||facts.hand.length<2)return '';
+    if(facts.hand.length===2&&facts.unseen<=1)return `You hold two ${localizedMonth(card.month)} cards and one is already on the floor. Taking it now while keeping your second card gives you control of three of the four ${localizedMonth(card.month)} cards and a strong chance to collect the last one later.`;
+    return `You have multiple ${localizedMonth(card.month)} cards and a clean one-card match on the floor. Capture now while keeping another card from that month for future control.`;
+  }
+  function trainingBombAdjustment(card,matches,gained,blockValue,opportunity){
+    if(!trainingBombOpportunity(card,matches))return 0;
+    const opponentPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount;
+    const progress=trainingProgressValue(gained,state.human);
+    let value=opponentPi>0?18:-78;
+    value-=24;
+    if(progress>=70)value+=30;
+    if(blockValue>=90)value+=26;
+    return value;
+  }
+  function trainingBombReason(card,matches,gained){
+    if(!trainingBombOpportunity(card,matches))return '';
+    const opponentPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount;
+    if(opponentPi<=0)return 'A Bomb would consume three cards and the computer has no Single to surrender right now, so do not spend the Bomb unless it creates a major scoring or defensive gain.';
+    return `A Bomb captures all four ${localizedMonth(card.month)} cards and can take a Single from the computer, so it is valuable when that payoff is stronger than preserving hand control.`;
+  }
   function trainingCandidate(card){
     if(!card||!state)return null;
-    const matches=matchesFor(card);
+    const matches=matchesFor(card),facts=trainingMonthFacts(card.month);
     if(!matches.length){
-      return {card,target:null,score:-captureValue(card)*.55,reason:`No floor card matches this month, so playing it leaves a ${trainingCategoryName(card)} exposed. If you must discard, sacrificing a lower-value card is usually safer.`};
+      const retained=Math.max(0,facts.hand.length-1),retainBonus=retained>0?8:0;
+      return {card,target:null,score:-captureValue(card)*.75+retainBonus,reason:retained>0?`No floor card matches ${localizedMonth(card.month)}. If you must discard from this month, keeping your other ${localizedMonth(card.month)} card preserves a chance to recover it later.`:`No floor card matches this month, so playing it leaves a ${trainingCategoryName(card)} exposed. If you must discard, sacrifice the least valuable card and avoid feeding the computer a Bright, set card, or double Single.`};
     }
     let best=null;
     for(const target of matches){
-      const gained=[card,...expandedTargetCards(target)],blockValue=trainingThreatValue(target,state.ai),opportunity=trainingOpportunityReason(gained,state.human);
-      const immediate=captureValue(card)+expandedTargetCards(target).reduce((sum,item)=>sum+captureValue(item),0);
-      const value=immediate*1.4+blockValue*.72+(opportunity?65:0)+(card.flags.includes('godori')?5:0)+(card.ribbonSet?3:0);
-      const reason=trainingThreatReason(target,state.ai)||opportunity||`This immediately captures a ${trainingCategoryName(target)} and gives the strongest visible value among your available plays.`;
-      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best={card,target,score:value,reason};
+      const gained=trainingGainedCards(card,target,matches),blockValue=trainingThreatValue(target,state.ai),opportunity=trainingOpportunityReason(gained,state.human),controlValue=trainingMonthControlValue(card,matches);
+      const immediate=gained.reduce((sum,item)=>sum+captureValue(item),0);
+      const progressValue=trainingProgressValue(gained,state.human);
+      const bombAdjustment=trainingBombAdjustment(card,matches,gained,blockValue,opportunity);
+      const twoFloorPenalty=matches.length===2?-8:0;
+      const value=immediate*1.05+progressValue+blockValue*.82+controlValue+bombAdjustment+twoFloorPenalty;
+      const controlReason=trainingMonthControlReason(card,matches),bombReason=trainingBombReason(card,matches,gained);
+      const reason=opportunity||trainingThreatReason(target,state.ai)||controlReason||(bombReason&&bombAdjustment<0?bombReason:'')||`This is the best balance of immediate capture, future month control, scoring progress, and defense among the visible plays.`;
+      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best={card,target,score:value,reason,bomb:trainingBombOpportunity(card,matches),controlValue,progressValue,blockValue};
     }
     return best;
   }
   function trainingRecommendation(){
     if(!state||state.turn!==PLAYER_A||!state.human?.hand?.length)return null;
-    let best=null;
+    const candidates=[];
     for(const card of state.human.hand){
       const candidate=trainingCandidate(card);
-      if(!candidate)continue;
-      if(!best||candidate.score>best.score||(candidate.score===best.score&&(card.month<best.card.month||card.month===best.card.month&&card.id<best.card.id)))best=candidate;
+      if(candidate)candidates.push(candidate);
     }
-    return best;
+    if(!candidates.length)return null;
+    const safeControl=candidates.filter(item=>item.controlValue>=80&&!item.bomb).sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
+    const noPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount<=0;
+    if(safeControl&&noPi){
+      const bestBomb=candidates.filter(item=>item.bomb).sort((a,b)=>b.score-a.score)[0];
+      if(bestBomb&&bestBomb.progressValue<70&&bestBomb.blockValue<90)return safeControl;
+    }
+    return candidates.sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
   function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
@@ -2387,6 +2473,12 @@
   function trainingOpeningStrategy(){
     if(!state?.human)return '';
     const hand=state.human.hand||[],floor=state.floor||[];
+    for(const card of hand){
+      const facts=trainingMonthFacts(card.month),matches=matchesFor(card);
+      if(facts.hand.length===2&&matches.length===1&&!trainingBombOpportunity(card,matches)){
+        return `Opening strategy: you control three of the four ${localizedMonth(card.month)} cards between your hand and the floor. Take the clean match first and keep the second card to control the remaining ${localizedMonth(card.month)} card.`;
+      }
+    }
     const reachable=target=>hand.some(card=>card.month===target.month);
     const handGodori=hand.filter(card=>card.flags.includes('godori')),floorGodori=floor.filter(card=>card.flags.includes('godori')&&reachable(card));
     if(handGodori.length>=2&&floorGodori.length)return `Opening strategy: you have ${handGodori.length} bird Pictures in your hand and a reachable bird Picture is already on the floor. Prioritize those months and build toward Godori (5-Birdies).`;
@@ -2397,10 +2489,13 @@
     }
     const brights=hand.filter(card=>card.type==='bright').length,reachableBright=floor.some(card=>card.type==='bright'&&reachable(card));
     if(brights>=2&&reachableBright)return `Opening strategy: you have ${brights} Brights and another reachable Bright is visible. Prioritize Bright months while avoiding unnecessary high-value discards.`;
-    const triple=state.human.hiddenTripleMonths?.[0];
-    if(triple)return `Opening strategy: you hold three cards from ${localizedMonth(triple)}. Keep the Shake/Bomb option in mind and watch for a matching floor card before committing the month.`;
+    const triple=state.human.hiddenTripleMonths?.[0]||state.human.armedBombMonths?.[0];
+    if(triple){
+      const opponentPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount;
+      return opponentPi>0?`Opening strategy: you hold three cards from ${localizedMonth(triple)}. Keep the Bomb option available, but compare its Single steal and four-card capture against any clean month-control play before spending all three cards.`:`Opening strategy: you hold three cards from ${localizedMonth(triple)}, but the computer has no Single to surrender. Do not rush the Bomb; preserve it unless it creates a major score or defensive swing.`;
+    }
     const best=trainingRecommendation();
-    return best?`Opening strategy: no major set is immediately dominant, so start by maximizing safe captures and denying visible scoring threats. First look: ${best.reason}`:'Opening strategy: focus on making captures, protecting Brights and set cards, and watching the computer’s captured groups for the next scoring threshold.';
+    return best?`Opening strategy: start by controlling months you hold in multiples, then complete scoring sets and deny immediate threats. First look: ${best.reason}`:'Opening strategy: favor clean captures that preserve control of a month, protect Brights and set cards, and watch the computer’s captured groups for the next scoring threshold.';
   }
   function showTrainingCoach(title,text){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
@@ -2645,7 +2740,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingBombOpportunity,trainingProgressValue,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
