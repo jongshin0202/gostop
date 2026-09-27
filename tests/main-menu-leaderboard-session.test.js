@@ -356,7 +356,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
   assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
-  assert.doesNotMatch(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
+  assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
   assert.doesNotMatch(source,/\.menu-category-toggle,\.menu-category-chevron,\.menu-utility\{transition:none!important\}/);
   assert.match(source,/touch-action:manipulation/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
