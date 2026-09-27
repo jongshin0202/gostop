@@ -532,20 +532,15 @@
     }
     return false;
   }
-  function rankedTransportConnected(session=globalThis.goStopOnlineSession){
-    const socket=session?.socket;if(!socket)return false;
-    const openState=Number(session?.WebSocketImpl?.OPEN??globalThis.WebSocket?.OPEN??1);
-    return socket.readyState===openState;
-  }
   function rankedHandTurnAvailable(){
     if(!onlineMode)return false;
     repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);
-    if(blocked||!snapshot||!rankedTransportConnected(session))return false;
+    const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
+    if(!connected||blocked)return false;
     if(globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected:true,pendingActionId:null,blocked:false}))return true;
-    if(snapshot?.nextAction)return false;
-    return !!state&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
+    return !!state&&state.openingSpecialsComplete===true&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
   }
   function rankedHandInputEnabled(){
     if(!rankedHandTurnAvailable())return false;
@@ -2689,7 +2684,7 @@
     let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlineSkipInitialOpening=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
     const isOnlinePresentationCurrent=epoch=>onlineMode&&epoch===onlinePresentationEpoch;
     onlineSubmit=function(action){
-      if(!onlineMode||!rankedTransportConnected(globalThis.goStopOnlineSession)){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
+      if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);onlineActionSubmittedAt.set(id,Date.now());presentation.locked=true;return id;}catch(error){activeOnlineStatus.textContent=error.message;return null;}
     };
     onlinePlayAgain=async function(){
@@ -2781,7 +2776,7 @@
       }
       if(snapshot.nextAction?.type==='chooseFloorTarget'){const targets=snapshot.nextAction.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');if(target)onlineSubmit({type:'chooseFloorTarget',source:snapshot.nextAction.source,targetId:target.id});return;}
       if(snapshot.nextAction){onlineSubmit(snapshot.nextAction);return;}
-      const connected=rankedTransportConnected(globalThis.goStopOnlineSession);
+      const connected=globalThis.goStopOnlineSession?.socket?.readyState===WebSocket.OPEN;
       presentation.locked=!globalThis.GoStopOnline.viewerCanInteract(snapshot,{connected,pendingActionId:globalThis.goStopOnlineSession.pendingActionId,blocked:onlineFlowBlocks(snapshot)});render();
     }
     function onlineStateFromSnapshot(snapshot,rawEvents=[]){
