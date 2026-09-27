@@ -2417,6 +2417,18 @@
     }
     return value;
   }
+  function trainingCaptureCategoryPriority(card){
+    if(!card)return 0;
+    // Training strategy priority requested for ordinary capture choices:
+    // Bright > Stripe > Single > Picture.
+    return card.type==='bright'?4:card.type==='ribbon'?3:card.type==='pi'?2:card.type==='animal'?1:0;
+  }
+  function trainingCapturePriority(cards=[]){
+    return cards.reduce((best,card)=>Math.max(best,trainingCaptureCategoryPriority(card)),0);
+  }
+  function trainingCapturePriorityLabel(priority){
+    return priority===4?'Bright':priority===3?'Stripe':priority===2?'Single':priority===1?'Picture':'card';
+  }
   function trainingMonthControlValue(card,matches){
     const facts=trainingMonthFacts(card.month),bomb=trainingBombOpportunity(card,matches);
     if(bomb)return 0;
@@ -2464,14 +2476,16 @@
       const progressValue=trainingProgressValue(gained,state.human);
       const bombAdjustment=trainingBombAdjustment(card,matches,gained,blockValue,opportunity);
       const urgency=trainingUnsecuredCaptureUrgency(card,target,matches);
+      const capturePriority=trainingCapturePriority(gained);
+      const capturePriorityValue=capturePriority*24;
       const twoFloorPenalty=matches.length===2?-8:0;
       const gudeunjaHoldPenalty=gudeunja?-180:0;
-      const value=immediate*1.05+progressValue+blockValue*.82+controlValue+bombAdjustment+urgency+twoFloorPenalty+gudeunjaHoldPenalty;
+      const value=immediate*1.05+progressValue+blockValue*.82+controlValue+bombAdjustment+urgency+capturePriorityValue+twoFloorPenalty+gudeunjaHoldPenalty;
       const controlReason=trainingMonthControlReason(card,matches),bombReason=trainingBombReason(card,matches,gained);
       const contestableReason=!gudeunja&&facts.unseen>0?`This ${localizedMonth(card.month)} floor card is still contestable because ${facts.unseen} matching card${facts.unseen===1?' remains':'s remain'} unseen. Capture it before the computer can take it.`:'';
       const gudeunjaReason=gudeunja?`This is a 굳은자 (guaranteed capture). Only you can take it from the current public position, so save it for later while any contestable floor capture remains.`:'';
       const reason=opportunity||trainingThreatReason(target,state.ai)||controlReason||contestableReason||(bombReason&&bombAdjustment<0?bombReason:'')||gudeunjaReason||`Take this capture now because it improves your visible scoring position without giving up a stronger future option.`;
-      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best={card,target,score:value,reason,bomb:trainingBombOpportunity(card,matches),controlValue,progressValue,blockValue,gudeunja,urgency};
+      if(!best||value>best.score||(value===best.score&&capturePriority>best.capturePriority)||(value===best.score&&capturePriority===best.capturePriority&&target.id<best.target.id))best={card,target,score:value,reason,bomb:trainingBombOpportunity(card,matches),controlValue,progressValue,blockValue,gudeunja,urgency,capturePriority,gained};
     }
     return best;
   }
@@ -2486,14 +2500,14 @@
     const captures=candidates.filter(item=>item.target);
     const unsecuredCaptures=captures.filter(item=>!item.gudeunja);
     let pool=unsecuredCaptures.length?unsecuredCaptures:(captures.length?captures:candidates);
-    const safeControl=pool.filter(item=>item.controlValue>=80&&!item.bomb).sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
+    const safeControl=pool.filter(item=>item.controlValue>=80&&!item.bomb).sort((a,b)=>b.capturePriority-a.capturePriority||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
     const noPi=score(state.ai?.captured||[],state.ai?.gukjinMode||'animal').piCount<=0;
     let best;
     if(safeControl&&noPi){
       const bestBomb=pool.filter(item=>item.bomb).sort((a,b)=>b.score-a.score)[0];
       if(bestBomb&&bestBomb.progressValue<70&&bestBomb.blockValue<90)best=safeControl;
     }
-    if(!best)best=pool.sort((a,b)=>b.score-a.score||b.urgency-a.urgency||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
+    if(!best)best=pool.sort((a,b)=>b.score-a.score||b.capturePriority-a.capturePriority||b.urgency-a.urgency||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id))[0];
     if(best&&unsecuredCaptures.length&&captures.some(item=>item.gudeunja)){
       const saved=captures.find(item=>item.gudeunja);
       return {...best,reason:`Take the contestable ${localizedMonth(best.card.month)} capture first. Your ${localizedMonth(saved.card.month)} match is a 굳은자 (guaranteed capture), so keep it in reserve until the other floor captures are gone. ${best.reason}`};
@@ -2516,11 +2530,17 @@
     const plan=(text,cards=[])=>({text,cardIds:trainingReferenceIds(cards)});
     const openingCandidates=hand.map(card=>trainingCandidate(card)).filter(Boolean),secured=openingCandidates.find(item=>item.target&&item.gudeunja),contestable=openingCandidates.find(item=>item.target&&!item.gudeunja);
     if(secured&&contestable)return plan(`Opening strategy: save the highlighted ${localizedMonth(secured.card.month)} 굳은자 for later because that capture is already yours. Take the highlighted contestable ${localizedMonth(contestable.card.month)} cards first, before the computer can take them.`,[secured.card,secured.target,contestable.card,contestable.target]);
-    for(const card of hand){
-      const facts=trainingMonthFacts(card.month),matches=matchesFor(card);
-      if(facts.hand.length===2&&matches.length===1&&!trainingBombOpportunity(card,matches)){
-        return plan(`Opening strategy: the highlighted cards are the ${localizedMonth(card.month)} cards. You control three of the four between your hand and the floor. Take the clean match first and keep the second card to control the remaining ${localizedMonth(card.month)} card.`,[...facts.hand,...matches]);
-      }
+    const cleanControlMonths=[...new Set(hand.map(card=>card.month))].map(month=>{
+      const representative=hand.find(card=>card.month===month),facts=trainingMonthFacts(month),matches=matchesFor(representative);
+      if(!representative||facts.hand.length!==2||matches.length!==1||trainingBombOpportunity(representative,matches))return null;
+      const candidates=facts.hand.map(card=>trainingCandidate(card)).filter(item=>item?.target&&!item.bomb);
+      const best=candidates.sort((a,b)=>b.capturePriority-a.capturePriority||b.score-a.score||a.card.id.localeCompare(b.card.id))[0];
+      return best?{month,facts,matches,best}:null;
+    }).filter(Boolean).sort((a,b)=>b.best.capturePriority-a.best.capturePriority||b.best.score-a.best.score||a.month-b.month);
+    if(cleanControlMonths.length){
+      const choice=cleanControlMonths[0],other=cleanControlMonths[1];
+      const priorityNote=other&&choice.best.capturePriority>other.best.capturePriority?` The ${trainingCapturePriorityLabel(choice.best.capturePriority)} capture takes priority over the ${trainingCapturePriorityLabel(other.best.capturePriority)} capture.`:'';
+      return plan(`Opening strategy: the highlighted cards are the ${localizedMonth(choice.month)} cards. You control three of the four between your hand and the floor. Take this clean match first and keep the second card to control the remaining ${localizedMonth(choice.month)} card.${priorityNote}`,[...choice.facts.hand,...choice.matches]);
     }
     const reachable=target=>hand.some(card=>card.month===target.month);
     const handGodori=hand.filter(card=>card.flags.includes('godori')),floorGodori=floor.filter(card=>card.flags.includes('godori')&&reachable(card));
@@ -2804,7 +2824,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingIsGudeunja,trainingUnsecuredCaptureUrgency,trainingBombOpportunity,trainingProgressValue,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningPlan,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingIsGudeunja,trainingUnsecuredCaptureUrgency,trainingBombOpportunity,trainingProgressValue,trainingCaptureCategoryPriority,trainingCapturePriority,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningPlan,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
