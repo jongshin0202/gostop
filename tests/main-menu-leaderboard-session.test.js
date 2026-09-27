@@ -313,8 +313,8 @@ test('Settings dialog owns Language and Notifications while legacy Room code Joi
 
 test('main menu uses two exclusive accordion choices with Training inside Friendly and compact utility navigation',()=>{
   assert.match(source,/rankedToggle\.id='competitiveGamingBtn'/);assert.match(source,/freeToggle\.id='friendlyGamingBtn'/);
-  assert.match(source,/rankedSubmenu\.append\(rankedSolo,onlinePlay\)/);
-  assert.match(source,/freeSubmenu\.append\(playPractice,freeFriendBtn,trainingBtn\)/);
+  assert.match(source,/rankedSubmenuInner\.append\(rankedSolo,onlinePlay\);rankedSubmenu\.append\(rankedSubmenuInner\)/);
+  assert.match(source,/freeSubmenuInner\.append\(playPractice,freeFriendBtn,trainingBtn\);freeSubmenu\.append\(freeSubmenuInner\)/);
   assert.match(source,/trainingBtn\.className='menu-training'/);
   assert.match(source,/utilities\.className='main-menu-utilities'/);assert.match(source,/utilities\.append\(friendsBtn,leaderboardBtn\)/);
   assert.match(source,/menu\.append\(rankedGroup,freeGroup,utilities\)/);
@@ -351,7 +351,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:0!important[^]*?transform:translate3d\(0,-6px,0\)!important/);
   assert.match(source,/\.menu-submenu-inner\{min-height:0;overflow:hidden;display:grid/);
   assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?grid-template-rows:1fr!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
-  assert.doesNotMatch(source,/submenu\.children\.length\*52\+24|--submenu-open-height/);
+  assert.doesNotMatch(source,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
