@@ -612,6 +612,16 @@
       .main-menu-utilities{gap:5px!important;margin-top:3px!important}.menu-utility{min-height:34px!important;padding:4px!important}
       .account-menu-box{padding:7px 10px!important;margin-top:40px!important}
     }
+    /* Fast menu response: preserve the accordion animation but avoid long layout/repaint work. */
+    .menu-category-toggle{transition:transform .07s ease,border-radius .07s ease,box-shadow .07s ease!important}
+    .menu-category-toggle:hover,.menu-category-toggle:focus-visible{filter:none!important}
+    .menu-submenu{will-change:opacity,transform!important;transition:max-height .12s cubic-bezier(.2,.8,.2,1),opacity .08s linear,transform .10s ease-out,padding .10s ease,border-color .10s ease,visibility 0s linear .12s!important}
+    .menu-category-block.expanded .menu-submenu{transition-delay:0s!important}
+    .menu-category-chevron{transition:transform .10s ease!important}
+    .menu-utility{transition:transform .07s ease,box-shadow .07s ease!important}
+    .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu>button:hover,.menu-submenu>button:focus-visible{filter:none!important}
+    .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
+
   `;document.head.appendChild(style);
 
   const overlay=$('soloStartOverlay'),playPractice=$('playSoloBtn'),createRoom=$('createOnlineBtn'),joinForm=$('joinOnlineForm'),howTo=$('howToBtn'),onlineStatus=$('onlineStatus');if(!overlay||!playPractice)return;
@@ -683,7 +693,7 @@
     let press=null;
     const activate=()=>{
       if(button.disabled)return;
-      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+650;
+      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+280;
       immediateMenuProgrammaticTarget=button;
       try{button.click();}finally{immediateMenuProgrammaticTarget=null;}
     };
@@ -867,9 +877,31 @@
   async function logout(){try{await api('/api/auth/logout',{method:'POST',body:{}});}catch(_){}clearSession();}
   function continueAfterAccount(){if(!account||!accountContinuation)return;const {next}=accountContinuation;accountContinuation=null;next();}
   function cancelAccountContinuation(){if(!accountContinuation)return;const {onCancel}=accountContinuation;accountContinuation=null;onCancel?.();}
-  let pendingVerificationCredentials=null;
+  let pendingVerificationCredentials=null,verificationWatchTimer=null,verificationWatchBusy=false;
+  function stopVerificationWatch(){if(verificationWatchTimer){clearInterval(verificationWatchTimer);verificationWatchTimer=null;}verificationWatchBusy=false;}
+  function verificationSuccessData(data){
+    const friendly=readFriendlyReferralContext();
+    if(!friendly?.signupStarted||!data?.account?.friendlyReferralProgress)return data;
+    return {...data,awards:{...(data.awards||{}),referralCoins:Math.max(200,Number(data.awards?.referralCoins)||0)},referral:{...(data.referral||{}),stage:friendly.stage||'game10',inviterAccountId:data.account.friendlyReferralProgress.inviterAccountId,inviterNickname:data.account.friendlyReferralProgress.inviterNickname}};
+  }
+  async function checkVerificationCompletion(){
+    if(verificationWatchBusy||!pendingVerificationCredentials||!verificationDialog.open||document.visibilityState==='hidden')return false;
+    verificationWatchBusy=true;
+    try{
+      const data=await api('/api/auth/login',{method:'POST',body:pendingVerificationCredentials,auth:false});
+      saveSession(data);const success=verificationSuccessData(data);pendingVerificationCredentials=null;stopVerificationWatch();verificationDialog.close();showAccountSuccess('verified',success);return true;
+    }catch(error){
+      if(!['EMAIL_NOT_VERIFIED','VERIFICATION_RATE_LIMIT'].includes(error?.code||''))$('verificationStatus').textContent=localizedError(error);
+      return false;
+    }finally{verificationWatchBusy=false;}
+  }
+  function startVerificationWatch(){
+    stopVerificationWatch();
+    if(!pendingVerificationCredentials)return;
+    verificationWatchTimer=setInterval(()=>{void checkVerificationCompletion();},15000);
+  }
   function showVerificationDialog(email,message=rt('verificationSentText',{email}),canResend=!!pendingVerificationCredentials){
-    $('verificationEmail').textContent=email||'';$('verificationText').textContent=message;$('verificationStatus').textContent='';$('verificationResend').hidden=!canResend;if(!verificationDialog.open)verificationDialog.showModal();
+    $('verificationEmail').textContent=email||'';$('verificationText').textContent=message;$('verificationStatus').textContent='';$('verificationResend').hidden=!canResend;if(!verificationDialog.open)verificationDialog.showModal();startVerificationWatch();
   }
   function showAccountSuccess(kind='registered',data=null){
     const context=readFriendlyReferralContext(),stage=data?.referral?.stage||context?.stage||'',referralCoins=Math.max(0,Number(data?.awards?.referralCoins)||0),referralAttempted=!!data?.referral||!!context?.signupStarted,inviterId=String(data?.referral?.inviterAccountId||account?.friendlyReferralProgress?.inviterAccountId||''),inviterName=String(data?.referral?.inviterNickname||'your inviter');
@@ -892,7 +924,7 @@
     }else if(goCompetitive)focusCompetitiveGaming();
     continueAfterAccount();
   }
-  $('accountDialogClose').addEventListener('click',()=>{cancelAccountContinuation();authDialog.close();cancelFriendlySignupFromAuth();});authDialog.addEventListener('cancel',()=>{cancelAccountContinuation();setTimeout(()=>cancelFriendlySignupFromAuth(),0);});$('loginTab').addEventListener('click',()=>setAuthTab('login'));$('registerTab').addEventListener('click',()=>setAuthTab('register'));$('registrationOk').addEventListener('click',()=>{void finishFriendlySignupSuccess(false);});$('registrationCompetitive').addEventListener('click',()=>{void finishFriendlySignupSuccess(true);});$('registrationAddFriend').addEventListener('click',async()=>{const button=$('registrationAddFriend'),accountId=successDialog.dataset.friendAccountId;if(!accountId||button.disabled)return;button.disabled=true;try{await api('/api/social/request',{method:'POST',body:{accountId}});notifySocialChanged(accountId);button.textContent='Friend Request Sent';showToast('Friend Request sent.',2200);await refreshAccount();}catch(error){showToast(localizedError(error),5000);}finally{button.disabled=false;}});$('verificationOk').addEventListener('click',()=>{verificationDialog.close();pendingVerificationCredentials=null;cancelAccountContinuation();revealCurrentMainMenu();});verificationDialog.addEventListener('cancel',()=>{pendingVerificationCredentials=null;cancelAccountContinuation();revealCurrentMainMenu();});$('verificationResend').addEventListener('click',async()=>{if(!pendingVerificationCredentials)return;const button=$('verificationResend');if(button.disabled)return;button.disabled=true;$('verificationStatus').textContent='';try{await api('/api/auth/resend-verification',{method:'POST',body:pendingVerificationCredentials,auth:false});$('verificationStatus').textContent=rt('verificationEmailResent');}catch(error){$('verificationStatus').textContent=localizedError(error);}finally{button.disabled=false;}});$('accountNoticeOk').addEventListener('click',async()=>{const okBtn=$('accountNoticeOk');if(okBtn.disabled)return;okBtn.disabled=true;try{if(accountNoticeDialog.dataset.rankedEntry==='1'){const next=accountNoticeDialog.__rankedNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.close();if(next)next();return;}if(accountNoticeDialog.dataset.dailyLaunch==='1'){const next=accountNoticeDialog.__dailyNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__dailyNext=null;accountNoticeDialog.close();renderAccountBox();patchGameIdentity();if(next)next();return;}await acknowledgeVisibleAccountNotice();}catch(error){showToast(localizedError(error),6000);}finally{okBtn.disabled=false;}});
+  $('accountDialogClose').addEventListener('click',()=>{cancelAccountContinuation();authDialog.close();cancelFriendlySignupFromAuth();});authDialog.addEventListener('cancel',()=>{cancelAccountContinuation();setTimeout(()=>cancelFriendlySignupFromAuth(),0);});$('loginTab').addEventListener('click',()=>setAuthTab('login'));$('registerTab').addEventListener('click',()=>setAuthTab('register'));$('registrationOk').addEventListener('click',()=>{void finishFriendlySignupSuccess(false);});$('registrationCompetitive').addEventListener('click',()=>{void finishFriendlySignupSuccess(true);});$('registrationAddFriend').addEventListener('click',async()=>{const button=$('registrationAddFriend'),accountId=successDialog.dataset.friendAccountId;if(!accountId||button.disabled)return;button.disabled=true;try{await api('/api/social/request',{method:'POST',body:{accountId}});notifySocialChanged(accountId);button.textContent='Friend Request Sent';showToast('Friend Request sent.',2200);await refreshAccount();}catch(error){showToast(localizedError(error),5000);}finally{button.disabled=false;}});$('verificationOk').addEventListener('click',()=>{stopVerificationWatch();verificationDialog.close();pendingVerificationCredentials=null;cancelAccountContinuation();revealCurrentMainMenu();});verificationDialog.addEventListener('cancel',()=>{stopVerificationWatch();pendingVerificationCredentials=null;cancelAccountContinuation();revealCurrentMainMenu();});$('verificationResend').addEventListener('click',async()=>{if(!pendingVerificationCredentials)return;const button=$('verificationResend');if(button.disabled)return;button.disabled=true;$('verificationStatus').textContent='';try{await api('/api/auth/resend-verification',{method:'POST',body:pendingVerificationCredentials,auth:false});$('verificationStatus').textContent=rt('verificationEmailResent');}catch(error){$('verificationStatus').textContent=localizedError(error);}finally{button.disabled=false;}});$('accountNoticeOk').addEventListener('click',async()=>{const okBtn=$('accountNoticeOk');if(okBtn.disabled)return;okBtn.disabled=true;try{if(accountNoticeDialog.dataset.rankedEntry==='1'){const next=accountNoticeDialog.__rankedNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.close();if(next)next();return;}if(accountNoticeDialog.dataset.dailyLaunch==='1'){const next=accountNoticeDialog.__dailyNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__dailyNext=null;accountNoticeDialog.close();renderAccountBox();patchGameIdentity();if(next)next();return;}await acknowledgeVisibleAccountNotice();}catch(error){showToast(localizedError(error),6000);}finally{okBtn.disabled=false;}});
   accountNoticeDialog.addEventListener('cancel',event=>{if(accountNoticeDialog.dataset.rankedEntry==='1'||accountNoticeDialog.dataset.dailyLaunch==='1')event.preventDefault();});
   accountNoticeDialog.addEventListener('close',()=>{if(accountNoticeDialog.dataset.rankedEntry==='1'||accountNoticeDialog.dataset.dailyLaunch==='1'){delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.__dailyNext=null;clearRankedEntryPending();}});
   $('loginForm').addEventListener('submit',async event=>{event.preventDefault();const form=new FormData(event.currentTarget),credentials={email:form.get('email'),password:form.get('password')};try{$('accountError').textContent='';const data=await api('/api/auth/login',{method:'POST',body:credentials,auth:false});const friendly=readFriendlyReferralContext();if(friendly?.signupStarted)sendFriendlyReferralStatus('declined',friendly.stage==='session-end'?'session-end':'game10');clearFriendlyReferralContext();saveSession(data);authDialog.close();continueAfterAccount();}catch(error){if(error?.code==='EMAIL_NOT_VERIFIED'){pendingVerificationCredentials=credentials;authDialog.close();showVerificationDialog(String(credentials.email||''));return;}$('accountError').textContent=localizedError(error);}});
@@ -1570,6 +1602,8 @@
     }catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}
   }
 
+  globalThis.addEventListener('focus',()=>{if(verificationDialog.open)void checkVerificationCompletion();});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&verificationDialog.open)void checkVerificationCompletion();});
   globalThis.addEventListener('storage',event=>{
     if(event.key!==TOKEN_KEY)return;
     if(!event.newValue){if(authToken)clearSession();return;}
@@ -1577,8 +1611,8 @@
     const friendly=readFriendlyReferralContext();authToken=event.newValue;
     void refreshAccount().then(()=>{
       if(!friendly?.signupStarted||!account?.friendlyReferralProgress)return;
-      if(verificationDialog.open)verificationDialog.close();if(authDialog.open)authDialog.close();if(registrationPolicyDialog.open)registrationPolicyDialog.close();
-      showAccountSuccess('verified',{awards:{referralCoins:200},referral:{stage:friendly.stage||'game10'}});
+      stopVerificationWatch();if(verificationDialog.open)verificationDialog.close();if(authDialog.open)authDialog.close();if(registrationPolicyDialog.open)registrationPolicyDialog.close();
+      showAccountSuccess('verified',verificationSuccessData({account,awards:{referralCoins:200},referral:{stage:friendly.stage||'game10'}}));
     });
   });
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity,handleFriendlyTerminal,handleFriendlySessionEnd});
