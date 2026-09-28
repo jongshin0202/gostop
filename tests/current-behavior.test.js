@@ -3199,3 +3199,61 @@ test('Training opening advice returns concrete card ids so named months are visu
   assert.ok(opening.cardIds.includes('m6-3'));
   assert.ok(opening.cardIds.includes('m6-4'));
 });
+
+
+test('Competitive Solo hand input survives stale opening/legal-action convenience flags',()=>{
+  const playable=stateWith({
+    turn:'playerA',
+    openingSpecialsComplete:false,
+    pendingTurn:null,
+    pendingDecision:null,
+    human:api.makePlayer({hand:[card('m6-2'),card('m7-3')]})
+  });
+  api.setState(playable);
+  api.setOnlineMode(true);
+  api.setOnlineSessionForTest({socket:{readyState:7},WebSocketImpl:{OPEN:7},pendingActionId:null});
+  api.setLatestOnlineSnapshot({
+    seatId:'playerA',
+    sessionFlow:{},
+    state:{
+      turn:'playerA',winner:null,pendingTurn:null,pendingDecision:null,
+      openingSpecialsComplete:false,legalActions:[],
+      human:{hand:[card('m6-2'),card('m7-3')]},ai:{handCount:10}
+    }
+  });
+  assert.equal(api.rankedTransportConnected(),true);
+  assert.equal(api.rankedAuthorityTurnPlayable(),true);
+  assert.equal(api.rankedLocalTurnPlayable(),true);
+  assert.equal(api.rankedHandTurnAvailable(),true);
+  assert.equal(api.rankedHandInputEnabled(),true);
+
+  api.setLatestOnlineSnapshot({
+    seatId:'playerA',
+    sessionFlow:{},
+    state:{
+      turn:'playerA',winner:null,pendingTurn:null,pendingDecision:{type:'chooseFloorTarget'},
+      openingSpecialsComplete:false,legalActions:[],
+      human:{hand:[card('m6-2')]},ai:{handCount:10}
+    }
+  });
+  assert.equal(api.rankedAuthorityTurnPlayable(),false);
+  assert.equal(api.rankedHandTurnAvailable(),false);
+
+  api.setOnlineMode(false);
+  api.setLatestOnlineSnapshot(null);
+  api.setOnlineSessionForTest(null);
+});
+
+test('Competitive Solo click touch second-tap and flick still share the same hand activation gate',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const presentation=fs.readFileSync(path.join(__dirname,'..','presentation-plan.js'),'utf8');
+  const gate=source.slice(source.indexOf('function rankedTransportConnected'),source.indexOf('function render()'));
+  assert.match(gate,/rankedAuthorityTurnPlayable/);
+  assert.match(gate,/rankedLocalTurnPlayable/);
+  assert.doesNotMatch(gate,/localPlayable=.*openingSpecialsComplete===true/);
+  assert.match(source,/document\.addEventListener\('gostop-hand-activate',event=>\{/);
+  assert.match(source,/if\(onlineMode\)\{\s*if\(!rankedHandTurnAvailable\(\)\)return;/);
+  assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
+  assert.match(presentation,/if\(flick\)\{clearSelection\(\);triggerPlay\(state\.cardId\);return;\}/);
+  assert.match(source,/onlineSubmit=function\(action\)\{\s*if\(!onlineMode\|\|!rankedTransportConnected\(globalThis\.goStopOnlineSession\)\)/);
+});
