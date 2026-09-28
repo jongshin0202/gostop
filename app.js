@@ -540,9 +540,6 @@
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
     if(!connected||blocked)return false;
     if(globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected:true,pendingActionId:null,blocked:false}))return true;
-    // A newer authority snapshot can arrive while the old hand is still being
-    // animated. Never let that old presentation override a real turn/decision lock.
-    if(snapshot?.state&&(snapshot.state.turn!==snapshot.seatId||snapshot.state.winner||snapshot.state.pendingTurn||snapshot.state.pendingDecision))return false;
     const localPlayable=!!state&&state.openingSpecialsComplete===true&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
     if(localPlayable)return true;
     if(snapshot?.nextAction)return false;
@@ -890,6 +887,10 @@
         if(onlinePendingCardId===cardId||authoritativeTargetChoice){syncTargetChoiceUi();return;}
         cleanupTargetChoice();onlineHandSourceRects.clear();
       }
+      // The server can acknowledge the play before its physical presentation
+      // finishes. Keep this card's turn claimed until turnCompleted is shown;
+      // do not use a possibly stale snapshot to disable the recovery gate.
+      if(onlinePendingCardId)return;
       const card=state.human.hand.find(item=>item.id===cardId);if(!card)return;
       onlinePendingCardId=cardId;rememberOnlineHandSource(cardId,clickedEl);clickedEl?.classList.add('pending-card');
       const needsPrePlayDecision=state.human.armedBombMonths?.includes(card.month)||state.human.hiddenTripleMonths?.includes(card.month);
@@ -2909,7 +2910,7 @@
         if(!isOnlinePresentationCurrent(epoch))return;
       }
       const actor=presentationEvents.find(event=>event.actorId)?.actorId;if(actor){await promptGukjinChoice(legacySideForPlayerId(actor),presentationEvents);if(!isOnlinePresentationCurrent(epoch))return;}
-      const completedTurn=presentationEvents.find(event=>event.type==='turnCompleted');if(completedTurn){await presentNewMilestones(completedTurn.actorId);if(!isOnlinePresentationCurrent(epoch))return;}
+      const completedTurn=presentationEvents.find(event=>event.type==='turnCompleted');if(completedTurn){await presentNewMilestones(completedTurn.actorId);if(!isOnlinePresentationCurrent(epoch))return;if(completedTurn.actorId===snapshot.seatId)onlinePendingCardId=null;}
       const chongtong=presentationEvents.find(event=>event.type==='chongtongDeclared'),threePpeok=presentationEvents.find(event=>event.type==='threePpeokDeclared'),nagari=presentationEvents.find(event=>event.type==='nagariDeclared');
       if(chongtong)presentChongtong(chongtong);
       else if(threePpeok)presentThreePpeok({events:[threePpeok]});
