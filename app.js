@@ -2830,6 +2830,8 @@
       makeState:makeTestState,
       setState(next){state=next;},
       setOnlineMode(value){onlineMode=!!value;},
+      setLatestOnlineSnapshot(next){latestOnlineSnapshot=next;},
+      setOnlineSessionForTest(next){globalThis.goStopOnlineSession=next;},
       setOnlineSubmit(fn){onlineSubmit=fn;},
       setLocale,refreshModeLocalizedLabels,
       getState(){return state;},
