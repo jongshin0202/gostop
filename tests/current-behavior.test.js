@@ -2111,7 +2111,7 @@ test('Stripe milestone titles are set-specific in Korean and remain generic else
 });
 
 test('terminal Online presentation awaits semantics and milestones before opening any result',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('function enterOnlineMatchView'));
   const semantic=transition.indexOf("event.type==='sweepTriggered'"),milestone=transition.indexOf('await presentNewMilestones(completedTurn.actorId)'),terminal=transition.indexOf('if(chongtong)presentChongtong(chongtong)');
   assert.ok(semantic>=0&&semantic<milestone&&milestone<terminal);
   for(const token of ['presentChongtong(chongtong)','presentThreePpeok({events:[threePpeok]})','setGrandResult(t(\'noWinner\')','presentStopResult({events:presentationEvents})'])assert.ok(transition.indexOf(token)>milestone,token);
@@ -2677,7 +2677,7 @@ test('Online hand play captures the live source before animation and preserves e
   const remembered=onlineClick.indexOf('rememberOnlineHandSource(cardId,clickedEl)');
   const submitted=onlineClick.indexOf('await submitOnlineCardPlay()');
   assert.ok(remembered>=0&&submitted>remembered);
-  const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('function enterOnlineMatchView'));
   assert.match(transition,/side==='human'\?takeOnlineHandSource\(event\.card\.id\)\|\|els\.playerHand\.querySelector\(`\[data-card-id="\$\{event\.card\.id\}"\]`\)\?\.getBoundingClientRect\(\)\|\|approximateHumanSource\(\):approximateAiSource\(\)/);
   assert.match(transition,/target=state\.floor\.find\(card=>card\.id===step\.targetCardId\)/);
   assert.match(transition,/incoming\.pendingTurn\?\.played,incoming\.pendingTurn\?\.drawn/);
@@ -2706,7 +2706,7 @@ test('eventless authority snapshots preserve a clicked local card until physical
     assert.equal(JSON.stringify(api.takeOnlineHandSource(selected.id)),JSON.stringify(exact));
     assert.equal(api.takeOnlineHandSource(selected.id),null);
   }
-  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('async function submitOnlineCardPlay'));
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('function enterOnlineMatchView'));
   const eventless=transition.slice(transition.indexOf('if(!presentationEvents.length)'));assert.ok(eventless.indexOf('hasUnpresentedLocalHandMovement')<eventless.indexOf('state=incomingMapped.state'));
   assert.match(transition,/side==='human'\?takeOnlineHandSource/);
   assert.match(transition,/:approximateAiSource\(\)/);
@@ -2987,7 +2987,7 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
   assert.match(presentation,/const nativeTouchSupported=touchCapable/);
   assert.match(presentation,/const pointerTouchSupported=!touchCapable&&typeof globalThis\.PointerEvent==='function'/);
-  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/if\(typeof globalThis\.PointerEvent==='function'\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
   assert.match(presentation,/state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
@@ -2997,13 +2997,13 @@ test('mobile hand browsing, second tap, and flick share one deterministic native
   assert.match(presentation,/clearPreviousClickSuppression\(\)/);
   assert.match(presentation,/Date\.now\(\)\+Math\.max\(80,Number\(ms\)\|\|140\)/);
   assert.doesNotMatch(presentation,/state\.intent!==\'browse\'&&isUpwardFlick/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:500,minSpeed:\.11,maxHorizontalRatio:1\.35/);
   assert.match(presentation,/if\(flick\)\{[\s\S]*triggerPlay\(state\.cardId\);return;/);
   assert.match(presentation,/if\(browsed\)\{[\s\S]*clearSelection\(\);return;/);
   assert.match(presentation,/if\(state\.wasSelected\)\{clearSelection\(\);triggerPlay\(state\.cardId\);\}/);
   assert.match(presentation,/bypassClickCard=card;[\s\S]*try\{card\.click\(\);\}finally\{bypassClickCard=null;\}/);
   assert.match(source,/el\.addEventListener\('click',\(\)=>\{void humanPlay\(card\.id,el\);\}\)/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:500,minSpeed:\.11,maxHorizontalRatio:1\.35/);
   assert.match(presentation,/suppressNextClick\(state\.cardId,260\)/);
   assert.match(css,/\.hand\{[^}]*touch-action:pan-y/);
 });

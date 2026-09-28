@@ -38,7 +38,7 @@ test('Android prefers native Touch Events and keeps Pointer Events as a non-touc
   assert.match(presentation,/if\(nativeTouchSupported\)\{[\s\S]*addEventListener\('touchstart'/);
   assert.match(presentation,/addEventListener\('touchmove'/);
   assert.match(presentation,/addEventListener\('touchend'/);
-  assert.match(presentation,/if\(pointerTouchSupported\)\{[\s\S]*addEventListener\('pointerdown'/);
+  assert.match(presentation,/if\(typeof globalThis\.PointerEvent==='function'\)\{[\s\S]*addEventListener\('pointerdown'/);
   assert.match(presentation,/addEventListener\('pointermove'/);
   assert.match(presentation,/addEventListener\('pointerup'/);
 });
@@ -49,7 +49,7 @@ test('horizontal browse, upward flick, and tap are separate deterministic outcom
   assert.match(presentation,/state\.intent='browse'/);
   assert.match(presentation,/state\.intent='flick'/);
   assert.doesNotMatch(presentation,/const flick=state\.intent!=='browse'&&isUpwardFlick/);
-  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:950,minSpeed:\.02,maxHorizontalRatio:1\.35/);
+  assert.match(presentation,/minUpwardDistance:10,minTravelDistance:20,maxDuration:500,minSpeed:\.11,maxHorizontalRatio:1\.35/);
   assert.match(presentation,/const browsed=!flick&&\(state\.intent==='browse'\|\|Math\.abs\(dx\)>=18&&Math\.abs\(dx\)>Math\.abs\(dy\)\*\.9\)/);
   assert.match(presentation,/const tap=Math\.abs\(dx\)<=28&&Math\.abs\(dy\)<=28&&endTime-state\.startTime<=1000/);
   assert.match(presentation,/clearPreviousClickSuppression\(\)/);
