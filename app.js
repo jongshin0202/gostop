@@ -532,18 +532,36 @@
     }
     return false;
   }
+  function rankedTransportConnected(session=globalThis.goStopOnlineSession){
+    const socket=session?.socket;if(!socket)return false;
+    const openState=Number(session?.WebSocketImpl?.OPEN??globalThis.WebSocket?.OPEN??1);
+    return socket.readyState===openState;
+  }
+  function rankedAuthorityTurnPlayable(snapshot=latestOnlineSnapshot){
+    const projected=snapshot?.state,seatId=snapshot?.seatId;
+    if(!projected||!['playerA','playerB'].includes(seatId))return false;
+    if(projected.turn!==seatId||projected.winner||projected.pendingTurn||projected.pendingDecision)return false;
+    const viewer=seatId===PLAYER_A?projected.human:projected.ai;
+    return Array.isArray(viewer?.hand)?viewer.hand.length>0:Number(viewer?.handCount||0)>0;
+  }
+  function rankedLocalTurnPlayable(){
+    return !!state&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
+  }
   function rankedHandTurnAvailable(){
     if(!onlineMode)return false;
     repairOrphanedRankedPendingAction();
     const session=globalThis.goStopOnlineSession,snapshot=latestOnlineSnapshot,flow=snapshot?.sessionFlow;
     const blocked=!!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);
-    const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
+    const connected=rankedTransportConnected(session);
     if(!connected||blocked)return false;
     if(globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected:true,pendingActionId:null,blocked:false}))return true;
-    const localPlayable=!!state&&state.openingSpecialsComplete===true&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
-    if(localPlayable)return true;
+    const authorityPlayable=rankedAuthorityTurnPlayable(snapshot),localPlayable=rankedLocalTurnPlayable();
+    // The server remains authoritative. This fallback only prevents a stale convenience
+    // flag (legalActions/openingSpecialsComplete) from disabling every card even though
+    // both the projected authority state and the local projection say it is our clean turn.
+    if(authorityPlayable&&localPlayable)return true;
     if(snapshot?.nextAction)return false;
-    return false;
+    return localPlayable&&!snapshot?.state;
   }
   function rankedHandInputEnabled(){
     if(!rankedHandTurnAvailable())return false;
@@ -2824,6 +2842,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
+      rankedTransportConnected,rankedAuthorityTurnPlayable,rankedLocalTurnPlayable,rankedHandTurnAvailable,rankedHandInputEnabled,
       trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingMonthFacts,trainingIsGudeunja,trainingUnsecuredCaptureUrgency,trainingBombOpportunity,trainingProgressValue,trainingCaptureCategoryPriority,trainingCapturePriority,trainingMonthControlValue,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningPlan,trainingOpeningStrategy,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
@@ -2868,7 +2887,7 @@
     let onlinePresentationQueue=Promise.resolve(),onlineDealPresented=false,onlineSkipInitialOpening=false,onlinePresentedMatchId=null,onlineStageState={},onlinePresentedEvents=new Set(),onlineSessionGeneration=0,onlinePresentationEpoch=0,onlineJoinInFlight=false;
     const isOnlinePresentationCurrent=epoch=>onlineMode&&epoch===onlinePresentationEpoch;
     onlineSubmit=function(action){
-      if(!onlineMode||!globalThis.goStopOnlineSession?.socket||globalThis.goStopOnlineSession.socket.readyState!==WebSocket.OPEN){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
+      if(!onlineMode||!rankedTransportConnected(globalThis.goStopOnlineSession)){activeOnlineStatus.textContent=t('onlineAuthorityDisconnected');presentation.locked=true;render();return null;}
       try{const id=globalThis.goStopOnlineSession.submit(action);onlineActions.set(id,action);onlineActionSubmittedAt.set(id,Date.now());presentation.locked=true;return id;}catch(error){activeOnlineStatus.textContent=error.message;return null;}
     };
     onlinePlayAgain=async function(){
@@ -2960,7 +2979,7 @@
       }
       if(snapshot.nextAction?.type==='chooseFloorTarget'){const targets=snapshot.nextAction.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');if(target)onlineSubmit({type:'chooseFloorTarget',source:snapshot.nextAction.source,targetId:target.id});return;}
       if(snapshot.nextAction){onlineSubmit(snapshot.nextAction);return;}
-      const connected=globalThis.goStopOnlineSession?.socket?.readyState===WebSocket.OPEN;
+      const connected=rankedTransportConnected(globalThis.goStopOnlineSession);
       presentation.locked=!globalThis.GoStopOnline.viewerCanInteract(snapshot,{connected,pendingActionId:globalThis.goStopOnlineSession.pendingActionId,blocked:onlineFlowBlocks(snapshot)});render();
     }
     function onlineStateFromSnapshot(snapshot,rawEvents=[]){
