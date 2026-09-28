@@ -540,6 +540,9 @@
     const connected=session?.socket?.readyState===(globalThis.WebSocket?.OPEN??1);
     if(!connected||blocked)return false;
     if(globalThis.GoStopOnline?.viewerCanInteract?.(snapshot,{connected:true,pendingActionId:null,blocked:false}))return true;
+    // A newer authority snapshot can arrive while the old hand is still being
+    // animated. Never let that old presentation override a real turn/decision lock.
+    if(snapshot?.state&&(snapshot.state.turn!==snapshot.seatId||snapshot.state.winner||snapshot.state.pendingTurn||snapshot.state.pendingDecision))return false;
     const localPlayable=!!state&&state.openingSpecialsComplete===true&&state.turn===PLAYER_A&&!state.winner&&!state.pendingTurn&&!state.pendingDecision&&Array.isArray(state.human?.hand)&&state.human.hand.length>0;
     if(localPlayable)return true;
     if(snapshot?.nextAction)return false;
@@ -617,6 +620,9 @@
   async function runPhysicalMotion(job){presentation.activePhysicalMotions++;try{return await job();}finally{presentation.activePhysicalMotions--;}}
 
   function setActiveHoveredHandCard(cardId){
+    // Touch selection outlives pointerleave and authority/resize renders.
+    const selected=els.playerHand.dataset?.selectedCardId;
+    if(selected&&[...els.playerHand.querySelectorAll('.hand-card-slot')].some(slot=>slot.dataset.handKey===selected))cardId=selected;
     presentation.activeHoveredHandCardId=cardId;
     els.playerHand.querySelectorAll('.hand-card-slot').forEach(slot=>{
       const active=!!cardId&&slot.dataset.handKey===cardId;slot.classList.toggle('is-hovered',active);
@@ -866,6 +872,7 @@
   async function humanPlay(cardId, clickedEl){
     if(onlineMode){
       repairOrphanedRankedPendingAction();
+      if(!rankedHandTurnAvailable())return;
       // Exactly one ranked action may be in flight. Rapid/repeated taps must not create
       // competing revisions or duplicate card plays before the authority responds.
       if(onlineActions.size>0){
@@ -1004,6 +1011,44 @@
     if(!live||live.disabled)return;
     event.preventDefault();void humanPlay(cardId,live);
   });
+
+  // Shared by direct hand activation and the production authority callbacks.
+  // Keep this in the same lexical scope as humanPlay (strict-mode block functions
+  // inside the startup branch are not visible to the hand handler).
+  async function submitOnlineCardPlay(){
+    const cardId=onlinePendingCardId;
+    if(!cardId)return false;
+    const card=state?.human?.hand?.find(item=>item.id===cardId);
+    let targetId=null;
+    if(card&&!state?.pendingDecision&&latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'){
+      const matches=matchesFor(card);
+      if(matches.length===2){
+        presentation.pendingHumanCardId=cardId;
+        const target=await chooseFloorTarget(matches,'Choose which floor card to hit',{cancelable:true});
+        if(!target){
+          const next=presentation.queuedHumanCardSwitch;
+          presentation.queuedHumanCardSwitch=null;
+          presentation.pendingHumanCardId=null;
+          presentation.locked=false;
+          onlineHandSourceRects.delete(cardId);
+          onlinePendingCardId=null;
+          els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
+          render();
+          if(next){await nextFrame();return humanPlay(next.cardId,next.clickedEl);}
+          return false;
+        }
+        targetId=target.id;
+        presentation.pendingHumanCardId=null;
+        presentation.queuedHumanCardSwitch=null;
+        presentation.locked=false;
+      }
+    }
+    if(onlineSubmit({type:'playCard',cardId,targetId}))return true;
+    onlineHandSourceRects.delete(cardId);
+    onlinePendingCardId=null;
+    els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
+    return false;
+  }
 
   async function aiTurn(){
     if(onlineMode)return;
@@ -2872,40 +2917,6 @@
       else if(presentationEvents.some(event=>event.type==='handEnded'))presentStopResult({events:presentationEvents});
       if(onlineAnonymousMode&&snapshot.terminalResult)globalThis.GoStopRanked?.handleFriendlyTerminal?.(snapshot);
       await driveOnline(snapshot,presentationEvents);
-    }
-    async function submitOnlineCardPlay(){
-      const cardId=onlinePendingCardId;
-      if(!cardId)return false;
-      const card=state?.human?.hand?.find(item=>item.id===cardId);
-      let targetId=null;
-      if(card&&!state?.pendingDecision&&latestOnlineSnapshot?.nextAction?.type!=='chooseFloorTarget'){
-        const matches=matchesFor(card);
-        if(matches.length===2){
-          presentation.pendingHumanCardId=cardId;
-          const target=await chooseFloorTarget(matches,'Choose which floor card to hit',{cancelable:true});
-          if(!target){
-            const next=presentation.queuedHumanCardSwitch;
-            presentation.queuedHumanCardSwitch=null;
-            presentation.pendingHumanCardId=null;
-            presentation.locked=false;
-            onlineHandSourceRects.delete(cardId);
-            onlinePendingCardId=null;
-            els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
-            render();
-            if(next){await nextFrame();return humanPlay(next.cardId,next.clickedEl);}
-            return false;
-          }
-          targetId=target.id;
-          presentation.pendingHumanCardId=null;
-          presentation.queuedHumanCardSwitch=null;
-          presentation.locked=false;
-        }
-      }
-      if(onlineSubmit({type:'playCard',cardId,targetId}))return true;
-      onlineHandSourceRects.delete(cardId);
-      onlinePendingCardId=null;
-      els.playerHand.querySelector(`[data-card-id="${cardId}"]`)?.classList.remove('pending-card');
-      return false;
     }
     function enterOnlineMatchView(anonymous){
       if(anonymous){if(freeFriendPanel)freeFriendPanel.hidden=true;}

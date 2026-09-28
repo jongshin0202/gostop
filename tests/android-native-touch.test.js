@@ -55,7 +55,9 @@ test('Android Chrome uses native touch: second tap commits, upward flick commits
     assert.equal(h.listeners.has('touchstart'),true);
     assert.equal(h.listeners.has('touchmove'),true);
     assert.equal(h.listeners.has('touchend'),true);
-    assert.equal(h.listeners.has('pointerdown'),false,'native Touch Events own Android hand gestures on touch devices');
+    h.fire('pointerdown',{pointerType:'touch',button:0,pointerId:1,target:h.card,clientX:125,clientY:550});
+    h.fire('pointerup',{pointerType:'touch',button:0,pointerId:1,target:h.card,clientX:125,clientY:550});
+    assert.equal(h.activations.length,0,'native Touch Events alone own finger gestures, even though mouse/pen listeners are installed');
 
     const touchStart=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
     const touchMove=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
