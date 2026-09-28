@@ -75,11 +75,12 @@ test('post-opening permission unlocks either New Game starter only after both Sh
 });
 
 
-test('fresh Solo replay turn unlocks from authoritative state even when derived legalActions is stale',()=>{
+test('fresh Solo turn unlocks from authoritative hand state even when derived projection fields are stale',()=>{
   const base={seatId:'playerB',state:{turn:'playerB',winner:null,pendingTurn:null,pendingDecision:null,openingSpecialsComplete:true,human:{},ai:{hand:[{id:'m1-1'}]},legalActions:[]}};
   assert.equal(viewerCanStartTurn(base),true);
   assert.equal(viewerCanInteract(base,{connected:true,pendingActionId:null,blocked:false}),true);
-  assert.equal(viewerCanStartTurn({...base,state:{...base.state,openingSpecialsComplete:false}}),false);
+  assert.equal(viewerCanStartTurn({...base,state:{...base.state,openingSpecialsComplete:false}}),true);
+  assert.equal(viewerCanStartTurn({...base,state:{...base.state,openingSpecialsComplete:undefined}}),true);
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,pendingTurn:{phase:'awaitingDraw'}}}),false);
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,pendingDecision:{type:'goStopDecision'}}}),false);
   assert.equal(viewerCanStartTurn({...base,state:{...base.state,ai:{hand:[]}}}),false);
