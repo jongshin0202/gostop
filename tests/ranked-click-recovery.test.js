@@ -3,6 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const vm=require('node:vm');
 const root=path.join(__dirname,'..');
 const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
 const ranked=fs.readFileSync(path.join(root,'ranked-client.js'),'utf8');
@@ -11,6 +12,19 @@ test('ranked card input self-recovers from stale client action bookkeeping',()=>
   const block=app.slice(app.indexOf('async function humanPlay'),app.indexOf('async function submitOnlineCardPlay'));
   assert.match(block,/if\(onlineActions\.size>0\)\{[\s\S]*pendingActionId[\s\S]*if\(pendingActionId\)return;[\s\S]*onlineActions\.clear\(\)/);
   assert.doesNotMatch(block,/if\(onlineActions\.size>0\)return;/);
+});
+
+test('a delayed authority projection cannot disable the already playable presented hand',()=>{
+  const source=app.slice(app.indexOf('function rankedHandTurnAvailable()'),app.indexOf('function rankedHandInputEnabled()'));
+  const context={
+    onlineMode:true,repairOrphanedRankedPendingAction(){},
+    latestOnlineSnapshot:{seatId:'playerA',state:{turn:'playerB',pendingTurn:{}},nextAction:{type:'resolveSpecialTurn'}},
+    state:{openingSpecialsComplete:true,turn:'playerA',winner:null,pendingTurn:null,pendingDecision:null,human:{hand:[{id:'m1-1'}]}},
+    PLAYER_A:'playerA',els:{quitConfirmDialog:{open:false}},
+    goStopOnlineSession:{socket:{readyState:1}},WebSocket:{OPEN:1},
+    GoStopOnline:{viewerCanInteract(){return false;}}
+  };
+  assert.equal(vm.runInNewContext(`${source};rankedHandTurnAvailable()`,context),true);
 });
 
 test('disconnect cleanup cannot leave ranked hand permanently blocked',()=>{
