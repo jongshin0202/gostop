@@ -8,10 +8,43 @@ export class GameRoom{
     this.state=state;this.env=env;
     const accountStore=env.ACCOUNT_STORE?.get(env.ACCOUNT_STORE.idFromName('global'))||null,toMs=value=>{const seconds=Number(value);return Number.isFinite(seconds)&&seconds>0?seconds*1000:undefined;};
     this.core=new FinalRankedRoomCore({storage:state.storage,accountStore,durableState:state,inactivityNudgeMs:toMs(env.INACTIVITY_NUDGE_SECONDS),nudgePhaseMs:toMs(env.INACTIVITY_NUDGE_PHASE_SECONDS),abandonmentCountdownMs:toMs(env.ABANDONMENT_COUNTDOWN_SECONDS),pauseDurationMs:toMs(env.PAUSE_DURATION_SECONDS)});
+    this.restoreHibernatingSockets();
+  }
+  socketAttachment(socket){try{return socket?.deserializeAttachment?.()||null;}catch(_){return null;}}
+  registerRuntimeSocket(socket,attachment=this.socketAttachment(socket)){
+    const playerId=attachment?.playerId;if(!socket||!playerId)return false;
+    socket.__playerId=playerId;
+    if(attachment.multiSocket){
+      const existing=this.core.sockets.get(playerId),sockets=existing instanceof Set?existing:new Set(existing?[existing]:[]);
+      sockets.add(socket);this.core.sockets.set(playerId,sockets);
+    }else{
+      const existing=this.core.sockets.get(playerId);
+      if(existing instanceof Set){existing.add(socket);this.core.sockets.set(playerId,existing);}
+      else this.core.sockets.set(playerId,socket);
+    }
+    return true;
+  }
+  restoreHibernatingSockets(extraSocket=null){
+    if(typeof this.state.getWebSockets!=='function')return;
+    this.core.sockets.clear();
+    const sockets=[...this.state.getWebSockets()];
+    if(extraSocket&&!sockets.includes(extraSocket))sockets.push(extraSocket);
+    for(const socket of sockets)this.registerRuntimeSocket(socket);
+  }
+  async prepareHibernatingEvent(socket=null){
+    this.restoreHibernatingSockets(socket);await this.core.load();
+    if(this.core.room)for(const participant of this.core.room.participants)participant.connected=this.core.sockets.has(participant.playerId);
+  }
+  closeRuntimeSockets(code=4002,reason='System reset'){
+    const closed=new Set();
+    for(const value of this.core.sockets?.values?.()||[]){
+      const sockets=value instanceof Set?value:[value];
+      for(const socket of sockets){if(!socket||closed.has(socket))continue;closed.add(socket);try{socket.close(code,reason);}catch(_){}}
+    }
   }
   async clearStorage(){if(typeof this.state.storage.deleteAll==='function')await this.state.storage.deleteAll();else{const all=await this.state.storage.list();for(const key of all.keys())await this.state.storage.delete(key);}}
   resetRuntime(){
-    for(const socket of this.core.sockets?.values?.()||[]){try{socket.close(4002,'System reset');}catch(_){}}
+    this.closeRuntimeSockets();
     this.core.sockets?.clear?.();this.core.room=null;
     this.core.authority=this.core.authorityFactory({crypto:this.core.crypto,now:this.core.now,trustedRuntime:true});
   }
@@ -36,12 +69,21 @@ export class GameRoom{
       if(request.method==='GET'&&url.pathname==='/connect'){
         if(request.headers.get('Upgrade')!=='websocket')throw new RoomError('UPGRADE_REQUIRED','WebSocket upgrade required.',426);
         const credential=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(v=>v.trim()).find(v=>v.startsWith('gostop-token.'))?.slice(13);
-        const pair=new WebSocketPair(),client=pair[0],server=pair[1];server.accept();await this.core.connect(credential,server);
-        server.addEventListener('message',event=>this.core.handle(server,event.data));server.addEventListener('close',()=>this.core.disconnect(server));server.addEventListener('error',()=>this.core.disconnect(server));
+        const authenticated=await this.core.authenticate(credential);if(!authenticated)throw new RoomError('INVALID_CREDENTIAL','Room credential is invalid.',401);
+        const pair=new WebSocketPair(),client=pair[0],server=pair[1];
+        if(typeof this.state.acceptWebSocket!=='function')throw new RoomError('HIBERNATION_UNAVAILABLE','Durable Object WebSocket hibernation is unavailable.',503);
+        this.state.acceptWebSocket(server);
+        try{
+          const participant=await this.core.connect(credential,server);
+          server.serializeAttachment({playerId:participant.playerId,multiSocket:!!participant.accountId});
+        }catch(error){try{server.close(1011,'Connection setup failed');}catch(_){}throw error;}
         return new Response(null,{status:101,webSocket:client,headers:{'Sec-WebSocket-Protocol':`gostop-token.${credential}`}});
       }
       throw new RoomError('NOT_FOUND','Endpoint not found.',404);
     }catch(error){return errorResponse(error);}
   }
-  async alarm(){return this.core.alarm();}
+  async webSocketMessage(socket,message){await this.prepareHibernatingEvent(socket);return this.core.handle(socket,message);}
+  async webSocketClose(socket){await this.prepareHibernatingEvent(socket);return this.core.disconnect(socket);}
+  async webSocketError(socket){await this.prepareHibernatingEvent(socket);return this.core.disconnect(socket);}
+  async alarm(){this.restoreHibernatingSockets();return this.core.alarm();}
 }
