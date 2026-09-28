@@ -6,11 +6,10 @@
     const state=snapshot?.state,seatId=snapshot?.seatId;
     if(!state||!['playerA','playerB'].includes(seatId)||state.turn!==seatId||state.winner||state.pendingTurn||state.pendingDecision)return false;
     if(Array.isArray(state.legalActions)&&state.legalActions.includes('attemptPlayCard'))return true;
-    // Replay fallback: a fresh authoritative hand can briefly expose an empty/stale
-    // convenience legalActions list after the computer auto-finishes its opening turn.
-    // Derive the same permission from projected authoritative state so the UI cannot
-    // remain locked even though it is already the viewer's playable turn.
-    if(state.openingSpecialsComplete!==true)return false;
+    // The authority can briefly publish a playable hand before convenience fields such
+    // as legalActions/openingSpecialsComplete catch up. The server remains authoritative
+    // for action validation, so do not hard-disable every card solely because one derived
+    // projection field is stale. This keeps click, second-tap and flick on the same path.
     const viewer=seatId==='playerA'?state.human:state.ai;
     return Array.isArray(viewer?.hand)&&viewer.hand.length>0;
   }
