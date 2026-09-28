@@ -52,15 +52,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           rm -f /tmp/gostop-tail.log /tmp/gostop-room-response.json
-          (timeout 20s npx wrangler@4.131.2 tail gostop-authority --format json --sampling-rate 1 > /tmp/gostop-tail.log 2>&1 || true) &
+          (timeout 20s npx wrangler@4.131.2 tail gostop-authority --format json --sampling-rate 0.99 > /tmp/gostop-tail.log 2>&1 || true) &
           TAIL_PID=$!
           sleep 5
           set +e
-          HTTP_CODE=$(curl -sS -o /tmp/gostop-room-response.json -w "%{http_code}" \\
-            -X POST "https://gostop-authority.jwshin1.workers.dev/api/rooms" \\
-            -H "Origin: https://gostoplive.com" \\
-            -H "Content-Type: application/json" \\
-            --data '{}')
+          HTTP_CODE=$(curl -sS -o /tmp/gostop-room-response.json -w "%{http_code}" -X POST "https://gostop-authority.jwshin1.workers.dev/api/rooms" -H "Origin: https://gostoplive.com" -H "Content-Type: application/json" --data '{}')
           CURL_STATUS=$?
           set -e
           sleep 5
