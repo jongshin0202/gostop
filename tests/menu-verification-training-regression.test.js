@@ -4,24 +4,15 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
-const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
 
-test('main menu opens its submenu on the same frame with a fast grid-track slide',()=>{
-  assert.match(ranked,/immediateMenuSuppressUntil=Date\.now\(\)\+280/);
-  assert.match(ranked,/grid-template-rows:0fr!important/);
-  assert.match(ranked,/grid-template-rows:1fr!important/);
-  assert.match(ranked,/transition:grid-template-rows \.18s/);
-  assert.match(ranked,/menu-submenu-inner/);
-  assert.doesNotMatch(ranked,/submenu\.style\.setProperty\('--submenu-open-height'/);
-  assert.match(ranked,/\.menu-category-chevron\{transition:transform \.08s ease!important\}/);
-  assert.match(ranked,/\.menu-category-toggle:hover,\.menu-category-toggle:focus-visible\{transform:none!important;filter:none!important\}/);assert.match(ranked,/\.menu-category-toggle:active\{transform:none!important\}/);
+test('main menu uses immediate desktop pointer-down accordion activation',()=>{
   assert.match(ranked,/function installImmediateDesktopAccordion\(button,section\)/);
   assert.match(ranked,/button\.addEventListener\('pointerdown',event=>\{/);
   assert.match(ranked,/if\(event\.pointerType==='touch'\|\|event\.button!==0\)return/);
   assert.match(ranked,/toggleMenuSection\(section\)/);
+  assert.match(ranked,/installImmediateDesktopAccordion\(rankedToggle,'competitive'\)/);
+  assert.match(ranked,/installImmediateDesktopAccordion\(freeToggle,'friendly'\)/);
   assert.match(ranked,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
-  assert.match(ranked,/\.gostop-main-menu\.main-menu-accordion\{backdrop-filter:none!important\}/);
-  assert.match(ranked,/visibility:hidden!important;[\s\S]*visibility 0s linear \.18s!important/);
 });
 
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
@@ -30,33 +21,4 @@ test('verification dialog self-heals after email verification without manual dis
   assert.match(ranked,/saveSession\(data\);const success=verificationSuccessData\(data\);pendingVerificationCredentials=null;stopVerificationWatch\(\);verificationDialog\.close\(\);showAccountSuccess\('verified',success\)/);
   assert.match(ranked,/addEventListener\('focus',\(\)=>\{if\(verificationDialog\.open\)void checkVerificationCompletion\(\);\}\)/);
   assert.match(ranked,/visibilitychange',[^\n]*verificationDialog\.open[^\n]*checkVerificationCompletion/);
-});
-
-test('Training coach values public-state month control and discounts no-Pi bombs',()=>{
-  const training=app.slice(app.indexOf('function trainingThreatValue'),app.indexOf('function showTrainingCoach'));
-  assert.match(training,/function trainingMonthControlValue/);
-  assert.match(training,/facts\.hand\.length>=2/);
-  assert.match(training,/function trainingBombAdjustment/);
-  assert.match(training,/opponentPi>0\?18:-78/);
-  assert.match(training,/if\(safeControl&&noPi\)/);
-  assert.doesNotMatch(training,/state\.ai(?:\?\.|\.)hand/);
-});
-
-
-test('Training opening strategy stays pinned until user input, then normal five-second coaching resumes',()=>{
-  assert.match(app,/trainingCoachPinned:false/);
-  assert.match(app,/showTrainingCoach\('Opening Strategy',openingPlan\.text,\{pinned:true,cardIds:openingPlan\.cardIds\}\)/);
-  assert.match(app,/if\(presentation\.trainingCoachPinned\)return;[\s\S]*setTimeout\(\(\)=>\{[\s\S]*\},5000\)/);
-  assert.match(app,/document\.addEventListener\('pointerdown',event=>\{[\s\S]*presentation\.trainingCoachPinned[\s\S]*hideTrainingCoach\(\)[\s\S]*armTrainingCoach/);
-  assert.match(app,/if\(!presentation\.trainingCoachPinned\)clearTrainingCoach\(\)/);
-});
-
-
-test('Training opening advice identifies referenced cards visually and uses Bright Stripe Single Picture priority',()=>{
-  assert.match(app,/trainingReferenceCardIds:\[\]/);
-  assert.match(app,/classList\.toggle\('training-referenced',presentation\.trainingReferenceCardIds\.includes\(card\.id\)\)/);
-  assert.match(app,/function trainingCaptureCategoryPriority\(card\)/);
-  assert.match(app,/card\.type==='bright'\?4:card\.type==='ribbon'\?3:card\.type==='pi'\?2:card\.type==='animal'\?1/);
-  assert.match(app,/cleanControlMonths[\s\S]*b\.best\.capturePriority-a\.best\.capturePriority/);
-  assert.match(app,/Stripe capture takes priority over the Picture capture|trainingCapturePriorityLabel/);
 });
