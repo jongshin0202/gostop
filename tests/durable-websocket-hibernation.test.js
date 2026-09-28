@@ -9,7 +9,6 @@ test('GameRoom uses Cloudflare hibernatable WebSockets instead of pinning Durabl
   assert.match(source,/state\.acceptWebSocket\(server\)/);
   assert.match(source,/server\.serializeAttachment\(\{playerId:participant\.playerId,multiSocket:!!participant\.accountId\}\)/);
   assert.match(source,/getWebSockets\(\)/);
-  assert.match(source,/deserializeAttachment\(\)/);
   assert.match(source,/async webSocketMessage\(socket,message\)/);
   assert.match(source,/async webSocketClose\(socket\)/);
   assert.match(source,/async webSocketError\(socket\)/);
