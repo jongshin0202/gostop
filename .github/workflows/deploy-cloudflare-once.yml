@@ -45,3 +45,32 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.131.2'
           command: deploy
+
+      - name: Trace production room allocation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          rm -f /tmp/gostop-tail.log /tmp/gostop-room-response.json
+          (timeout 20s npx wrangler@4.131.2 tail gostop-authority --format json --sampling-rate 1 > /tmp/gostop-tail.log 2>&1 || true) &
+          TAIL_PID=$!
+          sleep 5
+          set +e
+          HTTP_CODE=$(curl -sS -o /tmp/gostop-room-response.json -w "%{http_code}" \\
+            -X POST "https://gostop-authority.jwshin1.workers.dev/api/rooms" \\
+            -H "Origin: https://gostoplive.com" \\
+            -H "Content-Type: application/json" \\
+            --data '{}')
+          CURL_STATUS=$?
+          set -e
+          sleep 5
+          kill "$TAIL_PID" 2>/dev/null || true
+          wait "$TAIL_PID" 2>/dev/null || true
+          echo "Production room allocation HTTP: $HTTP_CODE (curl=$CURL_STATUS)"
+          cat /tmp/gostop-room-response.json || true
+          echo
+          echo "--- Worker tail ---"
+          cat /tmp/gostop-tail.log || true
+          if [ "$CURL_STATUS" -ne 0 ] || [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            exit 1
+          fi
