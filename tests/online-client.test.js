@@ -107,7 +107,7 @@ test('same-account takeover close code stops the displaced device from fighting 
 });
 
 
-test('anonymous Free Gaming rooms never send a ranked account token',async()=>{
+test('Friendly creator may identify the logged-in inviter while a Friendly link guest stays anonymous',async()=>{
   const oldFetch=globalThis.fetch,oldRanked=globalThis.GoStopRanked;
   const seen=[];
   globalThis.GoStopRanked={getAuthToken:()=> 'ranked-account-token'};
@@ -116,8 +116,10 @@ test('anonymous Free Gaming rooms never send a ranked account token',async()=>{
     return {ok:true,json:async()=>({room:{roomCode:'ABCDEFGHJK2345',credential:'room_'+('a'.repeat(64))}})};
   };
   try{
-    const free=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true});
-    await free.create();
+    const freeHost=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true});
+    await freeHost.create();
+    assert.equal(seen.at(-1).authorization,'Bearer ranked-account-token');
+    await freeHost.join('ABCDEFGHJK2345');
     assert.equal(seen.at(-1).authorization,null);
     const competitive=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {}});
     await competitive.create();
@@ -128,6 +130,23 @@ test('anonymous Free Gaming rooms never send a ranked account token',async()=>{
   }
 });
 
+
+test('Friendly host can explicitly attach an account identity token without enabling implicit ranked auth',async()=>{
+  const oldFetch=globalThis.fetch,seen=[];
+  globalThis.fetch=async(url,options={})=>{
+    seen.push({url:String(url),authorization:options.headers?.authorization||null});
+    return {ok:true,json:async()=>({room:{roomCode:'ABCDEFGHJK2345',credential:'room_'+('b'.repeat(64))}})};
+  };
+  try{
+    const host=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true,authToken:'friendly-host-token'});
+    await host.create();
+    assert.equal(seen.at(-1).authorization,'Bearer friendly-host-token');
+
+    const guest=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true});
+    await guest.join('ABCDEFGHJK2345');
+    assert.equal(seen.at(-1).authorization,null);
+  }finally{globalThis.fetch=oldFetch;}
+});
 
 test('room creator adapter connects with the exact credential returned by create',async()=>{
   const oldFetch=globalThis.fetch;

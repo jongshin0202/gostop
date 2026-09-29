@@ -184,6 +184,21 @@ test('Share Link creation and referral conversion tracking are exposed only by F
   assert.match(client,/event\.detail\?\.adapter\?\.anonymous!==true\)return/);assert.match(client,/showRoomShareLink\(roomCode,'free'\)/);assert.match(app,/async joinFreeRoom\(roomCode\)/);
 });
 
+test('Friendly Play carries inviter identity to the room and renders the other side as the inviter or Your Friend',()=>{
+  assert.match(online,/currentAuthToken\(path=''\)/);
+  assert.match(online,/return path==='\/api\/rooms'\?rankedToken:null/);
+  assert.match(online,/token=this\.currentAuthToken\(path\)/);
+  const bridgeCreate=app.slice(app.indexOf('async createFreeRoom()'),app.indexOf('async joinFreeRoom'));
+  assert.match(bridgeCreate,/OnlineSessionAdapter\(\{anonymous:true\}\)/);assert.doesNotMatch(bridgeCreate,/authToken:/);
+  const freeJoin=app.slice(app.indexOf('async joinFreeRoom(roomCode)'),app.indexOf('async resumeFriendlyRoom'));
+  assert.match(freeJoin,/OnlineSessionAdapter\(\{anonymous:true\}\)/);assert.doesNotMatch(freeJoin,/authToken:/);
+
+  assert.match(client,/friendlyOpponentProfile=snapshot\.opponentProfile\|\|\{\}/);
+  assert.match(client,/friendlyName=nickname\|\|'Your Friend'/);
+  assert.match(client,/opponentName\.textContent=friendlyName/);
+  assert.match(client,/friendlyOpponentProfile=null/);
+});
+
 test('Copy Link confirms success with a transient Link Copied dialog for 1.5 seconds',()=>{
   assert.match(client,/linkCopiedDialog\.id='linkCopiedDialog'/);assert.match(client,/<h2>Link Copied<\/h2>/);
   const copied=client.slice(client.indexOf('function showLinkCopiedDialog'),client.indexOf('async function shareFriendlyInvite'));
@@ -247,8 +262,8 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20260925-5/);
   assert.match(index,/styles\.css\?v=20260927-3/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20260927-34/);
-  assert.match(index,/online-client\.js\?v=20260927-5/);
+  assert.match(index,/ranked-client\.js\?v=20260929-1/);
+  assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20260928-2/);
   assert.match(index,/presentation-plan\.js\?v=20260928-1/);
   assert.match(index,/diagnostics\.js\?v=20260925-2/);
