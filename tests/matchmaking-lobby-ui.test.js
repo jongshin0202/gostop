@@ -184,6 +184,21 @@ test('Share Link creation and referral conversion tracking are exposed only by F
   assert.match(client,/event\.detail\?\.adapter\?\.anonymous!==true\)return/);assert.match(client,/showRoomShareLink\(roomCode,'free'\)/);assert.match(app,/async joinFreeRoom\(roomCode\)/);
 });
 
+test('Friendly Play carries inviter identity to the room and renders the other side as the inviter or Your Friend',()=>{
+  assert.match(online,/currentAuthToken\(\)\{return this\.authToken\|\|\(!this\.anonymous/);
+  const bridgeCreate=app.slice(app.indexOf('async createFreeRoom()'),app.indexOf('async joinFreeRoom'));
+  assert.match(bridgeCreate,/OnlineSessionAdapter\(\{anonymous:true,authToken:globalThis\.GoStopRanked\?\.getAuthToken\?\.\(\)\|\|null\}\)/);
+  const freeCreate=app.slice(app.indexOf("addEventListener('gostop-free-online-create'"),app.indexOf("if(typeof globalThis.CustomEvent"));
+  assert.match(freeCreate,/OnlineSessionAdapter\(\{anonymous:true,authToken:globalThis\.GoStopRanked\?\.getAuthToken\?\.\(\)\|\|null\}\)/);
+  const freeJoin=app.slice(app.indexOf('async joinFreeRoom(roomCode)'),app.indexOf('async resumeFriendlyRoom'));
+  assert.match(freeJoin,/OnlineSessionAdapter\(\{anonymous:true\}\)/);assert.doesNotMatch(freeJoin,/authToken:/);
+
+  assert.match(client,/friendlyOpponentProfile=snapshot\.opponentProfile\|\|\{\}/);
+  assert.match(client,/friendlyName=nickname\|\|'Your Friend'/);
+  assert.match(client,/opponentName\.textContent=friendlyName/);
+  assert.match(client,/friendlyOpponentProfile=null/);
+});
+
 test('Copy Link confirms success with a transient Link Copied dialog for 1.5 seconds',()=>{
   assert.match(client,/linkCopiedDialog\.id='linkCopiedDialog'/);assert.match(client,/<h2>Link Copied<\/h2>/);
   const copied=client.slice(client.indexOf('function showLinkCopiedDialog'),client.indexOf('async function shareFriendlyInvite'));
