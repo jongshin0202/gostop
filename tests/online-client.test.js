@@ -129,6 +129,23 @@ test('anonymous Free Gaming rooms never send a ranked account token',async()=>{
 });
 
 
+test('Friendly host can explicitly attach an account identity token without enabling implicit ranked auth',async()=>{
+  const oldFetch=globalThis.fetch,seen=[];
+  globalThis.fetch=async(url,options={})=>{
+    seen.push({url:String(url),authorization:options.headers?.authorization||null});
+    return {ok:true,json:async()=>({room:{roomCode:'ABCDEFGHJK2345',credential:'room_'+('b'.repeat(64))}})};
+  };
+  try{
+    const host=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true,authToken:'friendly-host-token'});
+    await host.create();
+    assert.equal(seen.at(-1).authorization,'Bearer friendly-host-token');
+
+    const guest=new OnlineSessionAdapter({baseUrl:'https://example.test',WebSocketImpl:class {},anonymous:true});
+    await guest.join('ABCDEFGHJK2345');
+    assert.equal(seen.at(-1).authorization,null);
+  }finally{globalThis.fetch=oldFetch;}
+});
+
 test('room creator adapter connects with the exact credential returned by create',async()=>{
   const oldFetch=globalThis.fetch;
   class FakeSocket{
