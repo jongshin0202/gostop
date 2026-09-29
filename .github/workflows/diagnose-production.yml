@@ -53,3 +53,5 @@ jobs:
           wait "$TAIL_PID" 2>/dev/null || true
           echo "=== WORKER TAIL ==="
           cat /tmp/gostop-tail.log || true
+
+# probe-run: after-lobby-hibernation
