@@ -185,11 +185,11 @@ test('Share Link creation and referral conversion tracking are exposed only by F
 });
 
 test('Friendly Play carries inviter identity to the room and renders the other side as the inviter or Your Friend',()=>{
-  assert.match(online,/currentAuthToken\(\)\{return this\.authToken\|\|\(!this\.anonymous/);
+  assert.match(online,/currentAuthToken\(path=''\)/);
+  assert.match(online,/return path==='\/api\/rooms'\?rankedToken:null/);
+  assert.match(online,/token=this\.currentAuthToken\(path\)/);
   const bridgeCreate=app.slice(app.indexOf('async createFreeRoom()'),app.indexOf('async joinFreeRoom'));
-  assert.match(bridgeCreate,/OnlineSessionAdapter\(\{anonymous:true,authToken:globalThis\.GoStopRanked\?\.getAuthToken\?\.\(\)\|\|null\}\)/);
-  const freeCreate=app.slice(app.indexOf("addEventListener('gostop-free-online-create'"),app.indexOf("if(typeof globalThis.CustomEvent"));
-  assert.match(freeCreate,/OnlineSessionAdapter\(\{anonymous:true,authToken:globalThis\.GoStopRanked\?\.getAuthToken\?\.\(\)\|\|null\}\)/);
+  assert.match(bridgeCreate,/OnlineSessionAdapter\(\{anonymous:true\}\)/);assert.doesNotMatch(bridgeCreate,/authToken:/);
   const freeJoin=app.slice(app.indexOf('async joinFreeRoom(roomCode)'),app.indexOf('async resumeFriendlyRoom'));
   assert.match(freeJoin,/OnlineSessionAdapter\(\{anonymous:true\}\)/);assert.doesNotMatch(freeJoin,/authToken:/);
 
@@ -264,7 +264,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/game-engine\.js\?v=20260925-2/);
   assert.match(index,/ranked-client\.js\?v=20260929-1/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
-  assert.match(index,/app\.js\?v=20260929-1/);
+  assert.match(index,/app\.js\?v=20260928-2/);
   assert.match(index,/presentation-plan\.js\?v=20260928-1/);
   assert.match(index,/diagnostics\.js\?v=20260925-2/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
