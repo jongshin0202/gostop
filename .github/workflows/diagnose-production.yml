@@ -17,15 +17,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
       - name: Trace live authority while probing room allocation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           rm -f /tmp/gostop-tail.log /tmp/room.json /tmp/me.json /tmp/leaderboards.json
-          (timeout 25s npx wrangler@4.131.2 tail gostop-authority --format json --sampling-rate 0.99 > /tmp/gostop-tail.log 2>&1 || true) &
+          (timeout 35s npx --no-install wrangler tail gostop-authority --format json --sampling-rate 0.99 > /tmp/gostop-tail.log 2>&1 || true) &
           TAIL_PID=$!
-          sleep 6
+          sleep 4
           echo "=== GET /api/leaderboards ==="
           curl -sS -D /tmp/leaderboards.headers -o /tmp/leaderboards.json "https://gostop-authority.jwshin1.workers.dev/api/leaderboards" -H "Origin: https://gostoplive.com" || true
           cat /tmp/leaderboards.headers || true
@@ -41,7 +48,7 @@ jobs:
           cat /tmp/me.headers || true
           cat /tmp/me.json || true
           echo
-          sleep 8
+          sleep 12
           kill "$TAIL_PID" 2>/dev/null || true
           wait "$TAIL_PID" 2>/dev/null || true
           echo "=== WORKER TAIL ==="
