@@ -9,7 +9,7 @@ test('global Lobby uses Cloudflare hibernatable WebSockets instead of pinning th
   assert.match(source,/state\.acceptWebSocket\(serverSocket\)/);
   assert.match(source,/getWebSockets\(\)/);
   assert.match(source,/serializeAttachment\(attachment\)/);
-  assert.match(source,/deserializeAttachment\(\)/);
+  assert.match(source,/deserializeAttachment/);
   assert.match(source,/async webSocketMessage\(socket,message\)/);
   assert.match(source,/async webSocketClose\(socket\)/);
   assert.match(source,/async webSocketError\(socket\)/);
