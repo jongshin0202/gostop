@@ -1,0 +1,48 @@
+name: Diagnose Production Authority
+
+on:
+  push:
+    branches:
+      - diag/live-room-allocation-20260928
+    paths:
+      - .github/workflows/diagnose-production.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trace live authority while probing room allocation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          rm -f /tmp/gostop-tail.log /tmp/room.json /tmp/me.json /tmp/leaderboards.json
+          (timeout 25s npx wrangler@4.131.2 tail gostop-authority --format json --sampling-rate 0.99 > /tmp/gostop-tail.log 2>&1 || true) &
+          TAIL_PID=$!
+          sleep 6
+          echo "=== GET /api/leaderboards ==="
+          curl -sS -D /tmp/leaderboards.headers -o /tmp/leaderboards.json "https://gostop-authority.jwshin1.workers.dev/api/leaderboards" -H "Origin: https://gostoplive.com" || true
+          cat /tmp/leaderboards.headers || true
+          cat /tmp/leaderboards.json || true
+          echo
+          echo "=== POST /api/rooms ==="
+          curl -sS -D /tmp/room.headers -o /tmp/room.json -X POST "https://gostop-authority.jwshin1.workers.dev/api/rooms" -H "Origin: https://gostoplive.com" -H "Content-Type: application/json" --data '{}' || true
+          cat /tmp/room.headers || true
+          cat /tmp/room.json || true
+          echo
+          echo "=== GET /api/me without auth ==="
+          curl -sS -D /tmp/me.headers -o /tmp/me.json "https://gostop-authority.jwshin1.workers.dev/api/me" -H "Origin: https://gostoplive.com" || true
+          cat /tmp/me.headers || true
+          cat /tmp/me.json || true
+          echo
+          sleep 8
+          kill "$TAIL_PID" 2>/dev/null || true
+          wait "$TAIL_PID" 2>/dev/null || true
+          echo "=== WORKER TAIL ==="
+          cat /tmp/gostop-tail.log || true
