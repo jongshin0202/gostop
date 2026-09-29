@@ -22,9 +22,51 @@ function distance(a,b){
 const similarityPercent=(a,b)=>Math.max(0,Math.min(100,Math.round((1-distance(a,b))*100)));
 
 export class Lobby{
-  constructor(state,env){this.state=state;this.env=env;this.crypto=globalThis.crypto;this.clients=new Map();this.challenges=new Map();this.lastRequestAt=new Map();}
+  constructor(state,env){
+    this.state=state;this.env=env;this.crypto=globalThis.crypto;this.clients=new Map();this.challenges=new Map();this.lastRequestAt=new Map();
+    this.restoreHibernatingClients();
+  }
+  socketAttachment(socket){try{return socket?.deserializeAttachment?.()||null;}catch(_){return null;}}
+  clientAttachment(client){
+    if(!client?.account?.id)return null;
+    return {
+      version:1,
+      clientId:client.clientId,
+      account:{id:client.account.id,nickname:client.account.nickname,walletCoins:client.account.walletCoins,countryCode:client.account.countryCode||null,regionCode:client.account.regionCode||null},
+      available:client.available!==false,
+      twoPlayer:!!client.twoPlayer,
+      mode:String(client.mode||'menu').slice(0,32),
+      tabId:client.tabId||null,
+      autoMatching:!!client.autoMatching,
+      autoMatchTried:[...(client.autoMatchTried instanceof Set?client.autoMatchTried:[])].slice(-24),
+      autoMatchCandidateId:client.autoMatchCandidateId||null,
+      searchQuery:String(client.searchQuery||'').slice(0,160),
+      connectedAt:Number(client.connectedAt)||Date.now(),
+      lastActivityAt:Number(client.lastActivityAt)||Number(client.connectedAt)||Date.now(),
+      lastPresenceAt:Number(client.lastPresenceAt)||Number(client.connectedAt)||Date.now(),
+      foreground:client.foreground===true,
+      notificationsEnabled:client.notificationsEnabled===true
+    };
+  }
+  clientFromAttachment(socket,attachment){
+    if(!socket||attachment?.version!==1||!attachment?.clientId||!attachment?.account?.id)return null;
+    return {...attachment,socket,account:clone(attachment.account),autoMatchTried:new Set(Array.isArray(attachment.autoMatchTried)?attachment.autoMatchTried:[]),messageQueue:Promise.resolve()};
+  }
+  registerHibernatingClient(socket,attachment=this.socketAttachment(socket)){
+    const client=this.clientFromAttachment(socket,attachment);if(!client)return null;
+    this.clients.set(socket,client);return client;
+  }
+  restoreHibernatingClients(extraSocket=null){
+    if(typeof this.state?.getWebSockets!=='function')return;
+    this.clients.clear();
+    const sockets=[...this.state.getWebSockets()];
+    if(extraSocket&&!sockets.includes(extraSocket))sockets.push(extraSocket);
+    for(const socket of sockets)this.registerHibernatingClient(socket);
+  }
+  syncClientAttachment(client){const attachment=this.clientAttachment(client);if(!attachment)return false;try{client.socket.serializeAttachment(attachment);return true;}catch(_){return false;}}
+  syncAllClientAttachments(){for(const client of this.clients.values())this.syncClientAttachment(client);}
   accountStore(){return this.env.ACCOUNT_STORE.get(this.env.ACCOUNT_STORE.idFromName('global'));}
-  enqueueClientMessage(client,data){const previous=client.messageQueue||Promise.resolve();const next=previous.catch(()=>{}).then(()=>this.handle(client,data));client.messageQueue=next;return next;}
+  enqueueClientMessage(client,data){const previous=client.messageQueue||Promise.resolve();const next=previous.catch(()=>{}).then(()=>this.handle(client,data)).finally(()=>this.syncAllClientAttachments());client.messageQueue=next;return next;}
   async resolveAccount(token,geoHeaders={}){if(!token)return null;const headers=new Headers({Authorization:`Bearer ${token}`});if(geoHeaders.country)headers.set('x-gostop-country',geoHeaders.country);if(geoHeaders.region)headers.set('x-gostop-region',geoHeaders.region);const response=await this.accountStore().fetch(new Request('https://accounts/internal/resolve',{headers}));if(!response.ok)return null;return (await response.json()).account||null;}
   async leaderboardRows(){
     const response=await this.accountStore().fetch(new Request('https://accounts/leaderboards'));if(!response.ok)return new Map();const body=await response.json(),monthly=new Map((body.monthly||[]).map(row=>[String(row.nickname||'').toLowerCase(),row]));
@@ -106,7 +148,7 @@ export class Lobby{
   }
   challengeParticipantsAvailable(challenge){const from=this.clientById(challenge.fromClientId),to=challenge.toClientId?this.clientById(challenge.toClientId):null;return !!from&&!from.twoPlayer&&this.clientCanReceiveChallenge(from)&&this.accountAvailable(challenge.to)&&(!to||!to.twoPlayer&&this.clientCanReceiveChallenge(to));}
   clearChallengeTimer(challenge){if(challenge?.expiryTimer){clearTimeout(challenge.expiryTimer);challenge.expiryTimer=null;}}
-  armChallengeExpiry(challenge){if(!challenge)return;this.clearChallengeTimer(challenge);const delay=Math.max(0,Number(challenge.expiresAt||0)-Date.now());challenge.expiryTimer=setTimeout(()=>{void this.expireChallenge(challenge.id);},delay);challenge.expiryTimer?.unref?.();}
+  armChallengeExpiry(challenge){if(!challenge)return;this.clearChallengeTimer(challenge);const delay=Math.max(0,Number(challenge.expiresAt||0)-Date.now());challenge.expiryTimer=setTimeout(()=>{void this.expireChallenge(challenge.id).finally(()=>this.syncAllClientAttachments());},delay);challenge.expiryTimer?.unref?.();}
   clearChallengeDeliveryTimer(challenge){if(challenge?.deliveryTimer){clearTimeout(challenge.deliveryTimer);challenge.deliveryTimer=null;}}
   armChallengeDeliveryRetry(challenge){if(!challenge||challenge.status!=='pending'||challenge.deliveryReceipts?.size)return;this.clearChallengeDeliveryTimer(challenge);const remaining=Number(challenge.expiresAt||0)-Date.now();if(remaining<=100)return;const delay=Math.min(CHALLENGE_DELIVERY_RETRY_MS,Math.max(100,remaining-50));challenge.deliveryTimer=setTimeout(()=>{this.retryChallengeDelivery(challenge.id);},delay);challenge.deliveryTimer?.unref?.();}
   retryChallengeDelivery(id){const challenge=this.challenges.get(id);if(!challenge||challenge.status!=='pending'||Number(challenge.expiresAt||0)<=Date.now()||challenge.deliveryReceipts?.size){this.clearChallengeDeliveryTimer(challenge);return false;}this.sendToAccount(challenge.to,this.challengeRequestMessage(challenge));this.armChallengeDeliveryRetry(challenge);return true;}
@@ -252,7 +294,7 @@ export class Lobby{
   removeAccountRuntime(accountId){
     const id=String(accountId||'');for(const challenge of [...this.challenges.values()])if(challenge.from===id||challenge.to===id)this.cancelPendingChallenge(challenge,'The player account was removed.');
     this.lastRequestAt.delete(id);for(const [socket,client] of [...this.clients])if(client.account?.id===id){this.clients.delete(socket);try{socket.close(4003,'Account removed');}catch(_){}}
-    return {ok:true};
+    this.syncAllClientAttachments();return {ok:true};
   }
   async fetch(request){
     const url=new URL(request.url);
@@ -265,8 +307,12 @@ export class Lobby{
     if(request.method!=='GET'||url.pathname!=='/connect')return json({ok:false,error:{code:'NOT_FOUND',message:'Endpoint not found.'}},404);
     if(request.headers.get('Upgrade')!=='websocket')return json({ok:false,error:{code:'UPGRADE_REQUIRED',message:'WebSocket upgrade required.'}},426);
     const protocol=request.headers.get('Sec-WebSocket-Protocol')?.split(',').map(value=>value.trim()).find(value=>value.startsWith('gostop-auth.')),token=protocol?.slice('gostop-auth.'.length),geoHeaders={country:request.headers.get('x-gostop-country')||'',region:request.headers.get('x-gostop-region')||''},account=await this.resolveAccount(token,geoHeaders);if(!account)return json({ok:false,error:{code:'AUTH_REQUIRED',message:'Login required.'}},401);
-    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];serverSocket.accept();const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:clone(account),available:false,twoPlayer:false,mode:'menu',tabId:null,autoMatching:false,autoMatchTried:new Set(),autoMatchCandidateId:null,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false,messageQueue:Promise.resolve()};this.clients.set(serverSocket,client);serverSocket.addEventListener('message',event=>{void this.enqueueClientMessage(client,event.data);});serverSocket.addEventListener('close',()=>{void this.disconnect(serverSocket);});serverSocket.addEventListener('error',()=>{void this.disconnect(serverSocket);});this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
+    if(typeof this.state?.acceptWebSocket!=='function')return json({ok:false,error:{code:'HIBERNATION_UNAVAILABLE',message:'Lobby WebSocket hibernation is unavailable.'}},503);
+    const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];this.state.acceptWebSocket(serverSocket);const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null},available:false,twoPlayer:false,mode:'menu',tabId:null,autoMatching:false,autoMatchTried:new Set(),autoMatchCandidateId:null,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false,messageQueue:Promise.resolve()};this.clients.set(serverSocket,client);this.syncClientAttachment(client);this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});await this.broadcastRecommendations();this.syncAllClientAttachments();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
   }
+  async webSocketMessage(socket,message){this.restoreHibernatingClients(socket);const client=this.clients.get(socket);if(!client){try{socket.close(4003,'Lobby session state unavailable');}catch(_){}return;}return this.enqueueClientMessage(client,message);}
+  async webSocketClose(socket){this.restoreHibernatingClients(socket);await this.disconnect(socket);this.syncAllClientAttachments();}
+  async webSocketError(socket){this.restoreHibernatingClients(socket);await this.disconnect(socket);this.syncAllClientAttachments();}
 }
 
 export {distance,similarityPercent,MATCH_WEIGHTS,MAX_LOBBY_RESULTS,CHALLENGE_TTL_MS,ACCEPTED_CHALLENGE_TTL_MS};
