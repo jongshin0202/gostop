@@ -2794,7 +2794,7 @@
         const room=await adapter.join(code);await beginOnline(room,{anonymous:true,statusElement:onlineStatus,adapter});return room;
       },
       async createFreeRoom(){
-        const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true,authToken:globalThis.GoStopRanked?.getAuthToken?.()||null}),room=await adapter.create();
+        const status=document.getElementById('freeOnlineStatus')||onlineStatus,adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();
         await beginOnline(room,{anonymous:true,statusElement:status,adapter});return room;
       },
       async joinFreeRoom(roomCode){
@@ -2976,7 +2976,7 @@
     joinOnlineForm?.addEventListener('submit',async event=>{event.preventDefault();if(onlineJoinInFlight)return;onlineJoinInFlight=true;try{activeOnlineStatus=onlineStatus;activeOnlineStatus.textContent=t('joiningRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter(),code=document.getElementById('onlineRoomCode').value.toUpperCase();let existing=JSON.parse(sessionStorage.getItem(`gostop-room-${code}`)||'null');if(!existing){try{const saved=JSON.parse(localStorage.getItem('gostop-active-ranked-room')||'null');if(saved?.roomCode===code)existing=saved;}catch(_){}}const room=await adapter.join(code,existing?.credential);await beginOnline(room,{adapter});els.soloStartOverlay.hidden=true;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:true,roomCode:room.roomCode}}));}catch(error){activeOnlineStatus.textContent=error.message;globalThis.dispatchEvent(new CustomEvent('gostop-online-launch-settled',{detail:{ok:false}}));}finally{onlineJoinInFlight=false;}});
     addEventListener('gostop-free-online-create',async()=>{
       if(!freeOnlineStatus)return;
-      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true,authToken:globalThis.GoStopRanked?.getAuthToken?.()||null}),room=await adapter.create();activeOnlineStatus.textContent=t('waitingForOpponent');await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
+      try{activeOnlineStatus=freeOnlineStatus;activeOnlineStatus.textContent=t('creatingRoom');const adapter=new globalThis.GoStopOnline.OnlineSessionAdapter({anonymous:true}),room=await adapter.create();activeOnlineStatus.textContent=t('waitingForOpponent');await beginOnline(room,{anonymous:true,statusElement:freeOnlineStatus,adapter});}
       catch(error){activeOnlineStatus.textContent=error.message;}
     });
   }
