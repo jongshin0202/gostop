@@ -6,9 +6,9 @@ const fs=require('node:fs');
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
 const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
 
-test('main menu accordion activates on first pointer-down and avoids layout animation',()=>{
+test('main menu accordion activates on first pointer-up and avoids layout animation',()=>{
   assert.match(ranked,/function installImmediateAccordion\(button,section\)/);
-  assert.match(ranked,/button\.addEventListener\('pointerdown',event=>\{/);
+  assert.match(ranked,/button\.addEventListener\('pointerup',event=>\{/);
   assert.match(ranked,/if\(event\.isPrimary===false\)return/);
   assert.match(ranked,/if\(event\.pointerType==='mouse'&&event\.button!==0\)return/);
   assert.match(ranked,/toggleMenuSection\(section\)/);
