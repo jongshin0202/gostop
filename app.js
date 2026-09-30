@@ -1564,8 +1564,17 @@
   }
 
   function showShakeChoice(decision){
-    const cardIds=decision.cardIds||state.human.hand.filter(card=>card.month===decision.month).map(card=>card.id),cards=cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean),bombReady=!!decision.floorCardId||(state.floor.some(c=>c.month===decision.month)&&!floorStackForMonth(decision.month));
-    els.shakeText.textContent=`${localizedMonth(decision.month)} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
+    const cardIds=decision.cardIds||state.human.hand.filter(card=>card.month===decision.month).map(card=>card.id),cards=cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean),bombReady=!!decision.floorCardId||(state.floor.some(c=>c.month===decision.month)&&!floorStackForMonth(decision.month)),monthLabel=localizedMonth(decision.month),choiceLabel=`${monthLabel} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
+    if(presentation.trainingMode){
+      const reason=bombReady
+        ?`Why Shake? Revealing your three ${monthLabel} cards increases this hand's score multiplier if you later win. A Bomb is also available now because another ${monthLabel} card is on the floor, so Bomb gives the immediate capture while Shake chooses the multiplier instead.`
+        :`Why Shake? You already hold three ${monthLabel} cards, and there is no ${monthLabel} card on the floor for a Bomb right now. Revealing the set increases this hand's score multiplier if you later win. Keep for Bomb hides the set and preserves the chance to Bomb if the fourth ${monthLabel} card appears later.`;
+      els.shakeText.style.whiteSpace='pre-line';
+      els.shakeText.textContent=`${choiceLabel}\n\n${reason}`;
+    }else{
+      els.shakeText.style.whiteSpace='';
+      els.shakeText.textContent=choiceLabel;
+    }
     if(els.keepSecretBtn)els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
     els.shakeCards.replaceChildren(...cards.map(card=>createCardEl(card,'card magnified-card')));
   }

@@ -95,15 +95,15 @@ test('manual leaderboard background click and Return restore the main menu witho
   assert.match(source,/rotateNote:'Use the arrows to switch leaderboards\. Click anywhere else to return to the menu\.'/);
 });
 
-test('main menu keeps native desktop clicks while touch phones use per-button first-touch activation',()=>{
+test('main menu categories use one immediate pointer path while submenu buttons keep touch activation',()=>{
   assert.match(source,/\.solo-start-overlay button\{touch-action:manipulation/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
-  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
-  assert.match(source,/if\(!touchCapable\)return/);
-  assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
-  assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
-  assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
-  assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
+  assert.match(source,/\[rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo\]\.forEach\(installImmediateMobileTap\)/);
+  assert.match(source,/function installImmediateAccordion\(button,section\)/);
+  assert.match(source,/button\.addEventListener\('click',event=>\{/);
+  assert.match(source,/installImmediateAccordion\(rankedToggle,'competitive'\)/);
+  assert.match(source,/installImmediateAccordion\(freeToggle,'friendly'\)/);
+  assert.doesNotMatch(source,/installImmediateDesktopAccordion/);
 });
 
 test('main-menu attract mode starts fifteen seconds after the visible menu becomes idle',()=>{
@@ -319,8 +319,8 @@ test('main menu uses two exclusive accordion choices with Training inside Friend
   assert.match(source,/utilities\.className='main-menu-utilities'/);assert.match(source,/utilities\.append\(friendsBtn,leaderboardBtn\)/);
   assert.match(source,/menu\.append\(rankedGroup,freeGroup,utilities\)/);
   assert.match(source,/function setMenuSection\(section=null\)/);assert.match(source,/expandedMenuSection===section\?null:section/);assert.match(source,/submenu\.inert=!open/);assert.match(source,/visibility:hidden/);
-  assert.match(source,/rankedToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('competitive'\)\)/);
-  assert.match(source,/freeToggle\.addEventListener\('click',\(\)=>toggleMenuSection\('friendly'\)\)/);
+  assert.match(source,/installImmediateAccordion\(rankedToggle,'competitive'\)/);
+  assert.match(source,/installImmediateAccordion\(freeToggle,'friendly'\)/);
   assert.match(source,/freeTitle\.textContent=rt\('freeGaming'\)/);assert.match(source,/rankedTitle\.textContent=rt\('competitiveGaming'\)/);
   assert.match(source,/freeGroupNote\.textContent=rt\('freeGamingNote'\)/);assert.match(source,/rankedGroupNote\.textContent=rt\('competitiveGamingNote'\)/);
 });
@@ -348,21 +348,22 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:1!important[^]*?visibility:hidden!important[^]*?transform:none!important[^]*?visibility 0s linear \.18s/);assert.match(source,/\.menu-submenu-inner\{[^]*?opacity:0;transform:translate3d\(0,-10px,0\)/);
+  assert.match(source,/\.menu-submenu\{[^]*?display:none!important[^]*?visibility:hidden!important[^]*?transition:none!important/);assert.match(source,/\.menu-submenu-inner\{[^]*?opacity:1;transform:translate3d\(0,0,0\)/);
   assert.match(source,/\.menu-submenu-inner\{\s*min-height:0;overflow:hidden;display:grid/);
-  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?grid-template-rows:1fr!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
-  assert.doesNotMatch(source,/submenu\.style\.setProperty\('--submenu-open-height'/);
+  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?display:grid!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
+  assert.match(source,/@keyframes menuSubmenuReveal/);assert.match(source,/html\.gostop-performance-lite \.menu-category-block\.expanded \.menu-submenu-inner\{animation:none!important\}/);
+  assert.doesNotMatch(source,/grid-template-rows:0fr!important|grid-template-rows:1fr!important|submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
-  assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
-  assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
-  assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
+  assert.match(source,/function installImmediateAccordion\(button,section\)/);
+  assert.match(source,/button\.addEventListener\('click',event=>\{/);
+  assert.match(source,/event\.preventDefault\(\);/);
   assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
   assert.doesNotMatch(source,/\.menu-category-toggle,\.menu-category-chevron,\.menu-utility\{transition:none!important\}/);
   assert.match(source,/touch-action:manipulation/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260929-1/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260930-1/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
@@ -451,7 +452,7 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
 
 
 
-test('production static hosting keeps direct authority routing and native first-touch menu activation',()=>{
+test('production static hosting keeps direct authority routing and native release category activation',()=>{
   assert.match(source,/productionSameOriginRest/);
   assert.ok(source.includes("const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'"));
   assert.match(source,/function installImmediateMobileTap\(button\)/);
@@ -459,13 +460,13 @@ test('production static hosting keeps direct authority routing and native first-
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?activate\(\)/);
   assert.match(source,/immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date\.now\(\)\+280/);
   assert.match(source,/overlay\.addEventListener\('click'/);
-  assert.match(source,/function installImmediateDesktopAccordion\(button,section\)/);
-  assert.match(source,/button\.addEventListener\('pointerdown',event=>\{/);
-  assert.match(source,/installImmediateDesktopAccordion\(rankedToggle,'competitive'\)/);
-  assert.match(source,/installImmediateDesktopAccordion\(freeToggle,'friendly'\)/);
-  assert.doesNotMatch(source,/suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
+  assert.match(source,/function installImmediateAccordion\(button,section\)/);
+  assert.match(source,/button\.addEventListener\('click',event=>\{/);
+  assert.match(source,/installImmediateAccordion\(rankedToggle,'competitive'\)/);
+  assert.match(source,/installImmediateAccordion\(freeToggle,'friendly'\)/);
+  assert.doesNotMatch(source,/installImmediateDesktopAccordion|suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
   assert.match(source,/@keyframes mainMenuChoiceSweep/);
-  assert.match(source,/\.menu-category-chevron\{[^]*?transition:transform \.24s/);
+  assert.match(source,/\.menu-category-chevron\{transition:transform \.07s ease!important\}/);
 });
 
 test('declining active Solo clears the client lock before account refresh',()=>{

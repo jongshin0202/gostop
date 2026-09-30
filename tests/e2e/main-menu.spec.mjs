@@ -239,9 +239,13 @@ test('Android native touch keeps first-tap menu response, accordion animation, s
   await expect(page.locator('#competitiveGamingBtn')).toHaveAttribute('aria-expanded','true');
   await expect(page.locator('#rankedSoloBtn')).toBeVisible();
   await expect(page.locator('#onlinePlayMenuBtn')).toBeVisible();
-  const transitionDuration=await page.locator('#competitiveGamingSubmenu').evaluate(node=>getComputedStyle(node).transitionDuration);
-  expect(transitionDuration).not.toMatch(/^(?:0s(?:,\s*)?)+$/);
-  await page.waitForTimeout(250);
+  const accordionTiming=await page.locator('#competitiveGamingSubmenu').evaluate(node=>({
+    outer:getComputedStyle(node).transitionDuration,
+    inner:getComputedStyle(node.querySelector('.menu-submenu-inner')).animationDuration
+  }));
+  expect(accordionTiming.outer).toMatch(/^(?:0s(?:,\s*)?)+$/);
+  expect(Number.parseFloat(accordionTiming.inner)||0).toBeLessThanOrEqual(.12);
+  await page.waitForTimeout(140);
   expect(competitiveSoloRequests).toBe(0);
 
   const friendly=await page.locator('#friendlyGamingBtn').boundingBox();
