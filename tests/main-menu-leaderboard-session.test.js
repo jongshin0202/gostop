@@ -100,7 +100,7 @@ test('main menu categories use one immediate pointer path while submenu buttons 
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/\[rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo\]\.forEach\(installImmediateMobileTap\)/);
   assert.match(source,/function installImmediateAccordion\(button,section\)/);
-  assert.match(source,/button\.addEventListener\('pointerup',event=>\{/);
+  assert.match(source,/button\.addEventListener\('click',event=>\{/);
   assert.match(source,/installImmediateAccordion\(rankedToggle,'competitive'\)/);
   assert.match(source,/installImmediateAccordion\(freeToggle,'friendly'\)/);
   assert.doesNotMatch(source,/installImmediateDesktopAccordion/);
@@ -355,9 +355,8 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.doesNotMatch(source,/grid-template-rows:0fr!important|grid-template-rows:1fr!important|submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/function installImmediateAccordion\(button,section\)/);
-  assert.match(source,/button\.addEventListener\('pointerup',event=>\{/);
-  assert.match(source,/if\(event\.isPrimary===false\)return/);
-  assert.match(source,/if\(event\.pointerType==='mouse'&&event\.button!==0\)return/);
+  assert.match(source,/button\.addEventListener\('click',event=>\{/);
+  assert.match(source,/event\.preventDefault\(\);/);
   assert.match(source,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
   assert.doesNotMatch(source,/\.menu-category-toggle,\.menu-category-chevron,\.menu-utility\{transition:none!important\}/);
   assert.match(source,/touch-action:manipulation/);
@@ -453,7 +452,7 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
 
 
 
-test('production static hosting keeps direct authority routing and immediate category activation',()=>{
+test('production static hosting keeps direct authority routing and native release category activation',()=>{
   assert.match(source,/productionSameOriginRest/);
   assert.ok(source.includes("const apiUrl=(path,method='GET')=>productionSameOriginRest&&method!=='GET'"));
   assert.match(source,/function installImmediateMobileTap\(button\)/);
@@ -462,7 +461,7 @@ test('production static hosting keeps direct authority routing and immediate cat
   assert.match(source,/immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date\.now\(\)\+280/);
   assert.match(source,/overlay\.addEventListener\('click'/);
   assert.match(source,/function installImmediateAccordion\(button,section\)/);
-  assert.match(source,/button\.addEventListener\('pointerup',event=>\{/);
+  assert.match(source,/button\.addEventListener\('click',event=>\{/);
   assert.match(source,/installImmediateAccordion\(rankedToggle,'competitive'\)/);
   assert.match(source,/installImmediateAccordion\(freeToggle,'friendly'\)/);
   assert.doesNotMatch(source,/installImmediateDesktopAccordion|suppressFastMenuTrustedClickUntil|installImmediateMenuPointer/);
