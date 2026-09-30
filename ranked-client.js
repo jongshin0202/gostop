@@ -744,13 +744,10 @@
   function installImmediateAccordion(button,section){
     if(!button)return;
     button.style.touchAction='manipulation';
-    button.addEventListener('pointerup',event=>{
-      if(event.isPrimary===false)return;
-      if(event.pointerType==='mouse'&&event.button!==0)return;
-      immediateMenuSuppressTarget=button;immediateMenuSuppressUntil=Date.now()+280;
+    button.addEventListener('click',event=>{
+      event.preventDefault();
       toggleMenuSection(section);
     });
-    button.addEventListener('click',()=>toggleMenuSection(section));
   }
   installImmediateAccordion(rankedToggle,'competitive');
   installImmediateAccordion(freeToggle,'friendly');
