@@ -13,7 +13,7 @@ function gitBlobSha(file){
 }
 
 test('verified gameplay runtime remains frozen unless explicitly updated',()=>{
-  assert.equal(gitBlobSha('app.js'),'1350e3480bded4cfac339100a4e46d248e479ae6');
+  assert.equal(gitBlobSha('app.js'),'01f0663dea281b7cf322e7a430612d8f5c972b18');
   assert.equal(gitBlobSha('presentation-plan.js'),'adfa065dfaef6456d06fd114e6c22ddb8a0ca498');
   assert.equal(gitBlobSha('game-engine.js'),'36aa58f8815a2e9ced62361986200ecd9741e2af');
   assert.equal(gitBlobSha('session-authority.js'),'44ab368976a2f9fac2cae337bf5b9c3d0baba222');

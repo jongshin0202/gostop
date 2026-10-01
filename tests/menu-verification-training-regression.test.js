@@ -46,16 +46,20 @@ test('Training strategy stays until user dismissal and gives concise tactical re
   assert.match(app,/Berry/);
 });
 
-test('Training Shake dialog recommends guaranteed Bomb when the fourth month card is on the floor',()=>{
+test('Training Shake and Bomb dialogs always show an explicit recommendation',()=>{
   assert.match(html,/id="shakeTrainingReason" hidden/);
+  assert.match(html,/id="bombTrainingReason" hidden/);
   assert.match(app,/shakeMultiplier=decision\.month>=11\?4:2/);
   assert.match(app,/Recommended: Bomb\. The fourth/);
-  assert.match(app,/this Bomb is guaranteed/);
-  assert.match(app,/Bomb immediately captures all four/);
-  assert.match(app,/gives two optional blank turns/);
-  assert.match(app,/Why Shake: revealing these three/);
-  assert.match(app,/trainingFlowerName\(decision\.month\)/);
-  assert.match(app,/Keep for Bomb keeps the set hidden so you can Bomb later/);
+  assert.match(app,/Bomb is guaranteed/);
+  assert.match(app,/Capture all four/);
+  assert.match(app,/gain two optional blank turns/);
+  assert.match(app,/Recommended: Shake\. Reveal these three/);
+  assert.match(app,/Keep for Bomb only preserves a future Bomb chance/);
+  assert.match(app,/shakeBtn\?\.classList\.toggle\('training-choice-recommended',training&&!bombReady\)/);
   assert.match(app,/keepSecretBtn\.classList\.toggle\('training-choice-recommended',training&&bombReady\)/);
+  assert.match(app,/function showBombChoice\(month,cardIds=\[\]\)/);
+  assert.match(app,/bombTrainingReason\.textContent=.*Recommended: Bomb/);
+  assert.match(app,/bombBtn\?\.classList\.toggle\('training-choice-recommended',training\)/);
   assert.match(app,/els\.shakeTrainingReason\.hidden=!training/);
 });
