@@ -1556,7 +1556,8 @@
 
   async function chooseBomb(month,epoch=gameplayPresentationEpoch){
     if(!els.bombDialog||!isGameplayPresentationCurrent(epoch))return false;
-    els.bombText.textContent=`${localizedMonth(month)} — ${t('bomb')}`;
+    const label=presentation.trainingMode&&!onlineMode?trainingFlowerName(month):localizedMonth(month);
+    els.bombText.textContent=`${label} — ${t('bomb')}`;
     if(!showGameplayModal(els.bombDialog,epoch))return false;
     return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
@@ -1570,7 +1571,7 @@
 
   function showShakeChoice(decision){
     const cardIds=decision.cardIds||state.human.hand.filter(card=>card.month===decision.month).map(card=>card.id),cards=cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean),bombReady=!!decision.floorCardId||(state.floor.some(c=>c.month===decision.month)&&!floorStackForMonth(decision.month));
-    const monthName=localizedMonth(decision.month),shakeMultiplier=decision.month>=11?4:2,training=!!presentation.trainingMode&&!onlineMode;
+    const training=!!presentation.trainingMode&&!onlineMode,monthName=training?trainingFlowerName(decision.month):localizedMonth(decision.month),shakeMultiplier=decision.month>=11?4:2;
     els.shakeText.textContent=`${monthName} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
     if(els.shakeTrainingReason){
       els.shakeTrainingReason.hidden=!training;
@@ -2212,10 +2213,13 @@
 
   async function humanGoStop(sc,epoch=gameplayPresentationEpoch){
     if(!isGameplayPresentationCurrent(epoch))return;
-    const preview=calculateFinalScore('human');
+    const preview=calculateFinalScore('human'),trainingAdvice=presentation.trainingMode&&!onlineMode?trainingGoStopRecommendation(sc):null;
     els.decisionText.textContent=`${t('currentGo',{count:state.human.go})}. ${formatScoreFormula(preview)}.`;
     if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
     els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
+    els.goBtn.classList.toggle('training-choice-recommended',trainingAdvice?.decision==='go');
+    els.stopBtn.classList.toggle('training-choice-recommended',trainingAdvice?.decision==='stop');
+    if(trainingAdvice){clearTrainingCoach();showTrainingCoach('GO / STOP ADVICE',trainingAdvice.reason);}
     showGameplayDialog(els.decisionDialog,epoch);
   }
 
@@ -2972,7 +2976,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingStrategyProfile,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
