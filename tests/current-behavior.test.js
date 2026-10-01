@@ -2974,7 +2974,8 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird, s
   assert.match(source,/function showTrainingOpeningStrategy\(text\)/);
   assert.match(source,/trainingOpeningDismissLayer\.addEventListener\('click',finish,\{once:true\}\)/);
   assert.match(source,/await showTrainingOpeningStrategy\(openingAdvice\)/);
-  assert.ok(source.indexOf('await showTrainingOpeningStrategy(openingAdvice)')<source.indexOf('scheduleTurnStart();',source.indexOf('await showTrainingOpeningStrategy(openingAdvice)')));
+  const openingAdviceAt=source.indexOf('await showTrainingOpeningStrategy(openingAdvice)'),openingSpecialsAt=source.indexOf('await processOpeningSpecials(epoch)',openingAdviceAt);
+  assert.ok(openingAdviceAt>=0&&openingSpecialsAt>openingAdviceAt,'Opening Strategy must be dismissed before opening specials and the first turn continue.');
   assert.match(source,/The highlighted floor card is the stronger target/);
 });
 
