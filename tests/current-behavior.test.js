@@ -3090,7 +3090,7 @@ test('How to Play teaches card families instead of calendar month names',()=>{
   assert.match(html,/The 12 card families/);
   assert.match(html,/Match by family/);
   assert.match(html,/Your Rose card/);
-  assert.match(html,/Bush floor card/);
+  assert.match(html,/Bush table card/);
   assert.match(html,/Your Hill card/);
   assert.match(html,/Drawn Star/);
   assert.doesNotMatch(html,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
