@@ -2741,7 +2741,7 @@
       ?'match and capture '+names[0]+' from the floor'
       :'match and capture '+names.join(' and ')+' during its play and draw';
     const scoring=threat.scoreParts.length?threat.scoreParts.join(' and '):('the captures add '+threat.gain+' points');
-    return 'The computer is at '+threat.beforeScore+'. If it can '+capture+', '+scoring+', taking it from '+threat.beforeScore+' to '+threat.afterScore+' and reaching '+finishThreshold+'.';
+    return 'The computer is at '+threat.beforeScore+'. If it can '+capture+', '+scoring+', taking it from '+threat.beforeScore+' to '+threat.afterScore+' — enough to reach the '+finishThreshold+'-point finish threshold.';
   }
   function trainingGoStopRecommendation(sc=scorePlayer(state?.human||{captured:[]})){
     if(!state?.human||!state?.ai)return null;
