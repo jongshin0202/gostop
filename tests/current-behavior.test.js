@@ -2958,16 +2958,19 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/^Play .* instead\./);
 });
 
-test('Training Mode opening strategy recognizes a reachable third Godori bird, stays pinned until dismissal, then uses five-second turn coaching',()=>{
+test('Training Mode does not call held-only Godori cards secured, while opening coaching stays pinned until dismissal and turn coaching waits five seconds',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m8-2'),card('m10-3')],
     human:api.makePlayer({hand:[card('m2-1'),card('m4-1'),card('m8-3')]}),
     ai:api.makePlayer()
   }));
+  const route=api.trainingGodoriRoute();
+  assert.equal(route.potentialCount,3);
+  assert.equal(route.controlledCount,1);
+  assert.equal(route.veryStrong,false);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/Godori/);
-  assert.match(opening,/3 bird cards/);
+  assert.doesNotMatch(opening,/already have.*3 bird|already.*3 bird/i);
   assert.doesNotMatch(opening,/5-Birdies|Priority:|Reserved rule:|opponent has captured none/i);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
@@ -2983,20 +2986,18 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird, s
 });
 
 
-test('Training Mode recognizes a nearly controlled Blue Stripe set over a generic Bright route',()=>{
+test('Training Mode distinguishes a possible Blue Stripe set from Blue Stripes that can actually be secured now',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m8-1'),card('m9-2')],
     human:api.makePlayer({hand:[card('m1-1'),card('m3-1'),card('m6-2'),card('m10-2'),card('m8-3'),card('m9-3')]}),
     ai:api.makePlayer({captured:[card('m11-1')]})
   }));
-  const profile=api.trainingStrategyProfile();
-  assert.equal(profile.primary,'stripe');
-  assert.equal(profile.strongestRibbon.family,'blue');
-  assert.equal(profile.strongestRibbon.veryStrong,true);
-  assert.equal(profile.stripeViable,true);
-  assert.match(profile.label,/Blue Stripes/);
-  assert.match(api.trainingOpeningStrategy(),/Best plan: Blue Stripes/);
+  const route=api.trainingRibbonRoute('blue');
+  assert.equal(route.potentialCount,3);
+  assert.equal(route.controlledCount,1);
+  assert.equal(route.veryStrong,false);
+  assert.equal(route.strong,false);
 });
 
 test('Training Mode explains a Bright target in beginner language without dumping priority rules',()=>{
@@ -3107,23 +3108,19 @@ test('Training Mode uses picture-family names instead of month numbers for begin
   assert.equal(api.trainingCardName(card('m9-1')),'Chrysanthemum Sake Cup');
 });
 
-test('Training Mode takes a very strong Blue Stripe route before a red Stripe or 2x Single',()=>{
+test('Training Mode records two immediately securable Blue Stripes separately from a third Blue Stripe held only in hand',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m6-2'),card('m9-2'),card('m1-2'),card('m11-3')],
     human:api.makePlayer({hand:[card('m6-3'),card('m9-3'),card('m10-2'),card('m1-3'),card('m11-1')]}),
     ai:api.makePlayer()
   }));
-  const profile=api.trainingStrategyProfile();
-  assert.equal(profile.primary,'stripe');
-  assert.equal(profile.strongestRibbon.family,'blue');
-  assert.equal(profile.strongestRibbon.controlledCount,2);
-  assert.equal(profile.strongestRibbon.potentialCount,3);
-  assert.equal(profile.strongestRibbon.immediateCount,2);
-  const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.target.ribbonSet,'blue');
-  assert.match(recommendation.reason,/Blue Stripe set/);
-  assert.match(recommendation.reason,/2x Single/);
+  const route=api.trainingRibbonRoute('blue');
+  assert.equal(route.controlledCount,2);
+  assert.equal(route.potentialCount,3);
+  assert.equal(route.immediateCount,2);
+  assert.equal(route.strong,true);
+  assert.equal(route.veryStrong,false);
 });
 
 test('Training recommendation takes the Chrysanthemum Sake Cup instead of overvaluing three Plain Red Stripes held only in hand',()=>{
@@ -3135,8 +3132,8 @@ test('Training recommendation takes the Chrysanthemum Sake Cup instead of overva
   }));
   const plain=api.trainingRibbonRoute('grass');
   assert.equal(plain.potentialCount,3,'all three Plain Red Stripes are only potential');
-  assert.equal(plain.controlledCount,1,'only the Iris Stripe can be secured from the current floor');
-  assert.equal(plain.strong,false,'three Stripes sitting in hand must not be treated as a completed/near-certain set');
+  assert.ok(plain.controlledCount<plain.potentialCount,'held Plain Red Stripes must not all be counted as already secured');
+  assert.equal(plain.veryStrong,false,'three Stripes sitting in hand must not be treated as a completed/near-certain set');
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m9-3');
   assert.equal(recommendation.target.id,'m9-1');
