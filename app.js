@@ -2401,30 +2401,32 @@
     return (state.floor||[]).filter(card=>months.has(card.month));
   }
   function trainingRibbonRoute(family,human=state?.human){
-    if(!human||!state)return {family,name:trainingRibbonName(family),alive:false,strong:false,veryStrong:false,controlledCount:0,immediateCount:0,captured:[],inHand:[],claimable:[],lost:[]};
+    if(!human||!state)return {family,name:trainingRibbonName(family),alive:false,strong:false,veryStrong:false,controlledCount:0,potentialCount:0,immediateCount:0,captured:[],inHand:[],playable:[],claimable:[],lost:[]};
     const routeMonths=TRAINING_RIBBON_MONTHS[family]||[],hand=human.hand||[],captured=human.captured||[],opponent=state.ai?.captured||[];
     const capturedRoute=captured.filter(card=>card.type==='ribbon'&&card.ribbonSet===family);
     const inHand=hand.filter(card=>card.type==='ribbon'&&card.ribbonSet===family);
+    const playable=inHand.filter(card=>(state.floor||[]).some(target=>target.month===card.month));
     const claimable=(state.floor||[]).filter(card=>card.type==='ribbon'&&card.ribbonSet===family&&hand.some(held=>held.month===card.month));
     const lost=opponent.filter(card=>card.type==='ribbon'&&card.ribbonSet===family);
-    const controlledMonths=new Set([...capturedRoute,...inHand,...claimable].map(card=>card.month).filter(month=>routeMonths.includes(month)));
-    const controlledCount=controlledMonths.size,alive=lost.length===0;
-    return {family,name:trainingRibbonName(family),alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,controlledCount,immediateCount:claimable.length,captured:capturedRoute,inHand,claimable,lost};
+    const immediatelySecurable=new Set([...capturedRoute,...playable,...claimable].map(card=>card.month).filter(month=>routeMonths.includes(month)));
+    const potential=new Set([...capturedRoute,...inHand,...claimable].map(card=>card.month).filter(month=>routeMonths.includes(month)));
+    const controlledCount=immediatelySecurable.size,potentialCount=potential.size,alive=lost.length===0;
+    return {family,name:trainingRibbonName(family),alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.month)).size,captured:capturedRoute,inHand,playable,claimable,lost};
   }
   function trainingGodoriRoute(human=state?.human){
-    if(!human||!state)return {alive:false,strong:false,veryStrong:false,controlledCount:0,immediateCount:0};
+    if(!human||!state)return {alive:false,strong:false,veryStrong:false,controlledCount:0,potentialCount:0,immediateCount:0};
     const months=[2,4,8],hand=human.hand||[],captured=human.captured||[],opponent=state.ai?.captured||[];
     const isBird=card=>card.flags?.includes('godori')&&months.includes(card.month);
-    const mineCaptured=captured.filter(isBird),inHand=hand.filter(isBird),claimable=(state.floor||[]).filter(card=>isBird(card)&&hand.some(held=>held.month===card.month)),lost=opponent.filter(isBird);
-    const controlledCount=new Set([...mineCaptured,...inHand,...claimable].map(card=>card.month)).size,alive=lost.length===0;
-    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,controlledCount,immediateCount:claimable.length,captured:mineCaptured,inHand,claimable,lost};
+    const mineCaptured=captured.filter(isBird),inHand=hand.filter(isBird),playable=inHand.filter(card=>(state.floor||[]).some(target=>target.month===card.month)),claimable=(state.floor||[]).filter(card=>isBird(card)&&hand.some(held=>held.month===card.month)),lost=opponent.filter(isBird);
+    const controlledCount=new Set([...mineCaptured,...playable,...claimable].map(card=>card.month)).size,potentialCount=new Set([...mineCaptured,...inHand,...claimable].map(card=>card.month)).size,alive=lost.length===0;
+    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.month)).size,captured:mineCaptured,inHand,playable,claimable,lost};
   }
   function trainingBrightRoute(human=state?.human){
-    if(!human||!state)return {alive:false,strong:false,veryStrong:false,fiveBrightNear:false,controlledCount:0,immediateCount:0,lostCount:0};
+    if(!human||!state)return {alive:false,strong:false,veryStrong:false,fiveBrightNear:false,controlledCount:0,potentialCount:0,immediateCount:0,lostCount:0};
     const hand=human.hand||[],captured=human.captured||[],opponent=state.ai?.captured||[];
-    const mineCaptured=captured.filter(card=>card.type==='bright'),inHand=hand.filter(card=>card.type==='bright'),claimable=(state.floor||[]).filter(card=>card.type==='bright'&&hand.some(held=>held.month===card.month)),lost=opponent.filter(card=>card.type==='bright');
-    const controlledCount=new Set([...mineCaptured,...inHand,...claimable].map(card=>card.id)).size,alive=(5-lost.length)>=3;
-    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,fiveBrightNear:lost.length===0&&controlledCount>=4,controlledCount,immediateCount:claimable.length,lostCount:lost.length,captured:mineCaptured,inHand,claimable,lost};
+    const mineCaptured=captured.filter(card=>card.type==='bright'),inHand=hand.filter(card=>card.type==='bright'),playable=inHand.filter(card=>(state.floor||[]).some(target=>target.month===card.month)),claimable=(state.floor||[]).filter(card=>card.type==='bright'&&hand.some(held=>held.month===card.month)),lost=opponent.filter(card=>card.type==='bright');
+    const controlledCount=new Set([...mineCaptured,...playable,...claimable].map(card=>card.id)).size,potentialCount=new Set([...mineCaptured,...inHand,...claimable].map(card=>card.id)).size,alive=(5-lost.length)>=3;
+    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,fiveBrightNear:lost.length===0&&controlledCount>=4,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.id)).size,lostCount:lost.length,captured:mineCaptured,inHand,playable,claimable,lost};
   }
   function trainingStrategyProfile(human=state?.human){
     if(!human||!state)return {primary:'single',label:'Singles',summary:'No major set is close yet, so build Singles and take 2x Singles when available.',priorityText:'2x Singles > Singles > Brights > Stripes > ordinary Pictures.',godoriViable:false,fiveBrightViable:false,brightViable:false,stripeViable:false,activeRibbonFamilies:[],ribbonRoutes:{},weights:{}};
