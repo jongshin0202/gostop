@@ -26,6 +26,20 @@ test('verification dialog self-heals after email verification without manual dis
 });
 
 
+test('Training strategy stays until user dismissal and explains the September sake cup choice',()=>{
+  assert.match(html,/id="gukjinTrainingReason" class="training-choice-reason" hidden/);
+  assert.match(app,/function trainingGukjinRecommendation\(human=state\?\.human\)/);
+  assert.match(app,/Recommended: \$\{choice\}/);
+  assert.match(app,/As a Single it counts as 2 Singles/);
+  assert.match(app,/training-choice-recommended/);
+  assert.match(app,/function showTrainingOpeningStrategy\(text\)/);
+  assert.match(app,/trainingOpeningDismissLayer\.className='training-opening-dismiss-layer'/);
+  assert.match(app,/Tap or click anywhere when you are ready to continue/);
+  assert.match(app,/await showTrainingOpeningStrategy\(openingAdvice\)/);
+  assert.match(app,/Reserved rule:/);
+  assert.match(app,/If I were playing this hand, I would use the/);
+});
+
 test('Training Shake dialog explains the score multiplier and Keep-for-Bomb tradeoff',()=>{
   assert.match(html,/id="shakeTrainingReason" hidden/);
   assert.match(app,/shakeMultiplier=decision\.month>=11\?4:2/);
