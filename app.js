@@ -2683,21 +2683,86 @@
     }
     return {mode,choice,profile,asPicture,asSingle,reason:'Recommended: '+choice+'. '+reason};
   }
+  function trainingScoreGainParts(before,after){
+    const parts=[];
+    const brightGain=(after.brightPts||0)-(before.brightPts||0);
+    if(brightGain>0)parts.push((after.bright===3?'3 Brights':'Brights')+' add '+brightGain+' point'+(brightGain===1?'':'s'));
+    let animalGain=(after.animalPts||0)-(before.animalPts||0);
+    if(!before.godori&&after.godori){parts.push('Godori adds 5 points');animalGain-=5;}
+    if(animalGain>0)parts.push(after.animals+' Pictures add '+animalGain+' point'+(animalGain===1?'':'s'));
+    const ribbonGain=(after.ribbonPts||0)-(before.ribbonPts||0);
+    if(ribbonGain>0)parts.push('Stripes add '+ribbonGain+' point'+(ribbonGain===1?'':'s'));
+    const piGain=(after.piPts||0)-(before.piPts||0);
+    if(piGain>0)parts.push('Singles add '+piGain+' point'+(piGain===1?'':'s'));
+    return parts;
+  }
+  function trainingOpponentVisibleThreat(maxTurns=1,opponent=state?.ai){
+    if(!state||!opponent)return {canWin:false,beforeScore:0,afterScore:0,gain:0,targets:[],sources:[],scoreParts:[]};
+    const before=scorePlayer(opponent),knownIds=new Set([
+      ...(state.human?.hand||[]),...(state.human?.captured||[]),...(opponent.captured||[]),...(state.floor||[])
+    ].map(card=>card.id));
+    const unseen=MASTER_DECK.filter(card=>!knownIds.has(card.id)),groups=[],seenBundles=new Set();
+    for(const target of state.floor||[]){
+      const cards=expandedTargetCards(target),key=cards.map(card=>card.id).sort().join('|');
+      if(!key||seenBundles.has(key))continue;
+      seenBundles.add(key);groups.push({target,cards,month:target.month});
+    }
+    const maxCaptures=Math.min(groups.length,Math.max(0,Math.trunc(maxTurns))*2);
+    let best={canWin:false,beforeScore:before.total,afterScore:before.total,gain:0,targets:[],sources:[],scoreParts:[]};
+    const consider=(selected,sources)=>{
+      const added=new Map();
+      selected.flatMap(group=>group.cards).forEach(card=>added.set(card.id,card));
+      sources.forEach(card=>added.set(card.id,card));
+      const after=scorePlayer({...opponent,captured:[...(opponent.captured||[]),...added.values()]}),gain=after.total-before.total,canWin=after.total>=finishThreshold;
+      const candidate={canWin,beforeScore:before.total,afterScore:after.total,gain,targets:selected.map(group=>group.target),sources:[...sources],scoreParts:trainingScoreGainParts(before,after)};
+      const betterWin=canWin&&!best.canWin;
+      const sameClass=canWin===best.canWin;
+      const simplerWin=canWin&&sameClass&&(candidate.targets.length<best.targets.length||(candidate.targets.length===best.targets.length&&candidate.gain<best.gain));
+      const strongerNonWin=!canWin&&sameClass&&candidate.afterScore>best.afterScore;
+      if(betterWin||simplerWin||strongerNonWin)best=candidate;
+    };
+    const chooseSources=(selected,index=0,sources=[],used=new Set())=>{
+      if(index>=selected.length){consider(selected,sources);return;}
+      for(const source of unseen){
+        if(source.month!==selected[index].month||used.has(source.id))continue;
+        used.add(source.id);sources.push(source);chooseSources(selected,index+1,sources,used);sources.pop();used.delete(source.id);
+      }
+    };
+    const chooseGroups=(size,startIndex=0,selected=[])=>{
+      if(selected.length===size){chooseSources(selected);return;}
+      for(let index=startIndex;index<groups.length;index++){selected.push(groups[index]);chooseGroups(size,index+1,selected);selected.pop();}
+    };
+    for(let size=1;size<=maxCaptures;size++)chooseGroups(size);
+    return best;
+  }
+  function trainingOpponentThreatExplanation(threat){
+    if(!threat?.canWin)return '';
+    const names=threat.targets.map(trainingCardName),capture=names.length===1
+      ?'match and capture '+names[0]+' from the floor'
+      :'match and capture '+names.join(' and ')+' during its play and draw';
+    const scoring=threat.scoreParts.length?threat.scoreParts.join(' and '):('the captures add '+threat.gain+' points');
+    return 'The computer is at '+threat.beforeScore+'. If it can '+capture+', '+scoring+', taking it from '+threat.beforeScore+' to '+threat.afterScore+' and reaching '+finishThreshold+'.';
+  }
   function trainingGoStopRecommendation(sc=scorePlayer(state?.human||{captured:[]})){
     if(!state?.human||!state?.ai)return null;
     const opponentScore=scorePlayer(state.ai).total,preview=calculateFinalScore('human');
     const view={ai:state.human,human:{...state.ai,handCount:state.ai.hand?.length||0},deckCount:state.deck?.length||0,matchContext:state.matchContext||{}};
     const analysis=aiGoStopDecision(view,sc),profile=trainingStrategyProfile(state.human),turns=analysis.remainingTurns;
+    const immediateThreat=trainingOpponentVisibleThreat(1),horizonTurns=Math.max(1,Math.min(2,analysis.opponentTurns||1)),horizonThreat=trainingOpponentVisibleThreat(horizonTurns);
+    const safePressure=turns>=2&&opponentScore<=1&&!horizonThreat.canWin;
+    const decision=immediateThreat.canWin?'stop':safePressure?'go':analysis.decision;
     let reason='';
-    if(analysis.decision==='stop'){
-      if(opponentScore>=5)reason='STOP. Lock in '+preview.total+' points now. The computer already has '+opponentScore+' points, so one strong turn could swing the hand.';
-      else if(turns<=1)reason='STOP. Lock in '+preview.total+' points now. The hand is almost over, so there is little upside left for another Go.';
+    if(decision==='stop'){
+      if(immediateThreat.canWin)reason='STOP. Lock in '+preview.total+' points now. '+trainingOpponentThreatExplanation(immediateThreat);
+      else if(opponentScore>=5)reason='STOP. Lock in '+preview.total+' points now. The computer already has '+opponentScore+' points, so one strong turn could swing the hand.';
+      else if(turns<=1)reason='STOP. Lock in '+preview.total+' points now. Only one scoring turn remains, so another Go risks giving up guaranteed points without enough time to improve.';
       else reason='STOP. Lock in '+preview.total+' points now. The extra upside from another Go is smaller than the comeback risk.';
     }else{
       const upside=profile.primary==='stripe'?('your '+profile.strongestRibbon.name+' Stripe set is still close'):profile.primary==='bright'?'your Bright route is still strong':profile.primary==='godori'?'Godori is still within reach':'you still have useful scoring cards left';
-      reason='GO. You lead '+sc.total+'–'+opponentScore+' with '+turns+' turn'+(turns===1?'':'s')+' left, and '+upside+'. There is enough upside to keep playing.';
+      if(safePressure)reason='GO. You lead '+sc.total+'–'+opponentScore+' with '+turns+' turns left. The computer has no visible route to '+finishThreshold+' from the current floor over its next '+horizonTurns+' turn'+(horizonTurns===1?'':'s')+', so there is time to press your lead.';
+      else reason='GO. You lead '+sc.total+'–'+opponentScore+' with '+turns+' turn'+(turns===1?'':'s')+' left, and '+upside+'. There is enough upside to keep playing.';
     }
-    return {...analysis,reason,stopPoints:preview.total,opponentScore};
+    return {...analysis,decision,reason,stopPoints:preview.total,opponentScore,immediateThreat,horizonThreat};
   }
 
   let trainingOpeningDismissLayer=null,trainingOpeningDismissResolve=null;
