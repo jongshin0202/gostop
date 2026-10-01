@@ -1621,10 +1621,7 @@
       }
     }
     if(!isGameplayPresentationCurrent(epoch))return;
-    presentation.locked=false; render();
-    const openingAdvice=presentation.trainingMode?trainingOpeningStrategy():'';
-    if(openingAdvice)await showTrainingOpeningStrategy(openingAdvice);
-    if(!isGameplayPresentationCurrent(epoch))return;
+    presentation.locked=false;render();
     scheduleTurnStart();
   }
 
@@ -2722,6 +2719,10 @@
     if(firstSessionHand)await presentOpeningSequence(starter,true,epoch);
     else await presentDealSequence(epoch);
     if(!isGameplayPresentationCurrent(epoch))return;
+    const openingAdvice=presentation.trainingMode?trainingOpeningStrategy():'';
+    if(openingAdvice)await showTrainingOpeningStrategy(openingAdvice);
+    if(!isGameplayPresentationCurrent(epoch))return;
+    presentation.locked=true;render();
     await processOpeningSpecials(epoch);
   }
   function cancelLocalGamePresentation(){
