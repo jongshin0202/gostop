@@ -26,13 +26,13 @@
     7:'Bush Clover',8:'Moon & Pampas',9:'Chrysanthemum',10:'Maple',11:'Paulownia',12:'Rain & Willow'
   });
   function cardFamilyName(month){return CARD_FAMILY_NAMES[month]||('Family '+month);}
-  function cardRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain Red':'Stripe';}
+  function cardRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain Red':'';}
   function cardDisplayName(card){
     if(!card)return 'card';
     const family=cardFamilyName(card.month);
     if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return family+' Sake Cup';
     if(card.type==='bright')return family+' Bright';
-    if(card.type==='ribbon')return family+' '+cardRibbonName(card.ribbonSet)+' Stripe';
+    if(card.type==='ribbon')return [family,cardRibbonName(card.ribbonSet),'Stripe'].filter(Boolean).join(' ');
     if(card.flags?.includes('doublePi'))return family+' 2x Single';
     if(card.flags?.includes('godori'))return family+' Bird Picture';
     if(card.type==='animal')return family+' Picture';
@@ -2382,7 +2382,7 @@
 
   const TRAINING_RIBBON_MONTHS=Object.freeze({red:Object.freeze([1,2,3]),blue:Object.freeze([6,9,10]),grass:Object.freeze([4,5,7])});
   function trainingFlowerName(month){return cardFamilyName(month);}
-  function trainingRibbonName(value){return cardRibbonName(value);}
+  function trainingRibbonName(value){return cardRibbonName(value)||'Stripe';}
   function trainingCardName(card){return cardDisplayName(card);}
   function trainingCategoryName(card){
     if(!card)return 'card';
