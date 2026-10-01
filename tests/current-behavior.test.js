@@ -3111,7 +3111,7 @@ test('Training Mode prefers a 2x Single over an ordinary Stripe when no Stripe s
 test('Training Go Stop keeps pressing an 8-0 lead when the current floor cannot give the opponent a visible finish path',()=>{
   const opponentCaptured=cards(
     'm1-1','m3-1',
-    'm5-1','m6-1','m7-1','m9-1',
+    'm5-1','m6-1','m7-1','m10-1',
     'm1-2','m4-2','m6-2',
     'm1-3','m2-3','m3-3','m4-3','m5-3','m6-3','m7-3','m8-3','m9-3'
   );
@@ -3119,7 +3119,7 @@ test('Training Go Stop keeps pressing an 8-0 lead when the current floor cannot 
     turn:'playerA',
     deck:cards('m10-2','m10-4','m11-1','m11-4'),
     floor:[card('m2-1'),card('m5-2')],
-    human:api.makePlayer({hand:[card('m10-1'),card('m12-2')]}),
+    human:api.makePlayer({hand:[card('m12-2'),card('m12-3')]}),
     ai:api.makePlayer({hand:[card('m10-3'),card('m11-2')],captured:opponentCaptured})
   }));
   assert.equal(api.score(opponentCaptured).total,0);
@@ -3151,7 +3151,7 @@ test('Training Go Stop explains the exact visible next-turn scoring path when th
   assert.equal(threat.beforeScore,4);
   assert.equal(threat.afterScore,7);
   assert.equal(threat.gain,3);
-  assert.deepEqual(threat.targets.map(card=>card.id),['m8-1']);
+  assert.equal(threat.targets.map(card=>card.id).join(','),'m8-1');
   assert.match(api.trainingOpponentThreatExplanation(threat),/Moon & Pampas Bright/);
   assert.match(api.trainingOpponentThreatExplanation(threat),/3 Brights add 3 points/);
   assert.match(api.trainingOpponentThreatExplanation(threat),/4 to 7/);
