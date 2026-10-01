@@ -2984,9 +2984,10 @@ test('Training Mode chooses a hand-level strategy and explains Bright/Stripe pri
     turn:'playerA',
     floor:[card('m8-1'),card('m9-2')],
     human:api.makePlayer({hand:[card('m1-1'),card('m3-1'),card('m6-2'),card('m10-2'),card('m8-3'),card('m9-3')]}),
-    ai:api.makePlayer()
+    ai:api.makePlayer({captured:[card('m11-1')]})
   }));
   const profile=api.trainingStrategyProfile();
+  assert.equal(profile.fiveBrightViable,false);
   assert.equal(profile.primary,'bright');
   assert.equal(profile.stripeViable,true);
   assert.match(profile.label,/Brights/);
