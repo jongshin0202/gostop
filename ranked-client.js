@@ -642,7 +642,10 @@
     .menu-utility{transition:transform .06s ease,box-shadow .06s ease!important}
     .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
-    html.gostop-performance-lite .menu-submenu{transition:none!important}
+    html.gostop-performance-lite .menu-submenu,
+    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu,
+    html.gostop-performance-lite .menu-category-toggle,
+    html.gostop-performance-lite .menu-category-chevron{transition:none!important}
     html.gostop-performance-lite .menu-category-block.expanded .menu-submenu-inner{
       opacity:1!important;transform:none!important;transition:none!important;will-change:auto!important
     }
