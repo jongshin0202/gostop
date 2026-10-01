@@ -217,7 +217,7 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
 });
 
 
-test('Android native touch keeps first-tap menu response, accordion animation, second tap, flick, and browse deterministic',async({browser})=>{
+test('Android native touch keeps immediate first-tap menu response, second tap, flick, and browse deterministic',async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
   const page=await context.newPage();
   let competitiveSoloRequests=0;
@@ -239,9 +239,10 @@ test('Android native touch keeps first-tap menu response, accordion animation, s
   await expect(page.locator('#competitiveGamingBtn')).toHaveAttribute('aria-expanded','true');
   await expect(page.locator('#rankedSoloBtn')).toBeVisible();
   await expect(page.locator('#onlinePlayMenuBtn')).toBeVisible();
-  const transitionDuration=await page.locator('#competitiveGamingSubmenu').evaluate(node=>getComputedStyle(node).transitionDuration);
-  expect(transitionDuration).not.toMatch(/^(?:0s(?:,\s*)?)+$/);
-  await page.waitForTimeout(250);
+  const submenuStyle=await page.locator('#competitiveGamingSubmenu').evaluate(node=>({display:getComputedStyle(node).display,transitionDuration:getComputedStyle(node).transitionDuration}));
+  expect(submenuStyle.display).toBe('grid');
+  expect(submenuStyle.transitionDuration).toMatch(/^(?:0s(?:,\s*)?)+$/);
+  await page.waitForTimeout(120);
   expect(competitiveSoloRequests).toBe(0);
 
   const friendly=await page.locator('#friendlyGamingBtn').boundingBox();

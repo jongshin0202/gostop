@@ -348,10 +348,12 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-height:760px\)[^]*?\.account-menu-box\{padding:7px 10px!important;margin-top:40px!important/);
   assert.match(source,/\.menu-category-toggle\{[^]*?min-height:72px[^]*?padding:9px 18px/);
   assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)\/\.98 Georgia,serif!important/);
-  assert.match(source,/\.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?opacity:1!important[^]*?visibility:hidden!important[^]*?transform:none!important[^]*?visibility 0s linear \.18s/);assert.match(source,/\.menu-submenu-inner\{[^]*?opacity:0;transform:translate3d\(0,-10px,0\)/);
-  assert.match(source,/\.menu-submenu-inner\{\s*min-height:0;overflow:hidden;display:grid/);
-  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?grid-template-rows:1fr!important[^]*?opacity:1!important[^]*?pointer-events:auto/);
-  assert.doesNotMatch(source,/submenu\.style\.setProperty\('--submenu-open-height'/);
+  assert.match(source,/\.menu-submenu\{[^]*?display:none!important[^]*?visibility:hidden!important[^]*?transition:none!important/);
+  assert.match(source,/\.menu-submenu-inner\{[^]*?opacity:0;transform:translate3d\(0,-6px,0\)[^]*?transition:none/);
+  assert.match(source,/\.menu-category-block\.expanded \.menu-submenu\{[^]*?display:grid!important[^]*?visibility:visible!important[^]*?pointer-events:auto/);
+  assert.match(source,/\.menu-category-block\.expanded\.menu-reveal \.menu-submenu-inner\{[^]*?transition:opacity \.09s ease-out,transform \.09s/);
+  assert.match(source,/html\.gostop-performance-lite \.menu-category-block\.expanded \.menu-submenu-inner\{[^]*?transition:none!important/);
+  assert.doesNotMatch(source,/grid-template-rows:0fr!important|submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(source,/function installImmediateMobileTap\(button\)/);
   assert.match(source,/const touchCapable=\('ontouchstart' in globalThis\)\|\|Number\(navigator\.maxTouchPoints\|\|0\)>0/);
   assert.match(source,/button\.addEventListener\('touchend',[\s\S]*?event\.preventDefault\(\);event\.stopPropagation\(\);activate\(\)/);
@@ -362,7 +364,7 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260929-1/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20260930-1/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{

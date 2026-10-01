@@ -612,48 +612,46 @@
       .main-menu-utilities{gap:5px!important;margin-top:3px!important}.menu-utility{min-height:34px!important;padding:4px!important}
       .account-menu-box{padding:7px 10px!important;margin-top:40px!important}
     }
-    /* Zero-delay accordion: state changes on pointer-down for mouse/pen.
-       The outer row expands immediately; only the inner buttons animate, so there is
-       no discrete visibility step that can make the submenu "pop" in late. */
+    /* Menu response is immediate. The layout no longer animates grid tracks or height;
+       only the submenu content gets a short compositor-only reveal. Low-end/performance-lite
+       devices skip even that reveal so first-tap response stays deterministic. */
     .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important}
-    .menu-category-toggle{transition:border-radius .08s ease,box-shadow .08s ease!important}
+    .menu-category-toggle{transition:border-radius .06s ease,box-shadow .06s ease!important}
     .menu-category-toggle:before{display:none!important;animation:none!important}
     .menu-category-toggle:hover,.menu-category-toggle:focus-visible{transform:none!important;filter:none!important}
     .menu-category-toggle:active{transform:none!important}
     .menu-submenu{
-      display:grid!important;grid-template-columns:1fr!important;grid-template-rows:0fr!important;
+      display:none!important;grid-template-columns:1fr!important;
       gap:0!important;max-height:none!important;opacity:1!important;visibility:hidden!important;
       overflow:hidden!important;pointer-events:none;margin:0 10px;padding:0 9px!important;
-      transform:none!important;will-change:grid-template-rows!important;contain:paint;
-      transition:grid-template-rows .18s cubic-bezier(.16,1,.3,1),border-color .12s ease,background .12s ease,visibility 0s linear .18s!important
+      transform:none!important;contain:paint;transition:none!important
     }
     .menu-submenu-inner{
       min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr;gap:7px;padding:8px 0 9px;
-      opacity:0;transform:translate3d(0,-10px,0);will-change:opacity,transform;
-      transition:opacity .09s linear,transform .18s cubic-bezier(.16,1,.3,1)
+      opacity:0;transform:translate3d(0,-6px,0);will-change:opacity,transform;transition:none
     }
     .menu-category-block.expanded .menu-submenu{
-      grid-template-rows:1fr!important;opacity:1!important;visibility:visible!important;pointer-events:auto;
-      transform:none!important;padding:0 9px!important;transition-delay:0s!important
+      display:grid!important;opacity:1!important;visibility:visible!important;pointer-events:auto;padding:0 9px!important
     }
-    .menu-category-block.expanded .menu-submenu-inner{opacity:1;transform:translate3d(0,0,0)}
+    .menu-category-block.expanded.menu-reveal .menu-submenu-inner{
+      opacity:1;transform:translate3d(0,0,0);
+      transition:opacity .09s ease-out,transform .09s cubic-bezier(.2,.8,.2,1)
+    }
     .menu-submenu-inner>button{width:100%;min-height:42px;border-radius:10px;font-size:clamp(16px,1.85vw,20px);font-weight:800;touch-action:manipulation}
-    .menu-category-chevron{transition:transform .08s ease!important}
+    .menu-category-chevron{transition:transform .06s ease!important}
     .menu-utility{transition:transform .06s ease,box-shadow .06s ease!important}
     .menu-utility:hover,.menu-utility:focus-visible,.menu-submenu-inner>button:hover,.menu-submenu-inner>button:focus-visible{filter:none!important}
     .gostop-main-menu button{-webkit-tap-highlight-color:transparent}
-    html.gostop-performance-lite .menu-submenu{
-      grid-template-rows:0fr!important;transform:none!important;visibility:hidden!important;
-      will-change:grid-template-rows!important;
-      transition:grid-template-rows .15s cubic-bezier(.16,1,.3,1),visibility 0s linear .15s!important
+    html.gostop-performance-lite .menu-submenu,
+    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu,
+    html.gostop-performance-lite .menu-category-toggle,
+    html.gostop-performance-lite .menu-category-chevron{transition:none!important}
+    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu-inner{
+      opacity:1!important;transform:none!important;transition:none!important;will-change:auto!important
     }
-    html.gostop-performance-lite .menu-submenu-inner{
-      transform:translate3d(0,-8px,0);transition:opacity .07s linear,transform .15s cubic-bezier(.16,1,.3,1)
+    @media(prefers-reduced-motion:reduce){
+      .menu-category-block.expanded .menu-submenu-inner{opacity:1!important;transform:none!important;transition:none!important;will-change:auto!important}
     }
-    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu{
-      grid-template-rows:1fr!important;transform:none!important;visibility:visible!important;transition-delay:0s!important
-    }
-    html.gostop-performance-lite .menu-category-block.expanded .menu-submenu-inner{transform:translate3d(0,0,0)}
     @media(max-width:760px){.menu-submenu-inner>button{min-height:40px;font-size:15px}}
     @media(max-height:760px){.menu-submenu-inner{gap:5px;padding:5px 0 6px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
 
@@ -702,16 +700,23 @@
   utilities.append(friendsBtn,leaderboardBtn);if(howTo)utilities.append(howTo);
   menu.append(rankedGroup,freeGroup,utilities);overlay.appendChild(menu);
 
-  let expandedMenuSection=null;
+  let expandedMenuSection=null,menuRevealToken=0;
   function setMenuSection(section=null){
     expandedMenuSection=section==='competitive'||section==='friendly'?section:null;
+    const revealToken=++menuRevealToken;
+    let revealGroup=null;
     for(const [name,group,toggle,submenu] of [['competitive',rankedGroup,rankedToggle,rankedSubmenu],['friendly',freeGroup,freeToggle,freeSubmenu]]){
       const open=expandedMenuSection===name;
-      group.classList.toggle('expanded',open);
+      group.classList.toggle('expanded',open);group.classList.remove('menu-reveal');
       toggle.setAttribute('aria-expanded',open?'true':'false');
       submenu.setAttribute('aria-hidden',open?'false':'true');
       submenu.inert=!open;
+      if(open)revealGroup=group;
     }
+    if(revealGroup)requestAnimationFrame(()=>{
+      if(revealToken!==menuRevealToken||!revealGroup.classList.contains('expanded'))return;
+      revealGroup.classList.add('menu-reveal');
+    });
   }
   function toggleMenuSection(section){setMenuSection(expandedMenuSection===section?null:section);}
   let immediateMenuProgrammaticTarget=null,immediateMenuSuppressTarget=null,immediateMenuSuppressUntil=0;

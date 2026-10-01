@@ -45,7 +45,7 @@
     'playerScore','aiScore','goCount','turnLabel','aiThinking','eventBanner','coachText','promptText','howToBtn','newGameBtn',
     'howToDialog','decisionDialog','decisionText','goBtn','stopBtn','resultDialog','resultTitle','resultScore','resultBreakdown',
     'playAgainBtn','resultQuitBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
-    'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeCards','shakeBtn','keepSecretBtn',
+    'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeTrainingReason','shakeCards','shakeBtn','keepSecretBtn',
     'bombDialog','bombText','bombCards','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
@@ -1565,7 +1565,15 @@
 
   function showShakeChoice(decision){
     const cardIds=decision.cardIds||state.human.hand.filter(card=>card.month===decision.month).map(card=>card.id),cards=cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean),bombReady=!!decision.floorCardId||(state.floor.some(c=>c.month===decision.month)&&!floorStackForMonth(decision.month));
-    els.shakeText.textContent=`${localizedMonth(decision.month)} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
+    const monthName=localizedMonth(decision.month),shakeMultiplier=decision.month>=11?4:2;
+    els.shakeText.textContent=`${monthName} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
+    if(els.shakeTrainingReason){
+      const training=!!presentation.trainingMode&&!onlineMode;
+      els.shakeTrainingReason.hidden=!training;
+      if(training)els.shakeTrainingReason.textContent=bombReady
+        ?`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Bomb instead captures the fourth ${monthName} card now, steals one Single when available, and gives two optional blank turns, but Bomb does not multiply the score.`
+        :`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Keep for Bomb keeps the set hidden so you can Bomb later if the fourth ${monthName} card appears on the floor.`;
+    }
     if(els.keepSecretBtn)els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
     els.shakeCards.replaceChildren(...cards.map(card=>createCardEl(card,'card magnified-card')));
   }

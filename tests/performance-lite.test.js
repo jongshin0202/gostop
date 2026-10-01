@@ -14,14 +14,15 @@ test('low-end phones automatically use the lightweight motion profile without ch
   assert.match(ranked,/cores>0&&cores<=4/);
   assert.match(ranked,/p90>28\|\|slow>=Math\.max\(6,Math\.ceil\(deltas\.length\*\.25\)\)/);
   assert.match(ranked,/document\.documentElement\.classList\.add\(PERFORMANCE_LITE_CLASS\)/);
-  assert.match(ranked,/html\.gostop-performance-lite \.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?transition:grid-template-rows \.15s/);
+  assert.match(ranked,/html\.gostop-performance-lite \.menu-submenu,[^]*?html\.gostop-performance-lite \.menu-category-block\.expanded \.menu-submenu,[^]*?html\.gostop-performance-lite \.menu-category-chevron\{transition:none!important\}/);
   assert.match(ranked,/html\.gostop-performance-lite \.ambient-room\{filter:none!important;transform:none!important\}/);
   assert.match(ranked,/html\.gostop-performance-lite dialog::backdrop\{backdrop-filter:none!important\}/);
   assert.match(ranked,/html\.gostop-performance-lite \.leaderboard-card-fan\{display:none!important\}/);
   assert.doesNotMatch(ranked,/submenu\.scrollHeight/);
   assert.doesNotMatch(ranked,/submenu\.style\.setProperty\('--submenu-open-height'/);
   assert.match(ranked,/\.menu-submenu-inner\{\s*min-height:0;overflow:hidden;display:grid/);
-  assert.match(ranked,/html\.gostop-performance-lite \.menu-submenu\{[^]*?grid-template-rows:0fr!important[^]*?transition:grid-template-rows \.15s/);
+  assert.match(ranked,/html\.gostop-performance-lite \.menu-category-block\.expanded \.menu-submenu-inner\{[^]*?opacity:1!important[^]*?transform:none!important[^]*?transition:none!important/);
+  assert.match(ranked,/html\.gostop-performance-lite \.menu-submenu,[^]*?html\.gostop-performance-lite \.menu-category-block\.expanded \.menu-submenu,[^]*?html\.gostop-performance-lite \.menu-category-chevron\{transition:none!important\}/);
   assert.match(ranked,/touch-action:manipulation/);
   assert.match(app,/const performanceLite=\(\)=>globalThis\.GOSTOP_PERFORMANCE_LITE===true/);
   assert.match(app,/const motionDuration=ms=>performanceLite\(\)\?Math\.max\(110,Math\.round\(ms\*\.58\)\):ms/);
