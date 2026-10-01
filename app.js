@@ -1576,7 +1576,7 @@
     if(els.shakeTrainingReason){
       els.shakeTrainingReason.hidden=!training;
       if(training)els.shakeTrainingReason.textContent=bombReady
-        ?`Recommended: Bomb. The fourth ${monthName} card is already on the floor, so this Bomb is guaranteed. Bomb immediately captures all four ${monthName} cards, steals one Single when available, and gives two optional blank turns. Shake would give your final score a ×${shakeMultiplier} multiplier if you win, but here I would take the guaranteed Bomb value instead.`
+        ?`Recommended: Bomb. The fourth ${monthName} card is already on the floor, so this Bomb is guaranteed. Bomb immediately captures all four ${monthName} cards, steals one Single when available, and gives two optional blank turns. Shake would give your final score a ×${shakeMultiplier} multiplier if you win, but choose Bomb here for the guaranteed value instead.`
         :`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Keep for Bomb keeps the set hidden so you can Bomb later if the fourth ${monthName} card appears on the floor.`;
     }
     if(els.keepSecretBtn){
@@ -2577,7 +2577,7 @@
     const matches=matchesFor(card);
     if(!matches.length){
       const strategic=trainingStrategicCardValue(card,profile);
-      return {card,target:null,reserved:false,score:-strategic*.72,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'I would only discard '+trainingCardName(card)+' if no floor capture is available.',shortWhy:'No floor capture is available for this card.'};
+      return {card,target:null,reserved:false,score:-strategic*.72,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no floor capture is available.',shortWhy:'No floor capture is available for this card.'};
     }
     let best=null;const targetChoices=[];
     for(const target of matches){
@@ -2624,7 +2624,7 @@
       ||sorted.find(candidate=>candidate.target&&(candidate.card.id!==best.card.id||candidate.target.id!==best.target.id));
     if(!alternative?.target)return '';
     const bestRoute=routeFamily?best.profile.ribbonRoutes?.[routeFamily]:null;
-    if(bestRoute?.veryStrong&&alternative.target.flags?.includes('doublePi'))return 'The '+trainingCardName(alternative.target)+' is a valuable 2x Single, but the '+bestRoute.name+' Stripe set is close enough to finish that I would take the Stripe first.';
+    if(bestRoute?.veryStrong&&alternative.target.flags?.includes('doublePi'))return 'The '+trainingCardName(alternative.target)+' is a valuable 2x Single, but take the '+bestRoute.name+' Stripe first because that set is close to completion.';
     if(bestRoute?.veryStrong&&alternative.gained?.some(card=>card.type==='bright'))return 'The Bright is also strong, but the '+bestRoute.name+' Stripe set is much closer to completion right now.';
     return 'Next best: '+trainingCardName(alternative.card)+' onto '+trainingCardName(alternative.target)+'.';
   }
@@ -2635,7 +2635,7 @@
     if(!pool.length)return null;
     const sorted=[...pool].sort((a,b)=>b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id));
     const best={...sorted[0]},why=trainingMoveWhy(best,profile);
-    const action=best.target?'I would play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'; you take '+best.captureDescription+'.':'I would play '+trainingCardName(best.card)+'.';
+    const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+' to take '+best.captureDescription+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed floor capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
     const alternative=trainingAlternativeSummary(best,sorted);
@@ -2646,7 +2646,7 @@
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
   function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
     if(!chosen||!recommended||chosen.id===recommended.card.id)return '';
-    return 'I would still choose '+trainingCardName(recommended.card)+(recommended.target?(' onto '+trainingCardName(recommended.target)):'')+'. '+(recommended.shortWhy||trainingMoveWhy(recommended));
+    return 'Play '+trainingCardName(recommended.card)+(recommended.target?(' onto '+trainingCardName(recommended.target)):'')+' instead. '+(recommended.shortWhy||trainingMoveWhy(recommended));
   }
   function trainingOpeningStrategy(){
     if(!state?.human)return '';
