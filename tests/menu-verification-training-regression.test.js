@@ -40,12 +40,15 @@ test('Training strategy stays until user dismissal and explains the September sa
   assert.match(app,/If I were playing this hand, I would use the/);
 });
 
-test('Training Shake dialog explains the score multiplier and Keep-for-Bomb tradeoff',()=>{
+test('Training Shake dialog recommends guaranteed Bomb when the fourth month card is on the floor',()=>{
   assert.match(html,/id="shakeTrainingReason" hidden/);
   assert.match(app,/shakeMultiplier=decision\.month>=11\?4:2/);
+  assert.match(app,/Recommended: Bomb\. The fourth/);
+  assert.match(app,/this Bomb is guaranteed/);
+  assert.match(app,/Bomb immediately captures all four/);
+  assert.match(app,/gives two optional blank turns/);
   assert.match(app,/Why Shake: revealing these three/);
-  assert.match(app,/gives your final score a ×\$\{shakeMultiplier\} multiplier if you win/);
   assert.match(app,/Keep for Bomb keeps the set hidden so you can Bomb later/);
-  assert.match(app,/Bomb does not multiply the score/);
+  assert.match(app,/keepSecretBtn\.classList\.toggle\('training-choice-recommended',training&&bombReady\)/);
   assert.match(app,/els\.shakeTrainingReason\.hidden=!training/);
 });
