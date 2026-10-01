@@ -26,7 +26,7 @@
     7:'Bush',8:'Hill',9:'Daisy',10:'Star',11:'Berry',12:'Willow'
   });
   function cardFamilyName(month){return CARD_FAMILY_NAMES[month]||('Family '+month);}
-  function cardRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain Red':'';}
+  function cardRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain':'';}
   function cardDisplayName(card){
     if(!card)return 'card';
     const family=cardFamilyName(card.month);

@@ -3077,7 +3077,7 @@ test('canonical card family names are locked for all twelve families and user-fa
   families.forEach((name,index)=>{assert.equal(api.cardFamilyName(index+1),name);assert.match(name,/^[A-Za-z]+$/);});
   assert.equal(api.cardDisplayName(card('m1-1')),'Pine Bright');
   assert.equal(api.cardDisplayName(card('m2-1')),'Plum Bird Picture');
-  assert.equal(api.cardDisplayName(card('m4-2')),'Vine Plain Red Stripe');
+  assert.equal(api.cardDisplayName(card('m4-2')),'Vine Plain Stripe');
   assert.equal(api.cardDisplayName(card('m9-1')),'Daisy Sake Cup');
   assert.equal(api.cardDisplayName(card('m11-3')),'Berry 2x Single');
   assert.equal(api.cardDisplayName(card('m12-3')),'Willow Stripe');
@@ -3122,7 +3122,7 @@ test('Training Mode records two immediately securable Blue Stripes separately fr
   assert.equal(route.veryStrong,false);
 });
 
-test('Training recommendation takes the Daisy Sake Cup instead of overvaluing three Plain Red Stripes held only in hand',()=>{
+test('Training recommendation takes the Daisy Sake Cup instead of overvaluing three Plain Stripes held only in hand',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m4-1'),card('m5-3'),card('m5-1'),card('m9-1'),card('m10-3')],
@@ -3130,8 +3130,8 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
     ai:api.makePlayer()
   }));
   const plain=api.trainingRibbonRoute('grass');
-  assert.equal(plain.potentialCount,3,'all three Plain Red Stripes are only potential');
-  assert.ok(plain.controlledCount<plain.potentialCount,'held Plain Red Stripes must not all be counted as already secured');
+  assert.equal(plain.potentialCount,3,'all three Plain Stripes are only potential');
+  assert.ok(plain.controlledCount<plain.potentialCount,'held Plain Stripes must not all be counted as already secured');
   assert.equal(plain.veryStrong,false,'three Stripes sitting in hand must not be treated as a completed/near-certain set');
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m9-3');
@@ -3180,7 +3180,7 @@ test('Computer AI uses the same paired-family setup logic when no capture is ava
   assert.equal(move.card.id,'m7-1');
 });
 
-test('Training explains Iris recommendation through the Plain Red 3-Stripe opportunity, not target scarcity',()=>{
+test('Training explains Iris recommendation through the Plain 3-Stripe opportunity, not target scarcity',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m5-2'),card('m9-3')],
@@ -3190,8 +3190,8 @@ test('Training explains Iris recommendation through the Plain Red 3-Stripe oppor
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m5-1');
   assert.equal(recommendation.target.id,'m5-2');
-  assert.match(recommendation.reason,/^Play Iris Picture onto Iris Plain Red Stripe\./);
-  assert.match(recommendation.reason,/strong chance to complete the Plain Red 3-Stripe set/);
+  assert.match(recommendation.reason,/^Play Iris Picture onto Iris Plain Stripe\./);
+  assert.match(recommendation.reason,/strong chance to complete the Plain 3-Stripe set/);
   assert.doesNotMatch(recommendation.reason,/to take|only Iris target|computer can remove|current hit/i);
 });
 
