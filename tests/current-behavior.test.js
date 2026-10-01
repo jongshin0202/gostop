@@ -3080,6 +3080,7 @@ test('canonical card family names are locked for all twelve families and user-fa
   assert.equal(api.cardDisplayName(card('m4-2')),'Wisteria Plain Red Stripe');
   assert.equal(api.cardDisplayName(card('m9-1')),'Chrysanthemum Sake Cup');
   assert.equal(api.cardDisplayName(card('m11-3')),'Paulownia 2x Single');
+  assert.equal(api.cardDisplayName(card('m12-3')),'Rain & Willow Stripe');
   assert.equal(api.cardDisplayName(card('m12-4')),'Rain & Willow 2x Single');
 });
 
