@@ -2693,22 +2693,14 @@
     if(best)best.targetAlternatives=targetChoices.filter(candidate=>candidate.target.id!==best.target.id).sort((a,b)=>b.score-a.score||a.target.id.localeCompare(b.target.id));
     return best;
   }
-  function trainingNoCaptureReason(best,sorted=[]){
+  function trainingNoCaptureReason(best){
     const base='No card for capture is available on the table.';
     const context=best?.discardContext||competitiveDiscardContext('human',best?.card);
-    let reason=base;
     if(context?.retainedFamily?.length){
       const family=trainingFlowerName(best.card.month);
-      reason+=' You have another '+family+' card in hand, so if this card stays on the table, you can capture it on your next turn.';
-    }else reason+=' This gives up the least useful card while keeping stronger future matches in hand.';
-    const protectedCandidate=sorted
-      .filter(candidate=>candidate?.card?.id!==best?.card?.id&&!candidate?.discardContext?.retainedFamily?.length&&candidate?.discardContext?.bestUnseen)
-      .sort((a,b)=>(b.discardContext.bestUnseenValue-a.discardContext.bestUnseenValue)||a.card.id.localeCompare(b.card.id))[0];
-    if(protectedCandidate?.discardContext?.bestUnseenValue>=80){
-      const held=trainingCardName(protectedCandidate.card),future=trainingCardName(protectedCandidate.discardContext.bestUnseen);
-      reason+=' Keep '+held+' because the strongest unseen '+trainingFlowerName(protectedCandidate.card.month)+' card is '+future+'.';
+      return base+' You have another '+family+' card in hand, so if this card stays on the table, you can capture it on your next turn.';
     }
-    return reason;
+    return base+' This gives up a lower-value card while preserving stronger future options.';
   }
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
@@ -2749,13 +2741,12 @@
       const aTier=a.urgency?.tier||0,bTier=b.urgency?.tier||0;
       return bTier-aTier||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
     });
-    const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best,sorted);
+    const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
-    const alternative=trainingAlternativeSummary(best,sorted);
     best.shortWhy=why;
-    best.reason=[action,why+reservedNote,threat,alternative].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    best.reason=[action,why+reservedNote,threat].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     return best;
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}

@@ -3033,7 +3033,7 @@ test('Training Mode defers Reserved captures while any live floor hit remains',(
   assert.doesNotMatch(recommendation.reason,/Reserved rule|Priority:/);
 });
 
-test('Training recommendation explains the computer-player strategy and a second playable alternative',()=>{
+test('Training recommendation focuses only on the recommended move and its strategy',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m8-1'),card('m5-3')],
@@ -3044,8 +3044,7 @@ test('Training recommendation explains the computer-player strategy and a second
   assert.ok(recommendation?.target);
   assert.match(recommendation.reason,/^Play /);
   assert.doesNotMatch(recommendation.reason,/\bI would\b/i);
-  assert.match(recommendation.reason,/Next best:/);
-  assert.doesNotMatch(recommendation.reason,/Current plan:|Priority:|Reserved rule:/);
+  assert.doesNotMatch(recommendation.reason,/Next best:|Current plan:|Priority:|Reserved rule:/);
 });
 
 test('Training Mode recommends how to use the September sake cup from current scoring strategy',()=>{
@@ -3140,7 +3139,7 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
   assert.match(recommendation.reason,/Sake Cup/);
 });
 
-test('Training no-capture strategy prefers a low-value paired family card and protects Iris for its unseen Stripe',()=>{
+test('Training no-capture strategy chooses a paired-family setup but explains only the spotlight card',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m2-3'),card('m3-3')],
@@ -3163,8 +3162,7 @@ test('Training no-capture strategy prefers a low-value paired family card and pr
   assert.match(recommendation.reason,/No card for capture is available on the table\./);
   assert.match(recommendation.reason,/another Bush card in hand/);
   assert.match(recommendation.reason,/capture it on your next turn/);
-  assert.match(recommendation.reason,/Keep Iris Picture because the strongest unseen Iris card is Iris Plain Red Stripe/);
-  assert.doesNotMatch(recommendation.reason,/No table capture is available for this card|throw|discard/i);
+  assert.doesNotMatch(recommendation.reason,/Iris|Keep |Next best:|No table capture is available for this card|throw|discard/i);
 });
 
 test('Computer AI uses the same paired-family setup logic when no capture is available',()=>{
