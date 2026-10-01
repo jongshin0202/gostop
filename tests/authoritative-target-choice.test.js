@@ -10,7 +10,7 @@ test('ranked two-card choice stays authority-validated while remaining retractab
   assert.match(source,/if\(action\?\.type==='attemptPlayCard'&&authoritativeTargetChoice\)\{await driveOnline\(latestOnlineSnapshot,onlineLastEvents\);return;\}/);
   const submit=source.slice(source.indexOf('async function submitOnlineCardPlay'),source.indexOf('function enterOnlineMatchView'));
   assert.match(submit,/const matches=matchesFor\(card\)/);
-  assert.match(submit,/chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/chooseFloorTarget\(matches,'Choose which table card to hit',\{cancelable:true\}\)/);
   assert.match(submit,/targetId=target\.id/);
   assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
 });
