@@ -1570,16 +1570,19 @@
 
   function showShakeChoice(decision){
     const cardIds=decision.cardIds||state.human.hand.filter(card=>card.month===decision.month).map(card=>card.id),cards=cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean),bombReady=!!decision.floorCardId||(state.floor.some(c=>c.month===decision.month)&&!floorStackForMonth(decision.month));
-    const monthName=localizedMonth(decision.month),shakeMultiplier=decision.month>=11?4:2;
+    const monthName=localizedMonth(decision.month),shakeMultiplier=decision.month>=11?4:2,training=!!presentation.trainingMode&&!onlineMode;
     els.shakeText.textContent=`${monthName} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
     if(els.shakeTrainingReason){
-      const training=!!presentation.trainingMode&&!onlineMode;
       els.shakeTrainingReason.hidden=!training;
       if(training)els.shakeTrainingReason.textContent=bombReady
-        ?`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Bomb instead captures the fourth ${monthName} card now, steals one Single when available, and gives two optional blank turns, but Bomb does not multiply the score.`
+        ?`Recommended: Bomb. The fourth ${monthName} card is already on the floor, so this Bomb is guaranteed. Bomb immediately captures all four ${monthName} cards, steals one Single when available, and gives two optional blank turns. Shake would give your final score a ×${shakeMultiplier} multiplier if you win, but here I would take the guaranteed Bomb value instead.`
         :`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Keep for Bomb keeps the set hidden so you can Bomb later if the fourth ${monthName} card appears on the floor.`;
     }
-    if(els.keepSecretBtn)els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
+    if(els.keepSecretBtn){
+      els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
+      els.keepSecretBtn.classList.toggle('training-choice-recommended',training&&bombReady);
+    }
+    els.shakeBtn?.classList.toggle('training-choice-recommended',false);
     els.shakeCards.replaceChildren(...cards.map(card=>createCardEl(card,'card magnified-card')));
   }
 
