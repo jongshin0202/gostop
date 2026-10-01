@@ -3117,12 +3117,65 @@ test('Training Mode takes a very strong Blue Stripe route before a red Stripe or
   const profile=api.trainingStrategyProfile();
   assert.equal(profile.primary,'stripe');
   assert.equal(profile.strongestRibbon.family,'blue');
-  assert.equal(profile.strongestRibbon.controlledCount,3);
+  assert.equal(profile.strongestRibbon.controlledCount,2);
+  assert.equal(profile.strongestRibbon.potentialCount,3);
   assert.equal(profile.strongestRibbon.immediateCount,2);
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.target.ribbonSet,'blue');
   assert.match(recommendation.reason,/Blue Stripe set/);
   assert.match(recommendation.reason,/2x Single/);
+});
+
+test('Training recommendation takes the Chrysanthemum Sake Cup instead of overvaluing three Plain Red Stripes held only in hand',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m4-1'),card('m5-3'),card('m5-1'),card('m9-1'),card('m10-3')],
+    human:api.makePlayer({hand:[card('m4-2'),card('m5-2'),card('m7-2'),card('m9-3'),card('m10-2')]}),
+    ai:api.makePlayer()
+  }));
+  const plain=api.trainingRibbonRoute('grass');
+  assert.equal(plain.potentialCount,3,'all three Plain Red Stripes are only potential');
+  assert.equal(plain.controlledCount,1,'only the Iris Stripe can be secured from the current floor');
+  assert.equal(plain.strong,false,'three Stripes sitting in hand must not be treated as a completed/near-certain set');
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m9-3');
+  assert.equal(recommendation.target.id,'m9-1');
+  assert.match(recommendation.reason,/Sake Cup/);
+});
+
+test('Training priority is unique Star hit first, unique Rose hit second, two-target Iris hit third',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m6-3'),card('m5-3'),card('m5-1'),card('m10-3')],
+    human:api.makePlayer({hand:[card('m4-2'),card('m5-2'),card('m6-4'),card('m7-2'),card('m10-2')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  const star=api.trainingCandidate(card('m10-2'),profile);
+  const rose=api.trainingCandidate(card('m6-4'),profile);
+  const iris=api.trainingCandidate(card('m5-2'),profile);
+  assert.equal(star.matchCount,1);
+  assert.equal(rose.matchCount,1);
+  assert.equal(iris.matchCount,2);
+  assert.ok(star.score>rose.score,'Blue Stripe + only Star floor target must outrank two ordinary Rose Singles');
+  assert.ok(rose.score>iris.score,'unique Rose hit must outrank Iris while a second Iris target remains');
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m10-2');
+  assert.equal(recommendation.target.id,'m10-3');
+  assert.match(recommendation.reason,/only Maple target on the floor/);
+});
+
+test('Computer AI uses the same Star-over-Rose-over-Iris move evaluator as Training Mode',()=>{
+  useState(stateWith({
+    turn:'playerB',
+    floor:[card('m6-3'),card('m5-3'),card('m5-1'),card('m10-3')],
+    human:api.makePlayer(),
+    ai:api.makePlayer({hand:[card('m4-2'),card('m5-2'),card('m6-4'),card('m7-2'),card('m10-2')]})
+  }));
+  const move=api.bestCompetitiveMove('ai');
+  assert.equal(move.card.id,'m10-2');
+  assert.equal(move.target.id,'m10-3');
+  assert.equal(api.bestAiCard().id,'m10-2');
 });
 
 test('Training Mode prefers a 2x Single over an ordinary Stripe when no Stripe set is close',()=>{
