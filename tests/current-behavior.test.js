@@ -2995,6 +2995,21 @@ test('Training Mode chooses a hand-level strategy and explains Bright/Stripe pri
   assert.match(profile.priorityText,/Brights > Stripes > Singles > ordinary Pictures/);
 });
 
+test('Training Mode explains why the same hand card should take a Bright instead of a Stripe under a Bright plan',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m3-1'),card('m3-2')],
+    human:api.makePlayer({hand:[card('m3-3')],captured:[card('m1-1'),card('m8-1')]}),
+    ai:api.makePlayer({captured:[card('m11-1')]})
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.profile.primary,'bright');
+  assert.equal(recommendation.card.id,'m3-3');
+  assert.equal(recommendation.target.id,'m3-1');
+  assert.match(recommendation.reason,/Same-card alternative:/);
+  assert.match(recommendation.reason,/Brights > Stripes > Singles > ordinary Pictures/);
+});
+
 test('Training Mode defers Reserved captures while any live floor hit remains',()=>{
   const reservedHand=card('m12-1'),reservedFloor=card('m12-2'),liveHand=card('m5-2'),liveFloor=card('m5-3');
   useState(stateWith({
