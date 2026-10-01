@@ -42,8 +42,8 @@ test('Training strategy stays until user dismissal and gives concise tactical re
   assert.doesNotMatch(app,/Reserved rule:/);
   assert.doesNotMatch(app,/5-Birdies/);
   assert.match(app,/function trainingCardName\(card\)/);
-  assert.match(app,/Peony/);
-  assert.match(app,/Paulownia/);
+  assert.match(app,/Rose/);
+  assert.match(app,/Berry/);
 });
 
 test('Training Shake dialog recommends guaranteed Bomb when the fourth month card is on the floor',()=>{
