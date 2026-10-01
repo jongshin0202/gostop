@@ -11,7 +11,7 @@ test('ranked client keeps a two-target hand card uncommitted until the player ch
   const submit=app.slice(app.indexOf('async function submitOnlineCardPlay'),app.indexOf('function enterOnlineMatchView'));
   assert.match(submit,/const matches=matchesFor\(card\)/);
   assert.match(submit,/if\(matches\.length===2\)/);
-  assert.match(submit,/chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/chooseFloorTarget\(matches,'Choose which table card to hit',\{cancelable:true\}\)/);
   assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
 });
 

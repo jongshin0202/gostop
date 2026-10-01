@@ -156,7 +156,7 @@ test('Online semantic floor candidates collapse every registered stack but retai
   // stays uncommitted until the player chooses one highlighted legal target.
   assert.match(submit,/let targetId=null/);
   assert.match(submit,/const matches=matchesFor\(card\)/);
-  assert.match(submit,/if\(matches\.length===2\)[\s\S]*chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/if\(matches\.length===2\)[\s\S]*chooseFloorTarget\(matches,'Choose which table card to hit',\{cancelable:true\}\)/);
   assert.match(submit,/targetId=target\.id/);
   assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
   assert.doesNotMatch(submit,/state\.floor\.filter\(item=>item\.month===card\.month\)/);
@@ -2566,7 +2566,7 @@ test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, 
 
 test('match examples label zero, one, two, and deck-draw family matching instead of unexplained card rows',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
-  assert.match(html,/One floor match → capture/);assert.match(html,/No floor match → stays on floor/);assert.match(html,/Two floor matches → choose one/);assert.match(html,/The deck card also matches by family/);
+  assert.match(html,/One table match → capture/);assert.match(html,/No table match → stays on table/);assert.match(html,/Two table matches → choose one/);assert.match(html,/The deck card also matches by family/);
   assert.match(html,/data-card-ids="m8-3"/);assert.match(html,/data-card-ids="m8-1,m8-2"/);
   assert.doesNotMatch(html,/data-card-ids="m10-2,m11-3,m12-3"/);
 });
@@ -2982,7 +2982,7 @@ test('Training Mode does not call held-only Godori cards secured, while opening 
   assert.match(source,/await showTrainingOpeningStrategy\(openingAdvice\)/);
   const openingAdviceAt=source.indexOf('await showTrainingOpeningStrategy(openingAdvice)'),openingSpecialsAt=source.indexOf('await processOpeningSpecials(epoch)',openingAdviceAt);
   assert.ok(openingAdviceAt>=0&&openingSpecialsAt>openingAdviceAt,'Opening Strategy must be dismissed before opening specials and the first turn continue.');
-  assert.match(source,/The highlighted floor card is the stronger target/);
+  assert.match(source,/The highlighted table card is the stronger target/);
 });
 
 
@@ -3090,7 +3090,7 @@ test('How to Play teaches card families instead of calendar month names',()=>{
   assert.match(html,/The 12 card families/);
   assert.match(html,/Match by family/);
   assert.match(html,/Your Rose card/);
-  assert.match(html,/Bush floor card/);
+  assert.match(html,/Bush table card/);
   assert.match(html,/Your Hill card/);
   assert.match(html,/Drawn Star/);
   assert.doesNotMatch(html,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
@@ -3140,6 +3140,20 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
   assert.match(recommendation.reason,/Sake Cup/);
 });
 
+test('Training explains Iris recommendation through the Plain Red 3-Stripe opportunity, not target scarcity',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m5-2'),card('m9-3')],
+    human:api.makePlayer({hand:[card('m5-1'),card('m4-2'),card('m7-2')]}),
+    ai:api.makePlayer()
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m5-1');
+  assert.equal(recommendation.target.id,'m5-2');
+  assert.match(recommendation.reason,/strong chance to complete the Plain Red 3-Stripe set/);
+  assert.doesNotMatch(recommendation.reason,/only Iris target|computer can remove|current hit/i);
+});
+
 test('Training priority is unique Star hit first, unique Rose hit second, two-target Iris hit third',()=>{
   useState(stateWith({
     turn:'playerA',
@@ -3159,7 +3173,8 @@ test('Training priority is unique Star hit first, unique Rose hit second, two-ta
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m10-2');
   assert.equal(recommendation.target.id,'m10-3');
-  assert.match(recommendation.reason,/only Star target on the floor/);
+  assert.match(recommendation.reason,/Stripe/);
+  assert.doesNotMatch(recommendation.reason,/only .*target|computer can remove|current hit/i);
 });
 
 test('Training defers two-target Willow and takes the only Daisy hit first',()=>{
@@ -3183,8 +3198,8 @@ test('Training defers two-target Willow and takes the only Daisy hit first',()=>
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m9-3');
   assert.equal(recommendation.target.id,'m9-2');
-  assert.match(recommendation.reason,/only Daisy target on the floor/);
-  assert.match(recommendation.reason,/Willow can wait because 2 Willow targets are on the floor/);
+  assert.match(recommendation.reason,/Stripe/);
+  assert.doesNotMatch(recommendation.reason,/only .*target|can wait because|losing one|current hit/i);
 });
 
 test('Computer AI also defers two-target Willow and takes the unique Daisy hit',()=>{

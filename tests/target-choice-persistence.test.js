@@ -35,7 +35,7 @@ test('ranked two-target hand cards are not submitted until a highlighted floor t
   const submit=source.slice(source.indexOf('async function submitOnlineCardPlay'),source.indexOf('function enterOnlineMatchView'));
   assert.match(submit,/const matches=matchesFor\(card\)/);
   assert.match(submit,/if\(matches\.length===2\)\{/);
-  assert.match(submit,/chooseFloorTarget\(matches,'Choose which floor card to hit',\{cancelable:true\}\)/);
+  assert.match(submit,/chooseFloorTarget\(matches,'Choose which table card to hit',\{cancelable:true\}\)/);
   assert.match(submit,/targetId=target\.id/);
   assert.match(submit,/onlineSubmit\(\{type:'playCard',cardId,targetId\}\)/);
 });

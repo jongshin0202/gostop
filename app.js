@@ -824,7 +824,7 @@
     const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
     const trainingRecommendationAtChoice=presentation.trainingTurnRecommendation;
     if(presentation.trainingMode&&card&&trainingRecommendationAtChoice?.target&&choice.matches.some(item=>item.id===trainingRecommendationAtChoice.target.id)&&card.id!==trainingRecommendationAtChoice.target.id){
-      showTrainingCoach('Strategy Note',`The highlighted floor card is the stronger target for this play. ${trainingRecommendationAtChoice.reason}`);
+      showTrainingCoach('Strategy Note',`The highlighted table card is the stronger target for this play. ${trainingRecommendationAtChoice.reason}`);
     }
     presentation.targetChoice=null;presentation.targetChoiceCleanup=null;
     els.floor.querySelectorAll('[data-target-choice="1"]').forEach(el=>{el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');delete el.dataset.targetChoice;});
@@ -838,7 +838,7 @@
     if(presentation.targetChoice?.key===key){syncTargetChoiceUi();return null;}
     cleanupTargetChoice();
     presentation.locked=true;
-    showActionCue('human','choose a floor card');
+    showActionCue('human','choose a table card');
     return new Promise(resolve=>{
       presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve,cancelable};
       presentation.targetChoiceCleanup=()=>finishTargetChoice(null);
@@ -985,7 +985,7 @@
     presentation.pendingHumanCardId=card.id;
     let target=null;
     if(matches.length===1) target=matches[0];
-    else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which floor card to hit');
+    else if(matches.length===2) target=await chooseFloorTarget(matches,'Choose which table card to hit');
     else if(matches.length>2) target=chooseBestMatch(matches);
     if(!isGameplayPresentationCurrent(epoch))return;
 
@@ -1046,7 +1046,7 @@
       const matches=matchesFor(card);
       if(matches.length===2){
         presentation.pendingHumanCardId=cardId;
-        const target=await chooseFloorTarget(matches,'Choose which floor card to hit',{cancelable:true});
+        const target=await chooseFloorTarget(matches,'Choose which table card to hit',{cancelable:true});
         if(!target){
           const next=presentation.queuedHumanCardSwitch;
           presentation.queuedHumanCardSwitch=null;
@@ -1247,7 +1247,7 @@
     }else if(drawMatches.length===1){
       drawTarget=drawMatches[0];
     }else if(drawMatches.length===2){
-      if(side==='human') drawTarget=await chooseFloorTarget(drawMatches,'Deck card: choose which floor card to hit');
+      if(side==='human') drawTarget=await chooseFloorTarget(drawMatches,'Deck card: choose which table card to hit');
       else { drawTarget=chooseBestMatch(drawMatches); await previewAiTarget(drawTarget); }
       if(!isGameplayPresentationCurrent(epoch))return;
     }else if(drawMatches.length>2){
@@ -1299,7 +1299,7 @@
     let target=null;
     if(matches.length===1)target=matches[0];
     else if(matches.length===2){
-      if(side==='human')target=await chooseFloorTarget(matches,'Choose which floor card to hit');
+      if(side==='human')target=await chooseFloorTarget(matches,'Choose which table card to hit');
       else{target=chooseBestMatch(matches);await previewAiTarget(target);}
       if(!isGameplayPresentationCurrent(epoch))return;
     }else if(matches.length>2)target=chooseBestMatch(matches);
@@ -1591,8 +1591,8 @@
     if(els.shakeTrainingReason){
       els.shakeTrainingReason.hidden=!training;
       if(training)els.shakeTrainingReason.textContent=bombReady
-        ?`Recommended: Bomb. The fourth ${monthName} card is already on the floor, so this Bomb is guaranteed. Bomb immediately captures all four ${monthName} cards, steals one Single when available, and gives two optional blank turns. Shake would give your final score a ×${shakeMultiplier} multiplier if you win, but choose Bomb here for the guaranteed value instead.`
-        :`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Keep for Bomb keeps the set hidden so you can Bomb later if the fourth ${monthName} card appears on the floor.`;
+        ?`Recommended: Bomb. The fourth ${monthName} card is already on the table, so this Bomb is guaranteed. Bomb immediately captures all four ${monthName} cards, steals one Single when available, and gives two optional blank turns. Shake would give your final score a ×${shakeMultiplier} multiplier if you win, but choose Bomb here for the guaranteed value instead.`
+        :`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Keep for Bomb keeps the set hidden so you can Bomb later if the fourth ${monthName} card appears on the table.`;
     }
     if(els.keepSecretBtn){
       els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
@@ -2517,7 +2517,7 @@
           ?'Godori > Brights > strong Stripe sets > 2x Singles > Singles > ordinary Pictures.'
           :'2x Singles > Singles > Brights > Stripes > ordinary Pictures.';
     let summary='';
-    if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest immediate route: '+strongestRibbon.controlledCount+' of the 3 set cards are already captured or can be secured from the current floor'+(strongestRibbon.potentialCount>strongestRibbon.controlledCount?(' ('+strongestRibbon.potentialCount+' are still possible including cards only held in hand)'):'')+'.';
+    if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest immediate route: '+strongestRibbon.controlledCount+' of the 3 set cards are already captured or can be secured from the current table'+(strongestRibbon.potentialCount>strongestRibbon.controlledCount?(' ('+strongestRibbon.potentialCount+' are still possible including cards only held in hand)'):'')+'.';
     else if(primary==='bright')summary='Brights are the clearest route: you already have or can immediately reach '+brightRoute.controlledCount+' Brights.';
     else if(primary==='godori')summary='Godori is live: you already have or can immediately reach '+godoriRoute.controlledCount+' of the 3 bird cards.';
     else summary='No major set is close yet, so build Singles and take 2x Singles when available.';
@@ -2647,7 +2647,7 @@
     const matches=matchesFor(card);
     if(!matches.length){
       const strategic=trainingStrategicCardValue(card,profile),competitive=competitiveMoveScore('human',card,null);
-      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no floor capture is available.',shortWhy:'No floor capture is available for this card.'};
+      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no table capture is available.',shortWhy:'No table capture is available for this card.'};
     }
     let best=null;const targetChoices=[];
     for(const target of matches){
@@ -2670,33 +2670,24 @@
     return best;
   }
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
-    if(!candidate?.target)return candidate?.shortWhy||'No floor capture is available.';
+    if(!candidate?.target)return candidate?.shortWhy||'No table capture is available.';
     if(candidate.opportunity)return candidate.opportunity;
-    if(candidate.uniqueFloorOpportunity){
-      const family=trainingFlowerName(candidate.card.month);
-      const deferred=(state?.human?.hand||[]).map(card=>({card,matches:matchesFor(card)})).filter(item=>item.card.id!==candidate.card.id&&item.matches.length>=2).sort((a,b)=>b.matches.length-a.matches.length||a.card.id.localeCompare(b.card.id))[0];
-      if(deferred){
-        const deferredFamily=trainingFlowerName(deferred.card.month);
-        return 'This is the only '+family+' target on the floor. Take it now. '+deferredFamily+' can wait because '+deferred.matches.length+' '+deferredFamily+' targets are on the floor, so losing one still leaves another hit.';
-      }
-      return 'This is the only '+family+' target on the floor. Take it now before the computer can remove your current hit.';
-    }
-    const gained=candidate.gained||[],strongRibbon=gained.find(card=>card.type==='ribbon'&&profile.ribbonRoutes?.[card.ribbonSet]?.strong);
-    if(strongRibbon){
-      const route=profile.ribbonRoutes[strongRibbon.ribbonSet];
-      return route.veryStrong
-        ?'You can realistically complete the '+route.name+' Stripe set from this hand, so this Stripe is worth taking before lower-value captures.'
-        :'This advances your live '+route.name+' Stripe set, one of the strongest scoring routes in this hand.';
+    const gained=candidate.gained||[];
+    const stripe=gained.find(card=>card.type==='ribbon');
+    if(stripe){
+      const route=profile.ribbonRoutes?.[stripe.ribbonSet];
+      if(route?.potentialCount>=3)return 'This captures a Stripe and gives you a strong chance to complete the '+route.name+' 3-Stripe set.';
+      if(route?.potentialCount>=2)return 'This captures a Stripe and keeps the '+route.name+' 3-Stripe set within reach.';
+      return 'This captures a Stripe and builds toward Stripe scoring.';
     }
     if(gained.some(card=>card.type==='bright')){
       return profile.brightRoute?.strong?'Brights are a strong route in this hand, and this capture moves you closer to a 3-Bright score.':'A Bright is the strongest available scoring card here.';
     }
-    if(gained.some(card=>card.flags?.includes('doublePi')))return 'A 2x Single counts as two Singles, so it is worth more than an ordinary Stripe or Picture when no stronger set is close.';
-    if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'Take the Sake Cup now. It can count as 2 Singles, so this floor card is much more valuable than an ordinary Single.';
+    if(gained.some(card=>card.flags?.includes('doublePi')))return 'A 2x Single counts as two Singles, so it is worth more than an ordinary Single or Picture when no stronger set is close.';
+    if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'The Sake Cup can count as 2 Singles, making it much more valuable than an ordinary Single.';
     if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.strong)return 'This keeps the 3-bird Godori set within reach.';
-    if(gained.some(card=>card.type==='pi'))return 'No stronger immediate capture is available, so building Singles is the safest scoring route.';
-    if(gained.some(card=>card.type==='ribbon'))return 'This Stripe improves a reachable scoring route without passing up a more urgent floor capture.';
-    return 'No Bright, Stripe, or Single capture is available, so this is the best remaining capture.';
+    if(gained.some(card=>card.type==='pi'))return 'No stronger scoring capture is available, so building Singles is the best scoring route.';
+    return 'This is the strongest available scoring capture.';
   }
   function trainingAlternativeSummary(best,sorted){
     const routeFamily=best?.target?.type==='ribbon'?best.target.ribbonSet:null;
@@ -2719,7 +2710,7 @@
     });
     const best={...sorted[0]},why=trainingMoveWhy(best,profile);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+' to take '+best.captureDescription+'.':'Play '+trainingCardName(best.card)+'.';
-    const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed floor capture left, so now is the right time to take it.':'';
+    const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
     const alternative=trainingAlternativeSummary(best,sorted);
     best.shortWhy=why;
@@ -2736,7 +2727,7 @@
     const profile=trainingStrategyProfile(state.human);
     if(profile.primary==='stripe'){
       const route=profile.strongestRibbon;
-      return ('Best plan: '+route.name+' Stripes. You already have or can immediately reach '+route.controlledCount+' of the 3 set cards'+(route.immediateCount?(', including '+route.immediateCount+' on the floor you can take now'):'')+'. '+profile.backup).trim();
+      return ('Best plan: '+route.name+' Stripes. You already have or can immediately reach '+route.controlledCount+' of the 3 set cards'+(route.immediateCount?(', including '+route.immediateCount+' on the table you can take now'):'')+'. '+profile.backup).trim();
     }
     if(profile.primary==='bright')return ('Best plan: Brights. You already have or can immediately reach '+profile.brightRoute.controlledCount+' Brights, so protect that route and take Bright captures when they are available. '+profile.backup).trim();
     if(profile.primary==='godori')return ('Best plan: Godori. You already have or can immediately reach '+profile.godoriRoute.controlledCount+' of the 3 bird cards, so protect that set while it is still live. '+profile.backup).trim();
@@ -2821,7 +2812,7 @@
   function trainingOpponentThreatExplanation(threat){
     if(!threat?.canWin)return '';
     const names=threat.targets.map(trainingCardName),capture=names.length===1
-      ?'match and capture '+names[0]+' from the floor'
+      ?'match and capture '+names[0]+' from the table'
       :'match and capture '+names.join(' and ')+' during its play and draw';
     const scoring=threat.scoreParts.length?threat.scoreParts.join(' and '):('the captures add '+threat.gain+' points');
     return 'The computer is at '+threat.beforeScore+'. If it can '+capture+', '+scoring+', taking it from '+threat.beforeScore+' to '+threat.afterScore+' — enough to reach the '+finishThreshold+'-point finish threshold.';
@@ -2842,7 +2833,7 @@
       else reason='STOP. Lock in '+preview.total+' points now. The extra upside from another Go is smaller than the comeback risk.';
     }else{
       const upside=profile.primary==='stripe'?('your '+profile.strongestRibbon.name+' Stripe set is still close'):profile.primary==='bright'?'your Bright route is still strong':profile.primary==='godori'?'Godori is still within reach':'you still have useful scoring cards left';
-      if(safePressure)reason='GO. You lead '+sc.total+'–'+opponentScore+' with '+turns+' turns left. The computer has no visible route to '+finishThreshold+' from the current floor over its next '+horizonTurns+' turn'+(horizonTurns===1?'':'s')+', so there is time to press your lead.';
+      if(safePressure)reason='GO. You lead '+sc.total+'–'+opponentScore+' with '+turns+' turns left. The computer has no visible route to '+finishThreshold+' from the current table over its next '+horizonTurns+' turn'+(horizonTurns===1?'':'s')+', so there is time to press your lead.';
       else reason='GO. You lead '+sc.total+'–'+opponentScore+' with '+turns+' turn'+(turns===1?'':'s')+' left, and '+upside+'. There is enough upside to keep playing.';
     }
     return {...analysis,decision,reason,stopPoints:preview.total,opponentScore,immediateThreat,horizonThreat};
@@ -3254,10 +3245,10 @@
       if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));showGameplayModal(els.bombDialog);return;}
       if(decision?.type==='goStopDecision'){await presentOnlineGoStopDecision(decision);return;}
       if(decision?.type==='chooseFloorTarget'){
-        const targets=decision.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');
+        const targets=decision.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which table card to hit');
         if(target)onlineSubmit({type:'chooseFloorTarget',source:decision.source,targetId:target.id});return;
       }
-      if(snapshot.nextAction?.type==='chooseFloorTarget'){const targets=snapshot.nextAction.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which floor card to hit');if(target)onlineSubmit({type:'chooseFloorTarget',source:snapshot.nextAction.source,targetId:target.id});return;}
+      if(snapshot.nextAction?.type==='chooseFloorTarget'){const targets=snapshot.nextAction.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which table card to hit');if(target)onlineSubmit({type:'chooseFloorTarget',source:snapshot.nextAction.source,targetId:target.id});return;}
       if(snapshot.nextAction){onlineSubmit(snapshot.nextAction);return;}
       const connected=globalThis.goStopOnlineSession?.socket?.readyState===WebSocket.OPEN;
       presentation.locked=!globalThis.GoStopOnline.viewerCanInteract(snapshot,{connected,pendingActionId:globalThis.goStopOnlineSession.pendingActionId,blocked:onlineFlowBlocks(snapshot)});render();
