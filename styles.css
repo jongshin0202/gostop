@@ -733,6 +733,10 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 .training-coach-copy p{margin:0;font:650 13px/1.38 system-ui,sans-serif;color:#f5ead5}
 #trainingCoachDismiss{flex:0 0 32px;width:32px;height:32px;border:1px solid rgba(242,199,90,.34);border-radius:999px;background:#ffffff09;color:#f6e8c8;font-size:20px;line-height:1;cursor:pointer}
 #trainingCoachDismiss:hover,#trainingCoachDismiss:focus-visible{background:#ffffff16;outline:2px solid rgba(242,199,90,.65);outline-offset:2px}
+.training-opening-dismiss-layer{position:fixed;inset:0;z-index:1376;background:transparent;cursor:pointer;touch-action:manipulation}
+.training-choice-reason{margin:10px 0 2px;padding:10px 12px;border:1px solid rgba(242,199,90,.45);border-radius:10px;background:rgba(255,214,94,.08);color:#f8e8c3;font:650 13px/1.42 system-ui,sans-serif;text-align:left}
+.training-choice-reason[hidden]{display:none!important}
+.training-choice-recommended{outline:3px solid #ffd65e!important;outline-offset:3px;box-shadow:0 0 0 5px rgba(255,214,94,.15),0 0 22px rgba(255,214,94,.45)!important}
 .floor .floor-card.training-recommended{z-index:22;outline:4px solid #ffd65e;outline-offset:4px;box-shadow:0 0 0 7px rgba(255,214,94,.18),0 0 28px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42);animation:trainingTargetPulse .72s ease-in-out infinite alternate}
 .floor .floor-card.training-recommended.training-warning{outline-color:#ffca52;box-shadow:0 0 0 7px rgba(228,59,50,.16),0 0 18px rgba(228,59,50,.42),0 0 30px rgba(255,214,94,.72),0 10px 20px rgba(0,0,0,.42)}
 .hand-card.training-referenced,.floor .floor-card.training-referenced{
