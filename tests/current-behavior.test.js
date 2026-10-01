@@ -2954,8 +2954,8 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m3-1');
   assert.equal(recommendation.target.id,'m3-2');
-  assert.match(recommendation.reason,/3-Stripe set/);
-  assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/highlighted/);
+  assert.match(recommendation.reason,/Red Stripe set/);
+  assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/I would still choose/);
 });
 
 test('Training Mode opening strategy recognizes a reachable third Godori bird, stays pinned until dismissal, then uses five-second turn coaching',()=>{
@@ -2965,7 +2965,10 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird, s
     human:api.makePlayer({hand:[card('m2-1'),card('m4-1'),card('m8-3')]}),
     ai:api.makePlayer()
   }));
-  assert.match(api.trainingOpeningStrategy(),/5-Birdies \(Godori\)|Godori/);
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/Godori/);
+  assert.match(opening,/3 bird cards/);
+  assert.doesNotMatch(opening,/5-Birdies|Priority:|Reserved rule:|opponent has captured none/i);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
   assert.match(coach,/setTimeout\(\(\)=>\{/);
@@ -2980,7 +2983,7 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird, s
 });
 
 
-test('Training Mode chooses a hand-level strategy and explains Bright/Stripe priority',()=>{
+test('Training Mode recognizes a nearly controlled Blue Stripe set over a generic Bright route',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m8-1'),card('m9-2')],
@@ -2988,14 +2991,15 @@ test('Training Mode chooses a hand-level strategy and explains Bright/Stripe pri
     ai:api.makePlayer({captured:[card('m11-1')]})
   }));
   const profile=api.trainingStrategyProfile();
-  assert.equal(profile.fiveBrightViable,false);
-  assert.equal(profile.primary,'bright');
+  assert.equal(profile.primary,'stripe');
+  assert.equal(profile.strongestRibbon.family,'blue');
+  assert.equal(profile.strongestRibbon.veryStrong,true);
   assert.equal(profile.stripeViable,true);
-  assert.match(profile.label,/Brights/);
-  assert.match(profile.priorityText,/Brights > Stripes > Singles > ordinary Pictures/);
+  assert.match(profile.label,/Blue Stripes/);
+  assert.match(api.trainingOpeningStrategy(),/Best plan: Blue Stripes/);
 });
 
-test('Training Mode explains why the same hand card should take a Bright instead of a Stripe under a Bright plan',()=>{
+test('Training Mode explains a Bright target in beginner language without dumping priority rules',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m3-1'),card('m3-2')],
@@ -3006,8 +3010,9 @@ test('Training Mode explains why the same hand card should take a Bright instead
   assert.equal(recommendation.profile.primary,'bright');
   assert.equal(recommendation.card.id,'m3-3');
   assert.equal(recommendation.target.id,'m3-1');
-  assert.match(recommendation.reason,/Same-card alternative:/);
-  assert.match(recommendation.reason,/Brights > Stripes > Singles > ordinary Pictures/);
+  assert.match(recommendation.reason,/Cherry Blossom Bright/);
+  assert.match(recommendation.reason,/3 Brights|3-Bright/);
+  assert.doesNotMatch(recommendation.reason,/Priority:|Reserved rule:|ordinary Pictures/);
 });
 
 test('Training Mode defers Reserved captures while any live floor hit remains',()=>{
@@ -3024,7 +3029,7 @@ test('Training Mode defers Reserved captures while any live floor hit remains',(
   assert.equal(recommendation.card.id,'m5-2');
   assert.equal(recommendation.target.id,'m5-3');
   assert.match(recommendation.reason,/Stripe.*Single|Single.*Stripe/);
-  assert.match(recommendation.reason,/Reserved/);
+  assert.doesNotMatch(recommendation.reason,/Reserved rule|Priority:/);
 });
 
 test('Training recommendation explains the computer-player strategy and a second playable alternative',()=>{
@@ -3036,9 +3041,9 @@ test('Training recommendation explains the computer-player strategy and a second
   }));
   const recommendation=api.trainingRecommendation();
   assert.ok(recommendation?.target);
-  assert.match(recommendation.reason,/If I were playing this hand/);
-  assert.match(recommendation.reason,/Current plan:/);
-  assert.match(recommendation.reason,/Second choice:/);
+  assert.match(recommendation.reason,/I would play/);
+  assert.match(recommendation.reason,/Next best:/);
+  assert.doesNotMatch(recommendation.reason,/Current plan:|Priority:|Reserved rule:/);
 });
 
 test('Training Mode recommends how to use the September sake cup from current scoring strategy',()=>{
@@ -3061,6 +3066,54 @@ test('Training Mode recommends how to use the September sake cup from current sc
   choice=api.trainingGukjinRecommendation();
   assert.equal(choice.mode,'animal');
   assert.match(choice.reason,/Recommended: Use as Picture/);
+});
+
+test('Training Mode uses picture-family names instead of month numbers for beginner coaching',()=>{
+  assert.equal(api.trainingFlowerName(6),'Peony');
+  assert.equal(api.trainingCardName(card('m6-2')),'Peony Blue Stripe');
+  assert.equal(api.trainingCardName(card('m11-3')),'Paulownia 2x Single');
+  assert.equal(api.trainingCardName(card('m9-1')),'Chrysanthemum Sake Cup');
+});
+
+test('Training Mode takes a very strong Blue Stripe route before a red Stripe or 2x Single',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m6-2'),card('m9-2'),card('m1-2'),card('m11-3')],
+    human:api.makePlayer({hand:[card('m6-3'),card('m9-3'),card('m10-2'),card('m1-3'),card('m11-1')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.primary,'stripe');
+  assert.equal(profile.strongestRibbon.family,'blue');
+  assert.equal(profile.strongestRibbon.controlledCount,3);
+  assert.equal(profile.strongestRibbon.immediateCount,2);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.target.ribbonSet,'blue');
+  assert.match(recommendation.reason,/Blue Stripe set/);
+  assert.match(recommendation.reason,/2x Single/);
+});
+
+test('Training Mode prefers a 2x Single over an ordinary Stripe when no Stripe set is close',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m6-2'),card('m11-3')],
+    human:api.makePlayer({hand:[card('m6-3'),card('m11-1')]}),
+    ai:api.makePlayer({captured:[card('m9-2')]})
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.ribbonRoutes.blue.alive,false);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.target.id,'m11-3');
+  assert.match(recommendation.reason,/2x Single/);
+});
+
+test('Training Go or Stop advice is produced synchronously when the decision appears',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const block=source.slice(source.indexOf('async function humanGoStop'),source.indexOf('function presentStopResult'));
+  assert.match(block,/trainingGoStopRecommendation\(sc\)/);
+  assert.match(block,/showTrainingCoach\('GO \/ STOP ADVICE',trainingAdvice\.reason\)/);
+  assert.ok(block.indexOf("showTrainingCoach('GO / STOP ADVICE'")<block.indexOf('showGameplayDialog(els.decisionDialog'));
+  assert.doesNotMatch(block,/setTimeout/);
 });
 
 test('mobile hand browsing, second tap, and flick share one deterministic native-touch path',()=>{

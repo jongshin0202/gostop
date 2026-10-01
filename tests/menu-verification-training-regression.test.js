@@ -26,18 +26,23 @@ test('verification dialog self-heals after email verification without manual dis
 });
 
 
-test('Training strategy stays until user dismissal and explains the September sake cup choice',()=>{
+test('Training strategy stays until user dismissal and gives concise tactical recommendations',()=>{
   assert.match(html,/id="gukjinTrainingReason" class="training-choice-reason" hidden/);
   assert.match(app,/function trainingGukjinRecommendation\(human=state\?\.human\)/);
-  assert.match(app,/Recommended: \$\{choice\}/);
-  assert.match(app,/As a Single it counts as 2 Singles/);
+  assert.match(app,/Recommended: /);
+  assert.match(app,/Use as 2 Singles/);
   assert.match(app,/training-choice-recommended/);
   assert.match(app,/function showTrainingOpeningStrategy\(text\)/);
   assert.match(app,/trainingOpeningDismissLayer\.className='training-opening-dismiss-layer'/);
   assert.match(app,/Tap or click anywhere when you are ready to continue/);
   assert.match(app,/await showTrainingOpeningStrategy\(openingAdvice\)/);
-  assert.match(app,/Reserved rule:/);
-  assert.match(app,/If I were playing this hand, I would use the/);
+  assert.match(app,/Best plan:/);
+  assert.match(app,/I would play /);
+  assert.doesNotMatch(app,/Reserved rule:/);
+  assert.doesNotMatch(app,/5-Birdies/);
+  assert.match(app,/function trainingCardName\(card\)/);
+  assert.match(app,/Peony/);
+  assert.match(app,/Paulownia/);
 });
 
 test('Training Shake dialog recommends guaranteed Bomb when the fourth month card is on the floor',()=>{
@@ -48,6 +53,7 @@ test('Training Shake dialog recommends guaranteed Bomb when the fourth month car
   assert.match(app,/Bomb immediately captures all four/);
   assert.match(app,/gives two optional blank turns/);
   assert.match(app,/Why Shake: revealing these three/);
+  assert.match(app,/trainingFlowerName\(decision\.month\)/);
   assert.match(app,/Keep for Bomb keeps the set hidden so you can Bomb later/);
   assert.match(app,/keepSecretBtn\.classList\.toggle\('training-choice-recommended',training&&bombReady\)/);
   assert.match(app,/els\.shakeTrainingReason\.hidden=!training/);
