@@ -2555,7 +2555,7 @@ test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, 
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
   assert.match(i18n.translate('en','scoringGate'),/Seven points is the first eligibility gate/);
   for(const text of ['1 Go','2 Go','3 Go','4 Go','5 Go','×2','×4','×8'])assert.ok(html.includes(text),text);
-  for(const text of ['3 Brights without the Rain & Willow Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
+  for(const text of ['3 Brights without the Willow Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
   assert.match(html,/data-card-ids="m6-4"/);assert.match(html,/data-card-ids="m6-3"/);
   assert.doesNotMatch(html,/data-card-ids="m6-1,m7-2,m8-3"/);
   assert.match(html,/data-card-ids="m5-1,m5-2"/);assert.match(html,/data-card-ids="m5-3"/);assert.match(html,/data-card-ids="m5-4"/);
@@ -3011,7 +3011,7 @@ test('Training Mode explains a Bright target in beginner language without dumpin
   assert.equal(recommendation.profile.primary,'bright');
   assert.equal(recommendation.card.id,'m3-3');
   assert.equal(recommendation.target.id,'m3-1');
-  assert.match(recommendation.reason,/Cherry Blossom Bright/);
+  assert.match(recommendation.reason,/Cherry Bright/);
   assert.match(recommendation.reason,/3 Brights|3-Bright/);
   assert.doesNotMatch(recommendation.reason,/Priority:|Reserved rule:|ordinary Pictures/);
 });
@@ -3072,27 +3072,27 @@ test('Training Mode recommends how to use the September sake cup from current sc
 
 test('canonical card family names are locked for all twelve families and user-facing card names',()=>{
   const families=[
-    'Pine & Crane','Plum Blossom','Cherry Blossom','Wisteria','Iris','Peony',
-    'Bush Clover','Moon & Pampas','Chrysanthemum','Maple','Paulownia','Rain & Willow'
+    'Pine','Plum','Cherry','Vine','Iris','Rose',
+    'Bush','Hill','Daisy','Star','Berry','Willow'
   ];
-  families.forEach((name,index)=>assert.equal(api.cardFamilyName(index+1),name));
-  assert.equal(api.cardDisplayName(card('m1-1')),'Pine & Crane Bright');
-  assert.equal(api.cardDisplayName(card('m2-1')),'Plum Blossom Bird Picture');
-  assert.equal(api.cardDisplayName(card('m4-2')),'Wisteria Plain Red Stripe');
-  assert.equal(api.cardDisplayName(card('m9-1')),'Chrysanthemum Sake Cup');
-  assert.equal(api.cardDisplayName(card('m11-3')),'Paulownia 2x Single');
-  assert.equal(api.cardDisplayName(card('m12-3')),'Rain & Willow Stripe');
-  assert.equal(api.cardDisplayName(card('m12-4')),'Rain & Willow 2x Single');
+  families.forEach((name,index)=>{assert.equal(api.cardFamilyName(index+1),name);assert.match(name,/^[A-Za-z]+$/);});
+  assert.equal(api.cardDisplayName(card('m1-1')),'Pine Bright');
+  assert.equal(api.cardDisplayName(card('m2-1')),'Plum Bird Picture');
+  assert.equal(api.cardDisplayName(card('m4-2')),'Vine Plain Red Stripe');
+  assert.equal(api.cardDisplayName(card('m9-1')),'Daisy Sake Cup');
+  assert.equal(api.cardDisplayName(card('m11-3')),'Berry 2x Single');
+  assert.equal(api.cardDisplayName(card('m12-3')),'Willow Stripe');
+  assert.equal(api.cardDisplayName(card('m12-4')),'Willow 2x Single');
 });
 
 test('How to Play teaches card families instead of calendar month names',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
   assert.match(html,/The 12 card families/);
   assert.match(html,/Match by family/);
-  assert.match(html,/Your Peony card/);
-  assert.match(html,/Bush Clover floor card/);
-  assert.match(html,/Your Moon & Pampas card/);
-  assert.match(html,/Drawn Maple/);
+  assert.match(html,/Your Rose card/);
+  assert.match(html,/Bush floor card/);
+  assert.match(html,/Your Hill card/);
+  assert.match(html,/Drawn Star/);
   assert.doesNotMatch(html,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
   for(const key of ['tutorialOverview','tutorialCardTypes','tutorialMatches','matchingGuide','novemberDoubleHelp','decemberDoubleHelp','sakeCupHelp']){
     assert.doesNotMatch(i18n.translate('en',key),/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
@@ -3102,10 +3102,10 @@ test('How to Play teaches card families instead of calendar month names',()=>{
 });
 
 test('Training Mode uses picture-family names instead of month numbers for beginner coaching',()=>{
-  assert.equal(api.trainingFlowerName(6),'Peony');
-  assert.equal(api.trainingCardName(card('m6-2')),'Peony Blue Stripe');
-  assert.equal(api.trainingCardName(card('m11-3')),'Paulownia 2x Single');
-  assert.equal(api.trainingCardName(card('m9-1')),'Chrysanthemum Sake Cup');
+  assert.equal(api.trainingFlowerName(6),'Rose');
+  assert.equal(api.trainingCardName(card('m6-2')),'Rose Blue Stripe');
+  assert.equal(api.trainingCardName(card('m11-3')),'Berry 2x Single');
+  assert.equal(api.trainingCardName(card('m9-1')),'Daisy Sake Cup');
 });
 
 test('Training Mode records two immediately securable Blue Stripes separately from a third Blue Stripe held only in hand',()=>{
@@ -3123,7 +3123,7 @@ test('Training Mode records two immediately securable Blue Stripes separately fr
   assert.equal(route.veryStrong,false);
 });
 
-test('Training recommendation takes the Chrysanthemum Sake Cup instead of overvaluing three Plain Red Stripes held only in hand',()=>{
+test('Training recommendation takes the Daisy Sake Cup instead of overvaluing three Plain Red Stripes held only in hand',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m4-1'),card('m5-3'),card('m5-1'),card('m9-1'),card('m10-3')],
@@ -3159,7 +3159,7 @@ test('Training priority is unique Star hit first, unique Rose hit second, two-ta
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m10-2');
   assert.equal(recommendation.target.id,'m10-3');
-  assert.match(recommendation.reason,/only Maple target on the floor/);
+  assert.match(recommendation.reason,/only Star target on the floor/);
 });
 
 test('Computer AI uses the same Star-over-Rose-over-Iris move evaluator as Training Mode',()=>{
@@ -3233,7 +3233,7 @@ test('Training Go Stop explains the exact visible next-turn scoring path when th
   assert.equal(threat.afterScore,7);
   assert.equal(threat.gain,3);
   assert.equal(threat.targets.map(card=>card.id).join(','),'m8-1');
-  assert.match(api.trainingOpponentThreatExplanation(threat),/Moon & Pampas Bright/);
+  assert.match(api.trainingOpponentThreatExplanation(threat),/Hill Bright/);
   assert.match(api.trainingOpponentThreatExplanation(threat),/3 Brights add 3 points/);
   assert.match(api.trainingOpponentThreatExplanation(threat),/4 to 7/);
   const advice=api.trainingGoStopRecommendation({total:10});
