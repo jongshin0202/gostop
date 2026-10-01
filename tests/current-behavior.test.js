@@ -3150,8 +3150,9 @@ test('Training explains Iris recommendation through the Plain Red 3-Stripe oppor
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m5-1');
   assert.equal(recommendation.target.id,'m5-2');
+  assert.match(recommendation.reason,/^Play Iris Picture onto Iris Plain Red Stripe\./);
   assert.match(recommendation.reason,/strong chance to complete the Plain Red 3-Stripe set/);
-  assert.doesNotMatch(recommendation.reason,/only Iris target|computer can remove|current hit/i);
+  assert.doesNotMatch(recommendation.reason,/to take|only Iris target|computer can remove|current hit/i);
 });
 
 test('Training priority is unique Star hit first, unique Rose hit second, two-target Iris hit third',()=>{
