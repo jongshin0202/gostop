@@ -2986,6 +2986,26 @@ test('Training Mode does not call held-only Godori cards secured, while opening 
 });
 
 
+test('Opening Strategy reports Red Stripe locations separately for hand and table',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m2-2'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m2-3'),card('m3-2')]}),
+    ai:api.makePlayer()
+  }));
+  const route=api.trainingRibbonRoute('red');
+  assert.equal(route.controlledCount,2);
+  assert.equal(route.playableHandCount,1);
+  assert.equal(route.tableClaimableCount,1);
+  assert.equal(route.capturedCount,0);
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/Best plan: Red Stripes/);
+  assert.match(opening,/you have 1 Red Stripe in hand/);
+  assert.match(opening,/1 Red Stripe is on the table you can take now/);
+  assert.match(opening,/That puts 2 of the 3 set cards within immediate reach/);
+  assert.doesNotMatch(opening,/including 2 on the table|2 Red Stripes? (?:is|are) on the table/);
+});
+
 test('Training Mode distinguishes a possible Blue Stripe set from Blue Stripes that can actually be secured now',()=>{
   useState(stateWith({
     turn:'playerA',
