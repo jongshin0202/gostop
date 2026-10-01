@@ -11,7 +11,7 @@
   const authorityApi=globalThis.GoStopSessionAuthority;
   if(!TEST_MODE&&!authorityApi)throw new Error('GoStopSessionAuthority must load before app.js.');
   const {
-    monthNames,monthShort,assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
+    assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,
     hasFourOfMonth,matchingCards,score,scorePlayer,scoreWithGukjinMode,serializeGameState,deserializeGameState,initializeShakeEligibility,resolveOpeningState,resolveNagari,resolveThreePpeok,
     evaluateGoStop,applyGoStopAction,applyNormalTurnAction,applySpecialTurnAction,applySweepAction,classifyTurnOutcome,isHandExhausted
   }=engine;
@@ -739,7 +739,7 @@
       const stack=document.createElement('span'); stack.className='capture-stack';
       groupCards.forEach((c,i)=>{
         const img=document.createElement('img'); img.className='captured-mini'; img.dataset.cardId=c.id; img.src=artUrl(c.file); img.alt='';
-        img.title=`${monthShort[c.month-1]} ${c.type}`; img.style.zIndex=String(i+1); stack.appendChild(img);
+        img.title=cardDisplayName(c); img.style.zIndex=String(i+1); stack.appendChild(img);
         if((c.flags.includes('doublePi')||(c.id==='m9-1'&&owner.gukjinMode==='pi'))){const badge=document.createElement('span');badge.className='double-single-badge';badge.textContent='×2';stack.appendChild(badge);}
       });
       if(!groupCards.length){ const empty=document.createElement('span'); empty.className='capture-empty'; empty.textContent='—'; stack.appendChild(empty); }
