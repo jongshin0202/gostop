@@ -3041,7 +3041,8 @@ test('Training recommendation explains the computer-player strategy and a second
   }));
   const recommendation=api.trainingRecommendation();
   assert.ok(recommendation?.target);
-  assert.match(recommendation.reason,/^Play /);\n  assert.doesNotMatch(recommendation.reason,/\\bI would\\b/i);
+  assert.match(recommendation.reason,/^Play /);
+  assert.doesNotMatch(recommendation.reason,/\bI would\b/i);
   assert.match(recommendation.reason,/Next best:/);
   assert.doesNotMatch(recommendation.reason,/Current plan:|Priority:|Reserved rule:/);
 });
