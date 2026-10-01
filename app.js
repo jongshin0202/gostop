@@ -2789,8 +2789,8 @@
     const profile=trainingStrategyProfile(state.human);
     if(profile.primary==='stripe'){
       const route=profile.strongestRibbon,locations=[];
-      if(route.capturedCount)locations.push('you already captured '+route.capturedCount);
-      if(route.playableHandCount)locations.push('you have '+route.playableHandCount+' in hand');
+      if(route.capturedCount)locations.push('you already captured '+route.capturedCount+' '+route.name+' Stripe'+(route.capturedCount===1?'':'s'));
+      if(route.playableHandCount)locations.push('you have '+route.playableHandCount+' '+route.name+' Stripe'+(route.playableHandCount===1?'':'s')+' in hand');
       if(route.tableClaimableCount)locations.push(route.tableClaimableCount+' '+route.name+' Stripe'+(route.tableClaimableCount===1?' is':'s are')+' on the table you can take now');
       const locationText=locations.length===1?locations[0]:locations.length===2?(locations[0]+' and '+locations[1]):(locations.slice(0,-1).join(', ')+', and '+locations.at(-1));
       return ('Best plan: '+route.name+' Stripes. '+locationText+'. That puts '+route.controlledCount+' of the 3 set cards within immediate reach. '+profile.backup).trim();
