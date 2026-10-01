@@ -3140,6 +3140,48 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
   assert.match(recommendation.reason,/Sake Cup/);
 });
 
+test('Training no-capture strategy prefers a low-value paired family card and protects Iris for its unseen Stripe',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m2-3'),card('m3-3')],
+    human:api.makePlayer({
+      hand:[card('m5-1'),card('m7-1'),card('m7-2')],
+      captured:[card('m5-3')]
+    }),
+    ai:api.makePlayer({captured:[card('m5-4')]})
+  }));
+  const iris=api.competitiveDiscardContext('human',card('m5-1'));
+  assert.equal(iris.retainedFamily.length,0);
+  assert.equal(iris.bestUnseen.id,'m5-2');
+  const bush=api.competitiveDiscardContext('human',card('m7-1'));
+  assert.equal(bush.retainedFamily.length,1);
+  assert.ok(api.competitiveMoveScore('human',card('m7-1'),null)>api.competitiveMoveScore('human',card('m5-1'),null));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m7-1');
+  assert.equal(recommendation.target,null);
+  assert.match(recommendation.reason,/^Play Bush Picture\./);
+  assert.match(recommendation.reason,/No card for capture is available on the table\./);
+  assert.match(recommendation.reason,/another Bush card in hand/);
+  assert.match(recommendation.reason,/capture it on your next turn/);
+  assert.match(recommendation.reason,/Keep Iris Picture because the strongest unseen Iris card is Iris Plain Red Stripe/);
+  assert.doesNotMatch(recommendation.reason,/No table capture is available for this card|throw|discard/i);
+});
+
+test('Computer AI uses the same paired-family setup logic when no capture is available',()=>{
+  useState(stateWith({
+    turn:'playerB',
+    floor:[card('m1-3'),card('m2-3'),card('m3-3')],
+    human:api.makePlayer({captured:[card('m5-4')]}),
+    ai:api.makePlayer({
+      hand:[card('m5-1'),card('m7-1'),card('m7-2')],
+      captured:[card('m5-3')]
+    })
+  }));
+  const move=api.bestCompetitiveMove('ai');
+  assert.equal(move.target,null);
+  assert.equal(move.card.id,'m7-1');
+});
+
 test('Training explains Iris recommendation through the Plain Red 3-Stripe opportunity, not target scarcity',()=>{
   useState(stateWith({
     turn:'playerA',
