@@ -2183,11 +2183,15 @@
     return value;
   }
   function competitiveMoveUrgency(side,card,target=null){
-    if(!state||!card||!target)return {tier:0,matchCount:0,unique:false,immediateScoreGain:0,severeBlock:false};
+    if(!state||!card||!target)return {tier:0,matchCount:0,unique:false,familyLock:false,liveStripeTarget:false,immediateScoreGain:0,severeBlock:false};
     const player=state[side],opponent=state[side==='human'?'ai':'human'],matches=matchesFor(card),gained=[card,...expandedTargetCards(target)];
     const before=score(player?.captured||[],player?.gukjinMode||'animal').total,after=score([...(player?.captured||[]),...gained],player?.gukjinMode||'animal').total;
     const immediateScoreGain=Math.max(0,after-before),severeBlock=trainingThreatValue(target,opponent)>=105,unique=matches.length===1;
-    return {tier:(immediateScoreGain>0||severeBlock)?3:unique?2:1,matchCount:matches.length,unique,immediateScoreGain,severeBlock};
+    const sameFamilyInHand=(player?.hand||[]).filter(item=>item.month===card.month).length;
+    const familyLock=sameFamilyInHand>=2&&matches.length===1;
+    const liveStripeTarget=target.type==='ribbon'&&!!target.ribbonSet&&competitiveRibbonSetAlive(side,target.ribbonSet);
+    const tier=(immediateScoreGain>0||severeBlock)?4:(familyLock||liveStripeTarget)?3:unique?2:1;
+    return {tier,matchCount:matches.length,unique,familyLock,liveStripeTarget,immediateScoreGain,severeBlock};
   }
   function competitiveMoveIsBetter(candidate,best){
     if(!best)return true;
@@ -2223,10 +2227,13 @@
     const targetBundle=expandedTargetCards(target),gained=[card,...targetBundle],base=gained.reduce((sum,item)=>sum+competitiveCardValueForSide(side,item),0);
     const floorPremium=competitiveCardValueForSide(side,target)*.75;
     const uniqueOpportunity=matches.length===1?120:matches.length===2?-20:-35;
+    const sameFamilyInHand=(player.hand||[]).filter(item=>item.month===card.month).length;
+    const familyLockBonus=sameFamilyInHand>=2&&matches.length===1?190:0;
+    const liveStripeBonus=target.type==='ribbon'&&target.ribbonSet&&competitiveRibbonSetAlive(side,target.ribbonSet)?150:0;
     const scarcePremium=(target.id==='m9-1'&&target.flags?.includes('switchPi'))?120:target.flags?.includes('doublePi')?105:target.type==='bright'?70:target.flags?.includes('godori')?55:0;
     const progress=competitiveProgressValue(player,gained,side);
     const denial=trainingThreatValue(target,opponent)*1.05;
-    return base+floorPremium+uniqueOpportunity+scarcePremium+progress+denial;
+    return base+floorPremium+uniqueOpportunity+familyLockBonus+liveStripeBonus+scarcePremium+progress+denial;
   }
   function bestCompetitiveMove(side){
     const player=state?.[side];
@@ -2729,13 +2736,18 @@
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
     if(candidate.opportunity)return candidate.opportunity;
-    const gained=candidate.gained||[];
+    const gained=candidate.gained||[],urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,candidate.target);
+    if(urgency.familyLock){
+      const family=trainingFlowerName(candidate.card.month),targetCategory=trainingCategoryName(candidate.target);
+      return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use one '+family+' card now to capture the '+targetCategory+' while keeping the other '+family+' card in hand.';
+    }
     const stripe=gained.find(card=>card.type==='ribbon');
     if(stripe){
       const route=profile.ribbonRoutes?.[stripe.ribbonSet];
       if(route&&!route.alive)return 'This adds to your total Stripe count, but the '+route.name+' 3-Stripe set is already broken.';
       if(route?.potentialCount>=3)return 'This captures a Stripe and gives you a strong chance to complete the '+route.name+' 3-Stripe set.';
       if(route?.potentialCount>=2)return 'This captures a Stripe and keeps the '+route.name+' 3-Stripe set within reach.';
+      if(route?.alive)return 'This captures a '+route.name+' Stripe while its 3-Stripe path is still open.';
       return 'This captures a Stripe and builds toward Stripe scoring.';
     }
     if(gained.some(card=>card.type==='bright')){
