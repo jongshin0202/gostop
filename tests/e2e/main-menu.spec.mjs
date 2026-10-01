@@ -308,12 +308,19 @@ test('Android native touch keeps immediate first-tap menu response, second tap, 
   await context.close();
 });
 
-test('Training Mode launches a real local game and Your Captured Cards opens the complete score breakdown',async({page})=>{
+test('Training Mode pins the opening strategy until dismissal and Your Captured Cards opens the complete score breakdown',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#friendlyGamingBtn').click();
   await page.locator('#trainingModeBtn').click();
   await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:12000});
   await expect(page.locator('#table')).toBeVisible();
+  await expect(page.locator('#trainingCoachPanel')).toBeVisible({timeout:12000});
+  await expect(page.locator('#trainingCoachTitle')).toHaveText('Opening Strategy');
+  await expect(page.locator('#trainingCoachText')).toContainText('Tap or click anywhere');
+  await expect(page.locator('.training-opening-dismiss-layer')).toBeVisible();
+  await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
+  await expect(page.locator('#trainingCoachPanel')).toBeHidden();
+  await expect(page.locator('.training-opening-dismiss-layer')).toHaveCount(0);
   await expect(page.locator('[data-score-owner="player"]')).toBeVisible();
   await page.locator('[data-score-owner="player"]').click();
   await expect(page.locator('#scoreDialog')).toHaveJSProperty('open',true);
