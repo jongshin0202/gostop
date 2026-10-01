@@ -3108,6 +3108,62 @@ test('Training Mode prefers a 2x Single over an ordinary Stripe when no Stripe s
   assert.match(recommendation.reason,/2x Single/);
 });
 
+test('Training Go Stop keeps pressing an 8-0 lead when the current floor cannot give the opponent a visible finish path',()=>{
+  const opponentCaptured=cards(
+    'm1-1','m3-1',
+    'm5-1','m6-1','m7-1','m10-1',
+    'm1-2','m4-2','m6-2',
+    'm1-3','m2-3','m3-3','m4-3','m5-3','m6-3','m7-3','m8-3','m9-3'
+  );
+  useState(stateWith({
+    turn:'playerA',
+    deck:cards('m10-2','m10-4','m11-1','m11-4'),
+    floor:[card('m2-1'),card('m5-2')],
+    human:api.makePlayer({hand:[card('m12-2'),card('m12-3')]}),
+    ai:api.makePlayer({hand:[card('m10-3'),card('m11-2')],captured:opponentCaptured})
+  }));
+  assert.equal(api.score(opponentCaptured).total,0);
+  const horizon=api.trainingOpponentVisibleThreat(2);
+  assert.equal(horizon.canWin,false);
+  assert.ok(horizon.afterScore<7);
+  const advice=api.trainingGoStopRecommendation({total:8});
+  assert.equal(advice.decision,'go');
+  assert.match(advice.reason,/GO\. You lead 8–0 with 2 turns left/);
+  assert.match(advice.reason,/no visible route to 7/);
+});
+
+test('Training Go Stop explains the exact visible next-turn scoring path when the opponent can reach seven',()=>{
+  const opponentCaptured=cards(
+    'm1-1','m3-1',
+    'm5-1','m6-1','m7-1','m9-1','m10-1',
+    'm1-2','m2-2','m3-2'
+  );
+  useState(stateWith({
+    turn:'playerA',
+    deck:cards('m11-2','m12-2'),
+    floor:[card('m8-1')],
+    human:api.makePlayer({hand:[card('m12-1')],firstPpeokPoints:10,go:1}),
+    ai:api.makePlayer({hand:[card('m11-1')],captured:opponentCaptured})
+  }));
+  assert.equal(api.score(opponentCaptured).total,4);
+  const threat=api.trainingOpponentVisibleThreat(1);
+  assert.equal(threat.canWin,true);
+  assert.equal(threat.beforeScore,4);
+  assert.equal(threat.afterScore,7);
+  assert.equal(threat.gain,3);
+  assert.equal(threat.targets.map(card=>card.id).join(','),'m8-1');
+  assert.match(api.trainingOpponentThreatExplanation(threat),/Moon & Pampas Bright/);
+  assert.match(api.trainingOpponentThreatExplanation(threat),/3 Brights add 3 points/);
+  assert.match(api.trainingOpponentThreatExplanation(threat),/4 to 7/);
+  const advice=api.trainingGoStopRecommendation({total:10});
+  assert.equal(advice.decision,'stop');
+  assert.equal(advice.stopPoints,11);
+  assert.match(advice.reason,/STOP\. Lock in 11 points now/);
+  assert.match(advice.reason,/3 Brights add 3 points/);
+  assert.match(advice.reason,/4 to 7/);
+  assert.match(advice.reason,/7-point finish threshold/);
+});
+
 test('Training Go or Stop advice is produced synchronously when the decision appears',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const block=source.slice(source.indexOf('async function humanGoStop'),source.indexOf('function presentStopResult'));
