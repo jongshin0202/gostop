@@ -3294,7 +3294,8 @@ test('Training defers two-target Willow and takes the only Daisy hit first',()=>
   assert.equal(willow.matchCount,2);
   assert.equal(willow.urgency.tier,1);
   assert.equal(daisy.matchCount,1);
-  assert.equal(daisy.urgency.tier,2);
+  assert.equal(daisy.urgency.tier,3);
+  assert.equal(daisy.urgency.liveStripeTarget,true);
   assert.equal(api.competitiveMoveIsBetter(
     {card:daisy.card,target:daisy.target,score:daisy.competitive,urgency:daisy.urgency},
     {card:willow.card,target:willow.target,score:willow.competitive,urgency:willow.urgency}
@@ -3316,7 +3317,8 @@ test('Computer AI also defers two-target Willow and takes the unique Daisy hit',
   const move=api.bestCompetitiveMove('ai');
   assert.equal(move.card.id,'m9-3');
   assert.equal(move.target.id,'m9-2');
-  assert.equal(move.urgency.tier,2);
+  assert.equal(move.urgency.tier,3);
+  assert.equal(move.urgency.liveStripeTarget,true);
 });
 
 test('Computer AI uses the same Star-over-Rose-over-Iris move evaluator as Training Mode',()=>{
