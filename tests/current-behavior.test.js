@@ -2965,7 +2965,10 @@ test('Training Mode opening strategy recognizes a reachable third Godori bird, s
     human:api.makePlayer({hand:[card('m2-1'),card('m4-1'),card('m8-3')]}),
     ai:api.makePlayer()
   }));
-  const opening=api.trainingOpeningStrategy();\n  assert.match(opening,/Godori/);\n  assert.match(opening,/3 bird cards/);\n  assert.doesNotMatch(opening,/5-Birdies|Priority:|Reserved rule:|opponent has captured none/i);
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/Godori/);
+  assert.match(opening,/3 bird cards/);
+  assert.doesNotMatch(opening,/5-Birdies|Priority:|Reserved rule:|opponent has captured none/i);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
   assert.match(coach,/setTimeout\(\(\)=>\{/);
