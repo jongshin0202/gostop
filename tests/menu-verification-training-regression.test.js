@@ -52,7 +52,8 @@ test('Training Shake dialog recommends guaranteed Bomb when the fourth month car
   assert.match(app,/this Bomb is guaranteed/);
   assert.match(app,/Bomb immediately captures all four/);
   assert.match(app,/gives two optional blank turns/);
-  assert.match(app,/Why Shake: revealing these three/);\n  assert.match(app,/trainingFlowerName\(decision\.month\)/);
+  assert.match(app,/Why Shake: revealing these three/);
+  assert.match(app,/trainingFlowerName\(decision\.month\)/);
   assert.match(app,/Keep for Bomb keeps the set hidden so you can Bomb later/);
   assert.match(app,/keepSecretBtn\.classList\.toggle\('training-choice-recommended',training&&bombReady\)/);
   assert.match(app,/els\.shakeTrainingReason\.hidden=!training/);
