@@ -21,6 +21,23 @@
   const PLAYER_A = 'playerA';
   const PLAYER_B = 'playerB';
   const SOLO_VIEWER_ID = PLAYER_A;
+  const CARD_FAMILY_NAMES=Object.freeze({
+    1:'Pine & Crane',2:'Plum Blossom',3:'Cherry Blossom',4:'Wisteria',5:'Iris',6:'Peony',
+    7:'Bush Clover',8:'Moon & Pampas',9:'Chrysanthemum',10:'Maple',11:'Paulownia',12:'Rain & Willow'
+  });
+  function cardFamilyName(month){return CARD_FAMILY_NAMES[month]||('Family '+month);}
+  function cardRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain Red':'Stripe';}
+  function cardDisplayName(card){
+    if(!card)return 'card';
+    const family=cardFamilyName(card.month);
+    if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return family+' Sake Cup';
+    if(card.type==='bright')return family+' Bright';
+    if(card.type==='ribbon')return family+' '+cardRibbonName(card.ribbonSet)+' Stripe';
+    if(card.flags?.includes('doublePi'))return family+' 2x Single';
+    if(card.flags?.includes('godori'))return family+' Bird Picture';
+    if(card.type==='animal')return family+' Picture';
+    return family+' Single';
+  }
 
   function onlineValueForViewer(value,viewerId){
     const swapId=item=>item===PLAYER_A?PLAYER_B:item===PLAYER_B?PLAYER_A:item;
@@ -141,8 +158,7 @@
   const clampVolume = v => Math.max(0, Math.min(1, v));
   const i18n=globalThis.GoStopI18n;
   function t(key,vars){return i18n?i18n.translate(presentation.locale,key,vars):key;}
-  function localizedMonths(){return t('monthNames').split(',');}
-  function localizedMonth(month){return localizedMonths()[month-1]||monthNames[month-1];}
+  function localizedMonth(month){return cardFamilyName(month);}
   function deckVisualBackCount(count){return count<=0?0:count<=5?count:Math.max(3,Math.ceil(count/4));}
   function computeStageScale(width,height){return Math.min(1,width/1530,Math.max(0.5,(height-76)/900));}
   function updateStageScale(){
@@ -499,9 +515,9 @@
     btn.className=className;
     btn.dataset.cardId=card.id;
     btn.dataset.month=card.month;
-    btn.title=`${monthShort[card.month-1]} · ${card.type}`;
+    btn.title=cardDisplayName(card);
     btn.classList.add('canonical-card-face');
-    const img=createCardFaceImage(card,`GoStop Card, ${monthShort[card.month-1]}`);
+    const img=createCardFaceImage(card,cardDisplayName(card));
     img.addEventListener('error',()=>{ img.alt='Card art unavailable'; btn.classList.add('art-error'); });
     btn.appendChild(img);
     return btn;
@@ -2364,24 +2380,10 @@
     return state.floor.map(card=>({card,value:trainingThreatValue(card,state.ai)})).filter(item=>item.value>0).sort((a,b)=>b.value-a.value||captureValue(b.card)-captureValue(a.card)||a.card.month-b.card.month)[0]?.card||null;
   }
 
-  const TRAINING_FLOWER_NAMES=Object.freeze({
-    1:'Pine & Crane',2:'Plum Blossom',3:'Cherry Blossom',4:'Wisteria',5:'Iris',6:'Peony',
-    7:'Bush Clover',8:'Moon & Pampas',9:'Chrysanthemum',10:'Maple',11:'Paulownia',12:'Rain & Willow'
-  });
   const TRAINING_RIBBON_MONTHS=Object.freeze({red:Object.freeze([1,2,3]),blue:Object.freeze([6,9,10]),grass:Object.freeze([4,5,7])});
-  function trainingFlowerName(month){return TRAINING_FLOWER_NAMES[month]||('Month '+month);}
-  function trainingRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain Red':'Stripe';}
-  function trainingCardName(card){
-    if(!card)return 'card';
-    const flower=trainingFlowerName(card.month);
-    if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return flower+' Sake Cup';
-    if(card.type==='bright')return flower+' Bright';
-    if(card.type==='ribbon')return flower+' '+trainingRibbonName(card.ribbonSet)+' Stripe';
-    if(card.flags?.includes('doublePi'))return flower+' 2x Single';
-    if(card.flags?.includes('godori'))return flower+' Bird Picture';
-    if(card.type==='animal')return flower+' Picture';
-    return flower+' Single';
-  }
+  function trainingFlowerName(month){return cardFamilyName(month);}
+  function trainingRibbonName(value){return cardRibbonName(value);}
+  function trainingCardName(card){return cardDisplayName(card);}
   function trainingCategoryName(card){
     if(!card)return 'card';
     if(card.flags?.includes('godori'))return 'bird Picture';
@@ -3035,7 +3037,7 @@
       setNagariCarryPower(value){state.matchContext.nagariCarryPower=value;},
       getNagariCarryPower(){return state.matchContext.nagariCarryPower;},
       setPreviousScores(human,ai){state.matchContext.lastScoreBySide.playerA=human;state.matchContext.lastScoreBySide.playerB=ai;},
-      assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,
+      assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,cardFamilyName,cardDisplayName,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,aiGoStopDecision,
