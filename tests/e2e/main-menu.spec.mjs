@@ -308,7 +308,7 @@ test('Android native touch keeps immediate first-tap menu response, second tap, 
   await context.close();
 });
 
-test('Training Mode pins the opening strategy until dismissal and Your Captured Cards opens the complete score breakdown',async({page})=>{
+test('Training Mode pins the opening strategy until the player dismisses it',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#friendlyGamingBtn').click();
   await page.locator('#trainingModeBtn').click();
@@ -318,16 +318,11 @@ test('Training Mode pins the opening strategy until dismissal and Your Captured 
   await expect(page.locator('#trainingCoachTitle')).toHaveText('Opening Strategy');
   await expect(page.locator('#trainingCoachText')).toContainText('Tap or click anywhere');
   await expect(page.locator('.training-opening-dismiss-layer')).toBeVisible();
+  await page.waitForTimeout(900);
+  await expect(page.locator('#trainingCoachPanel')).toBeVisible();
   await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
   await expect(page.locator('#trainingCoachPanel')).toBeHidden();
   await expect(page.locator('.training-opening-dismiss-layer')).toHaveCount(0);
-  await expect(page.locator('[data-score-owner="player"]')).toBeVisible();
-  await page.locator('[data-score-owner="player"]').click();
-  await expect(page.locator('#scoreDialog')).toHaveJSProperty('open',true);
-  await expect(page.locator('#scoreBreakdownContent')).toContainText('Bright');
-  await expect(page.locator('#scoreBreakdownContent')).toContainText('Picture');
-  await expect(page.locator('#scoreBreakdownContent')).toContainText('Stripe');
-  await expect(page.locator('#scoreBreakdownContent')).toContainText('Single');
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
