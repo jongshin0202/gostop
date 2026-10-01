@@ -2738,8 +2738,8 @@
     if(candidate.opportunity)return candidate.opportunity;
     const gained=candidate.gained||[],urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,candidate.target);
     if(urgency.familyLock){
-      const family=trainingFlowerName(candidate.card.month),targetCategory=trainingCategoryName(candidate.target);
-      return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use one '+family+' card now to capture the '+targetCategory+' while keeping the other '+family+' card in hand.';
+      const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(candidate.target);
+      return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use one '+family+' card now to capture '+targetName+' while keeping the other '+family+' card in hand.';
     }
     const stripe=gained.find(card=>card.type==='ribbon');
     if(stripe){
