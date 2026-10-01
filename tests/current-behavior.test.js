@@ -3075,7 +3075,7 @@ test('canonical card family names are locked for all twelve families and user-fa
     'Pine','Plum','Cherry','Vine','Iris','Rose',
     'Bush','Hill','Daisy','Star','Berry','Willow'
   ];
-  families.forEach((name,index)=>assert.equal(api.cardFamilyName(index+1),name));
+  families.forEach((name,index)=>{assert.equal(api.cardFamilyName(index+1),name);assert.match(name,/^[A-Za-z]+$/);});
   assert.equal(api.cardDisplayName(card('m1-1')),'Pine Bright');
   assert.equal(api.cardDisplayName(card('m2-1')),'Plum Bird Picture');
   assert.equal(api.cardDisplayName(card('m4-2')),'Vine Plain Red Stripe');
