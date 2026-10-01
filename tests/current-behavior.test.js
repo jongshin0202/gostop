@@ -2955,7 +2955,7 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   assert.equal(recommendation.card.id,'m3-1');
   assert.equal(recommendation.target.id,'m3-2');
   assert.match(recommendation.reason,/Red Stripe set/);
-  assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/highlighted/);
+  assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/I would still choose/);
 });
 
 test('Training Mode opening strategy recognizes a reachable third Godori bird, stays pinned until dismissal, then uses five-second turn coaching',()=>{
@@ -3011,7 +3011,7 @@ test('Training Mode explains a Bright target in beginner language without dumpin
   assert.equal(recommendation.card.id,'m3-3');
   assert.equal(recommendation.target.id,'m3-1');
   assert.match(recommendation.reason,/Cherry Blossom Bright/);
-  assert.match(recommendation.reason,/closer to a 3-Bright score/);
+  assert.match(recommendation.reason,/3 Brights|3-Bright/);
   assert.doesNotMatch(recommendation.reason,/Priority:|Reserved rule:|ordinary Pictures/);
 });
 
@@ -3041,9 +3041,9 @@ test('Training recommendation explains the computer-player strategy and a second
   }));
   const recommendation=api.trainingRecommendation();
   assert.ok(recommendation?.target);
-  assert.match(recommendation.reason,/If I were playing this hand/);
-  assert.match(recommendation.reason,/Current plan:/);
-  assert.match(recommendation.reason,/Second choice:/);
+  assert.match(recommendation.reason,/I would play/);
+  assert.match(recommendation.reason,/Next best:/);
+  assert.doesNotMatch(recommendation.reason,/Current plan:|Priority:|Reserved rule:/);
 });
 
 test('Training Mode recommends how to use the September sake cup from current scoring strategy',()=>{
