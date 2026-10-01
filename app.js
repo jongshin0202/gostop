@@ -2732,8 +2732,9 @@
     if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'The Sake Cup can count as 2 Singles, making it much more valuable than an ordinary Single.';
     if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.strong)return 'This keeps the 3-bird Godori set within reach.';
     if(gained.some(card=>card.type==='pi')){
-      const brokenStripe=Object.values(profile.ribbonRoutes||{}).find(route=>route&&!route.alive);
-      if(brokenStripe)return 'The '+brokenStripe.name+' 3-Stripe set is already broken, so building Singles is more valuable now.';
+      const familyStripe=MASTER_DECK.find(card=>card.month===candidate.card.month&&card.type==='ribbon'&&card.ribbonSet);
+      const brokenStripe=familyStripe?profile.ribbonRoutes?.[familyStripe.ribbonSet]:null;
+      if(brokenStripe&&!brokenStripe.alive)return 'The '+brokenStripe.name+' 3-Stripe set is already broken, so building Singles is more valuable now.';
       return 'No stronger scoring capture is available, so building Singles is the best scoring route.';
     }
     return 'This is the strongest available scoring capture.';
