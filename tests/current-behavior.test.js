@@ -3162,6 +3162,44 @@ test('Training priority is unique Star hit first, unique Rose hit second, two-ta
   assert.match(recommendation.reason,/only Star target on the floor/);
 });
 
+test('Training defers two-target Willow and takes the only Daisy hit first',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m12-1'),card('m12-4'),card('m9-2'),card('m6-3')],
+    human:api.makePlayer({hand:[card('m12-2'),card('m9-3')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  const willow=api.trainingCandidate(card('m12-2'),profile);
+  const daisy=api.trainingCandidate(card('m9-3'),profile);
+  assert.equal(willow.matchCount,2);
+  assert.equal(willow.urgency.tier,1);
+  assert.equal(daisy.matchCount,1);
+  assert.equal(daisy.urgency.tier,2);
+  assert.equal(api.competitiveMoveIsBetter(
+    {card:daisy.card,target:daisy.target,score:daisy.competitive,urgency:daisy.urgency},
+    {card:willow.card,target:willow.target,score:willow.competitive,urgency:willow.urgency}
+  ),true);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m9-3');
+  assert.equal(recommendation.target.id,'m9-2');
+  assert.match(recommendation.reason,/only Daisy target on the floor/);
+  assert.match(recommendation.reason,/Willow can wait because 2 Willow targets are on the floor/);
+});
+
+test('Computer AI also defers two-target Willow and takes the unique Daisy hit',()=>{
+  useState(stateWith({
+    turn:'playerB',
+    floor:[card('m12-1'),card('m12-4'),card('m9-2'),card('m6-3')],
+    human:api.makePlayer(),
+    ai:api.makePlayer({hand:[card('m12-2'),card('m9-3')]})
+  }));
+  const move=api.bestCompetitiveMove('ai');
+  assert.equal(move.card.id,'m9-3');
+  assert.equal(move.target.id,'m9-2');
+  assert.equal(move.urgency.tier,2);
+});
+
 test('Computer AI uses the same Star-over-Rose-over-Iris move evaluator as Training Mode',()=>{
   useState(stateWith({
     turn:'playerB',
