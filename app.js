@@ -2378,18 +2378,25 @@
   }
   function trainingStrategyProfile(human=state?.human){
     if(!human||!state)return {primary:'single',label:'Singles plan',summary:'Build Singles while denying the opponent’s strongest visible scoring chances.',priorityText:'Singles > Brights > Stripes > ordinary Pictures.',godoriViable:false,fiveBrightViable:false,brightViable:false,stripeViable:false,activeRibbonFamilies:[],weights:{}};
-    const hand=human.hand||[],captured=human.captured||[],reachable=trainingReachableFloorCards(human);
+    const hand=human.hand||[],captured=human.captured||[],opponent=state.ai?.captured||[],reachable=trainingReachableFloorCards(human);
     const unique=cards=>[...new Map(cards.map(card=>[card.id,card])).values()];
     const owned=unique([...captured,...hand]),visible=unique([...owned,...reachable]);
     const count=(cards,predicate)=>cards.filter(predicate).length;
-    const ownedBright=count(owned,card=>card.type==='bright'),brightPotential=count(visible,card=>card.type==='bright');
-    const ownedGodori=count(owned,card=>card.flags?.includes('godori')),godoriPotential=count(visible,card=>card.flags?.includes('godori'));
-    const ownedRibbon=count(owned,card=>card.type==='ribbon'),ribbonPotential=count(visible,card=>card.type==='ribbon');
-    const activeRibbonFamilies=['red','blue','grass'].filter(family=>count(owned,card=>card.ribbonSet===family)>=2&&count(visible,card=>card.ribbonSet===family)>=3);
-    const fiveBrightViable=ownedBright>=2&&brightPotential>=5;
-    const brightViable=ownedBright>=2&&brightPotential>=3;
-    const godoriViable=ownedGodori>=2&&godoriPotential>=3;
-    const stripeViable=activeRibbonFamilies.length>0||(ownedRibbon>=3&&ribbonPotential>=5);
+    const ownedBright=count(owned,card=>card.type==='bright'),reachableBright=count(reachable,card=>card.type==='bright'),opponentBright=count(opponent,card=>card.type==='bright');
+    const ownedGodori=count(owned,card=>card.flags?.includes('godori')),reachableGodori=count(reachable,card=>card.flags?.includes('godori')),opponentGodori=count(opponent,card=>card.flags?.includes('godori'));
+    const ownedRibbon=count(owned,card=>card.type==='ribbon'),reachableRibbon=count(reachable,card=>card.type==='ribbon'),opponentRibbon=count(opponent,card=>card.type==='ribbon');
+    const activeRibbonFamilies=['red','blue','grass'].filter(family=>{
+      const mine=count(owned,card=>card.ribbonSet===family),lost=count(opponent,card=>card.ribbonSet===family);
+      return mine>=2&&lost===0;
+    });
+    // A hand-level plan should consider cards that are still alive in the unseen deck,
+    // not only cards already visible on the floor. Opponent captures are the public
+    // evidence that can kill a complete-set route.
+    const fiveBrightViable=ownedBright>=2&&opponentBright===0;
+    const brightViable=ownedBright>=2&&opponentBright<=2;
+    const godoriViable=ownedGodori>=2&&opponentGodori===0;
+    const stripeViable=activeRibbonFamilies.length>0||(ownedRibbon>=3&&opponentRibbon<=7);
+    const brightPotential=ownedBright+reachableBright,godoriPotential=ownedGodori+reachableGodori,ribbonPotential=ownedRibbon+reachableRibbon;
     const currentPi=score(captured,human.gukjinMode||'animal').piCount;
     const piPotential=currentPi+hand.reduce((sum,card)=>sum+trainingPiUnits(card),0)+reachable.reduce((sum,card)=>sum+trainingPiUnits(card),0);
     let primary='single';
@@ -2408,15 +2415,15 @@
             ?'Stripes > Brights > Singles > ordinary Pictures.'
             :'Singles > Brights > Stripes > ordinary Pictures. If 5-Birdies becomes live, it jumps near the top.';
     const summary=primary==='five-bright'
-      ?`Five Brights is still visible as a realistic line (${brightPotential} Bright opportunities are in your hand, captures, or reachable floor).`
+      ?`Five Brights is still alive as a realistic hand plan: you control ${ownedBright} Brights and the opponent has captured none. ${reachableBright?`${reachableBright} more Bright ${reachableBright===1?'is':'are'} immediately reachable on the floor.`:''}`
       :primary==='godori'
-        ?`5-Birdies (Godori) is live: you already control ${ownedGodori} bird Picture opportunity${ownedGodori===1?'':'ies'} and can visibly reach all three.`
+        ?`5-Birdies (Godori) is live: you control ${ownedGodori} of the three bird Pictures and the opponent has not killed the remaining route.`
         :primary==='bright'
-          ?`Brights are your strongest scoring lane (${ownedBright} already in hand/captured, ${brightPotential} visible/reachable)${stripeViable?', with a strong Stripe route as the secondary plan':''}.`
+          ?`Brights are your strongest scoring lane: you control ${ownedBright} Brights and the 3-Brights route is still alive${stripeViable?', with a strong Stripe route as the secondary plan':''}.`
           :primary==='stripe'
-            ?`Stripes are your clearest set-building lane${activeRibbonFamilies.length?` (${activeRibbonFamilies.map(trainingRibbonName).join(' / ')} set is live)`:''}.`
+            ?`Stripes are your clearest set-building lane${activeRibbonFamilies.length?` (${activeRibbonFamilies.map(trainingRibbonName).join(' / ')} set is still alive)`:''}.`
             :`No strong Bright, 5-Birdies, or Stripe line is established, so collecting Singles is the most reliable scoring plan (up to ${piPotential} visible/reachable Single value).`;
-    return {primary,label,summary,priorityText,fiveBrightViable,brightViable,godoriViable,stripeViable,activeRibbonFamilies,brightPotential,godoriPotential,ribbonPotential,piPotential,currentPi};
+    return {primary,label,summary,priorityText,fiveBrightViable,brightViable,godoriViable,stripeViable,activeRibbonFamilies,brightPotential,godoriPotential,ribbonPotential,piPotential,currentPi,ownedBright,ownedGodori,ownedRibbon,reachableBright,reachableGodori,reachableRibbon,opponentBright,opponentGodori,opponentRibbon};
   }
   function trainingStrategicCardValue(card,profile=trainingStrategyProfile()){
     if(!card)return 0;
