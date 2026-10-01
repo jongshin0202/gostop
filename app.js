@@ -63,7 +63,7 @@
     'howToDialog','decisionDialog','decisionText','goBtn','stopBtn','resultDialog','resultTitle','resultScore','resultBreakdown',
     'playAgainBtn','resultQuitBtn','resultCall','goCallout','hintBtn','deckStack','table','roundNo','captureDialog','captureOwner','captureTitle','captureMagnified',
     'captureSummary','actionCue','railHowTo','railNewGame','soundToggle','shakeDialog','shakeText','shakeTrainingReason','shakeCards','shakeBtn','keepSecretBtn',
-    'bombDialog','bombText','bombCards','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
+    'bombDialog','bombText','bombTrainingReason','bombCards','bombBtn','playOneBtn','playerMultiplier','aiMultiplier','firstPpeokDialog','playerSessionStats','aiSessionStats',
     'gukjinDialog','gukjinChoiceCard','gukjinTrainingReason','gukjinPictureBtn','gukjinSingleBtn','shakeReviewDialog','shakeReviewCards',
     'shakeRevealDialog','shakeRevealTitle','shakeRevealText','shakeRevealCards','firstPoopTitle','firstPoopText',
     'milestoneOverlay','milestoneBirds','milestoneTitle','milestoneCards','languageBtn','languageMenu','openingOverlay','openingDie','openingMessage','soloStartOverlay','playSoloBtn','trainingModeBtn','trainingCoachPanel','trainingCoachTitle','trainingCoachText','trainingCoachDismiss','stopPreviewValue','scoreDialog','scoreBreakdownContent','resultCards','newGameDialog','newGameYesBtn','newGameNoBtn','optionsMenu','optionsNewGameBtn','optionsQuitBtn','replayWaitingDialog','newGameWaitingDialog','cancelNewGameBtn','incomingNewGameDialog','acceptNewGameBtn','rejectNewGameBtn','quitConfirmDialog','quitConfirmTitle','quitConfirmMessage','quitYesBtn','quitNoBtn','opponentEndedDialog','opponentEndedTitle','opponentEndedOkBtn','playerInfoOverlay','playerInfoPopover','playerInfoAvatar','playerInfoName','playerInfoSession','playerInfoWallet','playerInfoPoints','playerInfoStatus'
@@ -1569,10 +1569,21 @@
     return {left:x-w/2,top:r.top+r.height*.35-h/2,width:w,height:h};
   }
 
+  function showBombChoice(month,cardIds=[]){
+    const training=!!presentation.trainingMode&&!onlineMode,label=training?trainingFlowerName(month):localizedMonth(month);
+    const ids=cardIds.length?cardIds:state.human.hand.filter(card=>card.month===month).map(card=>card.id);
+    els.bombText.textContent=`${label} — ${t('bomb')}`;
+    els.bombCards.replaceChildren(...ids.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));
+    if(els.bombTrainingReason){
+      els.bombTrainingReason.hidden=!training;
+      if(training)els.bombTrainingReason.textContent=`Recommended: Bomb. Capture all four ${label} cards now, steal one Single when available, and gain two optional blank turns. Play One gives up this Bomb opportunity.`;
+    }
+    els.bombBtn?.classList.toggle('training-choice-recommended',training);
+    els.playOneBtn?.classList.toggle('training-choice-recommended',false);
+  }
   async function chooseBomb(month,epoch=gameplayPresentationEpoch){
     if(!els.bombDialog||!isGameplayPresentationCurrent(epoch))return false;
-    const label=presentation.trainingMode&&!onlineMode?trainingFlowerName(month):localizedMonth(month);
-    els.bombText.textContent=`${label} — ${t('bomb')}`;
+    showBombChoice(month);
     if(!showGameplayModal(els.bombDialog,epoch))return false;
     return new Promise(resolve=>{ presentation.bombResolver=resolve; });
   }
@@ -1591,14 +1602,14 @@
     if(els.shakeTrainingReason){
       els.shakeTrainingReason.hidden=!training;
       if(training)els.shakeTrainingReason.textContent=bombReady
-        ?`Recommended: Bomb. The fourth ${monthName} card is already on the table, so this Bomb is guaranteed. Bomb immediately captures all four ${monthName} cards, steals one Single when available, and gives two optional blank turns. Shake would give your final score a ×${shakeMultiplier} multiplier if you win, but choose Bomb here for the guaranteed value instead.`
-        :`Why Shake: revealing these three ${monthName} cards now gives your final score a ×${shakeMultiplier} multiplier if you win. Keep for Bomb keeps the set hidden so you can Bomb later if the fourth ${monthName} card appears on the table.`;
+        ?`Recommended: Bomb. The fourth ${monthName} card is already on the table, so Bomb is guaranteed. Capture all four ${monthName} cards now, steal one Single when available, and gain two optional blank turns.`
+        :`Recommended: Shake. Reveal these three ${monthName} cards now for a ×${shakeMultiplier} final-score multiplier if you win. Keep for Bomb only preserves a future Bomb chance if the fourth ${monthName} card appears on the table.`;
     }
     if(els.keepSecretBtn){
       els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
       els.keepSecretBtn.classList.toggle('training-choice-recommended',training&&bombReady);
     }
-    els.shakeBtn?.classList.toggle('training-choice-recommended',false);
+    els.shakeBtn?.classList.toggle('training-choice-recommended',training&&!bombReady);
     els.shakeCards.replaceChildren(...cards.map(card=>createCardEl(card,'card magnified-card')));
   }
 
@@ -3242,7 +3253,7 @@
       if(globalThis.goStopOnlineSession.pendingActionId||onlineFlowBlocks(snapshot)){presentation.locked=true;render();return;}
       const decision=state.pendingDecision;
       if(decision?.type==='shakeDecision'||decision?.type==='openingTripleDecision'){showShakeChoice(decision);showGameplayModal(els.shakeDialog);return;}
-      if(decision?.type==='bombDecision'){els.bombText.textContent=`${localizedMonth(decision.month)} — ${t('bomb')}`;els.bombCards.replaceChildren(...decision.cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));showGameplayModal(els.bombDialog);return;}
+      if(decision?.type==='bombDecision'){showBombChoice(decision.month,decision.cardIds);showGameplayModal(els.bombDialog);return;}
       if(decision?.type==='goStopDecision'){await presentOnlineGoStopDecision(decision);return;}
       if(decision?.type==='chooseFloorTarget'){
         const targets=decision.legalTargetIds.map(id=>state.floor.find(card=>card.id===id)).filter(Boolean),target=await chooseFloorTarget(targets,'Choose which table card to hit');
