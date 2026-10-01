@@ -2513,10 +2513,18 @@
     const playable=inHand.filter(card=>(state.floor||[]).some(target=>target.month===card.month));
     const claimable=(state.floor||[]).filter(card=>card.type==='ribbon'&&card.ribbonSet===family&&hand.some(held=>held.month===card.month));
     const lost=opponent.filter(card=>card.type==='ribbon'&&card.ribbonSet===family);
-    const immediatelySecurable=new Set([...capturedRoute,...playable,...claimable].map(card=>card.month).filter(month=>routeMonths.includes(month)));
+    const capturedMonths=new Set(capturedRoute.map(card=>card.month).filter(month=>routeMonths.includes(month)));
+    const playableHandMonths=new Set(playable.map(card=>card.month).filter(month=>routeMonths.includes(month)));
+    const tableClaimableMonths=new Set(claimable.map(card=>card.month).filter(month=>routeMonths.includes(month)));
+    const immediatelySecurable=new Set([...capturedMonths,...playableHandMonths,...tableClaimableMonths]);
     const potential=new Set([...capturedRoute,...inHand,...claimable].map(card=>card.month).filter(month=>routeMonths.includes(month)));
     const controlledCount=immediatelySecurable.size,potentialCount=potential.size,alive=lost.length===0;
-    return {family,name:trainingRibbonName(family),alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.month)).size,captured:capturedRoute,inHand,playable,claimable,lost};
+    return {
+      family,name:trainingRibbonName(family),alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,
+      controlledCount,potentialCount,immediateCount:new Set([...playableHandMonths,...tableClaimableMonths]).size,
+      capturedCount:capturedMonths.size,playableHandCount:playableHandMonths.size,tableClaimableCount:tableClaimableMonths.size,
+      captured:capturedRoute,inHand,playable,claimable,lost
+    };
   }
   function trainingGodoriRoute(human=state?.human){
     if(!human||!state)return {alive:false,strong:false,veryStrong:false,controlledCount:0,potentialCount:0,immediateCount:0};
@@ -2556,7 +2564,7 @@
           ?'Godori > Brights > strong Stripe sets > 2x Singles > Singles > ordinary Pictures.'
           :'2x Singles > Singles > Brights > Stripes > ordinary Pictures.';
     let summary='';
-    if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest immediate route: '+strongestRibbon.controlledCount+' of the 3 set cards are already captured or can be secured from the current table'+(strongestRibbon.potentialCount>strongestRibbon.controlledCount?(' ('+strongestRibbon.potentialCount+' are still possible including cards only held in hand)'):'')+'.';
+    if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest immediate route: '+strongestRibbon.controlledCount+' of the 3 set cards are captured, in hand with a current match, or directly claimable from the table'+(strongestRibbon.potentialCount>strongestRibbon.controlledCount?(' ('+strongestRibbon.potentialCount+' are still possible including cards only held in hand)'):'')+'.';
     else if(primary==='bright')summary='Brights are the clearest route: you already have or can immediately reach '+brightRoute.controlledCount+' Brights.';
     else if(primary==='godori')summary='Godori is live: you already have or can immediately reach '+godoriRoute.controlledCount+' of the 3 bird cards.';
     else summary='No major set is close yet, so build Singles and take 2x Singles when available.';
@@ -2780,8 +2788,12 @@
     if(!state?.human)return '';
     const profile=trainingStrategyProfile(state.human);
     if(profile.primary==='stripe'){
-      const route=profile.strongestRibbon;
-      return ('Best plan: '+route.name+' Stripes. You already have or can immediately reach '+route.controlledCount+' of the 3 set cards'+(route.immediateCount?(', including '+route.immediateCount+' on the table you can take now'):'')+'. '+profile.backup).trim();
+      const route=profile.strongestRibbon,locations=[];
+      if(route.capturedCount)locations.push('you already captured '+route.capturedCount);
+      if(route.playableHandCount)locations.push('you have '+route.playableHandCount+' in hand');
+      if(route.tableClaimableCount)locations.push(route.tableClaimableCount+' '+route.name+' Stripe'+(route.tableClaimableCount===1?' is':'s are')+' on the table you can take now');
+      const locationText=locations.length===1?locations[0]:locations.length===2?(locations[0]+' and '+locations[1]):(locations.slice(0,-1).join(', ')+', and '+locations.at(-1));
+      return ('Best plan: '+route.name+' Stripes. '+locationText+'. That puts '+route.controlledCount+' of the 3 set cards within immediate reach. '+profile.backup).trim();
     }
     if(profile.primary==='bright')return ('Best plan: Brights. You already have or can immediately reach '+profile.brightRoute.controlledCount+' Brights, so protect that route and take Bright captures when they are available. '+profile.backup).trim();
     if(profile.primary==='godori')return ('Best plan: Godori. You already have or can immediately reach '+profile.godoriRoute.controlledCount+' of the 3 bird cards, so protect that set while it is still live. '+profile.backup).trim();
