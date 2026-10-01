@@ -1090,7 +1090,7 @@
         return;
       }
 
-      const card=bestAiCard();
+      const competitiveMove=bestCompetitiveMove('ai'),card=competitiveMove?.card||null;
       if(!card){
         await finishNagari(epoch);
         return;
@@ -1114,10 +1114,9 @@
       const sourceRect=sourceEl?sourceEl.getBoundingClientRect():approximateAiSource();
       if(sourceEl)sourceEl.style.visibility='hidden';
       const matches=matchesFor(card);
-      let target=null;
-      if(matches.length===1)target=matches[0];
-      else if(matches.length===2)target=chooseBestMatch(matches);
-      else if(matches.length>2)target=chooseBestMatch(matches);
+      let target=competitiveMove?.target&&matches.some(item=>item.id===competitiveMove.target.id)?matches.find(item=>item.id===competitiveMove.target.id):null;
+      if(!target&&matches.length===1)target=matches[0];
+      else if(!target&&matches.length>1)target=matches.slice().sort((a,b)=>competitiveMoveScore('ai',card,b)-competitiveMoveScore('ai',card,a)||a.id.localeCompare(b.id))[0];
       if(target && matches.length>1){await previewAiTarget(target);if(!isGameplayPresentationCurrent(epoch))return;}
       const playResult=applyNormalAction(normalAction('ai',{type:'playCard',cardId:card.id,targetId:target?.id||null}));
       const playedEvent=playResult.events.find(event=>event.type==='cardPlayed');
@@ -2130,18 +2129,69 @@
   }
 
 
-  function bestAiCard(){
-    let best=state.ai.hand[0],bestV=-Infinity;
-    for(const c of state.ai.hand){
-      const matches=matchesFor(c);
-      const immediate=matches.length?captureValue(c)+Math.max(...matches.map(captureValue)):0;
-      const deny=matches.reduce((s,x)=>s+humanNeedValue(x),0);
-      const flexibility=state.ai.hand.filter(x=>x.month===c.month).length>1?-1.3:.5;
-      const v=immediate*1.5+deny*.8+flexibility+Math.random()*.35;
-      if(v>bestV){bestV=v;best=c;}
+  function competitiveCardValue(card){
+    if(!card)return 0;
+    if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return 180;
+    if(card.flags?.includes('doublePi'))return 165;
+    if(card.type==='bright')return 150;
+    if(card.flags?.includes('godori'))return 125;
+    if(card.type==='ribbon')return 85;
+    if(card.type==='animal')return 55;
+    if(card.type==='pi')return 35;
+    return 20;
+  }
+  function competitiveProgressValue(player,gained){
+    const beforeCards=player?.captured||[],afterCards=[...beforeCards,...(gained||[])],before=score(beforeCards,player?.gukjinMode||'animal'),after=score(afterCards,player?.gukjinMode||'animal');
+    let value=Math.max(0,after.total-before.total)*180;
+    const brightBefore=beforeCards.filter(card=>card.type==='bright').length,brightAfter=afterCards.filter(card=>card.type==='bright').length;
+    if(brightAfter>brightBefore){value+=(brightAfter-brightBefore)*35;if(brightBefore<2&&brightAfter>=2)value+=55;if(brightBefore<3&&brightAfter>=3)value+=220;}
+    const godoriBefore=beforeCards.filter(card=>card.flags?.includes('godori')).length,godoriAfter=afterCards.filter(card=>card.flags?.includes('godori')).length;
+    if(godoriAfter>godoriBefore){value+=(godoriAfter-godoriBefore)*55;if(godoriBefore<2&&godoriAfter>=2)value+=90;if(godoriBefore<3&&godoriAfter>=3)value+=350;}
+    for(const family of ['red','blue','grass']){
+      const ribbonBefore=beforeCards.filter(card=>card.type==='ribbon'&&card.ribbonSet===family).length,ribbonAfter=afterCards.filter(card=>card.type==='ribbon'&&card.ribbonSet===family).length;
+      if(ribbonAfter>ribbonBefore){value+=(ribbonAfter-ribbonBefore)*35;if(ribbonBefore<2&&ribbonAfter>=2)value+=70;if(ribbonBefore<3&&ribbonAfter>=3)value+=280;}
+    }
+    if(after.piCount>before.piCount){value+=(after.piCount-before.piCount)*18;if(before.piCount<10&&after.piCount>=10)value+=120;}
+    if(after.animals>before.animals){value+=(after.animals-before.animals)*16;if(before.animals<5&&after.animals>=5)value+=100;}
+    if(after.ribbons>before.ribbons){value+=(after.ribbons-before.ribbons)*18;if(before.ribbons<5&&after.ribbons>=5)value+=100;}
+    return value;
+  }
+  function competitiveMoveScore(side,card,target=null){
+    if(!state||!card)return -Infinity;
+    const player=state[side],opponent=state[side==='human'?'ai':'human'];
+    if(!player)return -Infinity;
+    const matches=matchesFor(card);
+    if(!target){
+      const sameFamilyInHand=(player.hand||[]).filter(item=>item.month===card.month).length;
+      return -competitiveCardValue(card)*1.15-(sameFamilyInHand>1?20:0);
+    }
+    const targetBundle=expandedTargetCards(target),gained=[card,...targetBundle],base=gained.reduce((sum,item)=>sum+competitiveCardValue(item),0);
+    const floorPremium=competitiveCardValue(target)*.75;
+    const uniqueOpportunity=matches.length===1?120:matches.length===2?-20:-35;
+    const scarcePremium=(target.id==='m9-1'&&target.flags?.includes('switchPi'))?120:target.flags?.includes('doublePi')?105:target.type==='bright'?70:target.flags?.includes('godori')?55:0;
+    const progress=competitiveProgressValue(player,gained);
+    const denial=trainingThreatValue(target,opponent)*1.05;
+    return base+floorPremium+uniqueOpportunity+scarcePremium+progress+denial;
+  }
+  function bestCompetitiveMove(side){
+    const player=state?.[side];
+    if(!player?.hand?.length)return null;
+    let best=null;
+    for(const card of player.hand){
+      const matches=matchesFor(card);
+      if(matches.length){
+        for(const target of matches){
+          const move={card,target,score:competitiveMoveScore(side,card,target),matchCount:matches.length};
+          if(!best||move.score>best.score||(move.score===best.score&&(card.id+'|'+target.id)<(best.card.id+'|'+best.target.id)))best=move;
+        }
+      }else{
+        const move={card,target:null,score:competitiveMoveScore(side,card,null),matchCount:0};
+        if(!best||move.score>best.score||(move.score===best.score&&card.id<best.card.id))best=move;
+      }
     }
     return best;
   }
+  function bestAiCard(){return bestCompetitiveMove('ai')?.card||null;}
   function humanNeedValue(card){
     const hc=state.human.captured;let v=0;
     if(card.type==='bright'&&hc.filter(c=>c.type==='bright').length>=2)v+=8;
