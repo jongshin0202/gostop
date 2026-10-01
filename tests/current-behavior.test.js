@@ -3269,6 +3269,39 @@ test('Computer AI uses the same Star-over-Rose-over-Iris move evaluator as Train
   assert.equal(api.bestAiCard().id,'m10-2');
 });
 
+test('Training chooses the Single over the same-family Plain Stripe after the Plain 3-Stripe path is broken',()=>{
+  const eightSingles=cards('m1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m5-3','m5-4');
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m4-2'),card('m4-3')],
+    human:api.makePlayer({hand:[card('m4-1')],captured:[card('m5-2'),...eightSingles]}),
+    ai:api.makePlayer({captured:[card('m7-2')]})
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.ribbonRoutes.grass.alive,false);
+  assert.equal(api.competitiveRibbonSetAlive('human','grass'),false);
+  assert.ok(api.competitiveCardValueForSide('human',card('m4-3'))>api.competitiveCardValueForSide('human',card('m4-2')));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m4-1');
+  assert.equal(recommendation.target.id,'m4-3');
+  assert.match(recommendation.reason,/Plain 3-Stripe set is already broken/);
+  assert.match(recommendation.reason,/building Singles is more valuable now/);
+  assert.doesNotMatch(recommendation.reason,/keeps the Plain 3-Stripe set within reach|strong chance to complete the Plain 3-Stripe set/);
+});
+
+test('Computer AI also takes the Single over a broken-family Plain Stripe',()=>{
+  const eightSingles=cards('m1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m5-3','m5-4');
+  useState(stateWith({
+    turn:'playerB',
+    floor:[card('m4-2'),card('m4-3')],
+    human:api.makePlayer({captured:[card('m7-2')]}),
+    ai:api.makePlayer({hand:[card('m4-1')],captured:[card('m5-2'),...eightSingles]})
+  }));
+  const move=api.bestCompetitiveMove('ai');
+  assert.equal(move.card.id,'m4-1');
+  assert.equal(move.target.id,'m4-3');
+});
+
 test('Training Mode prefers a 2x Single over an ordinary Stripe when no Stripe set is close',()=>{
   useState(stateWith({
     turn:'playerA',
