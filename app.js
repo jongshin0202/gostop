@@ -2709,7 +2709,7 @@
       return bTier-aTier||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
     });
     const best={...sorted[0]},why=trainingMoveWhy(best,profile);
-    const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+' to take '+best.captureDescription+'.':'Play '+trainingCardName(best.card)+'.';
+    const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
     const alternative=trainingAlternativeSummary(best,sorted);
