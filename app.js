@@ -1574,9 +1574,13 @@
     const ids=cardIds.length?cardIds:state.human.hand.filter(card=>card.month===month).map(card=>card.id);
     els.bombText.textContent=`${label} — ${t('bomb')}`;
     els.bombCards.replaceChildren(...ids.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean).map(card=>createCardEl(card,'card magnified-card')));
-    if(els.bombTrainingReason){
-      els.bombTrainingReason.hidden=!training;
-      if(training)els.bombTrainingReason.textContent=`Recommended: Bomb. Capture all four ${label} cards now, steal one Single when available, and gain two optional blank turns. Play One gives up this Bomb opportunity.`;
+    if(els.bombTrainingReason)els.bombTrainingReason.hidden=true;
+    if(training){
+      showTrainingSpecialCoach(
+        els.bombDialog,
+        'BOMB ADVICE',
+        `Bomb. Capture all four ${label} cards now, steal one Single when available, and gain two optional blank turns. Play One gives up this Bomb opportunity.`
+      );
     }
     els.bombBtn?.classList.toggle('training-choice-recommended',training);
     els.playOneBtn?.classList.toggle('training-choice-recommended',false);
@@ -1599,11 +1603,12 @@
     const cardIds=decision.cardIds||state.human.hand.filter(card=>card.month===decision.month).map(card=>card.id),cards=cardIds.map(id=>state.human.hand.find(card=>card.id===id)).filter(Boolean),bombReady=!!decision.floorCardId||(state.floor.some(c=>c.month===decision.month)&&!floorStackForMonth(decision.month));
     const training=!!presentation.trainingMode&&!onlineMode,monthName=training?trainingFlowerName(decision.month):localizedMonth(decision.month),shakeMultiplier=decision.month>=11?4:2;
     els.shakeText.textContent=`${monthName} — ${t('shake')} / ${bombReady?t('bomb'):t('keepBomb')}`;
-    if(els.shakeTrainingReason){
-      els.shakeTrainingReason.hidden=!training;
-      if(training)els.shakeTrainingReason.textContent=bombReady
-        ?`Recommended: Bomb. The fourth ${monthName} card is already on the table, so Bomb is guaranteed. Capture all four ${monthName} cards now, steal one Single when available, and gain two optional blank turns.`
-        :`Recommended: Shake. Reveal these three ${monthName} cards now for a ×${shakeMultiplier} final-score multiplier if you win. Keep for Bomb only preserves a future Bomb chance if the fourth ${monthName} card appears on the table.`;
+    if(els.shakeTrainingReason)els.shakeTrainingReason.hidden=true;
+    if(training){
+      const advice=bombReady
+        ?`Bomb. The fourth ${monthName} card is already on the table, so Bomb is guaranteed. Capture all four ${monthName} cards now, steal one Single when available, and gain two optional blank turns.`
+        :`Shake. Reveal these three ${monthName} cards now for a ×${shakeMultiplier} final-score multiplier if you win. Keep for Bomb only preserves a future Bomb chance if the fourth ${monthName} card appears on the table.`;
+      showTrainingSpecialCoach(els.shakeDialog,bombReady?'BOMB ADVICE':'SHAKE ADVICE',advice);
     }
     if(els.keepSecretBtn){
       els.keepSecretBtn.textContent=bombReady?t('bomb'):t('keepBomb');
@@ -2885,6 +2890,23 @@
     if(els.trainingCoachText)els.trainingCoachText.textContent=text;
     if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
   }
+  function restoreTrainingCoachHome(){
+    if(TEST_MODE||!els.trainingCoachPanel)return;
+    const stage=document.querySelector('main.game-stage');
+    if(stage?.parentNode)stage.parentNode.insertBefore(els.trainingCoachPanel,stage);
+    else if(document.body&&!document.body.contains(els.trainingCoachPanel))document.body.appendChild(els.trainingCoachPanel);
+  }
+  function showTrainingSpecialCoach(dialog,title,text){
+    if(!presentation.trainingMode||onlineMode||!dialog||!text||TEST_MODE)return;
+    hideTrainingCoach();
+    if(els.trainingCoachPanel&&!dialog.contains(els.trainingCoachPanel))dialog.appendChild(els.trainingCoachPanel);
+    showTrainingCoach(title,text);
+  }
+  function closeTrainingSpecialCoach(){
+    if(TEST_MODE)return;
+    hideTrainingCoach();
+    restoreTrainingCoachHome();
+  }
   function showTrainingOpeningStrategy(text){
     if(!presentation.trainingMode||!text||TEST_MODE)return Promise.resolve();
     if(presentation.trainingHintTimer){clearTimeout(presentation.trainingHintTimer);presentation.trainingHintTimer=null;}
@@ -3097,12 +3119,18 @@
     if(e.target===els.captureDialog)els.captureDialog.close();
   });
 
-  if(els.shakeDialog)els.shakeDialog.addEventListener('cancel',e=>{
-    if(presentation.shakeResolver){e.preventDefault();const r=presentation.shakeResolver;presentation.shakeResolver=null;els.shakeDialog.close();r(false);}
-  });
-  if(els.bombDialog)els.bombDialog.addEventListener('cancel',e=>{
-    if(presentation.bombResolver){e.preventDefault();const r=presentation.bombResolver;presentation.bombResolver=null;els.bombDialog.close();r(false);}
-  });
+  if(els.shakeDialog){
+    els.shakeDialog.addEventListener('cancel',e=>{
+      if(presentation.shakeResolver){e.preventDefault();const r=presentation.shakeResolver;presentation.shakeResolver=null;els.shakeDialog.close();r(false);}
+    });
+    els.shakeDialog.addEventListener('close',closeTrainingSpecialCoach);
+  }
+  if(els.bombDialog){
+    els.bombDialog.addEventListener('cancel',e=>{
+      if(presentation.bombResolver){e.preventDefault();const r=presentation.bombResolver;presentation.bombResolver=null;els.bombDialog.close();r(false);}
+    });
+    els.bombDialog.addEventListener('close',closeTrainingSpecialCoach);
+  }
 
   if(TEST_MODE){
     const cloneCard=card=>({...card,flags:[...card.flags]});

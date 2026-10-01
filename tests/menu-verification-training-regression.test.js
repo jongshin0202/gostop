@@ -46,20 +46,25 @@ test('Training strategy stays until user dismissal and gives concise tactical re
   assert.match(app,/Berry/);
 });
 
-test('Training Shake and Bomb dialogs always show an explicit recommendation',()=>{
+test('Training Shake and Bomb dialogs use the same information coach panel for recommendations',()=>{
   assert.match(html,/id="shakeTrainingReason" hidden/);
   assert.match(html,/id="bombTrainingReason" hidden/);
+  assert.match(app,/function showTrainingSpecialCoach\(dialog,title,text\)/);
+  assert.match(app,/dialog\.appendChild\(els\.trainingCoachPanel\)/);
+  assert.match(app,/showTrainingSpecialCoach\(els\.shakeDialog,bombReady\?'BOMB ADVICE':'SHAKE ADVICE',advice\)/);
+  assert.match(app,/showTrainingSpecialCoach\(\s*els\.bombDialog,\s*'BOMB ADVICE'/);
   assert.match(app,/shakeMultiplier=decision\.month>=11\?4:2/);
-  assert.match(app,/Recommended: Bomb\. The fourth/);
+  assert.match(app,/Bomb\. The fourth/);
   assert.match(app,/Bomb is guaranteed/);
   assert.match(app,/Capture all four/);
   assert.match(app,/gain two optional blank turns/);
-  assert.match(app,/Recommended: Shake\. Reveal these three/);
+  assert.match(app,/Shake\. Reveal these three/);
   assert.match(app,/Keep for Bomb only preserves a future Bomb chance/);
   assert.match(app,/shakeBtn\?\.classList\.toggle\('training-choice-recommended',training&&!bombReady\)/);
   assert.match(app,/keepSecretBtn\.classList\.toggle\('training-choice-recommended',training&&bombReady\)/);
-  assert.match(app,/function showBombChoice\(month,cardIds=\[\]\)/);
-  assert.match(app,/bombTrainingReason\.textContent=.*Recommended: Bomb/);
   assert.match(app,/bombBtn\?\.classList\.toggle\('training-choice-recommended',training\)/);
-  assert.match(app,/els\.shakeTrainingReason\.hidden=!training/);
+  assert.match(app,/els\.shakeTrainingReason\.hidden=true/);
+  assert.match(app,/els\.bombTrainingReason\.hidden=true/);
+  assert.match(app,/shakeDialog\.addEventListener\('close',closeTrainingSpecialCoach\)/);
+  assert.match(app,/bombDialog\.addEventListener\('close',closeTrainingSpecialCoach\)/);
 });
