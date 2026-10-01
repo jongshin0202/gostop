@@ -2501,7 +2501,7 @@
           ?'Godori > Brights > strong Stripe sets > 2x Singles > Singles > ordinary Pictures.'
           :'2x Singles > Singles > Brights > Stripes > ordinary Pictures.';
     let summary='';
-    if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest route: '+strongestRibbon.controlledCount+' of the 3 set cards are already in your hand/captures or immediately reachable'+(strongestRibbon.immediateCount?(', with '+strongestRibbon.immediateCount+' on the floor you can take now'):'')+'.';
+    if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest immediate route: '+strongestRibbon.controlledCount+' of the 3 set cards are already captured or can be secured from the current floor'+(strongestRibbon.potentialCount>strongestRibbon.controlledCount?(' ('+strongestRibbon.potentialCount+' are still possible including cards only held in hand)'):'')+'.';
     else if(primary==='bright')summary='Brights are the clearest route: you already have or can immediately reach '+brightRoute.controlledCount+' Brights.';
     else if(primary==='godori')summary='Godori is live: you already have or can immediately reach '+godoriRoute.controlledCount+' of the 3 bird cards.';
     else summary='No major set is close yet, so build Singles and take 2x Singles when available.';
@@ -2630,8 +2630,8 @@
     if(!card||!state)return null;
     const matches=matchesFor(card);
     if(!matches.length){
-      const strategic=trainingStrategicCardValue(card,profile);
-      return {card,target:null,reserved:false,score:-strategic*.72,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no floor capture is available.',shortWhy:'No floor capture is available for this card.'};
+      const strategic=trainingStrategicCardValue(card,profile),competitive=competitiveMoveScore('human',card,null);
+      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no floor capture is available.',shortWhy:'No floor capture is available for this card.'};
     }
     let best=null;const targetChoices=[];
     for(const target of matches){
@@ -2640,12 +2640,13 @@
       const before=score(state.human.captured||[],state.human.gukjinMode||'animal').total,after=score([...(state.human.captured||[]),...gained],state.human.gukjinMode||'animal').total;
       const scoreGain=Math.max(0,after-before),reserved=trainingIsReservedPlay(card,target),captureDescription=trainingCaptureDescription(gained);
       const route=target.type==='ribbon'?profile.ribbonRoutes?.[target.ribbonSet]:null;
-      const routeBonus=route?.veryStrong?240:route?.strong?120:0;
-      const premiumSingle=target.flags?.includes('doublePi')?150:target.id==='m9-1'&&target.flags?.includes('switchPi')?115:0;
-      const brightBonus=target.type==='bright'&&profile.brightRoute?.strong?120:0;
-      const godoriBonus=target.flags?.includes('godori')&&profile.godoriRoute?.strong?150:0;
-      const value=strategic+blockValue*1.18+scoreGain*85+(opportunity?150:0)+routeBonus+premiumSingle+brightBonus+godoriBonus;
-      const candidate={card,target,reserved,score:value,profile,captureDescription,gained,opportunity,threat,reason:'',shortWhy:''};
+      const routeBonus=route?.veryStrong?150:route?.strong?70:0;
+      const premiumSingle=target.flags?.includes('doublePi')?70:target.id==='m9-1'&&target.flags?.includes('switchPi')?90:0;
+      const brightBonus=target.type==='bright'&&profile.brightRoute?.strong?70:0;
+      const godoriBonus=target.flags?.includes('godori')&&profile.godoriRoute?.strong?90:0;
+      const competitive=competitiveMoveScore('human',card,target),uniqueFloorOpportunity=matches.length===1;
+      const value=competitive+strategic*.25+blockValue*.35+scoreGain*35+(opportunity?55:0)+routeBonus+premiumSingle+brightBonus+godoriBonus;
+      const candidate={card,target,reserved,score:value,competitive,matchCount:matches.length,uniqueFloorOpportunity,profile,captureDescription,gained,opportunity,threat,reason:'',shortWhy:''};
       targetChoices.push(candidate);
       if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best=candidate;
     }
@@ -2666,10 +2667,14 @@
       return profile.brightRoute?.strong?'Brights are a strong route in this hand, and this capture moves you closer to a 3-Bright score.':'A Bright is the strongest available scoring card here.';
     }
     if(gained.some(card=>card.flags?.includes('doublePi')))return 'A 2x Single counts as two Singles, so it is worth more than an ordinary Stripe or Picture when no stronger set is close.';
-    if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'The Sake Cup can count as 2 Singles later, so it carries more value than an ordinary Picture.';
+    if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'Take the Sake Cup now. It can count as 2 Singles, so this floor card is much more valuable than an ordinary Single.';
     if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.strong)return 'This keeps the 3-bird Godori set within reach.';
-    if(gained.some(card=>card.type==='pi'))return 'No stronger set capture is available, so building Singles is the safest scoring route.';
-    if(gained.some(card=>card.type==='ribbon'))return 'This Stripe improves your best reachable set more than an ordinary Picture.';
+    if(candidate.uniqueFloorOpportunity){
+      const family=trainingFlowerName(candidate.card.month);
+      return 'This is the only '+family+' target on the floor. Take it now before the computer can remove your current hit.';
+    }
+    if(gained.some(card=>card.type==='pi'))return 'No stronger immediate capture is available, so building Singles is the safest scoring route.';
+    if(gained.some(card=>card.type==='ribbon'))return 'This Stripe improves a reachable scoring route without passing up a more urgent floor capture.';
     return 'No Bright, Stripe, or Single capture is available, so this is the best remaining capture.';
   }
   function trainingAlternativeSummary(best,sorted){
