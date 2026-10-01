@@ -129,8 +129,8 @@
             <article><h4>Match first, score later</h4><p data-i18n="tutorialMatchingRule"></p></article>
           </div>
           <details class="tutorial-background"><summary>About the cards</summary><p data-i18n="history"></p><p data-i18n="matchingGuide"></p></details>
-          <h4 class="tutorial-subhead">The 12 month families</h4>
-          <p class="tutorial-muted">Every month has exactly four cards. You match by month, regardless of whether the cards are Brights, Pictures, Stripes, or Singles.</p>
+          <h4 class="tutorial-subhead">The 12 card families</h4>
+          <p class="tutorial-muted">Every card family has exactly four cards. Match by family, regardless of whether the cards are Brights, Pictures, Stripes, or Singles.</p>
           <div id="monthGuide" class="month-guide"></div>
         </section>
 
@@ -192,7 +192,7 @@
           <div class="tutorial-flow-card">
             <div><span class="tutorial-label">Your hand</span><div class="tutorial-cards" data-card-ids="m4-3"></div></div>
             <span class="tutorial-arrow">→</span>
-            <div><span class="tutorial-label">Same-month floor card</span><div class="tutorial-cards" data-card-ids="m4-4"></div></div>
+            <div><span class="tutorial-label">Same-family floor card</span><div class="tutorial-cards" data-card-ids="m4-4"></div></div>
             <span class="tutorial-arrow">=</span>
             <strong>Capture both</strong>
           </div>
@@ -215,17 +215,17 @@
             <article>
               <h4>No floor match → stays on floor</h4>
               <p data-i18n="matchNoneHelp"></p>
-              <div class="tutorial-example-row"><div><span class="tutorial-label">Your June card</span><div class="tutorial-cards" data-card-ids="m6-3"></div></div><span>≠</span><div><span class="tutorial-label">July floor card</span><div class="tutorial-cards" data-card-ids="m7-3"></div></div></div>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Your Peony card</span><div class="tutorial-cards" data-card-ids="m6-3"></div></div><span>≠</span><div><span class="tutorial-label">Bush Clover floor card</span><div class="tutorial-cards" data-card-ids="m7-3"></div></div></div>
             </article>
             <article>
               <h4>Two floor matches → choose one</h4>
               <p data-i18n="matchTwoHelp"></p>
-              <div class="tutorial-example-row"><div><span class="tutorial-label">Your August card</span><div class="tutorial-cards" data-card-ids="m8-3"></div></div><span>+</span><div><span class="tutorial-label">Two August choices</span><div class="tutorial-cards" data-card-ids="m8-1,m8-2"></div></div></div>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Your Moon & Pampas card</span><div class="tutorial-cards" data-card-ids="m8-3"></div></div><span>+</span><div><span class="tutorial-label">Two Moon & Pampas choices</span><div class="tutorial-cards" data-card-ids="m8-1,m8-2"></div></div></div>
             </article>
             <article>
-              <h4>The deck card also matches by month</h4>
+              <h4>The deck card also matches by family</h4>
               <p data-i18n="matchDrawHelp"></p>
-              <div class="tutorial-example-row"><div><span class="tutorial-label">Drawn October</span><div class="tutorial-cards" data-card-ids="m10-3"></div></div><span>+</span><div><span class="tutorial-label">October on floor</span><div class="tutorial-cards" data-card-ids="m10-4"></div></div><span>→</span><strong>Capture both</strong></div>
+              <div class="tutorial-example-row"><div><span class="tutorial-label">Drawn Maple</span><div class="tutorial-cards" data-card-ids="m10-3"></div></div><span>+</span><div><span class="tutorial-label">Maple on floor</span><div class="tutorial-cards" data-card-ids="m10-4"></div></div><span>→</span><strong>Capture both</strong></div>
             </article>
           </div>
         </section>
@@ -244,7 +244,7 @@
               <h4 data-i18n="bomb">Bomb!</h4>
               <div class="tutorial-split-visual"><div><span class="tutorial-label">3 in your hand</span><div class="tutorial-cards" data-card-ids="m2-1,m2-2,m2-3"></div></div><span>+</span><div><span class="tutorial-label">4th on floor</span><div class="tutorial-cards" data-card-ids="m2-4"></div></div></div>
               <p data-i18n="bombLong"></p>
-              <p class="tutorial-benefit"><strong>Why it matters:</strong> you take an entire month at once, steal a Single, and gain two blank-turn credits.</p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> you take an entire card family at once, steal a Single, and gain two blank-turn credits.</p>
             </article>
             <article>
               <h4 data-i18n="pooped">POOPED!</h4>
@@ -266,7 +266,7 @@
             </article>
             <article>
               <h4 data-i18n="kiss">KISS!</h4>
-              <div class="tutorial-split-visual"><div><span class="tutorial-label">Played, no floor match</span><div class="tutorial-cards" data-card-ids="m4-3"></div></div><span>+</span><div><span class="tutorial-label">Drawn same month</span><div class="tutorial-cards" data-card-ids="m4-4"></div></div></div>
+              <div class="tutorial-split-visual"><div><span class="tutorial-label">Played, no floor match</span><div class="tutorial-cards" data-card-ids="m4-3"></div></div><span>+</span><div><span class="tutorial-label">Drawn same family</span><div class="tutorial-cards" data-card-ids="m4-4"></div></div></div>
               <p data-i18n="kissLong"></p>
               <p class="tutorial-benefit"><strong>Why it matters:</strong> you turn what looked like a miss into a capture and steal one Single.</p>
             </article>
@@ -274,7 +274,7 @@
               <h4 data-i18n="tapTap">FLUSH!</h4>
               <div class="tutorial-split-visual"><div><span class="tutorial-label">Two on floor</span><div class="tutorial-cards" data-card-ids="m5-1,m5-2"></div></div><span>+</span><div><span class="tutorial-label">Played</span><div class="tutorial-cards" data-card-ids="m5-3"></div></div><span>+</span><div><span class="tutorial-label">Drawn</span><div class="tutorial-cards" data-card-ids="m5-4"></div></div></div>
               <p data-i18n="flushLong"></p>
-              <p class="tutorial-benefit"><strong>Why it matters:</strong> you collect all four cards of that month in one turn and steal one Single.</p>
+              <p class="tutorial-benefit"><strong>Why it matters:</strong> you collect all four cards of that family in one turn and steal one Single.</p>
             </article>
             <article>
               <h4 data-i18n="cleanSweep">CLEAN SWEEP!</h4>
@@ -330,19 +330,19 @@
             <table class="tutorial-score-table">
               <thead><tr><th>Category</th><th>What scores</th><th>Points</th></tr></thead>
               <tbody>
-                <tr><td><strong>Brights</strong></td><td>3 Brights without the December Rain Bright</td><td>3</td></tr>
-                <tr><td>Brights</td><td>3 Brights including the December Rain Bright</td><td>2</td></tr>
+                <tr><td><strong>Brights</strong></td><td>3 Brights without the Rain & Willow Bright</td><td>3</td></tr>
+                <tr><td>Brights</td><td>3 Brights including the Rain & Willow Bright</td><td>2</td></tr>
                 <tr><td>Brights</td><td>4 Brights</td><td>4</td></tr>
                 <tr><td>Brights</td><td>All 5 Brights</td><td>15</td></tr>
                 <tr><td><strong>Pictures</strong></td><td>5 Pictures</td><td>1</td></tr>
                 <tr><td>Pictures</td><td>Each Picture after the 5th</td><td>+1 each</td></tr>
-                <tr><td>5-BIRDIES / Godori</td><td>February + April + August bird Pictures</td><td>+5</td></tr>
+                <tr><td>5-BIRDIES / Godori</td><td>Plum Blossom + Wisteria + Moon & Pampas Bird Pictures</td><td>+5</td></tr>
                 <tr><td><strong>Stripes</strong></td><td>5 Stripes</td><td>1</td></tr>
                 <tr><td>Stripes</td><td>Each Stripe after the 5th</td><td>+1 each</td></tr>
                 <tr><td>3-STRIPES family</td><td>Red, Grass, or Blue three-card set</td><td>+3 per set</td></tr>
                 <tr><td><strong>Singles</strong></td><td>10 effective Singles</td><td>1</td></tr>
                 <tr><td>Singles</td><td>Each effective Single after the 10th</td><td>+1 each</td></tr>
-                <tr><td>2x Single</td><td>Colored November Paulownia or December Rain Single</td><td>Counts as 2 Singles</td></tr>
+                <tr><td>2x Single</td><td>Paulownia 2x Single or Rain & Willow 2x Single</td><td>Counts as 2 Singles</td></tr>
                 <tr><td>Sake Cup</td><td>Choose Picture OR 2x Singles</td><td>Whichever mode you choose</td></tr>
                 <tr><td><strong>FIRST POOP!</strong></td><td>POOPED! on your first turn</td><td>+7 bonus</td></tr>
               </tbody>
@@ -361,7 +361,7 @@
                 <tr><td>4 Go</td><td>×4</td></tr>
                 <tr><td>5 Go</td><td>×8</td></tr>
                 <tr><td>Each additional Go</td><td>Doubles again</td></tr>
-                <tr><td>Shake</td><td>Jan–Oct declaration ×2; Nov–Dec declaration ×4. Multiple Shakes compound.</td></tr>
+                <tr><td>Shake</td><td>Pine & Crane through Maple declaration ×2; Paulownia or Rain & Willow declaration ×4. Multiple Shakes compound.</td></tr>
                 <tr><td>Bright Penalty</td><td>×2 when winner has at least 3 Brights and loser has none</td></tr>
                 <tr><td>Picture Penalty</td><td>×2 when winner has at least 7 Pictures</td></tr>
                 <tr><td>Single Penalty</td><td>×2 when winner has at least 10 effective Singles and loser has 1–7</td></tr>
@@ -507,10 +507,10 @@
   <dialog id="shakeDialog">
     <div class="dialog-card special-rule-card">
       <div class="eyebrow" data-i18n="shake">Shake</div>
-      <h2>Reveal three matching-month cards?</h2>
+      <h2>Reveal three matching-family cards?</h2>
       <p id="shakeText"></p>
       <p id="shakeTrainingReason" hidden></p>
-      <div id="shakeCards" class="shake-cards" aria-label="Three same-month cards"></div>
+      <div id="shakeCards" class="shake-cards" aria-label="Three same-family cards"></div>
       <div class="decision-actions">
         <button id="shakeBtn" class="go-btn" type="button" data-i18n="shake">Shake</button>
         <button id="keepSecretBtn" class="stop-btn" type="button" data-i18n="keepBomb">Keep for Bomb</button>
@@ -539,7 +539,7 @@
       <div class="eyebrow" data-i18n="bomb">Bomb!</div>
       <h2>Play all three?</h2>
       <p id="bombText"></p>
-      <div id="bombCards" class="shake-cards" aria-label="Three matching-month cards"></div>
+      <div id="bombCards" class="shake-cards" aria-label="Three matching-family cards"></div>
       <div class="decision-actions">
         <button id="bombBtn" class="go-btn" type="button" data-i18n="bomb">Bomb!</button>
         <button id="playOneBtn" class="stop-btn" type="button">PLAY ONE</button>
