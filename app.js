@@ -2425,11 +2425,11 @@
   function trainingStrategicCardValue(card,profile=trainingStrategyProfile()){
     if(!card)return 0;
     const tables={
-      'five-bright':{bright:180,godori:160,ribbon:110,pi:78,animal:20},
-      godori:{bright:145,godori:178,ribbon:110,pi:78,animal:20},
-      bright:{bright:170,godori:158,ribbon:115,pi:80,animal:20},
-      stripe:{bright:145,godori:158,ribbon:165,pi:90,animal:20},
-      single:{bright:130,godori:158,ribbon:95,pi:175,animal:20}
+      'five-bright':{bright:320,godori:290,ribbon:150,pi:90,animal:15},
+      godori:{bright:240,godori:330,ribbon:150,pi:90,animal:15},
+      bright:{bright:300,godori:275,ribbon:170,pi:100,animal:15},
+      stripe:{bright:230,godori:275,ribbon:300,pi:110,animal:15},
+      single:{bright:220,godori:275,ribbon:150,pi:300,animal:15}
     };
     const weights=tables[profile.primary]||tables.single;
     if(card.flags?.includes('godori')&&profile.godoriViable)return weights.godori;
@@ -2533,7 +2533,7 @@
       const strategic=trainingStrategicCardValue(card,profile);
       return {card,target:null,reserved:false,score:-strategic*.72,profile,captureDescription:'',reason:`I would only discard the ${localizedMonth(card.month)} ${trainingCategoryName(card)} if no floor capture is available. Current plan: ${profile.label}. ${profile.priorityText}`};
     }
-    let best=null;
+    let best=null;const targetChoices=[];
     for(const target of matches){
       const gained=[card,...expandedTargetCards(target)],blockValue=trainingThreatValue(target,state.ai),opportunity=trainingOpportunityReason(gained,state.human),threat=trainingThreatReason(target,state.ai);
       const strategic=gained.reduce((sum,item)=>sum+trainingStrategicCardValue(item,profile),0);
@@ -2548,8 +2548,10 @@
         reserved?'This month is Reserved: all four cards in the month are already accounted for, so this capture is safe to save for later.':''
       ].filter(Boolean);
       const candidate={card,target,reserved,score:value,profile,captureDescription,reason:reasons.join(' ')};
+      targetChoices.push(candidate);
       if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best=candidate;
     }
+    if(best)best.targetAlternatives=targetChoices.filter(candidate=>candidate.target.id!==best.target.id).sort((a,b)=>b.score-a.score||a.target.id.localeCompare(b.target.id));
     return best;
   }
   function trainingRecommendation(){
@@ -2562,6 +2564,8 @@
     const extra=[];
     if(reservedDeferred)extra.push('I am intentionally leaving Reserved captures alone while a live floor capture is available; Reserved cards are the safe cards to cash in later.');
     if(best.reserved&&!liveHits.length)extra.push('This is a Reserved capture, but there is no other live floor hit, so this is the right time to cash it in.');
+    const sameCardAlternative=best.targetAlternatives?.[0];
+    if(sameCardAlternative?.target)extra.push(`Same-card alternative: this ${localizedMonth(best.card.month)} card could instead take ${sameCardAlternative.captureDescription}, but ${trainingCaptureDescription([best.card,...expandedTargetCards(best.target)])} ranks higher under ${profile.priorityText}`);
     const alternative=sorted.find(candidate=>candidate.card.id!==best.card.id||candidate.target?.id!==best.target?.id);
     if(alternative?.target)extra.push(`Second choice: ${localizedMonth(alternative.card.month)} would capture ${alternative.captureDescription}. It is playable, but it ranks below the recommended move under the current ${profile.label}.`);
     best.reason=[best.reason,...extra].filter(Boolean).join(' ');
