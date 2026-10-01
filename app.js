@@ -2647,7 +2647,7 @@
     const matches=matchesFor(card);
     if(!matches.length){
       const strategic=trainingStrategicCardValue(card,profile),competitive=competitiveMoveScore('human',card,null);
-      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no floor capture is available.',shortWhy:'No table capture is available for this card.'};
+      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no table capture is available.',shortWhy:'No table capture is available for this card.'};
     }
     let best=null;const targetChoices=[];
     for(const target of matches){
