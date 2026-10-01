@@ -2183,14 +2183,27 @@
     const bestKey=best.target?(best.card.id+'|'+best.target.id):best.card.id;
     return candidateKey<bestKey;
   }
+  function competitiveDiscardContext(side,card){
+    if(!state||!card)return {retainedFamily:[],unseenFamily:[],bestUnseen:null,bestUnseenValue:0};
+    const player=state[side];
+    if(!player)return {retainedFamily:[],unseenFamily:[],bestUnseen:null,bestUnseenValue:0};
+    const retainedFamily=(player.hand||[]).filter(item=>item.month===card.month&&item.id!==card.id);
+    const knownIds=new Set([
+      ...(state.human?.hand||[]),...(state.floor||[]),...(state.human?.captured||[]),...(state.ai?.captured||[])
+    ].map(item=>item.id));
+    const unseenFamily=MASTER_DECK.filter(item=>item.month===card.month&&!knownIds.has(item.id));
+    const bestUnseen=unseenFamily.slice().sort((a,b)=>competitiveCardValue(b)-competitiveCardValue(a)||a.id.localeCompare(b.id))[0]||null;
+    return {retainedFamily,unseenFamily,bestUnseen,bestUnseenValue:bestUnseen?competitiveCardValue(bestUnseen):0};
+  }
   function competitiveMoveScore(side,card,target=null){
     if(!state||!card)return -Infinity;
     const player=state[side],opponent=state[side==='human'?'ai':'human'];
     if(!player)return -Infinity;
     const matches=matchesFor(card);
     if(!target){
-      const sameFamilyInHand=(player.hand||[]).filter(item=>item.month===card.month).length;
-      return -competitiveCardValue(card)*1.15-(sameFamilyInHand>1?20:0);
+      const discard=competitiveDiscardContext(side,card),pairSetup=discard.retainedFamily.length?140:0;
+      const futurePremium=discard.retainedFamily.length?0:discard.bestUnseenValue*.7;
+      return -competitiveCardValue(card)*1.15+pairSetup-futurePremium;
     }
     const targetBundle=expandedTargetCards(target),gained=[card,...targetBundle],base=gained.reduce((sum,item)=>sum+competitiveCardValue(item),0);
     const floorPremium=competitiveCardValue(target)*.75;
@@ -2657,8 +2670,8 @@
     if(!card||!state)return null;
     const matches=matchesFor(card);
     if(!matches.length){
-      const strategic=trainingStrategicCardValue(card,profile),competitive=competitiveMoveScore('human',card,null);
-      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'Discard '+trainingCardName(card)+' only if no table capture is available.',shortWhy:'No table capture is available for this card.'};
+      const strategic=trainingStrategicCardValue(card,profile),competitive=competitiveMoveScore('human',card,null),discardContext=competitiveDiscardContext('human',card);
+      return {card,target:null,reserved:false,score:competitive-strategic*.15,competitive,discardContext,matchCount:0,uniqueFloorOpportunity:false,profile,captureDescription:'',gained:[],opportunity:'',threat:'',reason:'',shortWhy:'No card for capture is available on the table.'};
     }
     let best=null;const targetChoices=[];
     for(const target of matches){
@@ -2680,8 +2693,25 @@
     if(best)best.targetAlternatives=targetChoices.filter(candidate=>candidate.target.id!==best.target.id).sort((a,b)=>b.score-a.score||a.target.id.localeCompare(b.target.id));
     return best;
   }
+  function trainingNoCaptureReason(best,sorted=[]){
+    const base='No card for capture is available on the table.';
+    const context=best?.discardContext||competitiveDiscardContext('human',best?.card);
+    let reason=base;
+    if(context?.retainedFamily?.length){
+      const family=trainingFlowerName(best.card.month);
+      reason+=' You have another '+family+' card in hand, so if this card stays on the table, you can capture it on your next turn.';
+    }else reason+=' This gives up the least useful card while keeping stronger future matches in hand.';
+    const protectedCandidate=sorted
+      .filter(candidate=>candidate?.card?.id!==best?.card?.id&&!candidate?.discardContext?.retainedFamily?.length&&candidate?.discardContext?.bestUnseen)
+      .sort((a,b)=>(b.discardContext.bestUnseenValue-a.discardContext.bestUnseenValue)||a.card.id.localeCompare(b.card.id))[0];
+    if(protectedCandidate?.discardContext?.bestUnseenValue>=80){
+      const held=trainingCardName(protectedCandidate.card),future=trainingCardName(protectedCandidate.discardContext.bestUnseen);
+      reason+=' Keep '+held+' because the strongest unseen '+trainingFlowerName(protectedCandidate.card.month)+' card is '+future+'.';
+    }
+    return reason;
+  }
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
-    if(!candidate?.target)return candidate?.shortWhy||'No table capture is available.';
+    if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
     if(candidate.opportunity)return candidate.opportunity;
     const gained=candidate.gained||[];
     const stripe=gained.find(card=>card.type==='ribbon');
@@ -2719,7 +2749,7 @@
       const aTier=a.urgency?.tier||0,bTier=b.urgency?.tier||0;
       return bTier-aTier||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
     });
-    const best={...sorted[0]},why=trainingMoveWhy(best,profile);
+    const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best,sorted);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
@@ -3123,10 +3153,10 @@
       assertDeckIntegrity,countsByMonth,tripleMonths,fourMonths,hasFourOfMonth,cardFamilyName,cardDisplayName,
       markInitialFloorStacks,initFloorSlots,firstFreeFloorSlot,reserveFloorSlot,
       commitFloorSlot,addFloorCard,removeFloorCards,effectiveFloorMatchCards,expandedTargetCards,
-      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
+      stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveDiscardContext,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
