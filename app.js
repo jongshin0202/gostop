@@ -22,8 +22,8 @@
   const PLAYER_B = 'playerB';
   const SOLO_VIEWER_ID = PLAYER_A;
   const CARD_FAMILY_NAMES=Object.freeze({
-    1:'Pine & Crane',2:'Plum Blossom',3:'Cherry Blossom',4:'Wisteria',5:'Iris',6:'Peony',
-    7:'Bush Clover',8:'Moon & Pampas',9:'Chrysanthemum',10:'Maple',11:'Paulownia',12:'Rain & Willow'
+    1:'Pine',2:'Plum',3:'Cherry',4:'Vine',5:'Iris',6:'Rose',
+    7:'Bush',8:'Hill',9:'Daisy',10:'Star',11:'Berry',12:'Willow'
   });
   function cardFamilyName(month){return CARD_FAMILY_NAMES[month]||('Family '+month);}
   function cardRibbonName(value){return value==='red'?'Red':value==='blue'?'Blue':value==='grass'?'Plain Red':'';}
