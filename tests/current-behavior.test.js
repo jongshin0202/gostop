@@ -3215,6 +3215,49 @@ test('Training explains Iris recommendation through the Plain 3-Stripe opportuni
   assert.doesNotMatch(recommendation.reason,/to take|only Iris target|computer can remove|current hit/i);
 });
 
+test('Training prioritizes two-Iris family control and the live Plain Stripe over a 2x Single, Bush hit, or lone Red Stripe hit',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m5-2'),card('m7-4'),card('m2-2'),card('m12-4')],
+    human:api.makePlayer({hand:[card('m5-1'),card('m5-3'),card('m7-1'),card('m7-3'),card('m2-1'),card('m12-2')]}),
+    ai:api.makePlayer()
+  }));
+  const irisUrgency=api.competitiveMoveUrgency('human',card('m5-1'),card('m5-2'));
+  const bushUrgency=api.competitiveMoveUrgency('human',card('m7-1'),card('m7-4'));
+  const plumUrgency=api.competitiveMoveUrgency('human',card('m2-1'),card('m2-2'));
+  const willowUrgency=api.competitiveMoveUrgency('human',card('m12-2'),card('m12-4'));
+  assert.equal(irisUrgency.familyLock,true);
+  assert.equal(irisUrgency.liveStripeTarget,true);
+  assert.equal(irisUrgency.tier,3);
+  assert.equal(bushUrgency.familyLock,true);
+  assert.equal(bushUrgency.tier,3);
+  assert.equal(plumUrgency.liveStripeTarget,true);
+  assert.equal(plumUrgency.tier,3);
+  assert.equal(willowUrgency.tier,2);
+  assert.ok(api.competitiveMoveScore('human',card('m5-1'),card('m5-2'))>api.competitiveMoveScore('human',card('m7-1'),card('m7-4')));
+  assert.ok(api.competitiveMoveScore('human',card('m5-1'),card('m5-2'))>api.competitiveMoveScore('human',card('m2-1'),card('m2-2')));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.month,5);
+  assert.equal(recommendation.target.id,'m5-2');
+  assert.match(recommendation.reason,/You have 2 Iris cards in hand and 1 Iris card on the table/);
+  assert.match(recommendation.reason,/capture Iris Plain Stripe while keeping the other Iris card in hand/);
+  assert.doesNotMatch(recommendation.reason,/Willow 2x Single|Bush|Plum|Next best:/);
+});
+
+test('Computer AI shares the two-in-hand family control priority and takes Iris Plain Stripe',()=>{
+  useState(stateWith({
+    turn:'playerB',
+    floor:[card('m5-2'),card('m7-4'),card('m2-2'),card('m12-4')],
+    human:api.makePlayer(),
+    ai:api.makePlayer({hand:[card('m5-1'),card('m5-3'),card('m7-1'),card('m7-3'),card('m2-1'),card('m12-2')]})
+  }));
+  const move=api.bestCompetitiveMove('ai');
+  assert.equal(move.card.month,5);
+  assert.equal(move.target.id,'m5-2');
+  assert.equal(move.urgency.familyLock,true);
+  assert.equal(move.urgency.liveStripeTarget,true);
+});
+
 test('Training priority is unique Star hit first, unique Rose hit second, two-target Iris hit third',()=>{
   useState(stateWith({
     turn:'playerA',
@@ -3251,7 +3294,8 @@ test('Training defers two-target Willow and takes the only Daisy hit first',()=>
   assert.equal(willow.matchCount,2);
   assert.equal(willow.urgency.tier,1);
   assert.equal(daisy.matchCount,1);
-  assert.equal(daisy.urgency.tier,2);
+  assert.equal(daisy.urgency.tier,3);
+  assert.equal(daisy.urgency.liveStripeTarget,true);
   assert.equal(api.competitiveMoveIsBetter(
     {card:daisy.card,target:daisy.target,score:daisy.competitive,urgency:daisy.urgency},
     {card:willow.card,target:willow.target,score:willow.competitive,urgency:willow.urgency}
@@ -3273,7 +3317,8 @@ test('Computer AI also defers two-target Willow and takes the unique Daisy hit',
   const move=api.bestCompetitiveMove('ai');
   assert.equal(move.card.id,'m9-3');
   assert.equal(move.target.id,'m9-2');
-  assert.equal(move.urgency.tier,2);
+  assert.equal(move.urgency.tier,3);
+  assert.equal(move.urgency.liveStripeTarget,true);
 });
 
 test('Computer AI uses the same Star-over-Rose-over-Iris move evaluator as Training Mode',()=>{
