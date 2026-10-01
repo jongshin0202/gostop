@@ -2555,7 +2555,7 @@ test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, 
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
   assert.match(i18n.translate('en','scoringGate'),/Seven points is the first eligibility gate/);
   for(const text of ['1 Go','2 Go','3 Go','4 Go','5 Go','×2','×4','×8'])assert.ok(html.includes(text),text);
-  for(const text of ['3 Brights without the December Rain Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
+  for(const text of ['3 Brights without the Rain & Willow Bright','5 Pictures','5 Stripes','10 effective Singles','FIRST POOP!'])assert.ok(html.includes(text),text);
   assert.match(html,/data-card-ids="m6-4"/);assert.match(html,/data-card-ids="m6-3"/);
   assert.doesNotMatch(html,/data-card-ids="m6-1,m7-2,m8-3"/);
   assert.match(html,/data-card-ids="m5-1,m5-2"/);assert.match(html,/data-card-ids="m5-3"/);assert.match(html,/data-card-ids="m5-4"/);
@@ -2564,9 +2564,9 @@ test('beginner tutorial explains the 7-point gate, complete scoring, Go ladder, 
   assert.equal(Object.keys(i18n.dictionaries.en).includes('shakeLong'),false,'expanded tutorial detail copy stays outside the canonical localized UI dictionary');
 });
 
-test('match examples label zero, one, two, and deck-draw month matching instead of unexplained card rows',()=>{
+test('match examples label zero, one, two, and deck-draw family matching instead of unexplained card rows',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
-  assert.match(html,/One floor match → capture/);assert.match(html,/No floor match → stays on floor/);assert.match(html,/Two floor matches → choose one/);assert.match(html,/The deck card also matches by month/);
+  assert.match(html,/One floor match → capture/);assert.match(html,/No floor match → stays on floor/);assert.match(html,/Two floor matches → choose one/);assert.match(html,/The deck card also matches by family/);
   assert.match(html,/data-card-ids="m8-3"/);assert.match(html,/data-card-ids="m8-1,m8-2"/);
   assert.doesNotMatch(html,/data-card-ids="m10-2,m11-3,m12-3"/);
 });
@@ -3067,6 +3067,37 @@ test('Training Mode recommends how to use the September sake cup from current sc
   choice=api.trainingGukjinRecommendation();
   assert.equal(choice.mode,'animal');
   assert.match(choice.reason,/Recommended: Use as Picture/);
+});
+
+test('canonical card family names are locked for all twelve families and user-facing card names',()=>{
+  const families=[
+    'Pine & Crane','Plum Blossom','Cherry Blossom','Wisteria','Iris','Peony',
+    'Bush Clover','Moon & Pampas','Chrysanthemum','Maple','Paulownia','Rain & Willow'
+  ];
+  families.forEach((name,index)=>assert.equal(api.cardFamilyName(index+1),name));
+  assert.equal(api.cardDisplayName(card('m1-1')),'Pine & Crane Bright');
+  assert.equal(api.cardDisplayName(card('m2-1')),'Plum Blossom Bird Picture');
+  assert.equal(api.cardDisplayName(card('m4-2')),'Wisteria Plain Red Stripe');
+  assert.equal(api.cardDisplayName(card('m9-1')),'Chrysanthemum Sake Cup');
+  assert.equal(api.cardDisplayName(card('m11-3')),'Paulownia 2x Single');
+  assert.equal(api.cardDisplayName(card('m12-3')),'Rain & Willow Stripe');
+  assert.equal(api.cardDisplayName(card('m12-4')),'Rain & Willow 2x Single');
+});
+
+test('How to Play teaches card families instead of calendar month names',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8'),i18n=require('../i18n.js');
+  assert.match(html,/The 12 card families/);
+  assert.match(html,/Match by family/);
+  assert.match(html,/Your Peony card/);
+  assert.match(html,/Bush Clover floor card/);
+  assert.match(html,/Your Moon & Pampas card/);
+  assert.match(html,/Drawn Maple/);
+  assert.doesNotMatch(html,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
+  for(const key of ['tutorialOverview','tutorialCardTypes','tutorialMatches','matchingGuide','novemberDoubleHelp','decemberDoubleHelp','sakeCupHelp']){
+    assert.doesNotMatch(i18n.translate('en',key),/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
+  }
+  assert.match(i18n.translate('en','tutorialOverview'),/matching their card family/);
+  assert.match(i18n.translate('en','matchingGuide'),/artwork family/);
 });
 
 test('Training Mode uses picture-family names instead of month numbers for beginner coaching',()=>{
