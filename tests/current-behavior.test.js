@@ -2999,11 +2999,11 @@ test('Opening Strategy reports Red Stripe locations separately for hand and tabl
   assert.equal(route.tableClaimableCount,1);
   assert.equal(route.capturedCount,0);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/Best plan: Red Stripes/);
-  assert.match(opening,/you have 1 Red Stripe in hand/);
-  assert.match(opening,/1 Red Stripe is on the table you can take now/);
-  assert.match(opening,/That puts 2 of the 3 set cards within immediate reach/);
-  assert.doesNotMatch(opening,/including 2 on the table|2 Red Stripes? (?:is|are) on the table/);
+  assert.match(opening,/Best plan: Red Stripe set \(Pine, Plum, Cherry\)/);
+  assert.match(opening,/you have 1 of these set Stripe in hand/);
+  assert.match(opening,/1 more set Stripe is on the table you can take now/);
+  assert.match(opening,/That puts 2 of the 3 scoring-set Stripes within immediate reach/);
+  assert.doesNotMatch(opening,/including 2 on the table|2 more set Stripes? (?:is|are) on the table/);
 });
 
 test('Opening Strategy counts all Red Stripes in hand even when only one can be played immediately',()=>{
@@ -3020,11 +3020,26 @@ test('Opening Strategy counts all Red Stripes in hand even when only one can be 
   assert.equal(route.controlledCount,2);
   assert.equal(route.potentialCount,3);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/you have 2 Red Stripes in hand/);
-  assert.match(opening,/1 of your in-hand Red Stripe can be played onto a matching family on the table now/);
-  assert.match(opening,/1 Red Stripe is on the table you can take now/);
-  assert.match(opening,/That puts 2 of the 3 set cards within immediate reach/);
-  assert.doesNotMatch(opening,/you have 1 Red Stripe in hand/);
+  assert.match(opening,/you have 2 of these set Stripes in hand/);
+  assert.match(opening,/1 of your in-hand set Stripe can be played onto a matching family on the table now/);
+  assert.match(opening,/1 more set Stripe is on the table you can take now/);
+  assert.match(opening,/That puts 2 of the 3 scoring-set Stripes within immediate reach/);
+  assert.doesNotMatch(opening,/you have 1 of these set Stripe in hand/);
+});
+
+test('Opening Strategy distinguishes total Stripe cards from Red scoring-set Stripes',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-2')],
+    human:api.makePlayer({hand:[card('m1-2'),card('m3-3'),card('m12-3')]}),
+    ai:api.makePlayer()
+  }));
+  const route=api.trainingRibbonRoute('red');
+  assert.equal(route.inHandCount,1);
+  assert.equal((api.getState().human.hand||[]).filter(card=>card.type==='ribbon').length,2);
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/You have 2 Stripe cards total in hand, but only 1 belongs to this 3-card scoring set/);
+  assert.match(opening,/Red Stripe set \(Pine, Plum, Cherry\)/);
 });
 
 test('Training Mode distinguishes a possible Blue Stripe set from Blue Stripes that can actually be secured now',()=>{
