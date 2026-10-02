@@ -3020,7 +3020,7 @@ test('Opening Strategy counts all Red Stripes in hand even when only one can be 
   assert.equal(route.controlledCount,2);
   assert.equal(route.potentialCount,3);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/you have 2 of these set Stripes in hand/);
+  assert.match(opening,/you have 2 of these set Stripes in hand \(Pine, Plum\)/);
   assert.match(opening,/1 of your in-hand set Stripe can be played onto a matching family on the table now/);
   assert.match(opening,/1 more set Stripe is on the table you can take now/);
   assert.match(opening,/That puts 2 of the 3 scoring-set Stripes within immediate reach/);
