@@ -2802,13 +2802,17 @@
     if(profile.primary==='stripe'){
       const route=profile.strongestRibbon,locations=[];
       const setFamilies=(TRAINING_RIBBON_MONTHS[route.family]||[]).map(trainingFlowerName);
-      const totalHandStripes=(state.human.hand||[]).filter(card=>card.type==='ribbon').length;
+      const hand=state.human.hand||[],floor=state.floor||[];
+      const handSetStripes=hand.filter(card=>card.type==='ribbon'&&card.ribbonSet===route.family);
+      const tableClaimableSetStripes=floor.filter(card=>card.type==='ribbon'&&card.ribbonSet===route.family&&hand.some(held=>held.month===card.month));
+      const inHandCount=handSetStripes.length,tableClaimableCount=tableClaimableSetStripes.length,totalHandStripes=hand.filter(card=>card.type==='ribbon').length;
+      const inHandNames=handSetStripes.map(card=>trainingFlowerName(card.month));
       if(route.capturedCount)locations.push('You already captured '+route.capturedCount+' of these set Stripe'+(route.capturedCount===1?'':'s'));
-      if(route.inHandCount)locations.push('you have '+route.inHandCount+' of these set Stripe'+(route.inHandCount===1?'':'s')+' in hand');
-      if(route.tableClaimableCount)locations.push(route.tableClaimableCount+' more set Stripe'+(route.tableClaimableCount===1?' is':'s are')+' on the table you can take now');
+      if(inHandCount)locations.push('you have '+inHandCount+' of these set Stripe'+(inHandCount===1?'':'s')+' in hand'+(inHandNames.length?' ('+inHandNames.join(', ')+')':''));
+      if(tableClaimableCount)locations.push(tableClaimableCount+' more set Stripe'+(tableClaimableCount===1?' is':'s are')+' on the table you can take now');
       const locationText=locations.length===1?locations[0]:locations.length===2?(locations[0]+' and '+locations[1]):(locations.slice(0,-1).join(', ')+', and '+locations.at(-1));
-      const totalHandText=totalHandStripes>route.inHandCount
-        ?(' You have '+totalHandStripes+' Stripe cards total in hand, but only '+route.inHandCount+' '+(route.inHandCount===1?'belongs':'belong')+' to this 3-card scoring set.')
+      const totalHandText=totalHandStripes>inHandCount
+        ?(' You have '+totalHandStripes+' Stripe cards total in hand, but only '+inHandCount+' '+(inHandCount===1?'belongs':'belong')+' to this 3-card scoring set.')
         :'';
       const playableText=route.playableHandCount
         ?(' '+route.playableHandCount+' of your in-hand set Stripe'+(route.playableHandCount===1?' can':'s can')+' be played onto a matching family on the table now.')
