@@ -2801,14 +2801,19 @@
     const profile=trainingStrategyProfile(state.human);
     if(profile.primary==='stripe'){
       const route=profile.strongestRibbon,locations=[];
-      if(route.capturedCount)locations.push('you already captured '+route.capturedCount+' '+route.name+' Stripe'+(route.capturedCount===1?'':'s'));
-      if(route.inHandCount)locations.push('you have '+route.inHandCount+' '+route.name+' Stripe'+(route.inHandCount===1?'':'s')+' in hand');
-      if(route.tableClaimableCount)locations.push(route.tableClaimableCount+' '+route.name+' Stripe'+(route.tableClaimableCount===1?' is':'s are')+' on the table you can take now');
+      const setFamilies=(TRAINING_RIBBON_MONTHS[route.family]||[]).map(trainingFlowerName);
+      const totalHandStripes=(state.human.hand||[]).filter(card=>card.type==='ribbon').length;
+      if(route.capturedCount)locations.push('You already captured '+route.capturedCount+' of these set Stripe'+(route.capturedCount===1?'':'s'));
+      if(route.inHandCount)locations.push('you have '+route.inHandCount+' of these set Stripe'+(route.inHandCount===1?'':'s')+' in hand');
+      if(route.tableClaimableCount)locations.push(route.tableClaimableCount+' more set Stripe'+(route.tableClaimableCount===1?' is':'s are')+' on the table you can take now');
       const locationText=locations.length===1?locations[0]:locations.length===2?(locations[0]+' and '+locations[1]):(locations.slice(0,-1).join(', ')+', and '+locations.at(-1));
-      const playableText=route.playableHandCount
-        ?(' '+route.playableHandCount+' of your in-hand '+route.name+' Stripe'+(route.playableHandCount===1?' can':'s can')+' be played onto a matching family on the table now.')
+      const totalHandText=totalHandStripes>route.inHandCount
+        ?(' You have '+totalHandStripes+' Stripe cards total in hand, but only '+route.inHandCount+' '+(route.inHandCount===1?'belongs':'belong')+' to this 3-card scoring set.')
         :'';
-      return ('Best plan: '+route.name+' Stripes. '+locationText+'.'+playableText+' That puts '+route.controlledCount+' of the 3 set cards within immediate reach. '+profile.backup).trim();
+      const playableText=route.playableHandCount
+        ?(' '+route.playableHandCount+' of your in-hand set Stripe'+(route.playableHandCount===1?' can':'s can')+' be played onto a matching family on the table now.')
+        :'';
+      return ('Best plan: '+route.name+' Stripe set ('+setFamilies.join(', ')+'). '+locationText+'.'+totalHandText+playableText+' That puts '+route.controlledCount+' of the 3 scoring-set Stripes within immediate reach. '+profile.backup).trim();
     }
     if(profile.primary==='bright')return ('Best plan: Brights. You already have or can immediately reach '+profile.brightRoute.controlledCount+' Brights, so protect that route and take Bright captures when they are available. '+profile.backup).trim();
     if(profile.primary==='godori')return ('Best plan: Godori. You already have or can immediately reach '+profile.godoriRoute.controlledCount+' of the 3 bird cards, so protect that set while it is still live. '+profile.backup).trim();
