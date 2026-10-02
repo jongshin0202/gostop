@@ -2529,7 +2529,7 @@
     return {
       family,name:trainingRibbonName(family),alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,
       controlledCount,potentialCount,immediateCount:new Set([...playableHandMonths,...tableClaimableMonths]).size,
-      capturedCount:capturedMonths.size,playableHandCount:playableHandMonths.size,tableClaimableCount:tableClaimableMonths.size,
+      capturedCount:capturedMonths.size,inHandCount:new Set(inHand.map(card=>card.month)).size,playableHandCount:playableHandMonths.size,tableClaimableCount:tableClaimableMonths.size,
       captured:capturedRoute,inHand,playable,claimable,lost
     };
   }
@@ -2802,10 +2802,13 @@
     if(profile.primary==='stripe'){
       const route=profile.strongestRibbon,locations=[];
       if(route.capturedCount)locations.push('you already captured '+route.capturedCount+' '+route.name+' Stripe'+(route.capturedCount===1?'':'s'));
-      if(route.playableHandCount)locations.push('you have '+route.playableHandCount+' '+route.name+' Stripe'+(route.playableHandCount===1?'':'s')+' in hand');
+      if(route.inHandCount)locations.push('you have '+route.inHandCount+' '+route.name+' Stripe'+(route.inHandCount===1?'':'s')+' in hand');
       if(route.tableClaimableCount)locations.push(route.tableClaimableCount+' '+route.name+' Stripe'+(route.tableClaimableCount===1?' is':'s are')+' on the table you can take now');
       const locationText=locations.length===1?locations[0]:locations.length===2?(locations[0]+' and '+locations[1]):(locations.slice(0,-1).join(', ')+', and '+locations.at(-1));
-      return ('Best plan: '+route.name+' Stripes. '+locationText+'. That puts '+route.controlledCount+' of the 3 set cards within immediate reach. '+profile.backup).trim();
+      const playableText=route.playableHandCount
+        ?(' '+route.playableHandCount+' of your in-hand '+route.name+' Stripe'+(route.playableHandCount===1?' can':'s can')+' be played onto a matching family on the table now.')
+        :'';
+      return ('Best plan: '+route.name+' Stripes. '+locationText+'.'+playableText+' That puts '+route.controlledCount+' of the 3 set cards within immediate reach. '+profile.backup).trim();
     }
     if(profile.primary==='bright')return ('Best plan: Brights. You already have or can immediately reach '+profile.brightRoute.controlledCount+' Brights, so protect that route and take Bright captures when they are available. '+profile.backup).trim();
     if(profile.primary==='godori')return ('Best plan: Godori. You already have or can immediately reach '+profile.godoriRoute.controlledCount+' of the 3 bird cards, so protect that set while it is still live. '+profile.backup).trim();
