@@ -2931,7 +2931,7 @@
     const resolve=trainingOpeningDismissResolve;trainingOpeningDismissResolve=null;
     presentation.trainingOpeningPinned=false;hideTrainingCoach();
     if(unlock){presentation.locked=false;render();}
-    if(resolve)resolve();
+    if(resolve)setTimeout(resolve,250);
   }
   function showTrainingCoach(title,text){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
