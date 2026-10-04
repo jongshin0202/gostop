@@ -3089,6 +3089,21 @@ test('Training Mode defers Reserved captures while any live floor hit remains',(
   assert.doesNotMatch(recommendation.reason,/Reserved rule|Priority:/);
 });
 
+test('Training does not call a Reserved capture the only guaranteed hit when another Reserved hit is also available',()=>{
+  const irisHand=card('m5-1'),irisFloor=card('m5-2'),willowHand=card('m12-1'),willowFloor=card('m12-2');
+  useState(stateWith({
+    turn:'playerA',
+    floor:[irisFloor,willowFloor],
+    human:api.makePlayer({hand:[irisHand,willowHand],captured:[card('m5-3'),card('m12-3')]}),
+    ai:api.makePlayer({captured:[card('m5-4'),card('m12-4')]})
+  }));
+  assert.equal(api.trainingIsReservedPlay(irisHand,irisFloor),true);
+  assert.equal(api.trainingIsReservedPlay(willowHand,willowFloor),true);
+  const recommendation=api.trainingRecommendation();
+  assert.ok(recommendation?.target);
+  assert.doesNotMatch(recommendation.reason,/only guaranteed table capture/i);
+});
+
 test('Training recommendation focuses only on the recommended move and its strategy',()=>{
   useState(stateWith({
     turn:'playerA',
