@@ -108,6 +108,25 @@
         </div>
         <button class="dialog-close tutorial-close" type="submit" data-i18n-aria="close" aria-label="Close">×</button>
       </header>
+      <section id="tutorialVideoView" class="tutorial-video-view" aria-label="How to Play tutorial video">
+        <div id="tutorialVideoStage" class="tutorial-video-stage" aria-live="polite"></div>
+        <div class="tutorial-video-copy">
+          <div class="tutorial-video-meta">
+            <strong id="tutorialVideoChapterLabel">1 · The Goal</strong>
+            <span><span id="tutorialVideoCurrent">0:00</span> / <span id="tutorialVideoDuration">3:00</span></span>
+          </div>
+          <p id="tutorialVideoCaption" class="tutorial-video-caption"></p>
+        </div>
+        <input id="tutorialVideoProgress" class="tutorial-video-progress" type="range" min="0" max="180" step=".1" value="0" aria-label="Tutorial video position">
+        <div id="tutorialVideoChapters" class="tutorial-video-chapters" aria-label="Tutorial chapters"></div>
+        <div id="tutorialVideoControls" class="tutorial-video-controls">
+          <button id="tutorialVideoPrev" type="button" aria-label="Previous chapter">← Chapter</button>
+          <button id="tutorialVideoPlay" class="tutorial-video-play" type="button" aria-label="Play tutorial">Play</button>
+          <button id="tutorialVideoNext" type="button" aria-label="Next chapter">Chapter →</button>
+          <button id="tutorialVideoNarration" type="button" aria-pressed="false">Narration Off</button>
+          <button id="tutorialFullRulesBtn" type="button">Full Rules</button>
+        </div>
+      </section>
       <nav class="tutorial-nav" aria-label="Tutorial sections">
         <a href="#guide-overview" data-i18n="overview">Overview</a>
         <a href="#guide-controls">Using the App</a>
@@ -565,6 +584,7 @@
   <script src="online-client.js?v=20260929-1"></script>
   <script src="presentation-plan.js?v=20260928-1"></script>
   <script src="app.js?v=20261004-1"></script>
+  <script src="tutorial-video.js?v=20261004-1"></script>
   <script src="diagnostics.js?v=20260925-2"></script>
 </body>
 </html>
