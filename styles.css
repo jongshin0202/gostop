@@ -862,7 +862,9 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 .tutorial-video-chapters{display:flex;gap:5px;width:min(960px,100%);margin:0 auto;overflow-x:auto;padding-bottom:1px}
 .tutorial-video-chapters button,.tutorial-video-controls button,.tutorial-video-back-rules{flex:0 0 auto;border:1px solid #80623d;border-radius:8px;background:#2a1c14;color:#ead6b5;padding:7px 10px;cursor:pointer;font:800 .72rem system-ui,sans-serif}
 .tutorial-video-chapters button.active{background:#78501d;color:#fff2c8;border-color:#e1b45f}
-.tutorial-video-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;width:min(960px,100%);margin:0 auto}
+.tutorial-video-controls{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:7px;width:min(960px,100%);margin:0 auto}
+.tutorial-video-volume{display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #80623d;border-radius:8px;background:#2a1c14;color:#ead6b5;font:800 .7rem system-ui,sans-serif}
+.tutorial-video-volume input{width:82px;accent-color:#d8a845}
 .tutorial-video-controls .tutorial-video-play{min-width:90px;background:#8b2e21;border-color:#d96f53;color:#fff}
 .tutorial-video-controls button.active{background:#285f39;border-color:#69b57e;color:#fff}
 .tutorial-video-back-rules{margin-right:4px;background:#6f451a!important;color:#fff0c5!important}
@@ -883,6 +885,6 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .tutorial-video-special-grid{gap:3px}.tutorial-video-special-grid article{padding:5px 2px;gap:3px}.tutorial-video-special-grid article>strong{font-size:.58rem}.tutorial-video-special-grid article>span{font-size:.43rem;min-height:23px}.tutorial-video-special-grid .tutorial-video-card{width:clamp(19px,5vw,26px)}
   .scene-controls h3{font-size:1.2rem}.tutorial-video-device-icon{font-size:3rem}.scene-controls p{font-size:.7rem}.tutorial-video-training-cta{padding:8px 12px}.tutorial-video-training-cta strong{font-size:.85rem}.tutorial-video-training-cta span{font-size:.62rem}
   .tutorial-video-caption{font-size:.72rem;min-height:3.2em}.tutorial-video-meta{font-size:.62rem}
-  .tutorial-video-chapters button,.tutorial-video-controls button,.tutorial-video-back-rules{padding:6px 8px;font-size:.61rem}
+  .tutorial-video-chapters button,.tutorial-video-controls button,.tutorial-video-back-rules{padding:6px 8px;font-size:.61rem}.tutorial-video-volume{font-size:.58rem;padding:5px 7px}.tutorial-video-volume input{width:62px}
   .tutorial-video-chapters{scrollbar-width:none}.tutorial-video-chapters::-webkit-scrollbar{display:none}
 }
