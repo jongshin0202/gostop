@@ -723,8 +723,13 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 /* How To Play video tutorial: the animated quick-start is primary; the full written guide remains available on demand. */
 .tutorial-card{grid-template-rows:auto minmax(0,1fr)}
 .tutorial-reference-content{display:none!important}
-.tutorial-card.show-reference{grid-template-rows:auto auto minmax(0,1fr)}
-.tutorial-card.show-reference .tutorial-video{display:none}
+.tutorial-card.show-reference{grid-template-rows:auto auto auto minmax(0,1fr)}
+.tutorial-card.show-reference .tutorial-video{display:flex;justify-content:flex-end;align-items:center;padding:7px 18px;background:#17110d;overflow:visible}
+.tutorial-card.show-reference .tutorial-video-screen,
+.tutorial-card.show-reference .tutorial-video-progress,
+.tutorial-card.show-reference .tutorial-video-dots,
+.tutorial-card.show-reference .tutorial-video-controls>button:not(.tutorial-reference-toggle){display:none!important}
+.tutorial-card.show-reference .tutorial-video-controls{display:flex;margin-left:auto}
 .tutorial-card.show-reference .tutorial-reference-content.tutorial-nav{display:flex!important}
 .tutorial-card.show-reference .tutorial-reference-content.tutorial-sections{display:grid!important}
 .tutorial-video{
@@ -795,7 +800,7 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 
 @media(max-width:700px){
   .tutorial-card{grid-template-rows:auto minmax(0,1fr)}
-  .tutorial-card.show-reference{grid-template-rows:auto auto minmax(0,1fr)}
+  .tutorial-card.show-reference{grid-template-rows:auto auto auto minmax(0,1fr)}
   .tutorial-video{padding:8px 9px calc(10px + env(safe-area-inset-bottom));gap:7px}
   .tutorial-video-screen{padding:10px 9px;gap:7px;border-radius:12px}
   .tutorial-video-board{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-rows:minmax(118px,1fr) auto;gap:5px;padding:7px}
