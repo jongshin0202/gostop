@@ -2785,7 +2785,7 @@
     });
     const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
-    const reservedNote=best.reserved&&!liveHits.length?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
+    const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
     best.shortWhy=why;
     best.reason=[action,why+reservedNote,threat].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
