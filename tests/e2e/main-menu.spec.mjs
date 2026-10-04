@@ -380,18 +380,36 @@ test('phone attract mode swipes Global to Monthly without exiting, while a norma
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
-test('mobile How to Play header remains inside the viewport and its close button does not overlap the navigation row',async({page})=>{
+test('mobile How to Play opens the tutorial video below a non-overlapping header',async({page})=>{
   const errors=await openMenu(page,{mobile:true});
   await page.locator('#howToBtn').click();
   await expect(page.locator('#howToDialog')).toHaveJSProperty('open',true);
+  await expect(page.locator('#tutorialVideoView')).toBeVisible();
+  await expect(page.locator('#howToDialog .tutorial-nav')).toBeHidden();
   const dialog=await page.locator('#howToDialog .tutorial-card').boundingBox();
   const header=await page.locator('#howToDialog .tutorial-header').boundingBox();
   const close=await page.locator('#howToDialog .tutorial-close').boundingBox();
-  const nav=await page.locator('#howToDialog .tutorial-nav').boundingBox();
-  expect(dialog).not.toBeNull();expect(header).not.toBeNull();expect(close).not.toBeNull();expect(nav).not.toBeNull();
+  const stage=await page.locator('#tutorialVideoStage').boundingBox();
+  expect(dialog).not.toBeNull();expect(header).not.toBeNull();expect(close).not.toBeNull();expect(stage).not.toBeNull();
   expect(dialog.y).toBeGreaterThanOrEqual(0);
   expect(header.y).toBeGreaterThanOrEqual(dialog.y);
-  expect(close.y+close.height).toBeLessThanOrEqual(nav.y+1);
+  expect(close.y+close.height).toBeLessThanOrEqual(stage.y+1);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('How to Play tutorial video keeps the detailed rules available behind Full Rules',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#howToBtn').click();
+  await expect(page.locator('#tutorialVideoView')).toBeVisible();
+  await expect(page.locator('#tutorialVideoChapterLabel')).toContainText('The Goal');
+  await expect(page.locator('#tutorialVideoCaption')).toContainText('Match cards');
+  await page.locator('#tutorialFullRulesBtn').click();
+  await expect(page.locator('#tutorialVideoView')).toBeHidden();
+  await expect(page.locator('#howToDialog .tutorial-nav')).toBeVisible();
+  await expect(page.locator('#howToDialog .tutorial-sections')).toBeVisible();
+  await page.locator('.tutorial-video-back-rules').click();
+  await expect(page.locator('#tutorialVideoView')).toBeVisible();
+  await expect(page.locator('#howToDialog .tutorial-nav')).toBeHidden();
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 

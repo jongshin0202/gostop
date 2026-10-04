@@ -761,3 +761,130 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .training-coach-panel{top:43px;max-width:62vw;padding:6px 8px}
   .training-coach-copy p{font-size:10px;line-height:1.2}
 }
+
+
+/* How to Play tutorial video — isolated from gameplay layout and input. */
+.tutorial-video-view{display:grid;grid-template-rows:minmax(0,1fr) auto auto auto auto;gap:10px;min-height:0;padding:14px 18px 18px;background:linear-gradient(180deg,#17110d,#21160f)}
+.tutorial-video-view[hidden],.tutorial-nav[hidden],.tutorial-sections[hidden]{display:none!important}
+.tutorial-video-stage{position:relative;width:min(100%,960px);aspect-ratio:16/9;max-height:52vh;margin:0 auto;overflow:hidden;border:1px solid rgba(228,188,111,.45);border-radius:15px;background:radial-gradient(circle at 50% 42%,#385744 0,#233b2d 48%,#120d09 100%);box-shadow:inset 0 0 65px #0008,0 14px 35px #0006}
+.tutorial-video-scene{position:absolute;inset:0;display:grid;place-items:center;padding:clamp(14px,3vw,34px);font-family:Georgia,"Times New Roman",serif;color:#fff;text-align:center}
+.tutorial-video-scene h3{margin:0;color:#ffe09a;font-size:clamp(1.4rem,3.4vw,2.5rem)}
+.tutorial-video-logo{font-size:clamp(2.4rem,6.8vw,5.8rem);font-weight:800;color:#ffdc79;text-shadow:0 5px 18px #000}
+.tutorial-video-logo em{font-style:italic}
+.tutorial-video-subtitle{margin:10px auto 0;max-width:760px;color:#f0ddbb;font:700 clamp(.85rem,1.6vw,1.1rem)/1.45 system-ui,sans-serif}
+.tutorial-video-card-wrap{display:grid;justify-items:center;gap:4px;margin:0;min-width:0}
+.tutorial-video-card{display:block;width:clamp(52px,7vw,76px);aspect-ratio:76/123;object-fit:contain;border-radius:6px;border:2px solid #b52e22;background:#f5efe3;box-shadow:0 6px 13px #0008}
+.tutorial-video-card-wrap figcaption{max-width:105px;color:#ead5ae;font:700 clamp(.62rem,1vw,.78rem)/1.15 system-ui,sans-serif}
+.tutorial-video-card-back{background:linear-gradient(135deg,#70130e,#b42b20);position:relative}
+.tutorial-video-card-back:after{content:"";position:absolute;inset:6px;border:1px solid #ffb59a55;background:repeating-linear-gradient(45deg,#ffffff0a 0 2px,transparent 2px 7px)}
+.tutorial-video-arrow{font:900 clamp(1.4rem,3vw,2.4rem)/1 system-ui,sans-serif;color:#ffd36e}
+
+.tutorial-video-goal-row{display:grid;grid-template-columns:auto auto auto auto auto auto auto;align-items:center;gap:clamp(6px,1.5vw,16px);margin-top:16px}
+.tutorial-video-goal-step{display:grid;place-items:center;gap:7px}
+.tutorial-video-goal-step span{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#8f2a1e;border:1px solid #e3a65b;font:900 1rem system-ui,sans-serif}
+.tutorial-video-goal-step strong{font-size:clamp(.7rem,1.4vw,1rem);white-space:nowrap}
+
+.scene-cards{grid-template-rows:auto auto 1fr;align-content:center}
+.tutorial-video-family-demo{display:flex;align-items:end;justify-content:center;gap:clamp(5px,1.2vw,12px);margin:12px 0}
+.tutorial-video-type-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;width:min(780px,100%)}
+.tutorial-video-type-grid>div{display:grid;justify-items:center;gap:5px;padding:8px;border-radius:10px;background:#ffffff0d;border:1px solid #ffffff15}
+.tutorial-video-type-grid b{color:#ffd477;font:900 .85rem system-ui,sans-serif}
+
+.scene-turn{grid-template-rows:1fr auto auto;align-items:center}
+.tutorial-video-table{position:relative;width:min(760px,96%);height:min(300px,62%);min-height:220px;border:13px solid #4a291b;border-radius:42% / 15%;background:radial-gradient(circle,#395b45,#284331 70%);box-shadow:inset 0 0 35px #0006,0 12px 25px #0008}
+.tutorial-video-table-title{position:absolute;left:50%;top:8px;transform:translateX(-50%);color:#d7b77e;font:900 .68rem system-ui,sans-serif;letter-spacing:.18em}
+.tutorial-video-table-cards{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);display:flex;gap:18px}
+.tutorial-video-deck{position:absolute;left:8%;top:50%;transform:translateY(-50%)}
+.tutorial-video-capture-bin{position:absolute;right:5%;bottom:7%;min-width:125px;padding:8px 12px;border:1px solid #d0a56166;border-radius:8px;background:#1b120dcf;color:#ddc89e;font:700 .72rem system-ui,sans-serif}
+.tutorial-video-capture-bin:after{display:block;margin-top:4px;color:#ffd36e;font-weight:900}
+.tutorial-video-hand-row{display:flex;align-items:end;justify-content:center;gap:8px;margin-top:-8px}
+.tutorial-video-hand-row>span{align-self:center;color:#e0c695;font:900 .72rem system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em}
+.tutorial-video-turn-label{margin-top:4px;padding:7px 14px;border-radius:999px;background:#17100dcc;border:1px solid #cba56155;color:#ffe29b;font:800 .84rem system-ui,sans-serif}
+.tutorial-video-stage[data-phase="1"] .scene-turn .tutorial-video-hand-row [data-card-id="m4-3"] .tutorial-video-card{transform:translateY(-10px);box-shadow:0 0 0 3px #ffd55c,0 0 18px #f7c73e}
+.tutorial-video-stage[data-phase="2"] .scene-turn .tutorial-video-hand-row [data-card-id="m4-3"]{opacity:.25}
+.tutorial-video-stage[data-phase="2"] .scene-turn .tutorial-video-table-cards [data-card-id="m4-4"] .tutorial-video-card{box-shadow:0 0 0 3px #ffd55c,0 0 18px #f7c73e}
+.tutorial-video-stage[data-phase="3"] .scene-turn .tutorial-video-hand-row [data-card-id="m4-3"],.tutorial-video-stage[data-phase="3"] .scene-turn .tutorial-video-table-cards [data-card-id="m4-4"]{opacity:0}
+.tutorial-video-stage[data-phase="3"] .scene-turn .tutorial-video-capture-bin:after{content:"Vine ×2"}
+.tutorial-video-stage[data-phase="4"] .scene-turn .tutorial-video-deck{filter:brightness(1.35);transform:translateY(-50%) scale(1.06)}
+.tutorial-video-stage[data-phase="4"] .scene-turn .tutorial-video-table-cards [data-card-id="m10-3"] .tutorial-video-card{box-shadow:0 0 0 3px #85d7ff,0 0 18px #58bce9}
+
+.tutorial-video-match-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(900px,100%)}
+.tutorial-video-match-grid article{min-width:0;padding:15px 9px;border:1px solid #ffffff20;border-radius:12px;background:#160f0caa;display:grid;align-content:center;justify-items:center;gap:10px}
+.tutorial-video-match-grid h3{font-size:clamp(1rem,2vw,1.45rem)}
+.tutorial-video-match-grid article>strong{color:#ffd56f;font:900 .8rem system-ui,sans-serif}
+.tutorial-video-mini-row{display:flex;align-items:center;justify-content:center;gap:7px}
+.tutorial-video-two-targets{display:flex;gap:3px}
+.tutorial-video-match-grid .tutorial-video-card{width:clamp(44px,6vw,68px)}
+.tutorial-video-match-grid .tutorial-video-card-wrap figcaption{display:none}
+
+.tutorial-video-score-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:min(930px,100%)}
+.tutorial-video-score-grid article{min-width:0;padding:9px 6px;border-radius:10px;background:#170f0cb8;border:1px solid #ffffff1e;display:grid;gap:5px}
+.tutorial-video-score-grid article>b{color:#ffe19a;font-size:clamp(.8rem,1.5vw,1.05rem)}
+.tutorial-video-score-grid article>strong{color:#fff;font:900 clamp(.68rem,1.2vw,.86rem) system-ui,sans-serif}
+.tutorial-video-score-grid article>div{display:flex;justify-content:center;gap:2px}
+.tutorial-video-score-grid .tutorial-video-card{width:clamp(34px,4.7vw,56px)}
+.tutorial-video-score-grid figcaption{display:none}
+.tutorial-video-bonus-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;width:min(900px,100%);margin-top:12px}
+.tutorial-video-bonus-row>div{padding:8px;border-radius:8px;background:#ffffff0b;border:1px solid #d0aa642c}
+.tutorial-video-bonus-row strong,.tutorial-video-bonus-row span{display:block}
+.tutorial-video-bonus-row strong{color:#ffd36e;font-size:.78rem}
+.tutorial-video-bonus-row span{font:700 .68rem system-ui,sans-serif;color:#dbc8a8}
+
+.scene-gostop{grid-template-rows:auto auto auto;align-content:center;gap:18px}
+.tutorial-video-scoreburst{font-size:clamp(4rem,10vw,7.5rem);font-weight:900;color:#ffd55f;text-shadow:0 0 24px #e9a92266}
+.tutorial-video-scoreburst small{display:block;margin-top:-12px;font:900 .8rem system-ui,sans-serif;letter-spacing:.2em}
+.tutorial-video-decision{display:flex;gap:20px}
+.tutorial-video-decision button{min-width:150px;padding:13px 24px;border-radius:12px;border:2px solid;color:#fff;font:900 1.3rem Georgia,serif}
+.tutorial-video-go{background:#2f7a43;border-color:#83d19a!important}.tutorial-video-stop{background:#9b3427;border-color:#e77b61!important}
+.tutorial-video-choice-copy{display:flex;gap:20px;color:#e9d7b9;font:700 .8rem system-ui,sans-serif}.tutorial-video-choice-copy p{margin:0}.tutorial-video-choice-copy b{color:#ffd46e}
+
+.tutorial-video-special-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:min(940px,100%)}
+.tutorial-video-special-grid article{min-width:0;padding:10px 6px;border-radius:10px;background:#180f0cbf;border:1px solid #ffffff1d;display:grid;align-content:center;gap:7px}
+.tutorial-video-special-grid article>strong{color:#ffd36e;font-size:.9rem}
+.tutorial-video-special-grid article>span{min-height:30px;color:#d7c3a3;font:700 .66rem/1.3 system-ui,sans-serif}
+.tutorial-video-special-grid article>div{display:flex;justify-content:center;gap:1px}
+.tutorial-video-special-grid .tutorial-video-card{width:clamp(28px,3.8vw,46px)}
+.tutorial-video-special-grid figcaption{display:none}
+.tutorial-video-special-icons{font-size:clamp(1.6rem,4vw,3rem)}
+
+.scene-controls{grid-template-rows:auto auto auto auto;align-content:center;gap:10px}
+.tutorial-video-device-icon{font-size:clamp(3rem,8vw,6rem)}
+.scene-controls p{max-width:700px;margin:0;color:#eedbbc;font:700 clamp(.78rem,1.5vw,1rem)/1.45 system-ui,sans-serif}
+.tutorial-video-training-cta{display:grid;gap:5px;margin-top:10px;padding:13px 20px;border:1px solid #efc26277;border-radius:12px;background:linear-gradient(180deg,#74491688,#3b261188)}
+.tutorial-video-training-cta strong{color:#ffe29a;font-size:clamp(1rem,2vw,1.35rem)}
+.tutorial-video-training-cta span{font:800 .8rem system-ui,sans-serif}
+
+.tutorial-video-copy{width:min(960px,100%);margin:0 auto}
+.tutorial-video-meta{display:flex;justify-content:space-between;gap:15px;align-items:center;color:#e0c597;font:800 .76rem system-ui,sans-serif}
+.tutorial-video-meta strong{color:#ffd778}
+.tutorial-video-caption{min-height:2.9em;margin:5px 0 0;color:#f4ead8;font:700 clamp(.82rem,1.5vw,1rem)/1.45 system-ui,sans-serif}
+.tutorial-video-progress{width:min(960px,100%);margin:0 auto;accent-color:#d8a845}
+.tutorial-video-chapters{display:flex;gap:5px;width:min(960px,100%);margin:0 auto;overflow-x:auto;padding-bottom:1px}
+.tutorial-video-chapters button,.tutorial-video-controls button,.tutorial-video-back-rules{flex:0 0 auto;border:1px solid #80623d;border-radius:8px;background:#2a1c14;color:#ead6b5;padding:7px 10px;cursor:pointer;font:800 .72rem system-ui,sans-serif}
+.tutorial-video-chapters button.active{background:#78501d;color:#fff2c8;border-color:#e1b45f}
+.tutorial-video-controls{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:7px;width:min(960px,100%);margin:0 auto}
+.tutorial-video-volume{display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #80623d;border-radius:8px;background:#2a1c14;color:#ead6b5;font:800 .7rem system-ui,sans-serif}
+.tutorial-video-volume input{width:82px;accent-color:#d8a845}
+.tutorial-video-controls .tutorial-video-play{min-width:90px;background:#8b2e21;border-color:#d96f53;color:#fff}
+.tutorial-video-controls button.active{background:#285f39;border-color:#69b57e;color:#fff}
+.tutorial-video-back-rules{margin-right:4px;background:#6f451a!important;color:#fff0c5!important}
+
+@media(max-width:700px){
+  .tutorial-video-view{padding:8px 8px 10px;gap:7px}
+  .tutorial-video-stage{width:100%;max-height:48dvh;border-radius:10px}
+  .tutorial-video-scene{padding:10px}
+  .tutorial-video-logo{font-size:clamp(2rem,13vw,4rem)}
+  .tutorial-video-goal-row{grid-template-columns:repeat(4,1fr);gap:5px;width:100%}.tutorial-video-goal-row .tutorial-video-arrow{display:none}
+  .tutorial-video-goal-step span{width:28px;height:28px}.tutorial-video-goal-step strong{font-size:.58rem;white-space:normal}
+  .tutorial-video-card{width:clamp(39px,12vw,55px)}.tutorial-video-card-wrap figcaption{font-size:.55rem;max-width:72px}
+  .tutorial-video-family-demo{gap:4px;margin:5px 0}.tutorial-video-type-grid{gap:4px}.tutorial-video-type-grid>div{padding:4px 2px}.tutorial-video-type-grid b{font-size:.6rem}
+  .tutorial-video-table{height:72%;min-height:150px;border-width:8px}.tutorial-video-table-cards{gap:5px}.tutorial-video-deck{left:2%}.tutorial-video-capture-bin{right:2%;min-width:72px;padding:5px;font-size:.5rem}.tutorial-video-hand-row{gap:2px}.tutorial-video-hand-row>span{display:none}.tutorial-video-turn-label{font-size:.62rem;padding:4px 8px}
+  .tutorial-video-match-grid{gap:4px}.tutorial-video-match-grid article{padding:5px 2px;gap:4px}.tutorial-video-match-grid h3{font-size:.8rem}.tutorial-video-match-grid article>strong{font-size:.54rem}.tutorial-video-mini-row{gap:2px}.tutorial-video-match-grid .tutorial-video-card{width:clamp(29px,8.5vw,39px)}
+  .tutorial-video-score-grid,.tutorial-video-bonus-row{gap:3px}.tutorial-video-score-grid article{padding:4px 2px}.tutorial-video-score-grid .tutorial-video-card{width:clamp(22px,6vw,30px)}.tutorial-video-score-grid article>b{font-size:.58rem}.tutorial-video-score-grid article>strong{font-size:.48rem}.tutorial-video-bonus-row>div{padding:4px 2px}.tutorial-video-bonus-row strong{font-size:.52rem}.tutorial-video-bonus-row span{font-size:.42rem}
+  .tutorial-video-scoreburst{font-size:clamp(3rem,19vw,5rem)}.tutorial-video-decision{gap:8px}.tutorial-video-decision button{min-width:100px;padding:8px 12px;font-size:.95rem}.tutorial-video-choice-copy{gap:8px;font-size:.55rem}
+  .tutorial-video-special-grid{gap:3px}.tutorial-video-special-grid article{padding:5px 2px;gap:3px}.tutorial-video-special-grid article>strong{font-size:.58rem}.tutorial-video-special-grid article>span{font-size:.43rem;min-height:23px}.tutorial-video-special-grid .tutorial-video-card{width:clamp(19px,5vw,26px)}
+  .scene-controls h3{font-size:1.2rem}.tutorial-video-device-icon{font-size:3rem}.scene-controls p{font-size:.7rem}.tutorial-video-training-cta{padding:8px 12px}.tutorial-video-training-cta strong{font-size:.85rem}.tutorial-video-training-cta span{font-size:.62rem}
+  .tutorial-video-caption{font-size:.72rem;min-height:3.2em}.tutorial-video-meta{font-size:.62rem}
+  .tutorial-video-chapters button,.tutorial-video-controls button,.tutorial-video-back-rules{padding:6px 8px;font-size:.61rem}.tutorial-video-volume{font-size:.58rem;padding:5px 7px}.tutorial-video-volume input{width:62px}
+  .tutorial-video-chapters{scrollbar-width:none}.tutorial-video-chapters::-webkit-scrollbar{display:none}
+}
