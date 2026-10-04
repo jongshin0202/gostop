@@ -262,7 +262,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261001-4/);
   assert.match(index,/styles\.css\?v=20260927-3/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20260930-1/);
+  assert.match(index,/ranked-client\.js\?v=20261004-1/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261002-4/);
   assert.match(index,/presentation-plan\.js\?v=20260928-1/);
