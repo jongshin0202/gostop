@@ -14,7 +14,10 @@
   const playBtn=view.querySelector('#tutorialVideoPlay');
   const prevBtn=view.querySelector('#tutorialVideoPrev');
   const nextBtn=view.querySelector('#tutorialVideoNext');
+  const replayBtn=view.querySelector('#tutorialVideoReplay');
+  const captionsBtn=view.querySelector('#tutorialVideoCaptions');
   const narrationBtn=view.querySelector('#tutorialVideoNarration');
+  const volume=view.querySelector('#tutorialVideoVolume');
   const rulesBtn=view.querySelector('#tutorialFullRulesBtn');
   const chaptersRoot=view.querySelector('#tutorialVideoChapters');
   const nav=dialog.querySelector('.tutorial-nav');
@@ -223,6 +226,7 @@
   let frame=0;
   let sceneIndex=-1;
   let narration=false;
+  let captions=true;
   let returnFromRules=false;
 
   durationLabel.textContent=fmt(total);
@@ -242,8 +246,9 @@
   const speakScene=scene=>{
     if(!narration||!globalThis.speechSynthesis)return;
     globalThis.speechSynthesis.cancel();
+    if(typeof globalThis.SpeechSynthesisUtterance!=='function')return;
     const utterance=new SpeechSynthesisUtterance(getText(scene.narration));
-    utterance.rate=.96;utterance.pitch=1;utterance.volume=.9;
+    utterance.rate=.96;utterance.pitch=1;utterance.volume=Number(volume?.value||.9);
     globalThis.speechSynthesis.speak(utterance);
   };
 
@@ -264,6 +269,7 @@
       if(label)label.textContent=p<.22?'Choose a card from your hand':p<.45?'Match the same family on the table':p<.7?'Capture the matching cards':p<.86?'Flip the draw pile':'Resolve the drawn card too';
     }
     caption.textContent=getText(scene.caption);
+    caption.hidden=!captions;
     chaptersRoot.querySelectorAll('button').forEach((button,i)=>button.classList.toggle('active',i===index));
   };
 
@@ -326,16 +332,30 @@
   });
 
   playBtn.addEventListener('click',()=>playing?pause():play());
+  replayBtn?.addEventListener('click',()=>{seek(0);play();});
   prevBtn.addEventListener('click',()=>jumpScene(-1));
   nextBtn.addEventListener('click',()=>jumpScene(1));
   progress.addEventListener('input',()=>seek(progress.value));
+  captionsBtn?.addEventListener('click',()=>{
+    captions=!captions;
+    captionsBtn.textContent=captions?'Captions On':'Captions Off';
+    captionsBtn.classList.toggle('active',captions);
+    captionsBtn.setAttribute('aria-pressed',String(captions));
+    caption.hidden=!captions;
+  });
   narrationBtn.addEventListener('click',()=>{
     narration=!narration;
     narrationBtn.textContent=narration?'Narration On':'Narration Off';
     narrationBtn.classList.toggle('active',narration);
+    narrationBtn.setAttribute('aria-pressed',String(narration));
     if(narration){
       const point=sceneAt(time);speakScene(point.scene);
     }else stopNarration();
+  });
+  volume?.addEventListener('input',()=>{
+    if(narration){
+      const point=sceneAt(time);speakScene(point.scene);
+    }
   });
 
   const showRules=()=>{
