@@ -380,18 +380,30 @@ test('phone attract mode swipes Global to Monthly without exiting, while a norma
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
-test('mobile How to Play header remains inside the viewport and its close button does not overlap the navigation row',async({page})=>{
+test('mobile How to Play opens the animated tutorial video and keeps the full reference guide on demand',async({page})=>{
   const errors=await openMenu(page,{mobile:true});
   await page.locator('#howToBtn').click();
   await expect(page.locator('#howToDialog')).toHaveJSProperty('open',true);
-  const dialog=await page.locator('#howToDialog .tutorial-card').boundingBox();
-  const header=await page.locator('#howToDialog .tutorial-header').boundingBox();
-  const close=await page.locator('#howToDialog .tutorial-close').boundingBox();
-  const nav=await page.locator('#howToDialog .tutorial-nav').boundingBox();
-  expect(dialog).not.toBeNull();expect(header).not.toBeNull();expect(close).not.toBeNull();expect(nav).not.toBeNull();
-  expect(dialog.y).toBeGreaterThanOrEqual(0);
-  expect(header.y).toBeGreaterThanOrEqual(dialog.y);
-  expect(close.y+close.height).toBeLessThanOrEqual(nav.y+1);
+  await expect(page.locator('#tutorialVideo')).toBeVisible();
+  await expect(page.locator('#tutorialVideoChapter')).toHaveText('1 / 8');
+  await expect(page.locator('#tutorialVideoTitle')).toHaveText('Match the card family');
+  await expect(page.locator('#tutorialVideoPlay')).toHaveText('Pause');
+  await expect(page.locator('#tutorialVideoHand .tutorial-game-card')).toHaveCount(1);
+  await expect(page.locator('#tutorialVideoTable .tutorial-game-card')).toHaveCount(1);
+
+  await page.locator('#tutorialVideoNext').click();
+  await expect(page.locator('#tutorialVideoChapter')).toHaveText('2 / 8');
+  await expect(page.locator('#tutorialVideoTitle')).toHaveText('Every turn has two plays');
+
+  await page.locator('#tutorialReferenceToggle').click();
+  await expect(page.locator('#howToDialog .tutorial-card')).toHaveClass(/show-reference/);
+  await expect(page.locator('#howToDialog .tutorial-nav')).toBeVisible();
+  await expect(page.locator('#howToDialog .tutorial-sections')).toBeVisible();
+  await expect(page.locator('#tutorialReferenceToggle')).toHaveText('Video Tutorial');
+
+  await page.locator('#tutorialReferenceToggle').click();
+  await expect(page.locator('#howToDialog .tutorial-card')).not.toHaveClass(/show-reference/);
+  await expect(page.locator('#tutorialVideoTitle')).toBeVisible();
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
