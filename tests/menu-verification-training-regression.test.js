@@ -17,6 +17,18 @@ test('main menu uses immediate desktop pointer-down accordion activation',()=>{
   assert.match(ranked,/\.menu-category-toggle:before\{display:none!important;animation:none!important\}/);
 });
 
+test('mobile main menu keeps collapsed top controls and expanded Player info on stable anchors',()=>{
+  assert.match(ranked,/stable-mobile-menu-anchors/);
+  assert.match(ranked,/menu\.classList\.toggle\('has-expanded-section',!!expandedMenuSection\)/);
+  const anchors=ranked.slice(ranked.indexOf('function lockStableMobileMenuAnchors'),ranked.indexOf('const freePanel=',ranked.indexOf('function lockStableMobileMenuAnchors')));
+  assert.match(anchors,/setMenuSection\(null\)[^]*menu\.getBoundingClientRect\(\)\.top-overlayRect\.top/);
+  assert.match(anchors,/setMenuSection\('friendly'\)[^]*accountBox\.getBoundingClientRect\(\)\.top-overlayRect\.top/);
+  assert.match(anchors,/--gostop-menu-shell-top/);
+  assert.match(anchors,/--gostop-menu-account-top/);
+  assert.match(ranked,/overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false;scheduleStableMobileMenuAnchors\(\)/);
+  assert.match(ranked,/\.stable-mobile-menu-anchors \.gostop-main-menu\.main-menu-accordion\.has-expanded-section\{padding:7px!important;gap:5px!important\}/);
+});
+
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
   assert.match(ranked,/verificationWatchTimer=setInterval\(\(\)=>\{void checkVerificationCompletion\(\);\},15000\)/);
   assert.match(ranked,/api\('\/api\/auth\/login',\{method:'POST',body:pendingVerificationCredentials,auth:false\}\)/);
