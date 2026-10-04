@@ -655,6 +655,31 @@
     @media(max-width:760px){.menu-submenu-inner>button{min-height:40px;font-size:15px}}
     @media(max-height:760px){.menu-submenu-inner{gap:5px;padding:5px 0 6px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
 
+
+    /* Stable mobile menu anchors: preserve the collapsed main-menu hit targets while
+       allowing either accordion to expand only inside the space above Player info. */
+    @media(max-width:760px) and (orientation:portrait){
+      .solo-start-overlay.stable-mobile-menu-anchors{
+        align-content:start!important;place-content:start center!important;overflow:hidden!important
+      }
+      .solo-start-overlay.stable-mobile-menu-anchors .main-menu-title,
+      .solo-start-overlay.stable-mobile-menu-anchors .main-menu-floor-cards,
+      .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion,
+      .solo-start-overlay.stable-mobile-menu-anchors .account-menu-box{
+        position:absolute!important;left:50%!important;translate:-50% 0!important
+      }
+      .solo-start-overlay.stable-mobile-menu-anchors .main-menu-title{top:var(--gostop-menu-title-top)!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .main-menu-floor-cards{top:var(--gostop-menu-cards-top)!important;margin:0 auto!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion{top:var(--gostop-menu-shell-top)!important;margin:0!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .account-menu-box{top:var(--gostop-menu-account-top)!important;margin:0!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion.has-expanded-section{padding:7px!important;gap:5px!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-category-toggle{min-height:52px!important;padding:6px 10px!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-submenu-inner{gap:5px!important;padding:5px 0 6px!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .main-menu-utilities{gap:5px!important;margin-top:3px!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-utility{min-height:34px!important;padding:4px!important}
+    }
+
   `;document.head.appendChild(style);
 
   const overlay=$('soloStartOverlay'),playPractice=$('playSoloBtn'),createRoom=$('createOnlineBtn'),joinForm=$('joinOnlineForm'),howTo=$('howToBtn'),onlineStatus=$('onlineStatus');if(!overlay||!playPractice)return;
@@ -703,6 +728,7 @@
   let expandedMenuSection=null,menuRevealToken=0;
   function setMenuSection(section=null){
     expandedMenuSection=section==='competitive'||section==='friendly'?section:null;
+    menu.classList.toggle('has-expanded-section',!!expandedMenuSection);
     const revealToken=++menuRevealToken;
     let revealGroup=null;
     for(const [name,group,toggle,submenu] of [['competitive',rankedGroup,rankedToggle,rankedSubmenu],['friendly',freeGroup,freeToggle,freeSubmenu]]){
@@ -769,6 +795,40 @@
   const floorCards=document.createElement('div');floorCards.className='main-menu-floor-cards';floorCards.setAttribute('aria-hidden','true');
   ['m1-1','m2-1','m3-1','m6-1','m8-1','m9-1','m12-1'].forEach((id,index)=>{const card=deck.find(item=>item.id===id);if(!card)return;const img=document.createElement('img');img.className='main-menu-floor-card';img.alt='';img.decoding='async';img.src=cardFaceUrl(card.file);img.style.setProperty('--floor-index',String(index));floorCards.appendChild(img);});
   if(menuTitle)menuTitle.after(floorCards);else overlay.prepend(floorCards);menu.after(accountBox);
+  const stableMenuAnchorProperties=['--gostop-menu-title-top','--gostop-menu-cards-top','--gostop-menu-shell-top','--gostop-menu-account-top'];
+  let stableMenuAnchorFrame=0;
+  function clearStableMobileMenuAnchors(){
+    overlay.classList.remove('stable-mobile-menu-anchors');
+    for(const property of stableMenuAnchorProperties)overlay.style.removeProperty(property);
+  }
+  function lockStableMobileMenuAnchors(){
+    stableMenuAnchorFrame=0;
+    if(overlay.hidden||overlay.dataset.launching==='true')return;
+    if(!globalThis.matchMedia?.('(max-width:760px) and (orientation:portrait)')?.matches){clearStableMobileMenuAnchors();return;}
+    const restoreSection=expandedMenuSection;
+    overlay.classList.remove('stable-mobile-menu-anchors');overlay.scrollTop=0;
+    setMenuSection(null);
+    const overlayRect=overlay.getBoundingClientRect();
+    const titleTop=(menuTitle?.getBoundingClientRect().top??overlayRect.top)-overlayRect.top;
+    const cardsTop=floorCards.getBoundingClientRect().top-overlayRect.top;
+    const menuTop=menu.getBoundingClientRect().top-overlayRect.top;
+    setMenuSection('friendly');
+    const accountTop=accountBox.getBoundingClientRect().top-overlayRect.top;
+    setMenuSection(restoreSection);
+    if(![titleTop,cardsTop,menuTop,accountTop].every(Number.isFinite)){clearStableMobileMenuAnchors();return;}
+    overlay.style.setProperty('--gostop-menu-title-top',`${titleTop}px`);
+    overlay.style.setProperty('--gostop-menu-cards-top',`${cardsTop}px`);
+    overlay.style.setProperty('--gostop-menu-shell-top',`${menuTop}px`);
+    overlay.style.setProperty('--gostop-menu-account-top',`${accountTop}px`);
+    overlay.classList.add('stable-mobile-menu-anchors');
+  }
+  function scheduleStableMobileMenuAnchors(){
+    if(stableMenuAnchorFrame)cancelAnimationFrame(stableMenuAnchorFrame);
+    stableMenuAnchorFrame=requestAnimationFrame(lockStableMobileMenuAnchors);
+  }
+  globalThis.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
+  globalThis.addEventListener?.('orientationchange',scheduleStableMobileMenuAnchors);
+  globalThis.visualViewport?.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
 
   const freePanel=document.createElement('section');freePanel.id='freeFriendPanel';freePanel.className='online-lobby-panel';freePanel.hidden=true;freePanel.innerHTML=`<div class="online-lobby-card"><h2 id="freeFriendTitle">Play With Friend</h2><p id="freeFriendHelp" class="account-help">Create a room and send your friend the share link. Friendly Gaming never uses Wallet Coins or leaderboards.</p><div class="online-method"><strong id="freeRoomShareTitle">Share Link</strong><div class="online-existing-controls"><button id="freeCreateRoomBtn" class="glass-btn strong" type="button">Create Room / Share Link</button><div id="freeShareLinkBox" class="room-share-link" hidden><a id="freeShareLink" target="_blank" rel="noopener"></a><div class="friendly-share-actions"><button id="freeShareBtn" type="button">Share Invite</button><button id="freeCopyLinkBtn" type="button">Copy Link</button></div></div><p id="freeOnlineStatus" class="online-status" role="status" aria-live="polite"></p></div></div><div class="online-lobby-actions"><button id="freeFriendClose" type="button">Return</button></div></div>`;document.body.appendChild(freePanel);
 
@@ -1553,7 +1613,7 @@
   function revealCurrentMainMenu(){
     const gate=globalThis.GoStopMobileFullscreen?.gateInitialMainMenuFullscreen?.();
     if(gate){Promise.resolve(gate).then(()=>revealCurrentMainMenu());return;}
-    playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';overlay.hidden=false;globalThis.GoStopMobileFullscreen?.requestMainMenuFullscreen?.();syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();
+    playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';overlay.hidden=false;scheduleStableMobileMenuAnchors();globalThis.GoStopMobileFullscreen?.requestMainMenuFullscreen?.();syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();
   }
   const inviteUrl=new URL(location.href),verificationHash=inviteUrl.hash.match(/^#verify=([a-f0-9]{64})$/i),verificationToken=verificationHash?.[1]||inviteUrl.searchParams.get('verify')||'',validVerificationToken=/^[a-f0-9]{64}$/i.test(verificationToken),roomParam=inviteUrl.searchParams.get('room'),inviteMode=inviteUrl.searchParams.get('mode')==='free'?'free':'competitive',referralParam=inviteUrl.searchParams.get('ref')||'',validReferralParam=/^[a-f0-9]{64}$/i.test(referralParam),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   function withGameBridge(callback){
