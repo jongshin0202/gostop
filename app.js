@@ -2465,6 +2465,170 @@
     if(monthGuide){monthGuide.replaceChildren();for(let month=1;month<=12;month++){const article=document.createElement('article'),heading=document.createElement('h4'),description=document.createElement('p'),cards=document.createElement('div');heading.textContent=localizedMonth(month);description.textContent=t(`month${month}`);cards.className='tutorial-cards';MASTER_DECK.filter(card=>card.month===month).forEach(card=>{const item=document.createElement('span');item.className='tutorial-month-card';item.appendChild(createCardEl(card,'card tutorial-game-card'));const label=document.createElement('small');label.textContent=t(card.id==='m9-1'?'sakeCup':card.flags.includes('doublePi')?'doubleSingle':card.type==='bright'?'brights':card.type==='animal'?'pictures':card.type==='ribbon'?'stripes':'singles');item.appendChild(label);cards.appendChild(item);});article.append(heading,cards,description);monthGuide.appendChild(article);}}
   }
 
+
+  const TUTORIAL_VIDEO_SCENE_MS=6800;
+  const TUTORIAL_VIDEO_SCENES=Object.freeze([
+    Object.freeze({
+      title:'Match the card family',
+      caption:'Play a card onto a table card from the same family. Matching is based on the picture family, not the scoring type.',
+      hand:['m5-3'],table:['m5-4'],captured:['m5-3','m5-4'],action:'→',callout:'SAME FAMILY = CAPTURE'
+    }),
+    Object.freeze({
+      title:'Every turn has two plays',
+      caption:'First play one card from your hand and resolve it. Then flip the top card of the deck and resolve that card the same way.',
+      hand:['m4-3'],table:['m4-4','m10-4'],captured:['m4-3','m4-4'],deck:true,action:'1 → 2',callout:'PLAY A CARD • THEN DRAW'
+    }),
+    Object.freeze({
+      title:'What happens when cards match?',
+      caption:'No matching family: your card stays on the table. One match: capture it. Two matches: choose which table card you want.',
+      hand:['m8-3'],table:['m8-1','m8-2'],captured:[],action:'?',callout:'0 = STAYS • 1 = CAPTURE • 2 = CHOOSE'
+    }),
+    Object.freeze({
+      title:'Build four scoring groups',
+      caption:'Captured cards are sorted into Brights, Pictures, Stripes and Singles. Pictures and Stripes begin scoring at 5, Singles at 10, and Brights have their own high-value scoring.',
+      hand:[],table:[],captured:['m3-1','m2-1','m1-2','m11-3'],action:'→',callout:'BRIGHTS • PICTURES • STRIPES • SINGLES'
+    }),
+    Object.freeze({
+      title:'Look for powerful sets',
+      caption:'Some exact combinations add bonus points. Godori uses the three bird Pictures. Red, Plain and Blue each have their own 3-Stripe scoring set.',
+      hand:[],table:[],captured:['m2-1','m4-1','m8-2','m1-2','m2-2','m3-2'],action:'+',callout:'GODORI +5 • 3-STRIPE SET +3'
+    }),
+    Object.freeze({
+      title:'At 7 points, choose GO or STOP',
+      caption:'STOP banks the win now. GO keeps the hand going for more upside, but gives the opponent a chance to come back.',
+      kind:'decision',hand:[],table:[],captured:[],action:'',callout:'STOP = TAKE THE WIN • GO = TAKE THE RISK'
+    }),
+    Object.freeze({
+      title:'Special events can change the hand',
+      caption:'For example, three cards of one family in your hand plus the fourth on the table creates a Bomb. GoStop Live! also teaches Shake, Pooped!, Flush and Clean Sweep when they occur.',
+      hand:['m2-1','m2-2','m2-3'],table:['m2-4'],captured:[],action:'+',callout:'3 IN HAND + 4TH ON TABLE = BOMB'
+    }),
+    Object.freeze({
+      title:'Play directly on GoStop Live!',
+      caption:()=>tutorialVideoUsesTouch()
+        ?'Tap a card once to select it, tap it again to play, or press and flick upward for a quick play. Training Mode highlights a recommended move if you wait.'
+        :'Click a card to play it. If two table targets are available, click the one you want. You can also press and flick upward for a quick play. Training Mode can coach your next move.',
+      hand:['m5-1','m7-1','m10-2'],table:['m5-2','m7-4','m10-3'],captured:[],action:'→',callout:'TRY FRIENDLY GAMING → TRAINING MODE'
+    })
+  ]);
+  let tutorialVideoSceneIndex=0,tutorialVideoTimer=null,tutorialVideoPlaying=false;
+  function tutorialVideoUsesTouch(){
+    return Number(globalThis.navigator?.maxTouchPoints||0)>0||!!globalThis.matchMedia?.('(pointer: coarse)')?.matches;
+  }
+  function tutorialVideoNode(id){return document.getElementById(id);}
+  function tutorialVideoFillCards(root,ids){
+    if(!root)return;
+    root.replaceChildren();
+    for(const id of ids||[]){
+      const card=MASTER_DECK.find(item=>item.id===id);
+      if(card)root.appendChild(createCardEl(card,'card tutorial-game-card'));
+    }
+  }
+  function tutorialVideoBuildDots(){
+    const root=tutorialVideoNode('tutorialVideoDots');
+    if(!root||root.childElementCount===TUTORIAL_VIDEO_SCENES.length)return;
+    root.replaceChildren();
+    TUTORIAL_VIDEO_SCENES.forEach((scene,index)=>{
+      const button=document.createElement('button');
+      button.type='button';
+      button.setAttribute('aria-label','Tutorial chapter '+(index+1)+': '+scene.title);
+      button.addEventListener('click',()=>{tutorialVideoSceneIndex=index;renderTutorialVideoScene({restartTimer:true});});
+      root.appendChild(button);
+    });
+  }
+  function tutorialVideoSetProgress(restart=true){
+    const bar=tutorialVideoNode('tutorialVideoProgress');
+    if(!bar)return;
+    bar.style.transitionDuration='0ms';
+    bar.style.width='0%';
+    if(!tutorialVideoPlaying)return;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if(!tutorialVideoPlaying)return;
+      bar.style.transitionDuration=TUTORIAL_VIDEO_SCENE_MS+'ms';
+      bar.style.width='100%';
+    }));
+  }
+  function tutorialVideoSchedule(){
+    clearTimeout(tutorialVideoTimer);
+    if(!tutorialVideoPlaying)return;
+    tutorialVideoTimer=setTimeout(()=>{
+      tutorialVideoSceneIndex=(tutorialVideoSceneIndex+1)%TUTORIAL_VIDEO_SCENES.length;
+      renderTutorialVideoScene({restartTimer:true});
+    },TUTORIAL_VIDEO_SCENE_MS);
+  }
+  function renderTutorialVideoScene({restartTimer=false}={}){
+    if(TEST_MODE)return;
+    tutorialVideoBuildDots();
+    const scene=TUTORIAL_VIDEO_SCENES[tutorialVideoSceneIndex]||TUTORIAL_VIDEO_SCENES[0];
+    const screen=tutorialVideoNode('tutorialVideoScreen'),board=screen?.querySelector('.tutorial-video-board');
+    const title=tutorialVideoNode('tutorialVideoTitle'),caption=tutorialVideoNode('tutorialVideoCaption'),chapter=tutorialVideoNode('tutorialVideoChapter'),callout=tutorialVideoNode('tutorialVideoCallout');
+    if(title)title.textContent=scene.title;
+    if(caption)caption.textContent=typeof scene.caption==='function'?scene.caption():scene.caption;
+    if(chapter)chapter.textContent=(tutorialVideoSceneIndex+1)+' / '+TUTORIAL_VIDEO_SCENES.length;
+    if(callout)callout.textContent=scene.callout||'';
+    if(board)board.dataset.sceneKind=scene.kind||'cards';
+    tutorialVideoFillCards(tutorialVideoNode('tutorialVideoHand'),scene.hand);
+    tutorialVideoFillCards(tutorialVideoNode('tutorialVideoTable'),scene.table);
+    tutorialVideoFillCards(tutorialVideoNode('tutorialVideoCaptured'),scene.captured);
+    const deck=tutorialVideoNode('tutorialVideoDeckZone');if(deck)deck.hidden=!scene.deck;
+    const action=tutorialVideoNode('tutorialVideoAction');if(action)action.textContent=scene.action||'→';
+    const dots=[...(tutorialVideoNode('tutorialVideoDots')?.querySelectorAll('button')||[])];
+    dots.forEach((dot,index)=>dot.classList.toggle('active',index===tutorialVideoSceneIndex));
+    if(screen){
+      screen.classList.remove('is-entering');
+      void screen.offsetWidth;
+      screen.classList.add('is-entering');
+    }
+    const play=tutorialVideoNode('tutorialVideoPlay');
+    if(play){play.textContent=tutorialVideoPlaying?'Pause':'Play';play.setAttribute('aria-label',tutorialVideoPlaying?'Pause tutorial':'Play tutorial');}
+    tutorialVideoSetProgress();
+    if(restartTimer)tutorialVideoSchedule();
+  }
+  function playTutorialVideo(){
+    tutorialVideoPlaying=true;
+    renderTutorialVideoScene({restartTimer:true});
+  }
+  function pauseTutorialVideo(){
+    tutorialVideoPlaying=false;clearTimeout(tutorialVideoTimer);tutorialVideoTimer=null;
+    const bar=tutorialVideoNode('tutorialVideoProgress');if(bar){bar.style.transitionDuration='0ms';bar.style.width='0%';}
+    const play=tutorialVideoNode('tutorialVideoPlay');if(play){play.textContent='Play';play.setAttribute('aria-label','Play tutorial');}
+  }
+  function showTutorialVideo({restart=false}={}){
+    const card=els.howToDialog?.querySelector('.tutorial-card');
+    card?.classList.remove('show-reference');
+    const toggle=tutorialVideoNode('tutorialReferenceToggle');if(toggle)toggle.textContent='Reference Guide';
+    if(restart)tutorialVideoSceneIndex=0;
+    playTutorialVideo();
+  }
+  function showTutorialReference(){
+    pauseTutorialVideo();
+    const card=els.howToDialog?.querySelector('.tutorial-card');
+    card?.classList.add('show-reference');
+    const toggle=tutorialVideoNode('tutorialReferenceToggle');if(toggle)toggle.textContent='Video Tutorial';
+    const sections=els.howToDialog?.querySelector('.tutorial-sections');if(sections)sections.scrollTop=0;
+  }
+  function toggleTutorialReference(){
+    const card=els.howToDialog?.querySelector('.tutorial-card');
+    if(card?.classList.contains('show-reference'))showTutorialVideo();
+    else showTutorialReference();
+  }
+  function setupTutorialVideo(){
+    if(TEST_MODE||!els.howToDialog)return;
+    tutorialVideoBuildDots();
+    tutorialVideoNode('tutorialVideoPrev')?.addEventListener('click',()=>{
+      tutorialVideoSceneIndex=(tutorialVideoSceneIndex-1+TUTORIAL_VIDEO_SCENES.length)%TUTORIAL_VIDEO_SCENES.length;
+      renderTutorialVideoScene({restartTimer:true});
+    });
+    tutorialVideoNode('tutorialVideoNext')?.addEventListener('click',()=>{
+      tutorialVideoSceneIndex=(tutorialVideoSceneIndex+1)%TUTORIAL_VIDEO_SCENES.length;
+      renderTutorialVideoScene({restartTimer:true});
+    });
+    tutorialVideoNode('tutorialVideoPlay')?.addEventListener('click',()=>tutorialVideoPlaying?pauseTutorialVideo():playTutorialVideo());
+    tutorialVideoNode('tutorialReferenceToggle')?.addEventListener('click',toggleTutorialReference);
+    els.howToDialog.addEventListener('close',pauseTutorialVideo);
+    renderTutorialVideoScene();
+  }
+
   function trainingThreatValue(card,opponent=state?.ai){
     if(!card||!opponent)return 0;
     const captured=opponent.captured||[];
@@ -3087,6 +3251,7 @@
   document.addEventListener('pointerdown',unlockAudio,{once:true,capture:true});
   if(!TEST_MODE){addEventListener('resize',updateStageScale);updateStageScale();}
   setupLanguageMenu();
+  setupTutorialVideo();
   document.querySelector('.human-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_A);});
   document.querySelector('.cpu-chip .score-pill')?.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closePlayerInfo();openScoreBreakdown(PLAYER_B);});
   document.querySelectorAll('.game-capture-panel').forEach(panel=>{
@@ -3105,11 +3270,16 @@
     const mobile=(Number(globalThis.navigator?.maxTouchPoints||0)>0)||!!globalThis.matchMedia?.('(pointer: coarse)')?.matches;
     els.howToDialog.querySelectorAll('[data-tutorial-platform]').forEach(node=>{node.hidden=node.dataset.tutorialPlatform!==(mobile?'mobile':'desktop');});
   }
-  els.howToBtn.addEventListener('click',()=>{syncTutorialPlatformGuide();const sections=els.howToDialog.querySelector('.tutorial-sections');if(sections)sections.scrollTop=0;els.howToDialog.showModal();});
+  function openHowToTutorial(){
+    syncTutorialPlatformGuide();
+    if(!els.howToDialog.open)els.howToDialog.showModal();
+    showTutorialVideo({restart:true});
+  }
+  els.howToBtn.addEventListener('click',openHowToTutorial);
   els.howToDialog.querySelector('.tutorial-nav')?.addEventListener('click',event=>{const link=event.target.closest('a[href^="#guide-"]');if(!link)return;const target=els.howToDialog.querySelector(link.getAttribute('href'));if(!target)return;event.preventDefault();target.scrollIntoView({block:'start',behavior:'smooth'});});
   els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});
   if(els.shakeReviewDialog)els.shakeReviewDialog.addEventListener('click',()=>els.shakeReviewDialog.close());
-  if(els.railHowTo)els.railHowTo.addEventListener('click',()=>{syncTutorialPlatformGuide();els.howToDialog.showModal();});
+  if(els.railHowTo)els.railHowTo.addEventListener('click',openHowToTutorial);
   if(els.railNewGame)els.railNewGame.addEventListener('click',()=>els.newGameDialog.showModal());
   els.playerHand.addEventListener('pointerleave',()=>setActiveHoveredHandCard(null));
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});

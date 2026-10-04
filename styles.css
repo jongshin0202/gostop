@@ -719,6 +719,107 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
 }
 
 
+
+/* How To Play video tutorial: the animated quick-start is primary; the full written guide remains available on demand. */
+.tutorial-card{grid-template-rows:auto minmax(0,1fr)}
+.tutorial-reference-content{display:none!important}
+.tutorial-card.show-reference{grid-template-rows:auto auto auto minmax(0,1fr)}
+.tutorial-card.show-reference .tutorial-video{display:flex;justify-content:flex-end;align-items:center;padding:7px 18px;background:#17110d;overflow:visible}
+.tutorial-card.show-reference .tutorial-video-screen,
+.tutorial-card.show-reference .tutorial-video-progress,
+.tutorial-card.show-reference .tutorial-video-dots,
+.tutorial-card.show-reference .tutorial-video-controls>button:not(.tutorial-reference-toggle){display:none!important}
+.tutorial-card.show-reference .tutorial-video-controls{display:flex;margin-left:auto}
+.tutorial-card.show-reference .tutorial-reference-content.tutorial-nav{display:flex!important}
+.tutorial-card.show-reference .tutorial-reference-content.tutorial-sections{display:grid!important}
+.tutorial-video{
+  min-height:0;overflow:hidden;display:grid;grid-template-rows:minmax(0,1fr) 4px auto auto;gap:10px;
+  padding:16px 22px 18px;background:
+    radial-gradient(circle at 50% 42%,rgba(47,91,68,.42),transparent 48%),
+    linear-gradient(180deg,#17110d,#0e0d0a);
+}
+.tutorial-video-screen{
+  min-height:0;position:relative;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:12px;
+  padding:18px 20px;border:1px solid rgba(222,176,91,.38);border-radius:18px;
+  background:linear-gradient(180deg,rgba(26,51,39,.96),rgba(16,29,23,.98));
+  box-shadow:inset 0 1px rgba(255,255,255,.05),0 18px 40px rgba(0,0,0,.28);
+}
+.tutorial-video-topline{display:flex;justify-content:space-between;align-items:center;color:#e5bd6a;font:900 .72rem/1 system-ui,sans-serif;letter-spacing:.13em}
+.tutorial-video-length{color:#a8bcae}
+.tutorial-video-copy{text-align:center;max-width:920px;margin:0 auto}
+.tutorial-video-copy h3{margin:0 0 5px!important;padding:0!important;border:0!important;color:#fff3d3;font-size:clamp(1.5rem,3vw,2.35rem)!important;line-height:1.05}
+.tutorial-video-copy p{margin:0;color:#e5ddcd;font-size:clamp(.95rem,1.6vw,1.16rem);line-height:1.42}
+.tutorial-video-board{
+  min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) minmax(88px,.55fr) minmax(0,1fr);
+  gap:12px;align-items:center;justify-items:center;padding:10px 12px;border-radius:16px;
+  background:radial-gradient(circle at 50% 45%,rgba(44,92,67,.8),rgba(22,55,40,.76) 58%,rgba(14,35,26,.9));
+  border:1px solid rgba(255,255,255,.07);
+}
+.tutorial-video-zone{min-width:0;display:grid;justify-items:center;align-content:center;gap:8px}
+.tutorial-video-zone-label{color:#d6b272;font:900 .67rem/1 system-ui,sans-serif;letter-spacing:.1em}
+.tutorial-video-cards{min-height:112px;display:flex;justify-content:center;align-items:center;gap:7px;flex-wrap:wrap}
+.tutorial-video-cards .tutorial-game-card{width:72px!important;filter:drop-shadow(0 10px 9px rgba(0,0,0,.34))}
+.tutorial-video-action{font:900 clamp(2rem,4vw,3.4rem)/1 Georgia,serif;color:#ffd66f;text-shadow:0 4px 15px #000}
+.tutorial-video-deck-card{width:72px!important;box-shadow:0 10px 18px rgba(0,0,0,.35)}
+.tutorial-video-callout{
+  justify-self:center;max-width:90%;padding:9px 15px;border:1px solid rgba(244,197,93,.7);border-radius:999px;
+  background:rgba(23,16,10,.88);color:#ffd86f;text-align:center;font:900 .83rem/1.15 system-ui,sans-serif;letter-spacing:.06em;
+}
+.tutorial-video-screen.is-entering .tutorial-video-copy,.tutorial-video-screen.is-entering .tutorial-video-zone,.tutorial-video-screen.is-entering .tutorial-video-callout{animation:tutorialSceneIn .42s ease both}
+.tutorial-video-screen.is-entering .tutorial-video-zone:nth-child(3){animation-delay:.05s}
+.tutorial-video-screen.is-entering .tutorial-video-captured-zone{animation-delay:.1s}
+@keyframes tutorialSceneIn{from{opacity:0;transform:translateY(9px) scale(.985)}to{opacity:1;transform:none}}
+.tutorial-video-progress{height:4px;overflow:hidden;border-radius:999px;background:#ffffff16}
+.tutorial-video-progress span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c9953e,#ffe084);transition-property:width;transition-timing-function:linear}
+.tutorial-video-dots{display:flex;justify-content:center;gap:7px;min-height:18px}
+.tutorial-video-dots button{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:#ffffff2b;cursor:pointer}
+.tutorial-video-dots button.active{background:#ffd66f;box-shadow:0 0 0 3px rgba(255,214,111,.16)}
+.tutorial-video-controls{display:flex;justify-content:center;align-items:center;gap:8px}
+.tutorial-video-controls button{
+  min-width:44px;min-height:40px;padding:8px 12px;border:1px solid #765a33;border-radius:10px;
+  background:linear-gradient(#3b291c,#24180f);color:#f9e8c8;font-weight:800;cursor:pointer
+}
+.tutorial-video-controls button:hover,.tutorial-video-controls button:focus-visible{border-color:#d4a85b;outline:none;box-shadow:0 0 0 2px rgba(224,180,93,.18)}
+.tutorial-video-controls .tutorial-video-play{min-width:86px;background:linear-gradient(#8b5c20,#634016);border-color:#c6923e;color:#fff5dc}
+.tutorial-video-controls .tutorial-reference-toggle{margin-left:8px;min-width:134px}
+.tutorial-video-score-gate{
+  display:inline-flex;align-items:center;justify-content:center;min-width:92px;min-height:62px;padding:8px 12px;border-radius:14px;
+  background:#21140ddd;border:2px solid #d0a047;color:#ffe187;font:900 1.35rem/1 system-ui,sans-serif;box-shadow:0 10px 24px #0005
+}
+.tutorial-video-board[data-scene-kind="decision"]{grid-template-columns:1fr}
+.tutorial-video-board[data-scene-kind="decision"] .tutorial-video-hand-zone,
+.tutorial-video-board[data-scene-kind="decision"] .tutorial-video-action,
+.tutorial-video-board[data-scene-kind="decision"] .tutorial-video-table-zone,
+.tutorial-video-board[data-scene-kind="decision"] .tutorial-video-deck-zone,
+.tutorial-video-board[data-scene-kind="decision"] .tutorial-video-captured-zone{display:none}
+.tutorial-video-decision{display:none;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap}
+.tutorial-video-board[data-scene-kind="decision"] .tutorial-video-decision{display:flex}
+.tutorial-video-decision span{min-width:120px;padding:14px 18px;border-radius:14px;text-align:center;font:900 1rem/1.1 system-ui,sans-serif}
+.tutorial-video-decision .stop{background:#7d2d22;border:2px solid #d06d56;color:#fff0e9}
+.tutorial-video-decision .go{background:#1d5f43;border:2px solid #63b38c;color:#ebfff5}
+
+@media(max-width:700px){
+  .tutorial-card{grid-template-rows:auto minmax(0,1fr)}
+  .tutorial-card.show-reference{grid-template-rows:auto auto auto minmax(0,1fr)}
+  .tutorial-video{padding:8px 9px calc(10px + env(safe-area-inset-bottom));gap:7px}
+  .tutorial-video-screen{padding:10px 9px;gap:7px;border-radius:12px}
+  .tutorial-video-board{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-rows:minmax(118px,1fr) auto;gap:5px;padding:7px}
+  .tutorial-video-hand-zone{grid-column:1;grid-row:1}.tutorial-video-action{grid-column:2;grid-row:1}.tutorial-video-table-zone{grid-column:3;grid-row:1}
+  .tutorial-video-deck-zone{grid-column:1;grid-row:2}.tutorial-video-captured-zone{grid-column:2/4;grid-row:2}
+  .tutorial-video-cards{min-height:83px;gap:3px}.tutorial-video-cards .tutorial-game-card,.tutorial-video-deck-card{width:48px!important}
+  .tutorial-video-copy h3{font-size:1.35rem!important}.tutorial-video-copy p{font-size:.87rem;line-height:1.32}
+  .tutorial-video-zone-label{font-size:.57rem}.tutorial-video-callout{max-width:98%;padding:7px 9px;font-size:.7rem}
+  .tutorial-video-controls{gap:5px}.tutorial-video-controls button{min-width:40px;min-height:38px;padding:6px 9px;font-size:.82rem}
+  .tutorial-video-controls .tutorial-video-play{min-width:68px}.tutorial-video-controls .tutorial-reference-toggle{min-width:112px;margin-left:2px}
+  .tutorial-video-decision span{min-width:105px;padding:11px 13px}
+}
+@media(max-height:600px) and (orientation:landscape){
+  .tutorial-video{padding:6px 10px;gap:5px}.tutorial-video-screen{padding:7px 10px;grid-template-rows:auto auto minmax(0,1fr) auto;gap:5px}
+  .tutorial-video-copy h3{font-size:1.22rem!important}.tutorial-video-copy p{font-size:.78rem}
+  .tutorial-video-board{padding:4px 8px;gap:7px}.tutorial-video-cards{min-height:66px}.tutorial-video-cards .tutorial-game-card,.tutorial-video-deck-card{width:42px!important}
+  .tutorial-video-callout{padding:5px 9px;font-size:.65rem}.tutorial-video-controls button{min-height:32px;padding:4px 8px}
+}
+
 /* Training Mode strategy coach */
 .training-coach-panel{
   position:fixed;z-index:1375;left:50%;top:76px;transform:translateX(-50%);

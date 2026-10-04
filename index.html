@@ -15,7 +15,7 @@
     #gostopBootSplash.gostop-boot-ready::after{content:attr(data-start-label);position:absolute;left:50%;top:calc(50% + 58px);transform:translateX(-50%);font:700 14px/1.2 Arial,sans-serif;letter-spacing:.04em;color:#d8c8aa;opacity:.9;text-shadow:0 2px 8px #000;white-space:nowrap}
     html:not(.gostop-boot-pending) #gostopBootSplash{display:none!important}
   </style>
-  <link rel="stylesheet" href="styles.css?v=20260927-3" />
+  <link rel="stylesheet" href="styles.css?v=20261004-1" />
 </head>
 <body>
   <div id="gostopBootSplash" aria-hidden="true"><strong>GoStop <em>Live!</em></strong></div>
@@ -103,12 +103,57 @@
     <form method="dialog" class="dialog-card tutorial-card">
       <header class="tutorial-header">
         <div>
-          <p class="tutorial-eyebrow">BEGINNER GUIDE</p>
-          <h2>GoStop <em>Live!</em></h2>
+          <p class="tutorial-eyebrow">VIDEO TUTORIAL</p>
+          <h2>How to Play GoStop <em>Live!</em></h2>
         </div>
         <button class="dialog-close tutorial-close" type="submit" data-i18n-aria="close" aria-label="Close">×</button>
       </header>
-      <nav class="tutorial-nav" aria-label="Tutorial sections">
+      <section id="tutorialVideo" class="tutorial-video" aria-label="How to Play GoStop Live video tutorial">
+        <div id="tutorialVideoScreen" class="tutorial-video-screen" aria-live="polite">
+          <div class="tutorial-video-topline">
+            <span id="tutorialVideoChapter">1 / 8</span>
+            <span class="tutorial-video-length">QUICK START</span>
+          </div>
+          <div class="tutorial-video-copy">
+            <h3 id="tutorialVideoTitle">Match the card family</h3>
+            <p id="tutorialVideoCaption">Play a card onto a card from the same family to capture them.</p>
+          </div>
+          <div class="tutorial-video-board" aria-hidden="true">
+            <div class="tutorial-video-zone tutorial-video-hand-zone">
+              <span class="tutorial-video-zone-label">YOUR HAND</span>
+              <div id="tutorialVideoHand" class="tutorial-video-cards"></div>
+            </div>
+            <div class="tutorial-video-action" id="tutorialVideoAction">→</div>
+            <div class="tutorial-video-zone tutorial-video-table-zone">
+              <span class="tutorial-video-zone-label">TABLE</span>
+              <div id="tutorialVideoTable" class="tutorial-video-cards"></div>
+            </div>
+            <div id="tutorialVideoDeckZone" class="tutorial-video-zone tutorial-video-deck-zone" hidden>
+              <span class="tutorial-video-zone-label">DRAW</span>
+              <div class="tutorial-card-back tutorial-video-deck-card"></div>
+            </div>
+            <div class="tutorial-video-zone tutorial-video-captured-zone">
+              <span class="tutorial-video-zone-label">CAPTURED</span>
+              <div id="tutorialVideoCaptured" class="tutorial-video-cards"></div>
+            </div>
+            <div id="tutorialVideoDecision" class="tutorial-video-decision">
+              <span class="stop">STOP<br><small>Bank the win</small></span>
+              <div class="tutorial-video-score-gate">7+ PTS</div>
+              <span class="go">GO<br><small>Keep playing</small></span>
+            </div>
+          </div>
+          <div id="tutorialVideoCallout" class="tutorial-video-callout">SAME FAMILY = CAPTURE</div>
+        </div>
+        <div class="tutorial-video-progress" aria-hidden="true"><span id="tutorialVideoProgress"></span></div>
+        <div id="tutorialVideoDots" class="tutorial-video-dots" aria-label="Tutorial chapters"></div>
+        <div class="tutorial-video-controls">
+          <button id="tutorialVideoPrev" type="button" aria-label="Previous tutorial chapter">‹</button>
+          <button id="tutorialVideoPlay" type="button" class="tutorial-video-play" aria-label="Pause tutorial">Pause</button>
+          <button id="tutorialVideoNext" type="button" aria-label="Next tutorial chapter">›</button>
+          <button id="tutorialReferenceToggle" type="button" class="tutorial-reference-toggle">Reference Guide</button>
+        </div>
+      </section>
+      <nav class="tutorial-nav tutorial-reference-content" aria-label="Tutorial sections">
         <a href="#guide-overview" data-i18n="overview">Overview</a>
         <a href="#guide-controls">Using the App</a>
         <a href="#guide-types" data-i18n="cardTypes">Card Types</a>
@@ -119,7 +164,7 @@
         <a href="#guide-go" data-i18n="goStop">Go / Stop</a>
         <a href="#guide-hands" data-i18n="exampleHands">Example Hands</a>
       </nav>
-      <div class="tutorial-sections">
+      <div class="tutorial-sections tutorial-reference-content">
         <section id="guide-overview">
           <h3 data-i18n="overview">Overview</h3>
           <p class="tutorial-lead" data-i18n="tutorialQuickStart"></p>
@@ -564,7 +609,7 @@
   <script src="ranked-client.js?v=20261004-1"></script>
   <script src="online-client.js?v=20260929-1"></script>
   <script src="presentation-plan.js?v=20260928-1"></script>
-  <script src="app.js?v=20261004-1"></script>
+  <script src="app.js?v=20261004-2"></script>
   <script src="diagnostics.js?v=20260925-2"></script>
 </body>
 </html>
