@@ -102,7 +102,7 @@
     {
       id:'world',duration:12,phases:3,
       captions:[
-        {until:.34,text:'GoStop Live! makes GoStop easy to play together, wherever you are.'},
+        {until:.34,text:'GoStop Live! lets anyone around the world play GoStop together, wherever they are.'},
         {until:.68,text:'Play with friends or meet other GoStop Live! players around the world.'},
         {until:1,text:'Use the same GoStop Live! experience on a computer or on your phone.'}
       ],
