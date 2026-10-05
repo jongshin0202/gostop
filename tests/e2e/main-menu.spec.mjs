@@ -397,12 +397,14 @@ test('mobile How to Play opens the tutorial video below a non-overlapping header
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
-test('How to Play tutorial video keeps the detailed rules available behind Full Rules',async({page})=>{
+test('How to Play is an autoplay captioned film with only Full Rules and Training Mode actions',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#howToBtn').click();
   await expect(page.locator('#tutorialVideoView')).toBeVisible();
-  await expect(page.locator('#tutorialVideoChapterLabel')).toContainText('The Goal');
-  await expect(page.locator('#tutorialVideoCaption')).toContainText('Match cards');
+  await expect(page.locator('#tutorialVideoCaption')).toContainText('Welcome to GoStop Live');
+  await expect(page.locator('#tutorialFullRulesBtn')).toBeVisible();
+  await expect(page.locator('#tutorialTrainingModeBtn')).toBeVisible();
+  await expect(page.locator('#tutorialVideoPlay,#tutorialVideoReplay,#tutorialVideoPrev,#tutorialVideoNext,#tutorialVideoNarration,#tutorialVideoVolume,#tutorialVideoProgress,#tutorialVideoChapters')).toHaveCount(0);
   await page.locator('#tutorialFullRulesBtn').click();
   await expect(page.locator('#tutorialVideoView')).toBeHidden();
   await expect(page.locator('#howToDialog .tutorial-nav')).toBeVisible();
@@ -410,6 +412,17 @@ test('How to Play tutorial video keeps the detailed rules available behind Full 
   await page.locator('.tutorial-video-back-rules').click();
   await expect(page.locator('#tutorialVideoView')).toBeVisible();
   await expect(page.locator('#howToDialog .tutorial-nav')).toBeHidden();
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+test('How to Play film contains the product tour and corrected GoStop rules',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#howToBtn').click();
+  const script=await page.locator('script[src^="tutorial-video.js"]').getAttribute('src');
+  expect(script).toContain('20261005-1');
+  const body=await page.locator('body').textContent();
+  expect(body).toContain('Full Rules');
+  expect(body).toContain('Training Mode');
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
