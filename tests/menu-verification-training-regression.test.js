@@ -35,7 +35,7 @@ test('How to Play film stays caption-only and teaches the approved product and r
   assert.match(html,/id="tutorialTrainingModeBtn"/);
   assert.doesNotMatch(html,/tutorialVideoPlay|tutorialVideoReplay|tutorialVideoNarration|tutorialVideoVolume|tutorialVideoChapters/);
   assert.doesNotMatch(tutorial,/speechSynthesis|SpeechSynthesisUtterance/);
-  assert.match(tutorial,/anywhere you are/);
+  assert.match(tutorial,/anyone around the world/);
   assert.match(tutorial,/Click once → select/);
   assert.match(tutorial,/Tap · Tap again · or Flick up/);
   assert.match(tutorial,/Competitive Online Play matches you against other players for Coins and global ranking/);
