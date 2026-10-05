@@ -40,7 +40,7 @@ test('How to Play film stays caption-only and teaches the approved product and r
   assert.match(tutorial,/Tap · Tap again · or Flick up/);
   assert.match(tutorial,/Competitive Online Play matches you against other players for Coins and global ranking/);
   assert.match(tutorial,/Attract Mode automatically cycles through the leaderboards and back/);
-  assert.match(tutorial,/Every family has exactly four cards/);
+  assert.match(tutorial,/Every card family has exactly four cards/);
   assert.match(tutorial,/3 Brights with the Rain Bright = 2 points/);
   assert.match(tutorial,/All 5 Brights = 15 points/);
   assert.match(tutorial,/5-BIRDIES! and a 5-point bonus/);
