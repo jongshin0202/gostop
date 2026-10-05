@@ -76,7 +76,7 @@
       +'<div class="tutorial-mock-opponent"><span class="tutorial-avatar">AI</span><strong>Computer</strong><small>Captured Cards</small></div>'
       +'<div class="tutorial-mock-table">'
         +'<div class="tutorial-mock-deck">'+cardBack()+'</div>'
-        +'<div class="tutorial-mock-floor">'+cardHtml('m5-4')+cardHtml('m8-1')+cardHtml('m10-3')+cardHtml('m7-1')+'</div>'
+        +'<div class="tutorial-mock-floor">'+cardHtml('m5-4')+cardHtml('m8-1')+cardHtml('m8-2')+cardHtml('m10-3')+'</div>'
       +'</div>'
       +'<div class="tutorial-mock-bottom">'
         +'<div class="tutorial-mock-player"><span class="tutorial-avatar">YOU</span><strong>You</strong><small>0 Points</small></div>'
