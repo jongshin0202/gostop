@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
 const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
+const tutorial=fs.readFileSync(require.resolve('../tutorial-video.js'),'utf8');
 
 test('main menu uses immediate desktop pointer-down accordion activation',()=>{
   assert.match(ranked,/function installImmediateDesktopAccordion\(button,section\)/);
@@ -27,6 +28,31 @@ test('mobile main menu keeps collapsed top controls and expanded Player info on 
   assert.match(anchors,/--gostop-menu-account-top/);
   assert.match(ranked,/overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false;scheduleStableMobileMenuAnchors\(\)/);
   assert.match(ranked,/\.stable-mobile-menu-anchors \.gostop-main-menu\.main-menu-accordion\.has-expanded-section\{padding:7px!important;gap:5px!important\}/);
+});
+
+test('How to Play film stays caption-only and teaches the approved product and rule language',()=>{
+  assert.match(html,/id="tutorialFullRulesBtn"/);
+  assert.match(html,/id="tutorialTrainingModeBtn"/);
+  assert.doesNotMatch(html,/tutorialVideoPlay|tutorialVideoReplay|tutorialVideoNarration|tutorialVideoVolume|tutorialVideoChapters/);
+  assert.doesNotMatch(tutorial,/speechSynthesis|SpeechSynthesisUtterance/);
+  assert.match(tutorial,/anyone around the world/);
+  assert.match(tutorial,/Click once → select/);
+  assert.match(tutorial,/Tap · Tap again · or Flick up/);
+  assert.match(tutorial,/Competitive Online Play matches you against other players for Coins and global ranking/);
+  assert.match(tutorial,/Attract Mode automatically cycles through the leaderboards and back/);
+  assert.match(tutorial,/Every card family has exactly four cards/);
+  assert.match(tutorial,/3 Brights with the Rain Bright = 2 points/);
+  assert.match(tutorial,/All 5 Brights = 15 points/);
+  assert.match(tutorial,/5-BIRDIES! and a 5-point bonus/);
+  assert.match(tutorial,/Any 5 Stripes = 1 point/);
+  assert.match(tutorial,/10 Singles = 1 point/);
+  assert.match(tutorial,/1 GO adds \+1 point\. 2 GO means \+2 points total/);
+  assert.match(tutorial,/From 3 GO onward, your score doubles/);
+  assert.match(tutorial,/POOPED! \(뻑\)/);
+  assert.match(tutorial,/KISS! \(쪽\)/);
+  assert.match(tutorial,/FLUSH! \(따닥\)/);
+  assert.match(tutorial,/CLEAN SWEEP! \(싹쓸이\)/);
+  assert.match(tutorial,/steal 1 Single/);
 });
 
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
