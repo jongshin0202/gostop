@@ -207,7 +207,7 @@ await capture('05_two_matching_targets_choose_one',{tailMs:1600},async page=>{
   await page.waitForTimeout(850);
   await moveOverlayTo(page,'#floor [data-card-id="m2-2"]');
   await pulseOverlay(page);
-  await page.locator('#floor [data-card-id="m2-2"]').click();
+  await page.evaluate(()=>document.querySelector('#floor [data-card-id="m2-2"]')?.click());
   await page.waitForTimeout(1800);
 });
 
