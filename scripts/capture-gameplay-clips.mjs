@@ -86,8 +86,14 @@ async function newRecordedPage(name,{mobile=false}={}){
     recordVideo:{dir:rawDir,size:viewport}
   });
   const page=await context.newPage();
+  page.on('console',msg=>console.log('[browser console]',msg.type(),msg.text()));
+  page.on('pageerror',error=>console.log('[browser error]',error.stack||error.message));
   await page.goto(baseURL+'/?captureClips=1',{waitUntil:'domcontentloaded'});
-  await page.waitForFunction(()=>!!globalThis.GOSTOP_CAPTURE_API,null,{timeout:15000});
+  try{await page.waitForFunction(()=>!!globalThis.GOSTOP_CAPTURE_API,null,{timeout:15000});}
+  catch(error){
+    console.log('capture mode diagnostic',await page.evaluate(()=>({captureMode:globalThis.GOSTOP_CAPTURE_MODE,api:!!globalThis.GOSTOP_CAPTURE_API,ready:document.readyState,href:location.href,scripts:[...document.scripts].map(s=>s.src)})));
+    throw error;
+  }
   await page.addStyleTag({content:`
     #soloStartOverlay,#howToDialog,#settingsDialog,#authDialog,.tutorial-video-view{display:none!important}
     html,body{overflow:hidden!important}
