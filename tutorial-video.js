@@ -45,8 +45,7 @@
   };
 
   const filmUrl=()=>{
-    const url=new URL(location.href);
-    url.hash='';
+    const url=new URL(location.pathname,location.origin);
     url.searchParams.set('tutorialFootage','1');
     return url.href;
   };
@@ -113,6 +112,8 @@
       if(!d)return;
       d.documentElement.classList.add('tutorial-footage-document');
       d.body?.classList.add('tutorial-footage-body');
+      d.querySelectorAll('dialog[open]').forEach(node=>{try{node.close();}catch(_){ }});
+      d.querySelector('#returnGameNo')?.click();
       d.querySelector('#trainingModeBtn')?.click();
       await waitFor(item,'#playerHand .hand-card',16000);
     }catch(_){}
