@@ -1121,3 +1121,143 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .tutorial-rulebook{width:65px!important;height:82px!important;border-width:4px!important;font-size:.75rem!important;box-shadow:7px 6px 0 #2b170f,0 8px 15px #0008!important}.scene-full-rules p{font-size:.52rem!important}
   .scene-training .tutorial-device-frame{width:86%!important;height:60%!important}.tutorial-training-coach{top:12%!important;padding:5px 7px!important}.tutorial-training-coach strong{font-size:.46rem!important}.tutorial-training-coach span{font-size:.5rem!important}.tutorial-training-coach small{font-size:.4rem!important}
 }
+
+
+/* Continuous How to Play film using the real GoStop Live UI as footage. */
+.tutorial-video-view{
+  display:grid!important;
+  grid-template-rows:minmax(0,1fr) auto auto!important;
+  gap:10px!important;
+  min-height:0!important;
+  padding:12px 18px 18px!important;
+  background:#140e0a!important;
+}
+.tutorial-video-stage.film-stage{
+  position:relative!important;
+  width:min(100%,1080px)!important;
+  aspect-ratio:16/9!important;
+  max-height:60vh!important;
+  margin:0 auto!important;
+  overflow:hidden!important;
+  border:1px solid rgba(228,188,111,.48)!important;
+  border-radius:14px!important;
+  background:#0c0907!important;
+  box-shadow:0 15px 38px #0008,inset 0 0 70px #0006!important;
+}
+.tutorial-video-caption{
+  min-height:3em!important;
+  width:min(1080px,100%)!important;
+  margin:0 auto!important;
+  padding:8px 13px!important;
+  border:1px solid #8d6b3f55!important;
+  border-radius:9px!important;
+  background:#0f0a08e8!important;
+  color:#fff0d1!important;
+  text-align:center!important;
+  font:700 clamp(.84rem,1.45vw,1.02rem)/1.45 system-ui,sans-serif!important;
+}
+.tutorial-video-actions{display:flex!important;justify-content:center!important;gap:10px!important}
+.tutorial-video-actions button{min-width:155px!important;padding:10px 18px!important;border-radius:10px!important;font:800 .9rem Georgia,serif!important;cursor:pointer!important}
+#tutorialFullRulesBtn{background:#4f331f!important;border:1px solid #a87945!important;color:#f9e7c5!important}
+#tutorialTrainingModeBtn{background:#315c3a!important;border:1px solid #79aa82!important;color:#fff6d7!important}
+
+.film-frame-parking{position:fixed!important;left:-200vw!important;top:-200vh!important;width:1200px!important;height:900px!important;overflow:hidden!important;pointer-events:none!important;opacity:0!important}
+.film-live-wrap{
+  position:absolute!important;
+  inset:0!important;
+  display:grid!important;
+  place-items:center!important;
+  opacity:0!important;
+  transform:scale(1.012)!important;
+  transition:opacity .42s ease,transform .42s ease!important;
+  background:#050403!important;
+}
+.film-live-wrap.show{opacity:1!important;transform:scale(1)!important}
+.film-live-wrap.pc .film-live-frame,.film-live-wrap.menu .film-live-frame{
+  width:100%!important;height:100%!important;border:0!important;background:#111!important
+}
+.film-live-wrap.mobile{background:radial-gradient(circle at 50% 46%,#2d241d,#090706 72%)!important}
+.film-live-wrap.mobile:before{
+  content:"";position:absolute;left:50%;top:50%;translate:-50% -50%;
+  width:min(35%,330px);height:92%;border:10px solid #131313;border-radius:31px;
+  box-shadow:0 15px 35px #000b,inset 0 0 0 2px #333;pointer-events:none;z-index:2
+}
+.film-live-wrap.mobile .film-live-frame{
+  width:min(34%,320px)!important;height:89%!important;border:0!important;border-radius:21px!important;background:#111!important;z-index:1
+}
+.film-overlay-layer{position:absolute!important;inset:0!important;z-index:10!important;pointer-events:none!important}
+.film-gesture{
+  --gx:50%;--gy:50%;
+  position:absolute!important;
+  left:var(--gx)!important;top:var(--gy)!important;
+  width:24px!important;height:32px!important;
+  transform:translate(-12px,-6px)!important;
+  transition:left .48s cubic-bezier(.2,.8,.2,1),top .48s cubic-bezier(.2,.8,.2,1),transform .18s ease,filter .18s ease!important;
+  filter:drop-shadow(0 2px 5px #000)!important
+}
+.film-gesture.mouse:before{
+  content:"";position:absolute;left:2px;top:0;width:0;height:0;
+  border-left:9px solid white;border-top:16px solid white;border-right:7px solid transparent;border-bottom:7px solid transparent;
+  transform:rotate(-16deg);filter:drop-shadow(0 0 1px #000)
+}
+.film-gesture.mouse:after{content:"";position:absolute;left:10px;top:14px;width:8px;height:14px;border-radius:3px;background:#fff;transform:rotate(-36deg);box-shadow:0 0 1px #000}
+.film-gesture.finger{width:auto!important;height:auto!important;font-size:clamp(1.8rem,4vw,3.2rem)!important;line-height:1!important;transform:translate(-50%,-50%) rotate(-8deg)!important}
+.film-gesture.press{transform:translate(-50%,-50%) scale(.84)!important;filter:drop-shadow(0 0 10px #ffd265)!important}
+.film-gesture.mouse.press{transform:translate(-12px,-6px) scale(.9)!important}
+.film-gesture.swipe-up{animation:filmSwipeUp 1.05s cubic-bezier(.18,.75,.2,1) both!important}
+@keyframes filmSwipeUp{0%{transform:translate(-50%,-50%) rotate(-8deg)}25%{transform:translate(-50%,-50%) scale(.86) rotate(-8deg)}100%{transform:translate(-50%,-230%) rotate(-11deg)}}
+.film-training-banner{
+  position:absolute;left:50%;bottom:6%;translate:-50% 0;
+  width:min(72%,720px);padding:10px 14px;border:1px solid #d4ad5c88;border-radius:10px;
+  background:#130e0ceb;color:#fff;box-shadow:0 8px 24px #0009;text-align:center
+}
+.film-training-banner strong,.film-training-banner span{display:block}
+.film-training-banner strong{color:#ffdb7b;font:900 clamp(.8rem,1.5vw,1.05rem) system-ui,sans-serif}
+.film-training-banner span{margin-top:3px;color:#e9d5b1;font:700 clamp(.64rem,1vw,.8rem) system-ui,sans-serif}
+
+.film-graphic{
+  position:absolute!important;inset:0!important;
+  display:grid!important;place-items:center!important;align-content:center!important;
+  gap:12px!important;padding:clamp(16px,3vw,34px)!important;
+  color:white!important;text-align:center!important;
+  background:radial-gradient(circle at 50% 40%,#35543f 0,#1f3427 50%,#0e0907 100%)!important;
+  animation:filmGraphicIn .42s ease both!important
+}
+@keyframes filmGraphicIn{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:scale(1)}}
+.film-graphic h1,.film-graphic h2,.film-graphic h3,.film-graphic p{margin:0!important}
+.film-graphic h1{font-size:clamp(2rem,5vw,4rem)!important;color:#ffe399!important}
+.film-graphic h2{font-size:clamp(1.35rem,3vw,2.45rem)!important;color:#ffe099!important}
+.film-graphic h3{color:#f1d18d!important}
+.film-logo{font:900 clamp(2.8rem,7vw,6rem)/.96 Georgia,serif!important;color:#ffd66d!important;text-shadow:0 5px 18px #000!important}
+.film-logo.small{font-size:clamp(2rem,5vw,4.1rem)!important}.film-logo em{font-style:italic!important}
+.film-opening-cards{display:flex;align-items:end;justify-content:center}.film-opening-cards .film-card{margin-left:-13px!important}.film-opening-cards .film-card:first-child{margin-left:0!important}.film-opening-cards .film-card:nth-child(odd){transform:rotate(-6deg) translateY(4px)}.film-opening-cards .film-card:nth-child(even){transform:rotate(6deg)}
+.film-card{display:inline-grid!important;justify-items:center!important;gap:2px!important;margin:0!important}.film-card img{display:block!important;width:clamp(42px,5.7vw,68px)!important;aspect-ratio:76/123!important;object-fit:contain!important;border:2px solid #ac2d23!important;border-radius:5px!important;background:#f3eee2!important;box-shadow:0 5px 11px #0008!important}.film-card figcaption{max-width:88px!important;color:#ead3aa!important;font:700 clamp(.47rem,.8vw,.65rem)/1.1 system-ui,sans-serif!important}
+.film-world{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;color:#ffe6aa;font:800 clamp(.72rem,1.4vw,1rem) system-ui,sans-serif}.film-world i{width:38px;height:1px;background:linear-gradient(90deg,#e1ae4e,#fff0ad,#e1ae4e);box-shadow:0 0 9px #e5b75e}.film-devices{display:flex;align-items:center;gap:18px;color:#f0d192;font:900 clamp(1rem,2.2vw,1.65rem) system-ui,sans-serif}
+.film-goal-flow{display:grid;grid-template-columns:auto auto auto auto auto auto auto;align-items:center;gap:clamp(5px,1.6vw,18px);padding:14px 18px;border-radius:12px;background:#160f0cbd;border:1px solid #d3aa6066}.film-goal-flow span{padding:9px 11px;border-radius:8px;background:#623f1c;color:#fff0c3;font:900 clamp(.58rem,1.25vw,.9rem) system-ui,sans-serif}.film-goal-flow b{color:#ffd66e;font-size:1.4rem}
+.film-one-family{display:grid;gap:8px;padding:14px 18px;border-radius:12px;background:#160f0cbd;border:1px solid #d4aa5d66}.film-one-family>div{display:flex;gap:7px}.film-one-family .film-card img{width:clamp(58px,8vw,88px)!important}
+
+.film-card-grid.families{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;width:min(980px,100%)!important}.film-card-grid.families section{min-width:0;padding:5px;border-radius:7px;background:#160f0cae;border:1px solid #ffffff18}.film-card-grid.families section>div{display:flex;justify-content:center;gap:1px}.film-card-grid.families h3{font-size:clamp(.48rem,.85vw,.66rem)!important;margin-bottom:3px!important}.film-card-grid.families .film-card img{width:clamp(17px,2.45vw,29px)!important;border-width:1px!important}
+.film-type-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:min(990px,100%)!important}.film-type-grid>section{min-width:0;display:grid;align-content:start;gap:5px;padding:7px;border-radius:8px;background:#160f0cad;border:1px solid #ffffff18}.film-type-grid h3{font-size:clamp(.6rem,1vw,.82rem)!important}.film-type-grid section>div{display:flex;flex-wrap:wrap;justify-content:center;gap:1px}.film-type-grid .film-card img{width:clamp(14px,2.05vw,24px)!important;border-width:1px!important}.film-type-grid .stripe-set{display:grid!important;grid-template-columns:32px repeat(4,1fr);align-items:center!important}.film-type-grid .stripe-set b{font:800 .45rem system-ui,sans-serif;color:#e8cca0}
+
+.film-score-focus{width:min(860px,100%)!important}.film-score-focus>section{display:grid;gap:10px;padding:18px 20px;border:1px solid #d5aa5f66;border-radius:13px;background:#160f0ccf}.film-score-focus p{color:#f0d9b3!important;font:800 clamp(.72rem,1.35vw,.95rem) system-ui,sans-serif!important}.film-score-row{display:flex;justify-content:center;align-items:center;gap:3px}.film-score-row strong{margin-left:10px;color:#ffe09a;font:900 clamp(.64rem,1.25vw,.9rem) system-ui,sans-serif}.film-score-row .film-card img{width:clamp(40px,5.4vw,64px)!important}
+
+.film-gostop{display:grid;gap:10px;justify-items:center;width:min(900px,100%)!important}.film-seven{font:900 clamp(4rem,10vw,8rem)/.8 Georgia,serif;color:#ffd55f;text-shadow:0 0 24px #e9a92266}.film-seven small{display:block;margin-top:12px;font:900 .72rem system-ui,sans-serif;letter-spacing:.2em}.film-choice{display:flex;gap:18px}.film-choice b{min-width:130px;padding:10px 20px;border:2px solid;border-radius:10px;font-size:1.1rem}.film-choice b:first-child{background:#2f7a43;border-color:#83d19a}.film-choice b:last-child{background:#9b3427;border-color:#e77b61}.film-go-line{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;width:min(760px,95%)}.film-go-line span{padding:7px 4px;border-radius:8px;background:#170f0cbc;border:1px solid #ffffff18;color:#d9c5a3;font:800 .57rem system-ui,sans-serif}.film-go-line span.on{background:#76501d;color:#fff;box-shadow:0 0 15px #e8b54755}.film-go-line small{color:#ffe08e}.film-gostop .risk{padding:7px 11px;border-radius:8px;background:#7b271e55;border:1px solid #c7513b66;color:#ffdbc8;font:900 .62rem system-ui,sans-serif;opacity:.35}.film-gostop .risk.on{opacity:1;box-shadow:0 0 16px #cf4e3b55}
+
+.film-special-focus{display:grid;gap:12px;justify-items:center;width:min(840px,100%);padding:18px;border-radius:13px;background:#160f0ccf;border:1px solid #d4aa5d66}.film-special-focus h2{font-size:clamp(1.6rem,4vw,3rem)!important}.film-special-cards{display:flex;justify-content:center;gap:3px}.film-special-cards .film-card img{width:clamp(52px,7vw,80px)!important}.film-special-focus p{max-width:720px;color:#f0dbb6!important;font:800 clamp(.72rem,1.35vw,.95rem)/1.45 system-ui,sans-serif!important}.film-sweep{font-size:clamp(3rem,8vw,6rem)!important}
+.film-rulebook{width:110px;height:140px;border:6px solid #7d3b25;border-radius:7px;background:linear-gradient(135deg,#a62d20,#611a15);display:grid;place-items:center;color:#ffe4a0;font:900 1.2rem/1.15 Georgia,serif;box-shadow:12px 10px 0 #2a160f,0 14px 24px #0008}
+
+@media(max-width:700px){
+  .tutorial-video-view{padding:7px 7px 10px!important;gap:6px!important}
+  .tutorial-video-stage.film-stage{max-height:48dvh!important;border-radius:9px!important}
+  .tutorial-video-caption{font-size:.68rem!important;min-height:3.8em!important;padding:6px 8px!important}
+  .tutorial-video-actions{gap:7px!important}.tutorial-video-actions button{min-width:0!important;flex:1!important;padding:8px 9px!important;font-size:.72rem!important}
+  .film-live-wrap.mobile:before{width:39%!important;height:92%!important;border-width:6px!important;border-radius:18px!important}.film-live-wrap.mobile .film-live-frame{width:38%!important;height:89%!important;border-radius:13px!important}
+  .film-logo{font-size:clamp(2rem,12vw,3.6rem)!important}.film-card img{width:clamp(27px,7.4vw,40px)!important}
+  .film-goal-flow{grid-template-columns:repeat(4,1fr)!important;gap:3px!important;width:100%!important;padding:7px!important}.film-goal-flow b{display:none!important}.film-goal-flow span{padding:5px 3px!important;font-size:.46rem!important}
+  .film-card-grid.families{gap:2px!important}.film-card-grid.families section{padding:2px!important}.film-card-grid.families h3{font-size:.34rem!important}.film-card-grid.families .film-card img{width:11px!important}
+  .film-type-grid{gap:2px!important}.film-type-grid>section{padding:2px!important;gap:1px!important}.film-type-grid h3{font-size:.4rem!important}.film-type-grid .film-card img{width:9px!important}.film-type-grid .stripe-set{grid-template-columns:20px repeat(4,1fr)!important}.film-type-grid .stripe-set b{font-size:.28rem!important}
+  .film-score-focus>section{padding:8px!important;gap:5px!important}.film-score-row strong,.film-score-focus p{font-size:.48rem!important}.film-score-row .film-card img{width:26px!important}
+  .film-seven{font-size:3.2rem!important}.film-choice b{min-width:85px!important;padding:6px!important;font-size:.72rem!important}.film-go-line{gap:2px!important}.film-go-line span{font-size:.34rem!important;padding:4px 1px!important}.film-gostop .risk{font-size:.4rem!important;padding:4px 6px!important}
+  .film-special-focus{padding:8px!important;gap:6px!important}.film-special-cards .film-card img{width:35px!important}.film-special-focus p{font-size:.5rem!important}
+  .film-gesture.finger{font-size:1.8rem!important}.film-training-banner{width:82%!important;padding:6px 8px!important}
+}

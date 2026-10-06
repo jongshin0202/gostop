@@ -419,7 +419,7 @@ test('How to Play film contains the product tour and corrected GoStop rules',asy
   const errors=await openMenu(page);
   await page.locator('#howToBtn').click();
   const script=await page.locator('script[src^="tutorial-video.js"]').getAttribute('src');
-  expect(script).toContain('20261005-1');
+  expect(script).toContain('20261005-2');
   const body=await page.locator('body').textContent();
   expect(body).toContain('Full Rules');
   expect(body).toContain('Training Mode');

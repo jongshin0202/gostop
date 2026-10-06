@@ -30,24 +30,28 @@ test('mobile main menu keeps collapsed top controls and expanded Player info on 
   assert.match(ranked,/\.stable-mobile-menu-anchors \.gostop-main-menu\.main-menu-accordion\.has-expanded-section\{padding:7px!important;gap:5px!important\}/);
 });
 
-test('How to Play film stays caption-only and teaches the approved product and rule language',()=>{
+test('How to Play film uses live GoStop UI footage, voice, captions, and the approved rules',()=>{
   assert.match(html,/id="tutorialFullRulesBtn"/);
   assert.match(html,/id="tutorialTrainingModeBtn"/);
   assert.doesNotMatch(html,/tutorialVideoPlay|tutorialVideoReplay|tutorialVideoNarration|tutorialVideoVolume|tutorialVideoChapters/);
-  assert.doesNotMatch(tutorial,/speechSynthesis|SpeechSynthesisUtterance/);
-  assert.match(tutorial,/anyone around the world/);
-  assert.match(tutorial,/Click once → select/);
-  assert.match(tutorial,/Tap · Tap again · or Flick up/);
-  assert.match(tutorial,/Competitive Online Play matches you against other players for Coins and global ranking/);
-  assert.match(tutorial,/Attract Mode automatically cycles through the leaderboards and back/);
-  assert.match(tutorial,/Every card family has exactly four cards/);
-  assert.match(tutorial,/3 Brights with the Rain Bright = 2 points/);
-  assert.match(tutorial,/All 5 Brights = 15 points/);
-  assert.match(tutorial,/5-BIRDIES! and a 5-point bonus/);
+  assert.match(tutorial,/SpeechSynthesisUtterance/);
+  assert.match(tutorial,/tutorialFootage/);
+  assert.match(tutorial,/film-live-frame/);
+  assert.match(tutorial,/prepareTraining\(pcFrame\)/);
+  assert.match(tutorial,/prepareTraining\(mobileFrame\)/);
+  assert.match(tutorial,/On mobile, tap a card once to select it/);
+  assert.match(tutorial,/press the card and flick upward/);
+  assert.match(tutorial,/swipe-up/);
+  assert.match(tutorial,/Competitive Online Play lets you play other people for Coins and global ranking/);
+  assert.match(tutorial,/Attract Mode cycles through the leaderboards automatically/);
+  assert.match(tutorial,/Every family has exactly 4 cards/);
+  assert.match(tutorial,/3 non-Rain Brights = 3/);
+  assert.match(tutorial,/All 5 Brights = 15/);
+  assert.match(tutorial,/5-BIRDIES!/);
   assert.match(tutorial,/Any 5 Stripes = 1 point/);
   assert.match(tutorial,/10 Singles = 1 point/);
-  assert.match(tutorial,/1 GO adds \+1 point\. 2 GO means \+2 points total/);
-  assert.match(tutorial,/From 3 GO onward, your score doubles/);
+  assert.match(tutorial,/One Go adds one point/);
+  assert.match(tutorial,/From the third Go onward, your score doubles/);
   assert.match(tutorial,/POOPED! \(뻑\)/);
   assert.match(tutorial,/KISS! \(쪽\)/);
   assert.match(tutorial,/FLUSH! \(따닥\)/);
