@@ -1752,7 +1752,7 @@
     normalizeFixed(el,rect); return el;
   }
   function normalizeFixed(el,rect){
-    el.getAnimations().forEach(a=>a.cancel());
+    (el.getAnimations?.()||[]).forEach(a=>a.cancel());
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='2';
   }
@@ -1803,7 +1803,7 @@
       {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,filter:'drop-shadow(0 10px 9px rgba(0,0,0,.35))',offset:1}
     ];
     const a=el.animate(frames,{duration,easing:'cubic-bezier(.22,.72,.17,1)',fill:'forwards'});
-    await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`;
+    await a.finished.catch(()=>{}); (el.getAnimations?.()||[]).forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`;
     impactAt(landing); return el;
   }
 
@@ -1844,7 +1844,7 @@
         {transform:`translate(${dx}px,${dy}px) rotate(${land.rotation}deg)`,offset:1}
       ];
       return el.animate(frames,{duration,easing:'cubic-bezier(.2,.72,.14,1)',fill:'forwards'}).finished.then(()=>{
-        el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,land); el.style.transform=`rotate(${land.rotation}deg)`;
+        (el.getAnimations?.()||[]).forEach(a=>a.cancel()); normalizeFixed(el,land); el.style.transform=`rotate(${land.rotation}deg)`;
       }).catch(()=>{});
     });
     setTimeout(()=>playBombSound(),Math.max(0,duration-55));
@@ -1879,9 +1879,9 @@
       {transform:`translate(${dx}px,${dy}px)`,offset:1}
     ],{duration:motionDuration(360),easing:'cubic-bezier(.22,.72,.2,1)',fill:'forwards'});
     await lift.finished.catch(()=>{});
-    const now=el.getBoundingClientRect(); el.getAnimations().forEach(a=>a.cancel()); normalizeFixed(el,now);
+    const now=el.getBoundingClientRect(); (el.getAnimations?.()||[]).forEach(a=>a.cancel()); normalizeFixed(el,now);
     const flip=inner.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],{duration:motionDuration(380),easing:'cubic-bezier(.35,.05,.2,1)',fill:'forwards'});
-    await flip.finished.catch(()=>{}); inner.style.transform='rotateY(180deg)'; inner.getAnimations().forEach(a=>a.cancel());
+    await flip.finished.catch(()=>{}); inner.style.transform='rotateY(180deg)'; (inner.getAnimations?.()||[]).forEach(a=>a.cancel());
     await presentationPause('deckReveal'); return el;
   }
 
@@ -1899,13 +1899,13 @@
       {transform:`translate(${dx}px,${dy-10}px) rotate(${landing.rotation}deg)`,offset:.90},
       {transform:`translate(${dx}px,${dy}px) rotate(${landing.rotation}deg)`,offset:1}
     ],{duration,easing:'cubic-bezier(.2,.7,.14,1)',fill:'forwards'});
-    await a.finished.catch(()=>{}); el.getAnimations().forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; impactAt(landing);
+    await a.finished.catch(()=>{}); (el.getAnimations?.()||[]).forEach(x=>x.cancel()); normalizeFixed(el,landing); el.style.transform=`rotate(${landing.rotation}deg)`; impactAt(landing);
   }
 
   async function stageHandCardForChoice(side,card,sourceRect){
     await preloadCardFace(card);const full=fullSizeSourceRect(sourceRect),el=makePhysicalFace(card,full,'physical-card moving-card');stagePhysicalCard(card.id,el);
     document.querySelectorAll(`[data-card-id="${card.id}"]`).forEach(node=>{if(node!==el)node.style.visibility='hidden';});
-    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:motionDuration(240),easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();el.getAnimations().forEach(animation=>animation.cancel());normalizeFixed(el,held);}
+    if(!prefersReducedMotion()){const lift=el.animate([{transform:'translate(0,0)'},{transform:`translate(0,${seatForLegacySide(side)==='bottom'?-30:30}px)`}],{duration:motionDuration(240),easing:'ease-out',fill:'forwards'});await lift.finished.catch(()=>{});const held=el.getBoundingClientRect();(el.getAnimations?.()||[]).forEach(animation=>animation.cancel());normalizeFixed(el,held);}
     return el;
   }
 
