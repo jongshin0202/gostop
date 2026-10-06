@@ -415,11 +415,21 @@ test('How to Play is an autoplay captioned film with only Full Rules and Trainin
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
+test('How to Play preloads a real Training Mode game before the film reaches gameplay footage',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#howToBtn').click();
+  await expect(page.locator('.film-live-wrap.game iframe.film-live-frame')).toHaveCount(1);
+  const game=page.frameLocator('.film-live-wrap.game iframe.film-live-frame');
+  await expect.poll(async()=>game.locator('#playerHand .hand-card').count(),{timeout:30000}).toBeGreaterThan(0);
+  await expect.poll(async()=>game.locator('#table').count(),{timeout:5000}).toBe(1);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
 test('How to Play film contains the product tour and corrected GoStop rules',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#howToBtn').click();
   const script=await page.locator('script[src^="tutorial-video.js"]').getAttribute('src');
-  expect(script).toContain('20261005-2');
+  expect(script).toContain('20261005-3');
   const body=await page.locator('body').textContent();
   expect(body).toContain('Full Rules');
   expect(body).toContain('Training Mode');
