@@ -514,7 +514,7 @@ async function recordPart2(browser){
     await page.locator('#playerInfoOverlay').click({position:{x:5,y:5},force:true}).catch(()=>{});
     await clickWithCursor(page,'.human-chip .score-pill',{ms:450});await sleep(1400);
     await page.locator('#scoreDialog .dialog-close').click({force:true}).catch(()=>{});
-    const capture='.player-capture-panel,.human-capture-panel,.game-capture-panel';
+    const capture='.player-capture-panel';
     const first=page.locator(capture).first();
     if(await first.isVisible().catch(()=>false)){const box=await first.boundingBox();if(box){await cursorTo(page,capture,{ms:450});await first.click({force:true});await sleep(1600);await page.keyboard.press('Escape').catch(()=>{});}}
   });
