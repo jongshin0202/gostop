@@ -90,7 +90,10 @@ async function recordClip({name,viewport={width:1365,height:768},scenario,tail=1
   await setupPage(page);
   const video=page.video();
   try{
-    await scenario(page);
+    await Promise.race([
+      scenario(page),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error('Scenario timeout: '+name)),25000))
+    ]);
     await sleep(tail);
   }finally{
     await page.close();
@@ -208,7 +211,15 @@ const clips=[
         floor:['m4-1','m8-1'],deck:['m4-3'],
         humanHand:['m4-2'],aiCaptured:['m7-3','m9-3']
       });
+      const closer=setInterval(async()=>{
+        const open=await page.locator('#firstPpeokDialog[open]').count().catch(()=>0);
+        if(open){
+          await page.evaluate(()=>document.getElementById('firstPpeokDialog')?.close());
+          clearInterval(closer);
+        }
+      },150);
       await humanPlay(page,'m4-2');
+      clearInterval(closer);
     }
   },
   {
@@ -298,6 +309,11 @@ const clips=[
       });
       await page.evaluate(async()=>{
         const api=globalThis.GOSTOP_TEST_API;
+        const engine=globalThis.GoStopEngine;
+        let state=api.getState();
+        const offered=engine.applyNormalTurnAction(state,{type:'requestBombDecision',actorId:'playerA',cardId:'m6-1'});
+        api.setState(offered.state);
+        api.render();
         await api.executeBombTurn('human',6);
       });
     }
