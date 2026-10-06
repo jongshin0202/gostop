@@ -1391,3 +1391,6 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .film-special-focus{padding:8px!important;gap:5px!important}.film-special-focus .film-card img{width:33px!important}.film-special-focus p{font-size:.46rem!important}
   .film-ending-callout{gap:14px!important}.film-rulebook{width:70px!important;height:88px!important;border-width:4px!important;font-size:.78rem!important}
 }
+
+.film-frame-parking .film-live-wrap{width:1365px!important;height:768px!important;inset:auto!important;left:0!important;top:0!important}
+.film-frame-parking .film-live-frame{width:1365px!important;height:768px!important}
