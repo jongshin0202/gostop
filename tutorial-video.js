@@ -115,7 +115,7 @@
       d.querySelectorAll('dialog[open]').forEach(node=>{try{node.close();}catch(_){ }});
       d.querySelector('#returnGameNo')?.click();
       d.querySelector('#trainingModeBtn')?.click();
-      await waitFor(item,'#playerHand .hand-card',16000);
+      await waitFor(item,'#playerHand .hand-card:not(:disabled)',18000);
     }catch(_){}
   };
 
