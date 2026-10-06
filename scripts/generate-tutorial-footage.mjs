@@ -315,11 +315,26 @@ async function singleMatchHandSelector(page){
   }
   return data.hand[0]?`#playerHand [data-card-id="${data.hand[0]}"]`:null;
 }
+async function ensureCompetitiveOpen(page){
+  const button=page.locator('#competitiveGamingBtn');
+  if(await button.getAttribute('aria-expanded')!=='true'){
+    await button.click({force:true});
+    await page.locator('#onlinePlayMenuBtn').waitFor({state:'visible',timeout:5000});
+  }
+}
+async function ensureFriendlyOpen(page){
+  const button=page.locator('#friendlyGamingBtn');
+  if(await button.getAttribute('aria-expanded')!=='true'){
+    await button.click({force:true});
+    await page.locator('#trainingModeBtn').waitFor({state:'visible',timeout:5000});
+  }
+}
+
 async function startTraining(page){
   if(await page.locator('#soloStartOverlay').isHidden().catch(()=>false)){
     await page.reload({waitUntil:'domcontentloaded'});await page.locator('#competitiveGamingBtn').waitFor({state:'visible'});
   }
-  await page.locator('#friendlyGamingBtn').click({force:true});
+  await ensureFriendlyOpen(page);
   await page.locator('#trainingModeBtn').waitFor({state:'visible'});
   await page.locator('#trainingModeBtn').click({force:true});
   await page.locator('#soloStartOverlay').waitFor({state:'hidden',timeout:20000});
@@ -526,7 +541,7 @@ async function recordPart2(browser){
     await cursorTo(page,'#playSoloBtn',{ms:450}).catch(()=>{});await sleep(1200);
     await clickWithCursor(page,'#freeFriendBtn',{ms:450});await sleep(2400);
     await page.locator('#freeFriendClose').click({force:true}).catch(()=>{});
-    await clickWithCursor(page,'#competitiveGamingBtn',{ms:450});await sleep(1000);
+    await ensureCompetitiveOpen(page);await cursorTo(page,'#competitiveGamingBtn',{ms:450});await sleep(1000);
     await cursorTo(page,'#rankedSoloBtn',{ms:450});await sleep(1800);
     await clickWithCursor(page,'#onlinePlayMenuBtn',{ms:450});await sleep(2500);
     await page.locator('#onlineLobbyClose').click({force:true}).catch(()=>{});
@@ -534,7 +549,7 @@ async function recordPart2(browser){
 
   await runTimed(20,async()=>{
     if(await page.locator('#onlineLobbyPanel').isHidden().catch(()=>true)){
-      await page.locator('#competitiveGamingBtn').click({force:true});await page.locator('#onlinePlayMenuBtn').click({force:true});await sleep(900);
+      await ensureCompetitiveOpen(page);await page.locator('#onlinePlayMenuBtn').click({force:true});await sleep(900);
     }
     await clickWithCursor(page,'#autoMatchBtn',{ms:450});await sleep(3400);
     await page.locator('#autoMatchCandidateCancel').click({force:true}).catch(()=>{});
