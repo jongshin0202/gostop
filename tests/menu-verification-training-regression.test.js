@@ -6,7 +6,7 @@ const fs=require('node:fs');
 const ranked=fs.readFileSync(require.resolve('../ranked-client.js'),'utf8');
 const app=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
-const tutorial=fs.readFileSync(require.resolve('../tutorial-video.js'),'utf8');
+const tutorial=fs.readFileSync(require.resolve('../tutorial-video.js'),'utf8');\nconst tutorialGenerator=fs.readFileSync(require.resolve('../scripts/generate-tutorial-footage.mjs'),'utf8');
 
 test('main menu uses immediate desktop pointer-down accordion activation',()=>{
   assert.match(ranked,/function installImmediateDesktopAccordion\(button,section\)/);
@@ -30,29 +30,34 @@ test('mobile main menu keeps collapsed top controls and expanded Player info on 
   assert.match(ranked,/\.stable-mobile-menu-anchors \.gostop-main-menu\.main-menu-accordion\.has-expanded-section\{padding:7px!important;gap:5px!important\}/);
 });
 
-test('How to Play film stays caption-only and teaches the approved product and rule language',()=>{
+test('How to Play uses one recorded MP4 with synced captions and only Full Rules and Training Mode actions',()=>{
+  assert.match(html,/id="tutorialVideoPlayer"/);
+  assert.match(html,/assets\/gostop-live-how-to-play\.mp4/);
   assert.match(html,/id="tutorialFullRulesBtn"/);
   assert.match(html,/id="tutorialTrainingModeBtn"/);
-  assert.doesNotMatch(html,/tutorialVideoPlay|tutorialVideoReplay|tutorialVideoNarration|tutorialVideoVolume|tutorialVideoChapters/);
-  assert.doesNotMatch(tutorial,/speechSynthesis|SpeechSynthesisUtterance/);
-  assert.match(tutorial,/anyone around the world/);
-  assert.match(tutorial,/Click once → select/);
-  assert.match(tutorial,/Tap · Tap again · or Flick up/);
-  assert.match(tutorial,/Competitive Online Play matches you against other players for Coins and global ranking/);
-  assert.match(tutorial,/Attract Mode automatically cycles through the leaderboards and back/);
-  assert.match(tutorial,/Every card family has exactly four cards/);
-  assert.match(tutorial,/3 Brights with the Rain Bright = 2 points/);
-  assert.match(tutorial,/All 5 Brights = 15 points/);
-  assert.match(tutorial,/5-BIRDIES! and a 5-point bonus/);
-  assert.match(tutorial,/Any 5 Stripes = 1 point/);
-  assert.match(tutorial,/10 Singles = 1 point/);
-  assert.match(tutorial,/1 GO adds \+1 point\. 2 GO means \+2 points total/);
-  assert.match(tutorial,/From 3 GO onward, your score doubles/);
-  assert.match(tutorial,/POOPED! \(뻑\)/);
-  assert.match(tutorial,/KISS! \(쪽\)/);
-  assert.match(tutorial,/FLUSH! \(따닥\)/);
-  assert.match(tutorial,/CLEAN SWEEP! \(싹쓸이\)/);
-  assert.match(tutorial,/steal 1 Single/);
+  assert.doesNotMatch(html,/tutorialVideoPlay|tutorialVideoReplay|tutorialVideoNarration|tutorialVideoVolume|tutorialVideoChapters|tutorialVideoStage/);
+  assert.match(tutorial,/gostop-live-how-to-play-captions\.json/);
+  assert.match(tutorial,/video\.addEventListener\('timeupdate',syncCaption\)/);
+  assert.match(tutorial,/video\.play\(\)/);
+  assert.match(tutorialGenerator,/anyone around the world play GoStop together/);
+  assert.match(tutorialGenerator,/click a card once to select it/);
+  assert.match(tutorialGenerator,/flick upward for a faster play/);
+  assert.match(tutorialGenerator,/actualFlick/);
+  assert.match(tutorialGenerator,/Competitive Online Play lets you compete/);
+  assert.match(tutorialGenerator,/Attract Mode cycles through the leaderboards automatically/);
+  assert.match(tutorialGenerator,/Every family has exactly four cards/);
+  assert.match(tutorialGenerator,/three Brights with the Rain Bright score 2 points/);
+  assert.match(tutorialGenerator,/all five Brights score 15 points/);
+  assert.match(tutorialGenerator,/5-BIRDIES! scores 5 points/);
+  assert.match(tutorialGenerator,/Any five Stripes score 1/);
+  assert.match(tutorialGenerator,/Ten Singles score 1 point/);
+  assert.match(tutorialGenerator,/first GO adds 1 point/);
+  assert.match(tutorialGenerator,/third GO onward, the settlement doubles/);
+  assert.match(tutorialGenerator,/POOPED! is 뻑/);
+  assert.match(tutorialGenerator,/KISS! is 쪽/);
+  assert.match(tutorialGenerator,/FLUSH! is 따닥/);
+  assert.match(tutorialGenerator,/CLEAN SWEEP! is 싹쓸이/);
+  assert.match(tutorialGenerator,/steal one Single/);
 });
 
 test('verification dialog self-heals after email verification without manual dismissal',()=>{
