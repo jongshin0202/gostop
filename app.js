@@ -4,6 +4,7 @@
   // Characterization tests opt in before this script loads. Production never
   // sets this flag, so the browser startup and gameplay path remain unchanged.
   const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
+  const CAPTURE_MODE = TEST_MODE && globalThis.GOSTOP_CAPTURE_MODE === true;
 
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
   const engine = globalThis.GoStopEngine;
@@ -47,7 +48,7 @@
 
   function artUrl(filename) { return COMMONS + encodeURIComponent(filename).replace(/%2F/g,'/'); }
   function preloadCardFace(card){
-    if(TEST_MODE)return Promise.resolve();
+    if(TEST_MODE&&!CAPTURE_MODE)return Promise.resolve();
     if(!faceImagePromises.has(card.id)){
       const image=new Image(); image.src=artUrl(card.file);
       const ready=image.decode?image.decode():new Promise(resolve=>{image.onload=resolve;image.onerror=resolve;});
@@ -148,7 +149,7 @@
     globalThis.dispatchEvent(new CustomEvent('gostop-player-activity',{detail:{active:!!active,mode:String(mode||''),twoPlayer:!!twoPlayer}}));
   }
 
-  const sleep = ms => TEST_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
+  const sleep = ms => TEST_MODE&&!CAPTURE_MODE ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
   const PRESENTATION_PACING=Object.freeze({handToDeck:330,deckReveal:180,cardLandCleanup:180,postCapture:190});
   const performanceLite=()=>globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement.classList.contains('gostop-performance-lite');
   const motionDuration=ms=>performanceLite()?Math.max(110,Math.round(ms*.58)):ms;
@@ -569,7 +570,7 @@
 
   function render() {
     notePresentationRender();
-    if(TEST_MODE)return;
+    if(TEST_MODE&&!CAPTURE_MODE)return;
     const view=viewerRelativePlayers(state,SOLO_VIEWER_ID);
     const bottomPlayer=view.bottom.player,topPlayer=view.top.player;
     const bottomScore=scorePlayer(bottomPlayer),topScore=scorePlayer(topPlayer);
@@ -1474,7 +1475,7 @@
 
   async function animatePiTransfer(card,fromSide,toSide){
     presentation.piTransferAnimationCount++;
-    if(TEST_MODE)return;
+    if(TEST_MODE&&!CAPTURE_MODE)return;
     const fromRect=captureTargetRect(fromSide,'pi');
     const toRect=captureTargetRect(toSide,'pi');
     if(!fromRect.width||!toRect.width||prefersReducedMotion())return;
@@ -1755,10 +1756,10 @@
     el.style.position='fixed'; el.style.left=`${rect.left}px`; el.style.top=`${rect.top}px`; el.style.width=`${rect.width}px`; el.style.height=`${rect.height}px`;
     el.style.margin='0'; el.style.transform='none'; el.style.opacity='1'; el.style.zIndex='2';
   }
-  function syncStageOwnedCard(id){const owner=presentation.stagedCards.get(id);if(TEST_MODE||!owner)return;document.querySelectorAll(`[data-card-id="${id}"]`).forEach(node=>{if(node!==owner)node.style.visibility='hidden';});}
+  function syncStageOwnedCard(id){const owner=presentation.stagedCards.get(id);if((TEST_MODE&&!CAPTURE_MODE)||!owner)return;document.querySelectorAll(`[data-card-id="${id}"]`).forEach(node=>{if(node!==owner)node.style.visibility='hidden';});}
   function syncStageOwnedCards(){presentation.stagedCards.forEach((_,id)=>syncStageOwnedCard(id));}
   function stagePhysicalCard(id,el){presentation.stagedCards.set(id,el);syncStageOwnedCard(id);return el;}
-  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } if(!TEST_MODE)document.querySelectorAll(`[data-card-id="${id}"]`).forEach(node=>node.style.visibility=''); }
+  function removeStage(id){ const el=presentation.stagedCards.get(id); if(el){ presentation.stagedCards.delete(id); el.remove(); } if(!TEST_MODE||CAPTURE_MODE)document.querySelectorAll(`[data-card-id="${id}"]`).forEach(node=>node.style.visibility=''); }
 
   function resetHandPresentationState(){
     clearTrainingCoach();
@@ -1807,7 +1808,7 @@
   }
 
   async function animateBombSlap(side,cards,target,sourceRects=[]){
-    if(TEST_MODE)return;
+    if(TEST_MODE&&!CAPTURE_MODE)return;
     await Promise.all(cards.map(preloadCardFace));
     const landingBase=overlapLanding(target);
     if(!landingBase)return;
@@ -1853,6 +1854,7 @@
 
   async function animateDeckLiftFlip(side,card){
     if(TEST_MODE){
+    if(CAPTURE_MODE)preloadCardFaces();
       const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
       presentation.stagedCards.set(card.id,el);
       return el;
@@ -1884,7 +1886,7 @@
   }
 
   async function animateStagedSlap(el,card,target,kind='flip'){
-    if(TEST_MODE)return;
+    if(TEST_MODE&&!CAPTURE_MODE)return;
     const start=el.getBoundingClientRect(); normalizeFixed(el,start);
     const inner=el.querySelector('.deck-draw-inner'); if(inner){inner.style.transform='rotateY(180deg)';}
     const landing=target ? overlapLanding(target) : await freeFloorLanding(card);
@@ -2053,14 +2055,14 @@
   }
   function playSweepSound(){
     if(!presentation.soundEnabled)return;
-    traceAudio('sweep');if(TEST_MODE)return;
+    traceAudio('sweep');if(TEST_MODE&&!CAPTURE_MODE)return;
     try{const c=audioContext();if(!c)return;const now=c.currentTime;[[0,-.75,.55],[.48,.55,-.65]].forEach(([delay,panFrom,panTo],stroke)=>{const duration=.38,length=Math.floor(c.sampleRate*duration),buffer=c.createBuffer(1,length,c.sampleRate),data=buffer.getChannelData(0);let seed=0x5eed1234+stroke;for(let i=0;i<length;i++){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;const t=i/length,envelope=Math.sin(Math.PI*t)**.7,bristles=.45+.55*Math.abs(Math.sin(i*.043));data[i]=(((seed>>>0)/0xffffffff)*2-1)*envelope*bristles;}const source=c.createBufferSource(),high=c.createBiquadFilter(),band=c.createBiquadFilter(),gain=c.createGain(),pan=typeof c.createStereoPanner==='function'?c.createStereoPanner():null;high.type='highpass';high.frequency.value=1400;band.type='bandpass';band.frequency.setValueAtTime(5200,now+delay);band.frequency.exponentialRampToValueAtTime(2600,now+delay+duration);band.Q.value=.6;gain.gain.setValueAtTime(.0001,now+delay);gain.gain.linearRampToValueAtTime(.2,now+delay+.025);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+duration);source.buffer=buffer;source.connect(high).connect(band).connect(gain);if(pan){gain.connect(pan).connect(c.destination);pan.pan.setValueAtTime(panFrom,now+delay);pan.pan.linearRampToValueAtTime(panTo,now+delay+duration);}else gain.connect(c.destination);source.start(now+delay);source.stop(now+delay+duration);});}catch(_){ }
   }
   function playTapTapSound(){playProceduralNoise('flush');}
   function playKissSound(){
     if(!presentation.soundEnabled)return;
     presentation.kissSoundCount++;traceAudio('kiss');
-    if(TEST_MODE)return;
+    if(TEST_MODE&&!CAPTURE_MODE)return;
     try{
       const c=audioContext();if(!c)return;const now=c.currentTime;
       const tone=c.createOscillator(),gain=c.createGain();tone.type='sine';tone.frequency.setValueAtTime(260,now);tone.frequency.exponentialRampToValueAtTime(720,now+.18);tone.frequency.exponentialRampToValueAtTime(380,now+.34);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.3,now+.035);gain.gain.exponentialRampToValueAtTime(.0001,now+.38);tone.connect(gain).connect(c.destination);tone.start(now);tone.stop(now+.4);
@@ -3260,7 +3262,13 @@
       endPhysicalMotion(){presentation.activePhysicalMotions=Math.max(0,presentation.activePhysicalMotions-1);},
       notePresentationRender,
       resetPhysicalMotionTrace(){presentation.activePhysicalMotions=0;presentation.rendersDuringPhysicalMotion=0;},
-      setSoundEnabled(value){presentation.soundEnabled=!!value;}
+      setSoundEnabled(value){presentation.soundEnabled=!!value;},
+      render,
+      humanPlay,
+      beginGameplayPresentation,
+      closeAllGameplayPresentationUi,
+      showGoCallout,
+      CAPTURE_MODE
     });
   }else{
     preloadCardFaces();
