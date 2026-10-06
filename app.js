@@ -1853,8 +1853,7 @@
   }
 
   async function animateDeckLiftFlip(side,card){
-    if(TEST_MODE){
-    if(CAPTURE_MODE)preloadCardFaces();
+    if(TEST_MODE&&!CAPTURE_MODE){
       const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
       presentation.stagedCards.set(card.id,el);
       return el;
@@ -3188,6 +3187,7 @@
   }
 
   if(TEST_MODE){
+    if(CAPTURE_MODE)preloadCardFaces();
     const cloneCard=card=>({...card,flags:[...card.flags]});
     const makeTestPlayer=(overrides={})=>({
       hand:[],captured:[],go:0,shakes:0,shakeMultiplier:1,bombs:0,bombFreeTurns:0,ppeoks:0,
