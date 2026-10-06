@@ -44,7 +44,19 @@ jobs:
           cat /tmp/gostop-video-server.log
           exit 1
 
+      - name: Restore recorded tutorial footage
+        id: footage-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/tutorial/part1-raw.webm
+            build/tutorial/mobile-raw.webm
+            build/tutorial/part2-raw.webm
+            build/tutorial/captions.json
+          key: tutorial-footage-${{ hashFiles('scripts/generate-tutorial-footage.mjs') }}
+
       - name: Record actual GoStop Live footage
+        if: steps.footage-cache.outputs.cache-hit != 'true'
         run: node scripts/generate-tutorial-footage.mjs
 
       - name: Compose continuous narrated video
