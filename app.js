@@ -1923,7 +1923,7 @@
           state.deck=state.deck.filter(card=>card.id!==drawId);
           render();
           drawStage=await animateDeckLiftFlip('human',drawn);
-          drawTarget=drawTargetId?floorCard(drawTargetId):null;
+          drawTarget=drawTargetId?(floorCard(drawTargetId)||(drawTargetId===played.id?played:null)):null;
           const drawMatches=effectiveFloorMatchCards(drawn);dc=drawMatchCount==null?drawMatches.length:drawMatchCount;
           await animateStagedSlap(drawStage,drawn,drawTarget,'flip');
         }
