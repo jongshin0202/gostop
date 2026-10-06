@@ -27,6 +27,7 @@
   let gameFrame=null;
   let lastSpeech='';
   let returnFromRules=false;
+  let footageHeartbeat=0;
 
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const active=token=>token===filmRun&&dialog.open;
@@ -107,6 +108,29 @@
     return null;
   };
 
+  const installFootageStyle=d=>{
+    if(!d||d.getElementById('tutorialFootageStyle'))return;
+    const style=d.createElement('style');
+    style.id='tutorialFootageStyle';
+    style.textContent=`
+      #howToDialog{display:none!important}
+      html.tutorial-footage-document,body.tutorial-footage-body{overflow:hidden!important}
+      .film-demo-selected{transform:translateY(-18px)!important;filter:brightness(1.12)!important;box-shadow:0 0 0 4px rgba(255,218,95,.55),0 15px 30px rgba(0,0,0,.55)!important;z-index:80!important}
+      .film-demo-flick{transition:transform .75s cubic-bezier(.2,.8,.2,1),filter .25s ease!important;z-index:90!important}
+      .film-demo-flick-up{transform:translateY(-115px)!important;filter:brightness(1.14)!important}
+    `;
+    d.head?.appendChild(style);
+  };
+
+  const keepFootageAlive=()=>{
+    for(const item of [menuFrame,gameFrame]){
+      try{
+        const d=docOf(item);
+        d?.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:8,clientY:8,pointerType:'mouse'}));
+      }catch(_){}
+    }
+  };
+
   const closeFootageDialogs=item=>{
     const d=docOf(item);if(!d)return;
     d.querySelector('#returnGameNo')?.click();
@@ -121,6 +145,7 @@
     const d=docOf(menuFrame);if(!d)return false;
     d.documentElement.classList.add('tutorial-footage-document');
     d.body?.classList.add('tutorial-footage-body');
+    installFootageStyle(d);
     const friendly=await waitFor(menuFrame,'#friendlyGamingBtn',22000);
     if(!friendly)return false;
     closeFootageDialogs(menuFrame);
@@ -134,6 +159,7 @@
     const d=docOf(gameFrame);if(!d)return false;
     d.documentElement.classList.add('tutorial-footage-document');
     d.body?.classList.add('tutorial-footage-body');
+    installFootageStyle(d);
     const friendly=await waitFor(gameFrame,'#friendlyGamingBtn',22000);
     if(!friendly)return false;
     closeFootageDialogs(gameFrame);
@@ -653,11 +679,14 @@
     const token=++filmRun;
     lastSpeech='';
     clearOverlay();
+    if(footageHeartbeat)clearInterval(footageHeartbeat);
+    footageHeartbeat=setInterval(keepFootageAlive,1800);
     void runFilm(token);
   };
 
   const stopFilm=()=>{
     filmRun++;
+    if(footageHeartbeat){clearInterval(footageHeartbeat);footageHeartbeat=0;}
     try{speechSynthesis.cancel();}catch(_){}
     clearOverlay();
   };
