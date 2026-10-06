@@ -1,0 +1,63 @@
+name: Capture gameplay clips
+
+on:
+  push:
+    branches:
+      - tools/gameplay-clip-pack
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax checks
+        run: |
+          node --check app.js
+          node --check scripts/capture-gameplay-clips.mjs
+
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg zip
+
+      - name: Capture actual GoStop Live gameplay snippets
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/gostop-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:4173 >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/capture-gameplay-clips.mjs
+
+      - name: Convert to MP4
+        run: |
+          mkdir -p artifacts/gameplay-clips/mp4
+          for f in artifacts/gameplay-clips/raw/*.webm; do
+            b=$(basename "$f" .webm)
+            ffmpeg -y -i "$f" -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -movflags +faststart "artifacts/gameplay-clips/mp4/$b.mp4"
+          done
+          cp artifacts/gameplay-clips/README.txt artifacts/gameplay-clips/mp4/
+
+      - name: Build ZIP
+        run: |
+          cd artifacts/gameplay-clips/mp4
+          zip -9 ../GoStop-Live-Gameplay-Clips.zip *.mp4 README.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gostop-live-gameplay-clips
+          path: artifacts/gameplay-clips/GoStop-Live-Gameplay-Clips.zip
+          if-no-files-found: error
+          retention-days: 30
