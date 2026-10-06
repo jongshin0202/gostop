@@ -30,28 +30,29 @@ test('mobile main menu keeps collapsed top controls and expanded Player info on 
   assert.match(ranked,/\.stable-mobile-menu-anchors \.gostop-main-menu\.main-menu-accordion\.has-expanded-section\{padding:7px!important;gap:5px!important\}/);
 });
 
-test('How to Play film uses live GoStop UI footage, voice, captions, and the approved rules',()=>{
+test('How to Play film uses synchronized real GoStop UI footage, voice, captions, and approved rules',()=>{
   assert.match(html,/id="tutorialFullRulesBtn"/);
   assert.match(html,/id="tutorialTrainingModeBtn"/);
   assert.doesNotMatch(html,/tutorialVideoPlay|tutorialVideoReplay|tutorialVideoNarration|tutorialVideoVolume|tutorialVideoChapters/);
   assert.match(tutorial,/SpeechSynthesisUtterance/);
   assert.match(tutorial,/tutorialFootage/);
   assert.match(tutorial,/film-live-frame/);
-  assert.match(tutorial,/prepareTraining\(pcFrame\)/);
-  assert.match(tutorial,/prepareTraining\(mobileFrame\)/);
+  assert.match(tutorial,/prepareMenu/);
+  assert.match(tutorial,/prepareGame/);
+  assert.match(tutorial,/const shot=async/);
   assert.match(tutorial,/On mobile, tap a card once to select it/);
   assert.match(tutorial,/press the card and flick upward/);
-  assert.match(tutorial,/swipe-up/);
-  assert.match(tutorial,/Competitive Online Play lets you play other people for Coins and global ranking/);
-  assert.match(tutorial,/Attract Mode cycles through the leaderboards automatically/);
+  assert.match(tutorial,/film-demo-flick-up/);
+  assert.match(tutorial,/Competitive Gaming uses virtual Coins/);
+  assert.match(tutorial,/Attract Mode when left untouched/);
   assert.match(tutorial,/Every family has exactly 4 cards/);
   assert.match(tutorial,/3 non-Rain Brights = 3/);
   assert.match(tutorial,/All 5 Brights = 15/);
   assert.match(tutorial,/5-BIRDIES!/);
-  assert.match(tutorial,/Any 5 Stripes = 1 point/);
-  assert.match(tutorial,/10 Singles = 1 point/);
-  assert.match(tutorial,/One Go adds one point/);
-  assert.match(tutorial,/From the third Go onward, your score doubles/);
+  assert.match(tutorial,/Any 5 Stripes = 1/);
+  assert.match(tutorial,/10 Singles = 1/);
+  assert.match(tutorial,/1 GO adds \+1 point/);
+  assert.match(tutorial,/From the 3rd GO onward/);
   assert.match(tutorial,/POOPED! \(뻑\)/);
   assert.match(tutorial,/KISS! \(쪽\)/);
   assert.match(tutorial,/FLUSH! \(따닥\)/);
