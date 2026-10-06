@@ -389,11 +389,11 @@ test('mobile How to Play opens the tutorial video below a non-overlapping header
   const dialog=await page.locator('#howToDialog .tutorial-card').boundingBox();
   const header=await page.locator('#howToDialog .tutorial-header').boundingBox();
   const close=await page.locator('#howToDialog .tutorial-close').boundingBox();
-  const stage=await page.locator('#tutorialVideoStage').boundingBox();
-  expect(dialog).not.toBeNull();expect(header).not.toBeNull();expect(close).not.toBeNull();expect(stage).not.toBeNull();
+  const player=await page.locator('#tutorialVideoPlayer').boundingBox();
+  expect(dialog).not.toBeNull();expect(header).not.toBeNull();expect(close).not.toBeNull();expect(player).not.toBeNull();
   expect(dialog.y).toBeGreaterThanOrEqual(0);
   expect(header.y).toBeGreaterThanOrEqual(dialog.y);
-  expect(close.y+close.height).toBeLessThanOrEqual(stage.y+1);
+  expect(close.y+close.height).toBeLessThanOrEqual(player.y+1);
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
@@ -401,10 +401,12 @@ test('How to Play is an autoplay captioned film with only Full Rules and Trainin
   const errors=await openMenu(page);
   await page.locator('#howToBtn').click();
   await expect(page.locator('#tutorialVideoView')).toBeVisible();
+  await expect(page.locator('#tutorialVideoPlayer')).toBeVisible();
+  await expect(page.locator('#tutorialVideoPlayer source')).toHaveAttribute('src','assets/gostop-live-how-to-play.mp4');
   await expect(page.locator('#tutorialVideoCaption')).toContainText('Welcome to GoStop Live');
   await expect(page.locator('#tutorialFullRulesBtn')).toBeVisible();
   await expect(page.locator('#tutorialTrainingModeBtn')).toBeVisible();
-  await expect(page.locator('#tutorialVideoPlay,#tutorialVideoReplay,#tutorialVideoPrev,#tutorialVideoNext,#tutorialVideoNarration,#tutorialVideoVolume,#tutorialVideoProgress,#tutorialVideoChapters')).toHaveCount(0);
+  await expect(page.locator('#tutorialVideoPlay,#tutorialVideoReplay,#tutorialVideoPrev,#tutorialVideoNext,#tutorialVideoNarration,#tutorialVideoVolume,#tutorialVideoProgress,#tutorialVideoChapters,#tutorialVideoStage')).toHaveCount(0);
   await page.locator('#tutorialFullRulesBtn').click();
   await expect(page.locator('#tutorialVideoView')).toBeHidden();
   await expect(page.locator('#howToDialog .tutorial-nav')).toBeVisible();
@@ -419,7 +421,7 @@ test('How to Play film contains the product tour and corrected GoStop rules',asy
   const errors=await openMenu(page);
   await page.locator('#howToBtn').click();
   const script=await page.locator('script[src^="tutorial-video.js"]').getAttribute('src');
-  expect(script).toContain('20261005-1');
+  expect(script).toContain('20261005-2');
   const body=await page.locator('body').textContent();
   expect(body).toContain('Full Rules');
   expect(body).toContain('Training Mode');
