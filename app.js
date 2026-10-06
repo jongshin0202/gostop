@@ -5,6 +5,7 @@
   // sets this flag, so the browser startup and gameplay path remain unchanged.
   const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
   const CAPTURE_MODE = !TEST_MODE && new URLSearchParams(globalThis.location?.search||'').get('captureClips') === '1';
+  if(CAPTURE_MODE)globalThis.GOSTOP_CAPTURE_MODE=true;
 
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
   const engine = globalThis.GoStopEngine;
