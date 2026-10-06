@@ -3266,6 +3266,7 @@
       setLocked(value){presentation.locked=!!value;},
       render,
       humanPlay,
+      humanGoStop,
       beginGameplayPresentation,
       closeAllGameplayPresentationUi,
       showGoCallout,
