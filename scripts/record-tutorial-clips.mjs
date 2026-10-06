@@ -114,7 +114,12 @@ async function humanPlay(page,cardId){
 
 async function chooseTarget(page,cardId){
   await page.waitForSelector('#floor .target-option[data-card-id="'+cardId+'"]',{state:'visible',timeout:5000});
-  await page.locator('#floor .target-option[data-card-id="'+cardId+'"]').click();
+  await sleep(900);
+  await page.evaluate(cardId=>{
+    const el=document.querySelector('#floor .target-option[data-card-id="'+cardId+'"]');
+    if(!el)throw new Error('Target option not found: '+cardId);
+    el.click();
+  },cardId);
   await page.evaluate(()=>globalThis.__clipPromise);
 }
 
