@@ -1931,7 +1931,7 @@
     const unique=[];
     const seen=new Set();
     cards.filter(Boolean).forEach(c=>{if(!seen.has(c.id)){seen.add(c.id);unique.push(c);}});
-    if(TEST_MODE){unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));return;}
+    if(TEST_MODE&&!CAPTURE_MODE){unique.forEach(card=>presentation.floorSlotReservations.delete(card.id));return;}
     const entries=[];
     unique.forEach(card=>{
       const staged=presentation.stagedCards.get(card.id);
@@ -3263,6 +3263,7 @@
       notePresentationRender,
       resetPhysicalMotionTrace(){presentation.activePhysicalMotions=0;presentation.rendersDuringPhysicalMotion=0;},
       setSoundEnabled(value){presentation.soundEnabled=!!value;},
+      setLocked(value){presentation.locked=!!value;},
       render,
       humanPlay,
       beginGameplayPresentation,
