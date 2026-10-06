@@ -1897,6 +1897,11 @@
       },
       getState(){return state;},
       render(){render();updateStageScale();},
+      async interactivePlay(cardId){
+        const el=els.playerHand.querySelector(`[data-card-id="${cardId}"]`);
+        if(!el)throw new Error('Missing hand element '+cardId);
+        return humanPlay(cardId,el);
+      },
       async handHit({cardId,targetId=null,matchCount=null}){
         const played=state.human.hand.find(card=>card.id===cardId);if(!played)throw new Error('Missing hand card '+cardId);
         const target=targetId?floorCard(targetId):null;
