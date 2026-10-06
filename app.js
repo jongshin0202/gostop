@@ -416,7 +416,7 @@
     for(let i=0;i<st.floorSlotCount;i++) if(!used.has(i)) return i;
     let slot=st.floorSlotCount;
     while(used.has(slot))slot++;
-    if(commitCapacity){if(!TEST_MODE)throw new Error('Canonical floor capacity is engine-owned after hand creation.');st.floorSlotCount=slot+4;}
+    if(commitCapacity){if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Canonical floor capacity is engine-owned after hand creation.');st.floorSlotCount=slot+4;}
     return slot;
   }
   function reserveFloorSlot(card,preferredSlot=null){
@@ -428,7 +428,7 @@
     return slot;
   }
   function commitFloorSlot(card,preferredSlot=null){
-    if(!TEST_MODE)throw new Error('Canonical floor-slot commits are engine-owned after hand creation.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Canonical floor-slot commits are engine-owned after hand creation.');
     const reserved=presentation.floorSlotReservations.get(card.id);
     const slot=Number.isFinite(preferredSlot)?preferredSlot:Number.isFinite(reserved)?reserved:firstFreeFloorSlot(state);
     if(slot>=state.floorSlotCount)state.floorSlotCount=slot+4;
@@ -1505,7 +1505,7 @@
       const mode=score(actor.captured,'pi').total>score(actor.captured,'animal').total?'pi':'animal';
       if(actor.gukjinMode!==mode)applyNormalAction({type:'setGukjinMode',actorId,mode});
     }
-    let result=TEST_MODE?evaluateGoStop(state,{actorId}):submitSoloAction({type:'evaluateGoStop',actorId}); state=result.state;
+    let result=(TEST_MODE||CAPTURE_MODE)?evaluateGoStop(state,{actorId}):submitSoloAction({type:'evaluateGoStop',actorId}); state=result.state;
     if(result.autoStop){ presentStopResult(result,epoch); return; }
     if(result.pendingDecision){
       const sc=scorePlayer(state[side]);
@@ -1532,7 +1532,7 @@
   }
 
   function scheduleTurnStart(){
-    if(TEST_MODE)return;
+    if(TEST_MODE||CAPTURE_MODE)return;
     if(onlineMode||!localGameActive)return;
     const generation=localGameGeneration;
     clearTrainingCoach();
