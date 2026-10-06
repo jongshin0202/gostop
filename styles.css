@@ -1121,3 +1121,51 @@ html{font-family:system-ui,-apple-system,"Noto Sans KR","Noto Sans JP","Noto San
   .tutorial-rulebook{width:65px!important;height:82px!important;border-width:4px!important;font-size:.75rem!important;box-shadow:7px 6px 0 #2b170f,0 8px 15px #0008!important}.scene-full-rules p{font-size:.52rem!important}
   .scene-training .tutorial-device-frame{width:86%!important;height:60%!important}.tutorial-training-coach{top:12%!important;padding:5px 7px!important}.tutorial-training-coach strong{font-size:.46rem!important}.tutorial-training-coach span{font-size:.5rem!important}.tutorial-training-coach small{font-size:.4rem!important}
 }
+
+
+/* Recorded How to Play video: one continuous film, real footage, synced caption below. */
+.tutorial-video-view{
+  display:grid!important;
+  grid-template-rows:minmax(0,1fr) auto auto!important;
+  gap:10px!important;
+  min-height:0!important;
+  padding:12px 18px 18px!important;
+  background:linear-gradient(180deg,#17110d,#21160f)!important;
+}
+.tutorial-video-view[hidden],.tutorial-nav[hidden],.tutorial-sections[hidden]{display:none!important}
+.tutorial-video-player{
+  display:block!important;
+  width:min(100%,1000px)!important;
+  max-height:58vh!important;
+  aspect-ratio:16/9!important;
+  object-fit:contain!important;
+  margin:0 auto!important;
+  border:1px solid rgba(228,188,111,.48)!important;
+  border-radius:14px!important;
+  background:#100c09!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.58)!important;
+  cursor:pointer!important;
+}
+.tutorial-video-player:focus-visible{outline:3px solid #e3b45f!important;outline-offset:3px!important}
+.tutorial-video-copy{width:min(1000px,100%)!important;margin:0 auto!important}
+.tutorial-video-caption{
+  min-height:3em!important;
+  margin:0!important;
+  padding:8px 13px!important;
+  border-radius:9px!important;
+  background:#110c09e6!important;
+  border:1px solid #8e6c3d55!important;
+  color:#f8ecda!important;
+  text-align:center!important;
+  font:750 clamp(.85rem,1.45vw,1.05rem)/1.45 system-ui,sans-serif!important;
+}
+.tutorial-video-actions{display:flex!important;justify-content:center!important;gap:10px!important;width:min(1000px,100%)!important;margin:0 auto!important}
+.tutorial-video-actions button{min-width:160px!important;padding:10px 18px!important;border-radius:10px!important;border:1px solid #a87c42!important;cursor:pointer!important;font:800 .92rem Georgia,"Times New Roman",serif!important}
+#tutorialFullRulesBtn{background:linear-gradient(#5c3b24,#352317)!important;color:#f5dfbb!important}
+#tutorialTrainingModeBtn{background:linear-gradient(#3f7449,#24492c)!important;border-color:#83b78d!important;color:#fff6d8!important}
+@media(max-width:700px){
+  .tutorial-video-view{padding:7px 7px 10px!important;gap:7px!important}
+  .tutorial-video-player{width:100%!important;max-height:49dvh!important;border-radius:9px!important}
+  .tutorial-video-caption{min-height:4.2em!important;padding:6px 8px!important;font-size:.7rem!important}
+  .tutorial-video-actions{gap:7px!important}.tutorial-video-actions button{flex:1!important;min-width:0!important;padding:8px 10px!important;font-size:.74rem!important}
+}
