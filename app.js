@@ -241,8 +241,8 @@
     return playerIdForLegacySide(side)===viewerId?'bottom':'top';
   }
   function monthListHas(player,field,month){ return player[field].includes(month); }
-  function monthListAdd(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');if(!monthListHas(player,field,month))player[field].push(month); }
-  function monthListDelete(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');player[field]=player[field].filter(value=>value!==month); }
+  function monthListAdd(player,field,month){ if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Month-list mutation is characterization-only.');if(!monthListHas(player,field,month))player[field].push(month); }
+  function monthListDelete(player,field,month){ if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Month-list mutation is characterization-only.');player[field]=player[field].filter(value=>value!==month); }
   function applyNormalAction(action){
     if(onlineMode)throw new Error('Online authoritative actions must use the WebSocket authority.');
     if(!TEST_MODE&&!CAPTURE_MODE)return submitSoloAction(action);
@@ -459,7 +459,7 @@
     return stack.cardIds.map(id=>state.floor.find(c=>c.id===id)).filter(Boolean);
   }
   function removeFloorCards(cards){
-    if(!TEST_MODE)throw new Error('Legacy floor mutation is characterization-only.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Legacy floor mutation is characterization-only.');
     const idsSet=new Set(cards.map(c=>c.id));
     const affectedMonths=new Set(cards.map(c=>c.month));
     state.floor=state.floor.filter(c=>!idsSet.has(c.id));
@@ -473,12 +473,12 @@
     });
   }
   function addFloorCard(card,preferredSlot=null){
-    if(!TEST_MODE)throw new Error('Legacy floor mutation is characterization-only.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Legacy floor mutation is characterization-only.');
     commitFloorSlot(card,preferredSlot);
     if(!state.floor.some(c=>c.id===card.id)) state.floor.push(card);
   }
   function makePpeokStack(side,cards){
-    if(!TEST_MODE)throw new Error('Legacy Ppeok mutation is characterization-only.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Legacy Ppeok mutation is characterization-only.');
     const existing=cards.find(c=>state.floor.some(f=>f.id===c.id));
     const stackSlot=existing && Number.isFinite(state.floorSlotByCard?.[existing.id])
       ? state.floorSlotByCard[existing.id]
