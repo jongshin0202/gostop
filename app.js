@@ -4,6 +4,7 @@
   // Characterization tests opt in before this script loads. Production never
   // sets this flag, so the browser startup and gameplay path remain unchanged.
   const TEST_MODE = globalThis.GOSTOP_TEST_MODE === true;
+  const CAPTURE_MODE = !TEST_MODE && new URLSearchParams(globalThis.location?.search||'').get('captureClips') === '1';
 
   const COMMONS = 'https://commons.wikimedia.org/wiki/Special:Redirect/file/';
   const engine = globalThis.GoStopEngine;
@@ -243,14 +244,14 @@
   function monthListDelete(player,field,month){ if(!TEST_MODE)throw new Error('Month-list mutation is characterization-only.');player[field]=player[field].filter(value=>value!==month); }
   function applyNormalAction(action){
     if(onlineMode)throw new Error('Online authoritative actions must use the WebSocket authority.');
-    if(!TEST_MODE)return submitSoloAction(action);
+    if(!TEST_MODE&&!CAPTURE_MODE)return submitSoloAction(action);
     const result=applyNormalTurnAction(state,action);
     state=result.state;
     return result;
   }
   function applySpecialAction(action){
     if(onlineMode)throw new Error('Online authoritative actions must use the WebSocket authority.');
-    if(!TEST_MODE)return submitSoloAction(action);
+    if(!TEST_MODE&&!CAPTURE_MODE)return submitSoloAction(action);
     const result=applySpecialTurnAction(state,action);
     state=result.state;
     return result;
@@ -258,7 +259,7 @@
 
   function applyGoStopDecision(action){
     if(onlineMode)throw new Error('Online authoritative actions must use the WebSocket authority.');
-    if(!TEST_MODE)return submitSoloAction(action);
+    if(!TEST_MODE&&!CAPTURE_MODE)return submitSoloAction(action);
     const result=applyGoStopAction(state,action); state=result.state; return result;
   }
   function submitSoloAction(action){
@@ -1371,7 +1372,7 @@
   }
 
   async function resolveCombinedTurn(side,play,draw){
-    if(!TEST_MODE)throw new Error('Legacy combined-turn mutation is characterization-only.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Legacy combined-turn mutation is characterization-only.');
     // Legacy fallback and characterization oracle. Production routes Ppeok/Ssa-da,
     // Jjok, Ttadak, and Self-Ppeok through applySpecialTurnAction before reaching here.
     const sameMonth=draw && draw.card.month===play.card.month && !floorStackForMonth(play.card.month);
@@ -1416,7 +1417,7 @@
   }
 
   async function resolveSingleCard(side,action,isDeck){
-    if(!TEST_MODE)throw new Error('Legacy single-card mutation is characterization-only.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Legacy single-card mutation is characterization-only.');
     if(!action)return;
     const {card,stage,target,matchCount}=action;
     if(!matchCount){
@@ -1460,7 +1461,7 @@
   }
 
   async function stealPiAnimated(side,count){
-    if(!TEST_MODE)throw new Error('Legacy Pi mutation is characterization-only.');
+    if(!TEST_MODE&&!CAPTURE_MODE)throw new Error('Legacy Pi mutation is characterization-only.');
     const other=side==='human'?'ai':'human';
     for(let n=0;n<count;n++){
       const ordinary=state[other].captured.find(c=>c.type==='pi'&&!c.flags.includes('doublePi'));
@@ -1852,7 +1853,117 @@
   }
 
   async function animateDeckLiftFlip(side,card){
-    if(TEST_MODE){
+    if(CAPTURE_MODE){
+    const cloneCaptureCard=card=>({...card,flags:[...card.flags]});
+    const makeCapturePlayer=(overrides={})=>({
+      hand:[],captured:[],go:0,shakes:0,shakeMultiplier:1,bombs:0,bombFreeTurns:0,ppeoks:0,
+      hiddenTripleMonths:[],shakenMonths:[],resolvedOpeningTripleMonths:[],revealedShakeSets:[],armedBombMonths:[],turnsTaken:0,firstPpeokPoints:0,gukjinMode:'animal',lastGoScore:0,
+      ...overrides
+    });
+    const makeCaptureState=(overrides={})=>{
+      const next={
+        deck:[],floor:[],human:makeCapturePlayer(),ai:makeCapturePlayer(),
+        floorStacks:{},startingPlayerId:PLAYER_A,turn:PLAYER_A,winner:null,specialWinner:null,
+        matchContext:{lastScoreBySide:{playerA:0,playerB:0},nagariCarryPower:0},
+        ...overrides
+      };
+      initFloorSlots(next);
+      return next;
+    };
+    const capCard=id=>cloneCaptureCard(MASTER_DECK.find(card=>card.id===id));
+    const cardRect=id=>els.playerHand.querySelector(`[data-card-id="${id}"]`)?.getBoundingClientRect()||approximateHumanSource();
+    const floorCard=id=>state.floor.find(card=>card.id===id)||null;
+    const resetCapturePresentation=()=>{
+      invalidateGameplayPresentation();
+      beginGameplayPresentation();
+      onlineMode=false;latestOnlineSnapshot=null;localGameActive=true;localGameGeneration++;
+      presentation.locked=false;presentation.sessionStarted=true;presentation.aiTurnInProgress=false;
+      presentation.soundEnabled=false;presentation.targetChoice=null;presentation.pendingHumanCardId=null;
+      presentation.queuedHumanCardSwitch=null;presentation.deckDisplayCount=null;
+      presentation.milestoneHistory={playerA:new Set(),playerB:new Set()};
+      document.documentElement.classList.remove('gostop-boot-pending');
+      els.soloStartOverlay.hidden=true;
+      document.querySelectorAll('dialog[open]').forEach(dialog=>{try{dialog.close();}catch(_){}});
+    };
+    globalThis.GOSTOP_CAPTURE_API=Object.freeze({
+      card:capCard,
+      makePlayer:makeCapturePlayer,
+      makeState:makeCaptureState,
+      setScenario(overrides={}){
+        resetCapturePresentation();
+        state=makeCaptureState(overrides);
+        render();updateStageScale();
+        return state;
+      },
+      getState(){return state;},
+      render(){render();updateStageScale();},
+      async handHit({cardId,targetId=null,matchCount=null}){
+        const played=state.human.hand.find(card=>card.id===cardId);if(!played)throw new Error('Missing hand card '+cardId);
+        const target=targetId?floorCard(targetId):null;
+        const matches=effectiveFloorMatchCards(played),count=matchCount==null?matches.length:matchCount;
+        const source=cardRect(cardId);
+        const handEl=els.playerHand.querySelector(`[data-card-id="${cardId}"]`);
+        if(handEl)handEl.style.visibility='hidden';
+        state.human.hand=state.human.hand.filter(card=>card.id!==cardId);
+        const staged=await animateHandCardSlap('human',played,source,target);
+        await resolveSingleCard('human',{card:played,stage:staged,target,matchCount:count},false);
+      },
+      async fullTurn({cardId,targetId=null,drawId=null,drawTargetId=null,playMatchCount=null,drawMatchCount=null,specialLabel='' }){
+        const played=state.human.hand.find(card=>card.id===cardId);if(!played)throw new Error('Missing hand card '+cardId);
+        const target=targetId?floorCard(targetId):null;
+        const playMatches=effectiveFloorMatchCards(played),pc=playMatchCount==null?playMatches.length:playMatchCount;
+        const source=cardRect(cardId),handEl=els.playerHand.querySelector(`[data-card-id="${cardId}"]`);
+        if(handEl)handEl.style.visibility='hidden';
+        state.human.hand=state.human.hand.filter(card=>card.id!==cardId);
+        const playedStage=await animateHandCardSlap('human',played,source,target);
+        await presentationPause('handToDeck');
+        let drawn=null,drawStage=null,drawTarget=null,dc=0;
+        if(drawId){
+          drawn=capCard(drawId);
+          state.deck=state.deck.filter(card=>card.id!==drawId);
+          render();
+          drawStage=await animateDeckLiftFlip('human',drawn);
+          drawTarget=drawTargetId?floorCard(drawTargetId):null;
+          const drawMatches=effectiveFloorMatchCards(drawn);dc=drawMatchCount==null?drawMatches.length:drawMatchCount;
+          await animateStagedSlap(drawStage,drawn,drawTarget,'flip');
+        }
+        const play={card:played,stage:playedStage,target,matchCount:pc};
+        const draw=drawn?{card:drawn,stage:drawStage,target:drawTarget,matchCount:dc}:null;
+        await resolveCombinedTurn('human',play,draw);
+        if(specialLabel){
+          const ids=[played,drawn,...state.human.captured].filter(Boolean).map(card=>card.id);
+          await showSpecialTransient(specialLabel,[...new Set(ids)].slice(0,4),'',gameplayPresentationEpoch);
+        }
+      },
+      async bomb(month){
+        const card=state.human.hand.find(item=>item.month===month);if(!card)throw new Error('Missing bomb month');
+        applyNormalAction(normalAction('human',{type:'requestBombDecision',cardId:card.id}));
+        await executeBombTurn('human',month,gameplayPresentationEpoch);
+      },
+      async shake(month){
+        const card=state.human.hand.find(item=>item.month===month);if(!card)throw new Error('Missing shake month');
+        const attempted=applyNormalAction(normalAction('human',{type:'attemptPlayCard',cardId:card.id}));
+        if(attempted.pendingDecision?.type!=='shakeDecision')throw new Error('Shake decision not available');
+        const declared=applyNormalAction(normalAction('human',{type:'declareShake'}));
+        await presentShakeDeclaration(declared.events,gameplayPresentationEpoch);
+        render();
+      },
+      async sweep(){
+        await applySweepIfNeeded('human');
+      },
+      async goStopDialog(){
+        const current=scorePlayer(state.human);
+        presentation.locked=true;
+        els.decisionText.textContent=`You have ${current.total} points.`;
+        const preview=calculateFinalScore('human');
+        if(els.stopPreviewValue)els.stopPreviewValue.textContent=t('stopValue',{points:preview.total});
+        els.goBtn.textContent=state.human.go===0?t('go'):`${state.human.go+1} ${t('go')}`;
+        showGameplayModal(els.decisionDialog,gameplayPresentationEpoch);
+      }
+    });
+  }
+
+  if(TEST_MODE){
       const el={remove(){},getBoundingClientRect(){return {left:0,top:0,width:76,height:123};}};
       presentation.stagedCards.set(card.id,el);
       return el;
