@@ -13,20 +13,20 @@ PART2=306
 normalize_desktop() {
   local input="$1" output="$2" seconds="$3"
   ffmpeg -hide_banner -loglevel error -y -sseof "-$seconds" -i "$input" -t "$seconds" \
-    -vf "fps=30,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x100c09,setsar=1,fade=t=in:st=0:d=.2,fade=t=out:st=$(python3 - <<PY
+    -vf "fps=30,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x100c09,setsar=1,fade=t=in:st=0:d=0.2,fade=t=out:st=$(python3 - <<PY
 print(max(0,float('$seconds')-.2))
 PY
-):d=.2" \
+):d=0.2" \
     -an -c:v libx264 -preset medium -crf 24 -pix_fmt yuv420p "$output"
 }
 
 normalize_mobile() {
   local input="$1" output="$2" seconds="$3"
   ffmpeg -hide_banner -loglevel error -y -sseof "-$seconds" -i "$input" -t "$seconds" \
-    -vf "fps=30,scale=-2:680,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x100c09,setsar=1,drawbox=x=(w-iw)/2-8:y=12:w=iw+16:h=696:color=0x8c6c45@0.65:t=4,fade=t=in:st=0:d=.2,fade=t=out:st=$(python3 - <<PY
+    -vf "fps=30,scale=-2:680,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x100c09,setsar=1,fade=t=in:st=0:d=0.2,fade=t=out:st=$(python3 - <<PY
 print(max(0,float('$seconds')-.2))
 PY
-):d=.2" \
+):d=0.2" \
     -an -c:v libx264 -preset medium -crf 24 -pix_fmt yuv420p "$output"
 }
 
@@ -76,10 +76,10 @@ fi
     source_audio="$BUILD/audio/$id.wav"
   fi
   ffmpeg -hide_banner -loglevel error -y -i "$source_audio" \
-    -af "apad=pad_dur=$duration,afade=t=in:st=0:d=.06,afade=t=out:st=$(python3 - <<PY
+    -af "apad=pad_dur=$duration,afade=t=in:st=0:d=0.06,afade=t=out:st=$(python3 - <<PY
 print(max(0,float('$duration')-.12))
 PY
-):d=.12" \
+):d=0.12" \
     -t "$duration" -ar 48000 -ac 2 -c:a aac -b:a 128k "$BUILD/audio/$id.m4a"
   printf "file '%s'\n" "$BUILD/audio/$id.m4a" >> "$BUILD/audio/list.txt"
 done < "$BUILD/audio/cues.tsv"
