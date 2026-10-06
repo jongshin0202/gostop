@@ -111,11 +111,15 @@ async function finish(rec,tailMs=1000){
   console.log('saved',dest);
 }
 
+const failedClips=[];
 async function capture(name,options,runner){
   console.log('capturing',name);
   const rec=await newRecordedPage(name,options);
   try{
     await runner(rec.page);
+  }catch(error){
+    failedClips.push({name,error:String(error?.stack||error)});
+    console.error('CLIP_FAILED',name,error?.stack||error);
   }finally{
     await finish(rec,options?.tailMs??1000);
   }
@@ -335,4 +339,9 @@ fs.writeFileSync(path.join(outDir,'README.txt'),
   'Raw snippets from the actual GoStop Live! UI and animation system. No narration, subtitles, or music are baked in.\n\n'+
   manifest.map(([n,d])=>n+'.mp4\n  '+d).join('\n\n')+'\n'
 );
-console.log('capture complete');
+if(failedClips.length){
+  fs.writeFileSync(path.join(outDir,'CAPTURE_ERRORS.txt'),failedClips.map(item=>item.name+'\n'+item.error+'\n').join('\n'));
+  console.log('capture completed with scenario errors',failedClips.map(item=>item.name));
+}else{
+  console.log('capture complete: all scenarios successful');
+}
