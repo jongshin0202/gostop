@@ -1,0 +1,50 @@
+name: Tutorial Clip Pack
+
+on:
+  push:
+    branches: [feat/tutorial-clip-pack]
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start local game server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/gostop-clip-server.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/gostop-clip-server.log
+          exit 1
+      - name: Record gameplay snippets
+        run: node scripts/record-tutorial-clips.mjs
+      - name: Convert clips to MP4
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          mkdir -p tutorial-clips/mp4
+          for f in tutorial-clips/raw/*.webm; do
+            name="$(basename "$f" .webm)"
+            ffmpeg -y -i "$f" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -movflags +faststart "tutorial-clips/mp4/$name.mp4"
+          done
+          cp tutorial-clips/README.txt tutorial-clips/mp4/README.txt
+      - name: Upload clip pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: gostop-live-gameplay-clips
+          path: tutorial-clips/mp4/
+          if-no-files-found: error
+          retention-days: 14
