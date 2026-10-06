@@ -563,6 +563,7 @@
       action:async()=>{
         mountFrame(gameFrame,'mobile');clearOverlay();
         const sel='#playerHand .hand-card:not(:disabled)';
+        await waitFor(gameFrame,sel,12000);
         const p=pointAt(gameFrame,sel,'finger');
         if(p){
           p.node.classList.add('press');
@@ -573,6 +574,7 @@
           await wait(850);
           p.el.classList.remove('film-demo-flick','film-demo-flick-up');
           p.node.classList.remove('swipe-up');
+          p.el.click();
         }
       }
     });
