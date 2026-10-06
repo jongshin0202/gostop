@@ -1,0 +1,725 @@
+{
+  "duration": 366,
+  "timeline": [
+    {
+      "start": 0,
+      "end": 6,
+      "text": "Welcome to GoStop Live!",
+      "segment": "welcome"
+    },
+    {
+      "start": 6,
+      "end": 12,
+      "text": "GoStop Live! lets anyone around the world play GoStop together.",
+      "segment": "world"
+    },
+    {
+      "start": 12,
+      "end": 18,
+      "text": "Play with friends, the computer, or other players around the globe.",
+      "segment": "world"
+    },
+    {
+      "start": 18,
+      "end": 25,
+      "text": "On PC or Mac, click a card once to select it.",
+      "segment": "pc"
+    },
+    {
+      "start": 25,
+      "end": 29,
+      "text": "The card lifts out of your hand so you can see what is selected.",
+      "segment": "pc"
+    },
+    {
+      "start": 29,
+      "end": 34,
+      "text": "Click the selected card again to play it onto the table.",
+      "segment": "pc"
+    },
+    {
+      "start": 34,
+      "end": 38,
+      "text": "When a table choice is required, click the highlighted card you want.",
+      "segment": "pc"
+    },
+    {
+      "start": 38,
+      "end": 44,
+      "text": "On mobile, tap a card once to select it.",
+      "segment": "mobile"
+    },
+    {
+      "start": 44,
+      "end": 50,
+      "text": "Tap the selected card again to play it.",
+      "segment": "mobile"
+    },
+    {
+      "start": 50,
+      "end": 56,
+      "text": "Or press the card and flick upward for a faster play.",
+      "segment": "mobile"
+    },
+    {
+      "start": 56,
+      "end": 60,
+      "text": "The card follows the upward gesture and plays onto the table.",
+      "segment": "mobile"
+    },
+    {
+      "start": 60,
+      "end": 66,
+      "text": "The game screen is interactive. Tap or click your player area for player information.",
+      "segment": "info"
+    },
+    {
+      "start": 66,
+      "end": 71,
+      "text": "Tap the score for a complete scoring breakdown.",
+      "segment": "info"
+    },
+    {
+      "start": 71,
+      "end": 75,
+      "text": "Tap your captured-card area to inspect captured cards and scoring groups.",
+      "segment": "info"
+    },
+    {
+      "start": 75,
+      "end": 78,
+      "text": "Game controls such as How to Play and Quit Game stay available on the screen.",
+      "segment": "info"
+    },
+    {
+      "start": 78,
+      "end": 84,
+      "text": "Training Mode teaches you while you practice against the computer AI.",
+      "segment": "modes"
+    },
+    {
+      "start": 84,
+      "end": 89,
+      "text": "Friendly Solo Play is casual play against AI with no Coins or ranking.",
+      "segment": "modes"
+    },
+    {
+      "start": 89,
+      "end": 94,
+      "text": "Play With Friend creates a room link you can send to another person.",
+      "segment": "modes"
+    },
+    {
+      "start": 94,
+      "end": 98,
+      "text": "Competitive Solo Play lets you play the computer for Coins and ranking.",
+      "segment": "modes"
+    },
+    {
+      "start": 98,
+      "end": 102,
+      "text": "Competitive Online Play lets you compete with other GoStop Live! players.",
+      "segment": "modes"
+    },
+    {
+      "start": 102,
+      "end": 109,
+      "text": "Auto Match recommends an available opponent and shows you who you are about to challenge.",
+      "segment": "social"
+    },
+    {
+      "start": 109,
+      "end": 114,
+      "text": "You can browse top players or search for a specific player.",
+      "segment": "social"
+    },
+    {
+      "start": 114,
+      "end": 118,
+      "text": "Send a Friend Request to connect with players you want to find again.",
+      "segment": "social"
+    },
+    {
+      "start": 118,
+      "end": 122,
+      "text": "Friends and recommendations make it easy to start another game together.",
+      "segment": "social"
+    },
+    {
+      "start": 122,
+      "end": 129,
+      "text": "The Leaderboards button opens the all-time Global Leaderboard.",
+      "segment": "leaderboards"
+    },
+    {
+      "start": 129,
+      "end": 135,
+      "text": "Swipe to see this month’s Global Leaderboard.",
+      "segment": "leaderboards"
+    },
+    {
+      "start": 135,
+      "end": 140,
+      "text": "Competitive wins and losses change your Coins and your global ranking.",
+      "segment": "leaderboards"
+    },
+    {
+      "start": 140,
+      "end": 147,
+      "text": "If you leave the Main Menu untouched, Attract Mode cycles through the leaderboards automatically.",
+      "segment": "leaderboards"
+    },
+    {
+      "start": 147,
+      "end": 157,
+      "text": "The goal is simple: match card families, capture scoring cards, reach 7 points, then choose GO or STOP.",
+      "segment": "goal"
+    },
+    {
+      "start": 157,
+      "end": 162,
+      "text": "Every family has exactly four cards.",
+      "segment": "families"
+    },
+    {
+      "start": 162,
+      "end": 167,
+      "text": "GoStop Live! uses twelve easy family names instead of month numbers.",
+      "segment": "families"
+    },
+    {
+      "start": 167,
+      "end": 175,
+      "text": "Pine, Plum, Cherry, Vine, Iris, Rose, Bush, Hill, Daisy, Star, Berry, and Willow.",
+      "segment": "families"
+    },
+    {
+      "start": 175,
+      "end": 181,
+      "text": "Cards score in four main types: Brights, Pictures, Stripes, and Singles.",
+      "segment": "types"
+    },
+    {
+      "start": 181,
+      "end": 187,
+      "text": "Stripes include Red, Blue, and Plain Stripe sets.",
+      "segment": "types"
+    },
+    {
+      "start": 187,
+      "end": 192,
+      "text": "Singles are the most common cards.",
+      "segment": "types"
+    },
+    {
+      "start": 192,
+      "end": 199,
+      "text": "Some special Single cards count as two Singles.",
+      "segment": "types"
+    },
+    {
+      "start": 199,
+      "end": 207,
+      "text": "Brights: three Brights with the Rain Bright score 2 points. Three non-Rain Brights score 3.",
+      "segment": "scoring"
+    },
+    {
+      "start": 207,
+      "end": 213,
+      "text": "Four Brights score 4 points, and all five Brights score 15 points.",
+      "segment": "scoring"
+    },
+    {
+      "start": 213,
+      "end": 221,
+      "text": "5-BIRDIES! scores 5 points. Any five Pictures score 1 point, then each extra Picture adds 1.",
+      "segment": "scoring"
+    },
+    {
+      "start": 221,
+      "end": 229,
+      "text": "Three Red, Blue, or Plain Stripes score 3 points. Any five Stripes score 1, then each extra Stripe adds 1.",
+      "segment": "scoring"
+    },
+    {
+      "start": 229,
+      "end": 237,
+      "text": "Ten Singles score 1 point, then each extra Single adds 1. 2x Single cards count as two.",
+      "segment": "scoring"
+    },
+    {
+      "start": 237,
+      "end": 243,
+      "text": "A turn starts by playing one card from your hand.",
+      "segment": "matching"
+    },
+    {
+      "start": 243,
+      "end": 249,
+      "text": "If the table has one card from the same family, your played card captures it.",
+      "segment": "matching"
+    },
+    {
+      "start": 249,
+      "end": 254,
+      "text": "Then the draw pile flips one card.",
+      "segment": "matching"
+    },
+    {
+      "start": 254,
+      "end": 259,
+      "text": "If the drawn card matches a table family, it captures that card too.",
+      "segment": "matching"
+    },
+    {
+      "start": 259,
+      "end": 265,
+      "text": "If there is no match, the played or drawn card stays on the table.",
+      "segment": "matching"
+    },
+    {
+      "start": 265,
+      "end": 271,
+      "text": "At 7 points in a two-player game, you choose GO or STOP.",
+      "segment": "gostop"
+    },
+    {
+      "start": 271,
+      "end": 276,
+      "text": "STOP ends the hand and you take the points you have now.",
+      "segment": "gostop"
+    },
+    {
+      "start": 276,
+      "end": 283,
+      "text": "GO keeps the game going. The first GO adds 1 point, and the second GO adds another point.",
+      "segment": "gostop"
+    },
+    {
+      "start": 283,
+      "end": 288,
+      "text": "From the third GO onward, the settlement doubles with each additional GO.",
+      "segment": "gostop"
+    },
+    {
+      "start": 288,
+      "end": 293,
+      "text": "If you lose after declaring GO, your opponent also receives the GO penalty multiplier.",
+      "segment": "gostop"
+    },
+    {
+      "start": 293,
+      "end": 300,
+      "text": "SHAKE: reveal three cards from the same family. A normal Shake doubles your settlement if you win.",
+      "segment": "specials"
+    },
+    {
+      "start": 300,
+      "end": 308,
+      "text": "BOMB: keep three same-family cards hidden. When the fourth is on the table, play all three, capture the family, and steal one Single.",
+      "segment": "specials"
+    },
+    {
+      "start": 308,
+      "end": 315,
+      "text": "POOPED! is 뻑. Your play and the draw create a three-card family stack. Capturing it later steals one Single.",
+      "segment": "specials"
+    },
+    {
+      "start": 315,
+      "end": 322,
+      "text": "KISS! is 쪽. Your played card has no match, then the draw gives the matching family. Capture the pair and steal one Single.",
+      "segment": "specials"
+    },
+    {
+      "start": 322,
+      "end": 331,
+      "text": "FLUSH! is 따닥, and CLEAN SWEEP! is 싹쓸이. These special captures also steal one Single when available.",
+      "segment": "specials"
+    },
+    {
+      "start": 331,
+      "end": 341,
+      "text": "You do not need to memorize everything. Full Rules keeps the complete written reference one click away.",
+      "segment": "fullrules"
+    },
+    {
+      "start": 341,
+      "end": 347,
+      "text": "Your best first game is Training Mode.",
+      "segment": "training"
+    },
+    {
+      "start": 347,
+      "end": 353,
+      "text": "Play against AI while GoStop Live! highlights a recommended card and table target.",
+      "segment": "training"
+    },
+    {
+      "start": 353,
+      "end": 359,
+      "text": "Training Mode explains why the move is recommended and teaches special rules as they happen.",
+      "segment": "training"
+    },
+    {
+      "start": 359,
+      "end": 366,
+      "text": "Have fun playing GoStop Live!",
+      "segment": "fun"
+    }
+  ],
+  "segments": [
+    {
+      "id": "welcome",
+      "duration": 6,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Welcome to GoStop Live!"
+        }
+      ]
+    },
+    {
+      "id": "world",
+      "duration": 12,
+      "cues": [
+        {
+          "at": 0,
+          "text": "GoStop Live! lets anyone around the world play GoStop together."
+        },
+        {
+          "at": 6,
+          "text": "Play with friends, the computer, or other players around the globe."
+        }
+      ]
+    },
+    {
+      "id": "pc",
+      "duration": 20,
+      "cues": [
+        {
+          "at": 0,
+          "text": "On PC or Mac, click a card once to select it."
+        },
+        {
+          "at": 7,
+          "text": "The card lifts out of your hand so you can see what is selected."
+        },
+        {
+          "at": 11,
+          "text": "Click the selected card again to play it onto the table."
+        },
+        {
+          "at": 16,
+          "text": "When a table choice is required, click the highlighted card you want."
+        }
+      ]
+    },
+    {
+      "id": "mobile",
+      "duration": 22,
+      "cues": [
+        {
+          "at": 0,
+          "text": "On mobile, tap a card once to select it."
+        },
+        {
+          "at": 6,
+          "text": "Tap the selected card again to play it."
+        },
+        {
+          "at": 12,
+          "text": "Or press the card and flick upward for a faster play."
+        },
+        {
+          "at": 18,
+          "text": "The card follows the upward gesture and plays onto the table."
+        }
+      ]
+    },
+    {
+      "id": "info",
+      "duration": 18,
+      "cues": [
+        {
+          "at": 0,
+          "text": "The game screen is interactive. Tap or click your player area for player information."
+        },
+        {
+          "at": 6,
+          "text": "Tap the score for a complete scoring breakdown."
+        },
+        {
+          "at": 11,
+          "text": "Tap your captured-card area to inspect captured cards and scoring groups."
+        },
+        {
+          "at": 15,
+          "text": "Game controls such as How to Play and Quit Game stay available on the screen."
+        }
+      ]
+    },
+    {
+      "id": "modes",
+      "duration": 24,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Training Mode teaches you while you practice against the computer AI."
+        },
+        {
+          "at": 6,
+          "text": "Friendly Solo Play is casual play against AI with no Coins or ranking."
+        },
+        {
+          "at": 11,
+          "text": "Play With Friend creates a room link you can send to another person."
+        },
+        {
+          "at": 16,
+          "text": "Competitive Solo Play lets you play the computer for Coins and ranking."
+        },
+        {
+          "at": 20,
+          "text": "Competitive Online Play lets you compete with other GoStop Live! players."
+        }
+      ]
+    },
+    {
+      "id": "social",
+      "duration": 20,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Auto Match recommends an available opponent and shows you who you are about to challenge."
+        },
+        {
+          "at": 7,
+          "text": "You can browse top players or search for a specific player."
+        },
+        {
+          "at": 12,
+          "text": "Send a Friend Request to connect with players you want to find again."
+        },
+        {
+          "at": 16,
+          "text": "Friends and recommendations make it easy to start another game together."
+        }
+      ]
+    },
+    {
+      "id": "leaderboards",
+      "duration": 25,
+      "cues": [
+        {
+          "at": 0,
+          "text": "The Leaderboards button opens the all-time Global Leaderboard."
+        },
+        {
+          "at": 7,
+          "text": "Swipe to see this month’s Global Leaderboard."
+        },
+        {
+          "at": 13,
+          "text": "Competitive wins and losses change your Coins and your global ranking."
+        },
+        {
+          "at": 18,
+          "text": "If you leave the Main Menu untouched, Attract Mode cycles through the leaderboards automatically."
+        }
+      ]
+    },
+    {
+      "id": "goal",
+      "duration": 10,
+      "cues": [
+        {
+          "at": 0,
+          "text": "The goal is simple: match card families, capture scoring cards, reach 7 points, then choose GO or STOP."
+        }
+      ]
+    },
+    {
+      "id": "families",
+      "duration": 18,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Every family has exactly four cards."
+        },
+        {
+          "at": 5,
+          "text": "GoStop Live! uses twelve easy family names instead of month numbers."
+        },
+        {
+          "at": 10,
+          "text": "Pine, Plum, Cherry, Vine, Iris, Rose, Bush, Hill, Daisy, Star, Berry, and Willow."
+        }
+      ]
+    },
+    {
+      "id": "types",
+      "duration": 24,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Cards score in four main types: Brights, Pictures, Stripes, and Singles."
+        },
+        {
+          "at": 6,
+          "text": "Stripes include Red, Blue, and Plain Stripe sets."
+        },
+        {
+          "at": 12,
+          "text": "Singles are the most common cards."
+        },
+        {
+          "at": 17,
+          "text": "Some special Single cards count as two Singles."
+        }
+      ]
+    },
+    {
+      "id": "scoring",
+      "duration": 38,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Brights: three Brights with the Rain Bright score 2 points. Three non-Rain Brights score 3."
+        },
+        {
+          "at": 8,
+          "text": "Four Brights score 4 points, and all five Brights score 15 points."
+        },
+        {
+          "at": 14,
+          "text": "5-BIRDIES! scores 5 points. Any five Pictures score 1 point, then each extra Picture adds 1."
+        },
+        {
+          "at": 22,
+          "text": "Three Red, Blue, or Plain Stripes score 3 points. Any five Stripes score 1, then each extra Stripe adds 1."
+        },
+        {
+          "at": 30,
+          "text": "Ten Singles score 1 point, then each extra Single adds 1. 2x Single cards count as two."
+        }
+      ]
+    },
+    {
+      "id": "matching",
+      "duration": 28,
+      "cues": [
+        {
+          "at": 0,
+          "text": "A turn starts by playing one card from your hand."
+        },
+        {
+          "at": 6,
+          "text": "If the table has one card from the same family, your played card captures it."
+        },
+        {
+          "at": 12,
+          "text": "Then the draw pile flips one card."
+        },
+        {
+          "at": 17,
+          "text": "If the drawn card matches a table family, it captures that card too."
+        },
+        {
+          "at": 22,
+          "text": "If there is no match, the played or drawn card stays on the table."
+        }
+      ]
+    },
+    {
+      "id": "gostop",
+      "duration": 28,
+      "cues": [
+        {
+          "at": 0,
+          "text": "At 7 points in a two-player game, you choose GO or STOP."
+        },
+        {
+          "at": 6,
+          "text": "STOP ends the hand and you take the points you have now."
+        },
+        {
+          "at": 11,
+          "text": "GO keeps the game going. The first GO adds 1 point, and the second GO adds another point."
+        },
+        {
+          "at": 18,
+          "text": "From the third GO onward, the settlement doubles with each additional GO."
+        },
+        {
+          "at": 23,
+          "text": "If you lose after declaring GO, your opponent also receives the GO penalty multiplier."
+        }
+      ]
+    },
+    {
+      "id": "specials",
+      "duration": 38,
+      "cues": [
+        {
+          "at": 0,
+          "text": "SHAKE: reveal three cards from the same family. A normal Shake doubles your settlement if you win."
+        },
+        {
+          "at": 7,
+          "text": "BOMB: keep three same-family cards hidden. When the fourth is on the table, play all three, capture the family, and steal one Single."
+        },
+        {
+          "at": 15,
+          "text": "POOPED! is 뻑. Your play and the draw create a three-card family stack. Capturing it later steals one Single."
+        },
+        {
+          "at": 22,
+          "text": "KISS! is 쪽. Your played card has no match, then the draw gives the matching family. Capture the pair and steal one Single."
+        },
+        {
+          "at": 29,
+          "text": "FLUSH! is 따닥, and CLEAN SWEEP! is 싹쓸이. These special captures also steal one Single when available."
+        }
+      ]
+    },
+    {
+      "id": "fullrules",
+      "duration": 10,
+      "cues": [
+        {
+          "at": 0,
+          "text": "You do not need to memorize everything. Full Rules keeps the complete written reference one click away."
+        }
+      ]
+    },
+    {
+      "id": "training",
+      "duration": 18,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Your best first game is Training Mode."
+        },
+        {
+          "at": 6,
+          "text": "Play against AI while GoStop Live! highlights a recommended card and table target."
+        },
+        {
+          "at": 12,
+          "text": "Training Mode explains why the move is recommended and teaches special rules as they happen."
+        }
+      ]
+    },
+    {
+      "id": "fun",
+      "duration": 7,
+      "cues": [
+        {
+          "at": 0,
+          "text": "Have fun playing GoStop Live!"
+        }
+      ]
+    }
+  ]
+}
