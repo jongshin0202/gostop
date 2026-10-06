@@ -15,7 +15,7 @@
     #gostopBootSplash.gostop-boot-ready::after{content:attr(data-start-label);position:absolute;left:50%;top:calc(50% + 58px);transform:translateX(-50%);font:700 14px/1.2 Arial,sans-serif;letter-spacing:.04em;color:#d8c8aa;opacity:.9;text-shadow:0 2px 8px #000;white-space:nowrap}
     html:not(.gostop-boot-pending) #gostopBootSplash{display:none!important}
   </style>
-  <link rel="stylesheet" href="styles.css?v=20261005-1" />
+  <link rel="stylesheet" href="styles.css?v=20261005-2" />
 </head>
 <body>
   <div id="gostopBootSplash" aria-hidden="true"><strong>GoStop <em>Live!</em></strong></div>
@@ -109,9 +109,18 @@
         <button class="dialog-close tutorial-close" type="submit" data-i18n-aria="close" aria-label="Close">×</button>
       </header>
       <section id="tutorialVideoView" class="tutorial-video-view" aria-label="How to Play tutorial video">
-        <div id="tutorialVideoStage" class="tutorial-video-stage" aria-live="polite"></div>
+        <video
+          id="tutorialVideoPlayer"
+          class="tutorial-video-player"
+          preload="metadata"
+          playsinline
+          poster="assets/gostop-live-how-to-play-poster.jpg"
+          aria-describedby="tutorialVideoCaption"
+        >
+          <source src="assets/gostop-live-how-to-play.mp4" type="video/mp4">
+        </video>
         <div class="tutorial-video-copy">
-          <p id="tutorialVideoCaption" class="tutorial-video-caption"></p>
+          <p id="tutorialVideoCaption" class="tutorial-video-caption" aria-live="polite">Welcome to GoStop Live!</p>
         </div>
         <div class="tutorial-video-actions">
           <button id="tutorialFullRulesBtn" type="button">Full Rules</button>
@@ -575,7 +584,7 @@
   <script src="online-client.js?v=20260929-1"></script>
   <script src="presentation-plan.js?v=20260928-1"></script>
   <script src="app.js?v=20261004-1"></script>
-  <script src="tutorial-video.js?v=20261005-1"></script>
+  <script src="tutorial-video.js?v=20261005-2"></script>
   <script src="diagnostics.js?v=20260925-2"></script>
 </body>
 </html>
