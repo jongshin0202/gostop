@@ -2958,7 +2958,7 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/^Play .* instead\./);
 });
 
-test('Training Mode does not call held-only Godori cards secured, while opening coaching stays pinned until dismissal and turn coaching waits five seconds',()=>{
+test('Training Mode recognizes held plus claimable 5-BIRDIES potential without calling held cards secured, while opening coaching stays pinned until dismissal and turn coaching waits five seconds',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m8-2'),card('m10-3')],
@@ -2969,9 +2969,10 @@ test('Training Mode does not call held-only Godori cards secured, while opening 
   assert.equal(route.potentialCount,3);
   assert.equal(route.controlledCount,1);
   assert.equal(route.veryStrong,false);
+  assert.equal(route.strategic,true);
   const opening=api.trainingOpeningStrategy();
-  assert.doesNotMatch(opening,/already have.*3 bird|already.*3 bird/i);
-  assert.doesNotMatch(opening,/5-Birdies|Priority:|Reserved rule:|opponent has captured none/i);
+  assert.match(opening,/Best plan: 5-BIRDIES/);
+  assert.doesNotMatch(opening,/secured|Priority:|Reserved rule:|opponent has captured none/i);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
   assert.match(coach,/setTimeout\(\(\)=>\{/);
@@ -3227,12 +3228,12 @@ test('Training no-capture strategy uses fixed card priority inside a paired-fami
   assert.equal(bush.retainedFamily.length,1);
   assert.ok(api.competitiveMoveScore('human',card('m7-1'),null)>api.competitiveMoveScore('human',card('m5-1'),null));
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m7-2');
+  assert.equal(recommendation.card.id,'m7-1');
   assert.equal(recommendation.target,null);
-  assert.match(recommendation.reason,/^Play Bush Plain Stripe\./);
+  assert.match(recommendation.reason,/^Play Bush Picture\./);
   assert.match(recommendation.reason,/No card for capture is available on the table\./);
   assert.match(recommendation.reason,/another Bush card in hand/);
-  assert.match(recommendation.reason,/capture it on your next turn/);
+  assert.match(recommendation.reason,/lower-risk Bush card as bait/);
   assert.doesNotMatch(recommendation.reason,/Iris|Keep |Next best:|No table capture is available for this card|throw|discard/i);
 });
 
@@ -3250,24 +3251,71 @@ test('Training no-capture priority plays Iris Single before Iris Picture',()=>{
   assert.match(recommendation.reason,/another Iris card in hand/);
 });
 
-test('Training treats a live 5-BIRDIES Picture as top priority and a broken one as an ordinary Picture',()=>{
+test('Training opening recognizes simultaneous 5-BIRDIES and Bright routes and takes the Hill Bird Picture first',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m8-2'),card('m6-3'),card('m1-3'),card('m5-3')],
+    human:api.makePlayer({
+      hand:[card('m2-1'),card('m3-1'),card('m8-1'),card('m11-1'),card('m6-1'),card('m6-4')]
+    }),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.godoriRoute.potentialCount,2);
+  assert.equal(profile.godoriRoute.strategic,true);
+  assert.equal(profile.brightRoute.potentialCount,3);
+  assert.equal(profile.brightRoute.strategic,true);
+  assert.equal(profile.primary,'godori');
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/Best plan: 5-BIRDIES/);
+  assert.match(opening,/Brights are also strong/);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m8-1');
+  assert.equal(recommendation.target.id,'m8-2');
+  assert.match(recommendation.reason,/5-BIRDIES/);
+});
+
+test('Training never discards a Bright when another legal discard exists and prefers the statistically safer family',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m2-3')],
+    human:api.makePlayer({
+      hand:[card('m11-1'),card('m11-2'),card('m6-1')],
+      captured:[card('m6-2'),card('m6-4'),card('m11-4')]
+    }),
+    ai:api.makePlayer()
+  }));
+  const berry=api.competitiveDiscardContext('human',card('m11-2'));
+  const rose=api.competitiveDiscardContext('human',card('m6-1'));
+  assert.equal(berry.bestUnseen.id,'m11-3');
+  assert.equal(rose.bestUnseen.id,'m6-3');
+  assert.ok(api.trainingDiscardRisk(card('m11-1'))>api.trainingDiscardRisk(card('m11-2')));
+  assert.ok(api.trainingDiscardRisk(card('m11-2'))>api.trainingDiscardRisk(card('m6-1')));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m6-1');
+  assert.equal(recommendation.target,null);
+  assert.match(recommendation.reason,/only one unseen card left|lowest-risk/i);
+  assert.doesNotMatch(recommendation.reason,/Berry Bright/);
+});
+
+test('Training protects a live 5-BIRDIES Picture from discard and treats a broken one as an ordinary Picture',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m3-3')],
-    human:api.makePlayer({hand:[card('m2-1'),card('m2-3')]}),
+    human:api.makePlayer({hand:[card('m2-1'),card('m7-2')]}),
     ai:api.makePlayer()
   }));
   assert.equal(api.trainingStrategyProfile().godoriRoute.alive,true);
-  assert.equal(api.trainingRecommendation().card.id,'m2-1');
+  assert.equal(api.trainingRecommendation().card.id,'m7-2','keep the live Bird Picture and discard the Stripe instead');
 
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m3-3')],
-    human:api.makePlayer({hand:[card('m2-1'),card('m2-3')]}),
+    human:api.makePlayer({hand:[card('m2-1'),card('m7-2')]}),
     ai:api.makePlayer({captured:[card('m4-1')]})
   }));
   assert.equal(api.trainingStrategyProfile().godoriRoute.alive,false);
-  assert.equal(api.trainingRecommendation().card.id,'m2-3');
+  assert.equal(api.trainingRecommendation().card.id,'m2-1','after 5-BIRDIES is broken, the Bird Picture is an ordinary Picture');
 });
 
 test('English-facing gameplay uses 5-BIRDIES instead of Godori',()=>{
