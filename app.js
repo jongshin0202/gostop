@@ -2534,19 +2534,21 @@
     };
   }
   function trainingGodoriRoute(human=state?.human){
-    if(!human||!state)return {alive:false,strong:false,veryStrong:false,controlledCount:0,potentialCount:0,immediateCount:0};
+    if(!human||!state)return {alive:false,strong:false,veryStrong:false,strategic:false,controlledCount:0,potentialCount:0,immediateCount:0};
     const months=[2,4,8],hand=human.hand||[],captured=human.captured||[],opponent=state.ai?.captured||[];
     const isBird=card=>card.flags?.includes('godori')&&months.includes(card.month);
     const mineCaptured=captured.filter(isBird),inHand=hand.filter(isBird),playable=inHand.filter(card=>(state.floor||[]).some(target=>target.month===card.month)),claimable=(state.floor||[]).filter(card=>isBird(card)&&hand.some(held=>held.month===card.month)),lost=opponent.filter(isBird);
     const controlledCount=new Set([...mineCaptured,...playable,...claimable].map(card=>card.month)).size,potentialCount=new Set([...mineCaptured,...inHand,...claimable].map(card=>card.month)).size,alive=lost.length===0;
-    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.month)).size,captured:mineCaptured,inHand,playable,claimable,lost};
+    const immediateCount=new Set([...playable,...claimable].map(card=>card.month)).size,strategic=alive&&potentialCount>=2&&immediateCount>0;
+    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,strategic,controlledCount,potentialCount,immediateCount,captured:mineCaptured,inHand,playable,claimable,lost};
   }
   function trainingBrightRoute(human=state?.human){
-    if(!human||!state)return {alive:false,strong:false,veryStrong:false,fiveBrightNear:false,controlledCount:0,potentialCount:0,immediateCount:0,lostCount:0};
+    if(!human||!state)return {alive:false,strong:false,veryStrong:false,strategic:false,fiveBrightNear:false,controlledCount:0,potentialCount:0,immediateCount:0,lostCount:0};
     const hand=human.hand||[],captured=human.captured||[],opponent=state.ai?.captured||[];
     const mineCaptured=captured.filter(card=>card.type==='bright'),inHand=hand.filter(card=>card.type==='bright'),playable=inHand.filter(card=>(state.floor||[]).some(target=>target.month===card.month)),claimable=(state.floor||[]).filter(card=>card.type==='bright'&&hand.some(held=>held.month===card.month)),lost=opponent.filter(card=>card.type==='bright');
     const controlledCount=new Set([...mineCaptured,...playable,...claimable].map(card=>card.id)).size,potentialCount=new Set([...mineCaptured,...inHand,...claimable].map(card=>card.id)).size,alive=(5-lost.length)>=3;
-    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,fiveBrightNear:lost.length===0&&controlledCount>=4,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.id)).size,lostCount:lost.length,captured:mineCaptured,inHand,playable,claimable,lost};
+    const immediateCount=new Set([...playable,...claimable].map(card=>card.id)).size,strategic=alive&&potentialCount>=3;
+    return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,strategic,fiveBrightNear:lost.length===0&&controlledCount>=4,controlledCount,potentialCount,immediateCount,lostCount:lost.length,captured:mineCaptured,inHand,playable,claimable,lost};
   }
   function trainingStrategyProfile(human=state?.human){
     if(!human||!state)return {primary:'single',label:'Singles',summary:'No major set is close yet, so build Singles and take 2x Singles when available.',priorityText:'Brights > Stripes > Singles > Pictures.',godoriViable:false,fiveBrightViable:false,brightViable:false,stripeViable:false,activeRibbonFamilies:[],ribbonRoutes:{},weights:{}};
@@ -2557,6 +2559,8 @@
     const activeRibbonFamilies=Object.values(ribbonRoutes).filter(route=>route.strong).map(route=>route.family);
     let primary='single';
     if(brightRoute.fiveBrightNear)primary='bright';
+    else if(godoriRoute.strategic)primary='godori';
+    else if(brightRoute.strategic)primary='bright';
     else if(godoriRoute.veryStrong&&godoriRoute.immediateCount>0)primary='godori';
     else if(strongestRibbon?.veryStrong&&strongestRibbon.immediateCount>0)primary='stripe';
     else if(brightRoute.strong)primary='bright';
@@ -2568,15 +2572,20 @@
       :'Brights > Stripes > Singles > Pictures.';
     let summary='';
     if(primary==='stripe')summary=strongestRibbon.name+' Stripes are the clearest immediate route: '+strongestRibbon.controlledCount+' of the 3 set cards are captured, in hand with a current match, or directly claimable from the table'+(strongestRibbon.potentialCount>strongestRibbon.controlledCount?(' ('+strongestRibbon.potentialCount+' are still possible including cards only held in hand)'):'')+'.';
-    else if(primary==='bright')summary='Brights are the clearest route: you already have or can immediately reach '+brightRoute.controlledCount+' Brights.';
-    else if(primary==='godori')summary='5-BIRDIES is live: you already have or can immediately reach '+godoriRoute.controlledCount+' of the 3 bird cards.';
+    else if(primary==='bright')summary='Brights are a strong route: '+brightRoute.potentialCount+' Brights are already in hand, captured, or directly claimable from the table.';
+    else if(primary==='godori')summary='5-BIRDIES is a strong route: '+godoriRoute.potentialCount+' of the 3 bird cards are already in hand, captured, or directly claimable from the table.';
     else summary='No major set is close yet, so build Singles and take 2x Singles when available.';
     const currentPi=score(captured,human.gukjinMode||'animal').piCount;
     const piPotential=currentPi+hand.reduce((sum,card)=>sum+trainingPiUnits(card),0)+reachable.reduce((sum,card)=>sum+trainingPiUnits(card),0);
-    const backup=primary==='stripe'&&brightRoute.strong?'Brights are a strong backup.':primary==='bright'&&strongestRibbon?.strong?(strongestRibbon.name+' Stripes are a strong backup.'):primary!=='godori'&&godoriRoute.strong?'5-BIRDIES is a strong backup.':'';
+    let backup='';
+    if(primary==='godori'&&brightRoute.strategic)backup='Brights are also strong: '+brightRoute.potentialCount+' Brights are already in hand or directly claimable.';
+    else if(primary==='bright'&&godoriRoute.strategic)backup='5-BIRDIES is also live: '+godoriRoute.potentialCount+' of the 3 bird cards are already in hand or directly claimable.';
+    else if(primary==='stripe'&&(brightRoute.strong||brightRoute.strategic))backup='Brights are a strong backup.';
+    else if(primary==='bright'&&strongestRibbon?.strong)backup=strongestRibbon.name+' Stripes are a strong backup.';
+    else if(primary!=='godori'&&(godoriRoute.strong||godoriRoute.strategic))backup='5-BIRDIES is a strong backup.';
     return {
       primary,label,summary,priorityText,backup,brightRoute,godoriRoute,ribbonRoutes,strongestRibbon,
-      fiveBrightViable:brightRoute.fiveBrightNear,brightViable:brightRoute.strong,godoriViable:godoriRoute.strong,
+      fiveBrightViable:brightRoute.fiveBrightNear,brightViable:brightRoute.strong||brightRoute.strategic,godoriViable:godoriRoute.strong||godoriRoute.strategic,brightStrategic:brightRoute.strategic,godoriStrategic:godoriRoute.strategic,
       stripeViable:Object.values(ribbonRoutes).some(route=>route.strong),activeRibbonFamilies,
       piPotential,currentPi,ownedBright:brightRoute.controlledCount,ownedGodori:godoriRoute.controlledCount,
       ownedRibbon:(captured.filter(card=>card.type==='ribbon').length+hand.filter(card=>card.type==='ribbon').length),
@@ -2586,19 +2595,55 @@
       opponentRibbon:(state.ai?.captured||[]).filter(card=>card.type==='ribbon').length
     };
   }
-  function trainingNoCapturePriority(card,profile=trainingStrategyProfile()){
-    if(!card)return 0;
-    if(card.flags?.includes('godori'))return profile.godoriRoute?.alive?5:1;
-    if(card.type==='bright')return 4;
-    if(card.type==='ribbon')return 3;
-    if(card.type==='pi')return 2;
-    return 1;
+  function trainingDiscardRisk(card,profile=trainingStrategyProfile()){
+    if(!card)return Infinity;
+    if(card.type==='bright')return 1000000;
+    if(card.flags?.includes('godori')&&profile.godoriRoute?.alive)return 100000;
+    const context=competitiveDiscardContext('human',card),paired=context.retainedFamily?.length>0;
+    let risk=paired?competitiveCardValue(card):(card.type==='ribbon'?300:card.type==='pi'?200:card.type==='animal'?100:160);
+    if(card.flags?.includes('doublePi'))risk+=120;
+    if(card.id==='m9-1'&&card.flags?.includes('switchPi'))risk+=120;
+    if(card.type==='ribbon'&&card.ribbonSet){
+      const route=profile.ribbonRoutes?.[card.ribbonSet];
+      if(route?.strong||route?.veryStrong)risk+=100;
+      else if(route&&!route.alive)risk-=60;
+    }
+    if(context.bestUnseen)risk+=context.bestUnseenValue*.7;
+    if(paired){
+      const bestRetained=Math.max(...context.retainedFamily.map(item=>competitiveCardValue(item)),0);
+      risk-=Math.min(40,bestRetained*.35);
+    }
+    return risk;
+  }
+  function trainingNoCapturePriority(card,profile=trainingStrategyProfile()){return trainingDiscardRisk(card,profile);}
+  function trainingCapturePriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
+    if(!candidate?.target)return 0;
+    const gained=candidate.gained||[candidate.card,candidate.target];
+    if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.alive)return 600+(profile.godoriRoute?.strategic?50:0);
+    if(gained.some(card=>card.type==='bright'))return 500+(profile.brightRoute?.strategic?40:0);
+    const stripe=gained.find(card=>card.type==='ribbon');
+    if(stripe){
+      const route=stripe.ribbonSet?profile.ribbonRoutes?.[stripe.ribbonSet]:null;
+      if(route&&!route.alive)return 250;
+      return 400+(route?.veryStrong?40:route?.strong?20:0);
+    }
+    if(gained.some(card=>card.flags?.includes('doublePi')||(card.id==='m9-1'&&card.flags?.includes('switchPi'))))return 330;
+    if(gained.some(card=>card.type==='pi'))return 300;
+    return 200;
+  }
+  function trainingHitCompare(a,b,profile=trainingStrategyProfile()){
+    const aEmergency=Number((a.urgency?.immediateScoreGain||0)>0||a.urgency?.severeBlock),bEmergency=Number((b.urgency?.immediateScoreGain||0)>0||b.urgency?.severeBlock);
+    if(aEmergency!==bEmergency)return bEmergency-aEmergency;
+    const priorityDelta=trainingCapturePriority(b,profile)-trainingCapturePriority(a,profile);
+    if(priorityDelta)return priorityDelta;
+    const aTier=a.urgency?.tier||0,bTier=b.urgency?.tier||0;
+    return bTier-aTier||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
   }
   function trainingStrategicCardValue(card,profile=trainingStrategyProfile()){
     if(!card)return 0;
     if(card.flags?.includes('godori'))return profile.godoriRoute?.alive?560:50;
     if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return profile.primary==='single'?380:300;
-    if(card.type==='bright')return 300+(profile.brightRoute?.strong?80:0)+(profile.primary==='bright'?90:0);
+    if(card.type==='bright')return 300+((profile.brightRoute?.strong||profile.brightRoute?.strategic)?80:0)+(profile.primary==='bright'?90:0);
     if(card.type==='ribbon'){
       const route=profile.ribbonRoutes?.[card.ribbonSet];
       if(route&&!route.alive)return 60;
@@ -2713,15 +2758,16 @@
       const route=target.type==='ribbon'?profile.ribbonRoutes?.[target.ribbonSet]:null;
       const routeBonus=route?.veryStrong?150:route?.strong?70:0;
       const premiumSingle=target.flags?.includes('doublePi')?70:target.id==='m9-1'&&target.flags?.includes('switchPi')?90:0;
-      const brightBonus=target.type==='bright'&&profile.brightRoute?.strong?70:0;
-      const godoriBonus=target.flags?.includes('godori')&&profile.godoriRoute?.strong?90:0;
+      const brightBonus=target.type==='bright'&&(profile.brightRoute?.strong||profile.brightRoute?.strategic)?70:0;
+      const godoriBonus=target.flags?.includes('godori')&&(profile.godoriRoute?.strong||profile.godoriRoute?.strategic)?90:0;
       const competitive=competitiveMoveScore('human',card,target),urgency=competitiveMoveUrgency('human',card,target),uniqueFloorOpportunity=urgency.unique;
       const value=competitive+strategic*.25+blockValue*.35+scoreGain*35+(opportunity?55:0)+routeBonus+premiumSingle+brightBonus+godoriBonus;
       const candidate={card,target,reserved,score:value,competitive,urgency,matchCount:matches.length,uniqueFloorOpportunity,profile,captureDescription,gained,opportunity,threat,reason:'',shortWhy:''};
       targetChoices.push(candidate);
-      if(!best||value>best.score||(value===best.score&&target.id<best.target.id))best=candidate;
     }
-    if(best)best.targetAlternatives=targetChoices.filter(candidate=>candidate.target.id!==best.target.id).sort((a,b)=>b.score-a.score||a.target.id.localeCompare(b.target.id));
+    targetChoices.sort((a,b)=>trainingHitCompare(a,b,profile));
+    best=targetChoices[0]||null;
+    if(best)best.targetAlternatives=targetChoices.filter(candidate=>candidate.target.id!==best.target.id);
     return best;
   }
   function trainingNoCaptureReason(best){
@@ -2729,9 +2775,12 @@
     const context=best?.discardContext||competitiveDiscardContext('human',best?.card);
     if(context?.retainedFamily?.length){
       const family=trainingFlowerName(best.card.month);
-      return base+' You have another '+family+' card in hand, so if this card stays on the table, you can capture it on your next turn.';
+      return base+' You have another '+family+' card in hand, so this uses the lower-risk '+family+' card as bait while preserving the stronger '+family+' card.';
     }
-    return base+' This gives up a lower-value card while preserving stronger future options.';
+    if(context?.unseenFamily?.length===1&&context.bestUnseen&&competitiveCardValue(context.bestUnseen)<=competitiveCardValue(MASTER_DECK.find(card=>card.type==='pi'&&!card.flags?.includes('doublePi')))){
+      return base+' This family has only one unseen card left and it is a Single, making this a lower-risk card to leave on the table.';
+    }
+    return base+' This is the lowest-risk card to leave on the table while protecting Brights and stronger future captures.';
   }
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
@@ -2753,7 +2802,7 @@
       return 'This captures a Stripe and builds toward Stripe scoring.';
     }
     if(gained.some(card=>card.type==='bright')){
-      return profile.brightRoute?.strong?'Brights are a strong route in this hand, and this capture moves you closer to a 3-Bright score.':'A Bright is the strongest available scoring card here.';
+      return (profile.brightRoute?.strong||profile.brightRoute?.strategic)?'Brights are a strong route in this hand, and this capture moves you closer to a 3-Bright score.':'A Bright is the strongest available scoring card here.';
     }
     if(gained.some(card=>card.flags?.includes('doublePi')))return 'A 2x Single counts as two Singles, so it is worth more than an ordinary Single or Picture when no stronger set is close.';
     if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'The Sake Cup can count as 2 Singles, making it much more valuable than an ordinary Single.';
@@ -2778,17 +2827,18 @@
   function trainingRecommendation(){
     if(!state||state.turn!==PLAYER_A||!state.human?.hand?.length)return null;
     const profile=trainingStrategyProfile(),candidates=state.human.hand.map(card=>trainingCandidate(card,profile)).filter(Boolean),hits=candidates.filter(candidate=>candidate.target),liveHits=hits.filter(candidate=>!candidate.reserved);
-    const pool=liveHits.length?liveHits:(hits.length?hits:candidates);
+    let pool=liveHits.length?liveHits:(hits.length?hits:candidates);
     if(!pool.length)return null;
     const noCaptureOnly=!hits.length;
-    const sorted=[...pool].sort((a,b)=>{
-      if(noCaptureOnly){
-        const priorityDelta=trainingNoCapturePriority(b.card,profile)-trainingNoCapturePriority(a.card,profile);
-        if(priorityDelta)return priorityDelta;
-      }
-      const aTier=a.urgency?.tier||0,bTier=b.urgency?.tier||0;
-      return bTier-aTier||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
-    });
+    if(noCaptureOnly){
+      const withoutBrights=pool.filter(candidate=>candidate.card.type!=='bright');
+      if(withoutBrights.length)pool=withoutBrights;
+      const withoutLiveBirdies=pool.filter(candidate=>!(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive));
+      if(withoutLiveBirdies.length)pool=withoutLiveBirdies;
+    }
+    const sorted=[...pool].sort((a,b)=>noCaptureOnly
+      ?trainingDiscardRisk(a.card,profile)-trainingDiscardRisk(b.card,profile)||b.score-a.score||a.card.id.localeCompare(b.card.id)
+      :trainingHitCompare(a,b,profile));
     const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
@@ -2825,8 +2875,8 @@
         :'';
       return ('Best plan: '+route.name+' Stripe set ('+setFamilies.join(', ')+'). '+locationText+'.'+totalHandText+playableText+' That puts '+route.controlledCount+' of the 3 scoring-set Stripes within immediate reach. '+profile.backup).trim();
     }
-    if(profile.primary==='bright')return ('Best plan: Brights. You already have or can immediately reach '+profile.brightRoute.controlledCount+' Brights, so protect that route and take Bright captures when they are available. '+profile.backup).trim();
-    if(profile.primary==='godori')return ('Best plan: 5-BIRDIES. You already have or can immediately reach '+profile.godoriRoute.controlledCount+' of the 3 bird cards, so protect that set while it is still live. '+profile.backup).trim();
+    if(profile.primary==='bright')return ('Best plan: Brights. '+profile.brightRoute.potentialCount+' Brights are already in hand, captured, or directly claimable, so protect them and take Bright captures first. '+profile.backup).trim();
+    if(profile.primary==='godori')return ('Best plan: 5-BIRDIES. '+profile.godoriRoute.potentialCount+' of the 3 bird cards are already in hand, captured, or directly claimable, so take an available Bird Picture before lower-priority captures. '+profile.backup).trim();
     return 'Best plan: Singles. No major set is close yet, so take 2x Singles first and build Singles steadily; use Brights or Stripes when a clear set opportunity appears.';
   }
   function trainingGukjinRecommendation(human=state?.human){
@@ -3234,7 +3284,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveRibbonSetAlive,competitiveCardValueForSide,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveDiscardContext,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingNoCapturePriority,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingCapturePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
