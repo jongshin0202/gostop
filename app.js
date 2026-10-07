@@ -2737,7 +2737,8 @@
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
     if(candidate.opportunity)return candidate.opportunity;
     const gained=candidate.gained||[],urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,candidate.target);
-    if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.alive)return 'This secures a 5-BIRDIES Picture while the 5-BIRDIES set is still live.';
+    const liveBirdiesTarget=candidate.target.flags?.includes('godori')&&profile.godoriRoute?.alive,liveBirdiesPlay=candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive&&!candidate.targetAlternatives?.length;
+    if(liveBirdiesTarget||liveBirdiesPlay)return 'This secures a 5-BIRDIES Picture while the 5-BIRDIES set is still live.';
     if(urgency.familyLock){
       const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(candidate.target);
       return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use one '+family+' card now to capture '+targetName+' while keeping the other '+family+' card in hand.';
