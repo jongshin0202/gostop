@@ -3193,7 +3193,7 @@ test('Training Mode records two immediately securable Blue Stripes separately fr
   assert.equal(route.veryStrong,false);
 });
 
-test('Training recommendation takes the Daisy Sake Cup instead of overvaluing three Plain Stripes held only in hand',()=>{
+test('Training takes a live 5-BIRDIES Picture ahead of the Daisy Sake Cup',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m4-1'),card('m5-3'),card('m5-1'),card('m9-1'),card('m10-3')],
@@ -3205,12 +3205,12 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
   assert.ok(plain.controlledCount<plain.potentialCount,'held Plain Stripes must not all be counted as already secured');
   assert.equal(plain.veryStrong,false,'three Stripes sitting in hand must not be treated as a completed/near-certain set');
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m9-3');
-  assert.equal(recommendation.target.id,'m9-1');
-  assert.match(recommendation.reason,/Sake Cup/);
+  assert.equal(recommendation.card.id,'m4-2');
+  assert.equal(recommendation.target.id,'m4-1');
+  assert.match(recommendation.reason,/5-BIRDIES/);
 });
 
-test('Training no-capture strategy chooses a paired-family setup but explains only the spotlight card',()=>{
+test('Training no-capture strategy uses fixed card priority inside a paired-family setup',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m2-3'),card('m3-3')],
@@ -3227,13 +3227,62 @@ test('Training no-capture strategy chooses a paired-family setup but explains on
   assert.equal(bush.retainedFamily.length,1);
   assert.ok(api.competitiveMoveScore('human',card('m7-1'),null)>api.competitiveMoveScore('human',card('m5-1'),null));
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m7-1');
+  assert.equal(recommendation.card.id,'m7-2');
   assert.equal(recommendation.target,null);
-  assert.match(recommendation.reason,/^Play Bush Picture\./);
+  assert.match(recommendation.reason,/^Play Bush Plain Stripe\./);
   assert.match(recommendation.reason,/No card for capture is available on the table\./);
   assert.match(recommendation.reason,/another Bush card in hand/);
   assert.match(recommendation.reason,/capture it on your next turn/);
   assert.doesNotMatch(recommendation.reason,/Iris|Keep |Next best:|No table capture is available for this card|throw|discard/i);
+});
+
+test('Training no-capture priority plays Iris Single before Iris Picture',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m5-1'),card('m5-3')]}),
+    ai:api.makePlayer()
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m5-3');
+  assert.equal(recommendation.target,null);
+  assert.match(recommendation.reason,/^Play Iris Single\./);
+  assert.match(recommendation.reason,/another Iris card in hand/);
+});
+
+test('Training treats a live 5-BIRDIES Picture as top priority and a broken one as an ordinary Picture',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m2-3')]}),
+    ai:api.makePlayer()
+  }));
+  assert.equal(api.trainingStrategyProfile().godoriRoute.alive,true);
+  assert.equal(api.trainingRecommendation().card.id,'m2-1');
+
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m2-3')]}),
+    ai:api.makePlayer({captured:[card('m4-1')]})
+  }));
+  assert.equal(api.trainingStrategyProfile().godoriRoute.alive,false);
+  assert.equal(api.trainingRecommendation().card.id,'m2-3');
+});
+
+test('English-facing gameplay uses 5-BIRDIES instead of Godori',()=>{
+  const app=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const i18n=require('../i18n.js');
+  for(const phrase of [
+    'Godori bird set','Godori >','Godori is live','Godori is a strong backup',
+    'completing Godori','3-bird Godori set','Godori set within reach',
+    'Best plan: Godori','Godori adds 5 points','Godori is still within reach'
+  ])assert.equal(app.includes(phrase),false,phrase);
+  assert.doesNotMatch(i18n.translate('en','tutorialTypePictureDetail'),/Godori/);
+  assert.doesNotMatch(i18n.translate('en','birdiesLong'),/Godori/);
+  assert.doesNotMatch(html,/>5-BIRDIES \/ Godori</);
+  assert.match(html,/<td>5-BIRDIES<\/td>/);
 });
 
 test('Computer AI uses the same paired-family setup logic when no capture is available',()=>{
@@ -3266,7 +3315,7 @@ test('Training explains Iris recommendation through the Plain 3-Stripe opportuni
   assert.doesNotMatch(recommendation.reason,/to take|only Iris target|computer can remove|current hit/i);
 });
 
-test('Training prioritizes two-Iris family control and the live Plain Stripe over a 2x Single, Bush hit, or lone Red Stripe hit',()=>{
+test('Training live 5-BIRDIES priority overrides the two-Iris family-control move',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m5-2'),card('m7-4'),card('m2-2'),card('m12-4')],
@@ -3288,11 +3337,10 @@ test('Training prioritizes two-Iris family control and the live Plain Stripe ove
   assert.ok(api.competitiveMoveScore('human',card('m5-1'),card('m5-2'))>api.competitiveMoveScore('human',card('m7-1'),card('m7-4')));
   assert.ok(api.competitiveMoveScore('human',card('m5-1'),card('m5-2'))>api.competitiveMoveScore('human',card('m2-1'),card('m2-2')));
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.month,5);
-  assert.equal(recommendation.target.id,'m5-2');
-  assert.match(recommendation.reason,/You have 2 Iris cards in hand and 1 Iris card on the table/);
-  assert.match(recommendation.reason,/capture Iris Plain Stripe while keeping the other Iris card in hand/);
-  assert.doesNotMatch(recommendation.reason,/Willow 2x Single|Bush|Plum|Next best:/);
+  assert.equal(recommendation.card.id,'m2-1');
+  assert.equal(recommendation.target.id,'m2-2');
+  assert.match(recommendation.reason,/5-BIRDIES/);
+  assert.doesNotMatch(recommendation.reason,/Iris|Willow 2x Single|Bush|Next best:/);
 });
 
 test('Computer AI shares the two-in-hand family control priority and takes Iris Plain Stripe',()=>{

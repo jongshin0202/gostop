@@ -259,12 +259,12 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.match(index,/i18n\.js\?v=20261001-4/);
+  assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261005-3/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
   assert.match(index,/ranked-client\.js\?v=20261004-1/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
-  assert.match(index,/app\.js\?v=20261004-1/);
+  assert.match(index,/app\.js\?v=20261007-1/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
   assert.match(index,/presentation-plan\.js\?v=20260928-1/);
   assert.match(index,/diagnostics\.js\?v=20260925-2/);
