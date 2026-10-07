@@ -2608,7 +2608,7 @@
       if(route?.strong||route?.veryStrong)risk+=100;
       else if(route&&!route.alive)risk-=60;
     }
-    if(context.bestUnseen)risk+=context.bestUnseenValue*.7;
+    if(context.bestUnseen)risk+=context.bestUnseenValue*(paired?1.1:.7);
     if(paired){
       const bestRetained=Math.max(...context.retainedFamily.map(item=>competitiveCardValue(item)),0);
       risk-=Math.min(40,bestRetained*.35);
