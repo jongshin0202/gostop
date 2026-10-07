@@ -2958,7 +2958,7 @@ test('Training Mode warns about an opponent completing a three-ribbon set and re
   assert.match(api.trainingAlternativeReason(card('m5-1'),recommendation),/^Play .* instead\./);
 });
 
-test('Training Mode does not call held-only Godori cards secured, while opening coaching stays pinned until dismissal and turn coaching waits five seconds',()=>{
+test('Training Mode recognizes held plus claimable 5-BIRDIES potential without calling held cards secured, while opening coaching stays pinned until dismissal and turn coaching waits five seconds',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m8-2'),card('m10-3')],
@@ -2969,9 +2969,10 @@ test('Training Mode does not call held-only Godori cards secured, while opening 
   assert.equal(route.potentialCount,3);
   assert.equal(route.controlledCount,1);
   assert.equal(route.veryStrong,false);
+  assert.equal(route.strategic,true);
   const opening=api.trainingOpeningStrategy();
-  assert.doesNotMatch(opening,/already have.*3 bird|already.*3 bird/i);
-  assert.doesNotMatch(opening,/5-Birdies|Priority:|Reserved rule:|opponent has captured none/i);
+  assert.match(opening,/Best plan: 5-BIRDIES/);
+  assert.doesNotMatch(opening,/secured|Priority:|Reserved rule:|opponent has captured none/i);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
   assert.match(coach,/setTimeout\(\(\)=>\{/);
@@ -3227,12 +3228,12 @@ test('Training no-capture strategy uses fixed card priority inside a paired-fami
   assert.equal(bush.retainedFamily.length,1);
   assert.ok(api.competitiveMoveScore('human',card('m7-1'),null)>api.competitiveMoveScore('human',card('m5-1'),null));
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m7-2');
+  assert.equal(recommendation.card.id,'m7-1');
   assert.equal(recommendation.target,null);
-  assert.match(recommendation.reason,/^Play Bush Plain Stripe\./);
+  assert.match(recommendation.reason,/^Play Bush Picture\./);
   assert.match(recommendation.reason,/No card for capture is available on the table\./);
   assert.match(recommendation.reason,/another Bush card in hand/);
-  assert.match(recommendation.reason,/capture it on your next turn/);
+  assert.match(recommendation.reason,/lower-risk Bush card as bait/);
   assert.doesNotMatch(recommendation.reason,/Iris|Keep |Next best:|No table capture is available for this card|throw|discard/i);
 });
 
