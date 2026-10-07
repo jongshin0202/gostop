@@ -2549,7 +2549,7 @@
     return {alive,strong:alive&&controlledCount>=2,veryStrong:alive&&controlledCount>=3,fiveBrightNear:lost.length===0&&controlledCount>=4,controlledCount,potentialCount,immediateCount:new Set([...playable,...claimable].map(card=>card.id)).size,lostCount:lost.length,captured:mineCaptured,inHand,playable,claimable,lost};
   }
   function trainingStrategyProfile(human=state?.human){
-    if(!human||!state)return {primary:'single',label:'Singles',summary:'No major set is close yet, so build Singles and take 2x Singles when available.',priorityText:'2x Singles > Singles > Brights > Stripes > ordinary Pictures.',godoriViable:false,fiveBrightViable:false,brightViable:false,stripeViable:false,activeRibbonFamilies:[],ribbonRoutes:{},weights:{}};
+    if(!human||!state)return {primary:'single',label:'Singles',summary:'No major set is close yet, so build Singles and take 2x Singles when available.',priorityText:'Brights > Stripes > Singles > Pictures.',godoriViable:false,fiveBrightViable:false,brightViable:false,stripeViable:false,activeRibbonFamilies:[],ribbonRoutes:{},weights:{}};
     const hand=human.hand||[],captured=human.captured||[],reachable=trainingReachableFloorCards(human);
     const ribbonRoutes=Object.fromEntries(['red','blue','grass'].map(family=>[family,trainingRibbonRoute(family,human)]));
     const strongestRibbon=Object.values(ribbonRoutes).sort((a,b)=>Number(b.veryStrong)-Number(a.veryStrong)||b.controlledCount-a.controlledCount||b.immediateCount-a.immediateCount||a.family.localeCompare(b.family))[0]||null;
