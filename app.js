@@ -2619,8 +2619,8 @@
   function trainingCapturePriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return 0;
     const gained=candidate.gained||[candidate.card,candidate.target];
-    if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.alive)return 600+(profile.godoriRoute?.strategic?50:0);
-    if(gained.some(card=>card.type==='bright'))return 500+(profile.brightRoute?.strategic?40:0);
+    if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.alive)return 600;
+    if(gained.some(card=>card.type==='bright'))return 500;
     const stripe=gained.find(card=>card.type==='ribbon');
     if(stripe){
       const route=stripe.ribbonSet?profile.ribbonRoutes?.[stripe.ribbonSet]:null;
@@ -2631,13 +2631,23 @@
     if(gained.some(card=>card.type==='pi'))return 300;
     return 200;
   }
+  function trainingActiveRoutePriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
+    if(!candidate?.target)return 0;
+    const gained=candidate.gained||[candidate.card,candidate.target];
+    if(profile.godoriRoute?.strategic&&gained.some(card=>card.flags?.includes('godori')))return 3;
+    if(profile.brightRoute?.strategic&&gained.some(card=>card.type==='bright'))return 2;
+    if(profile.primary==='stripe'&&gained.some(card=>card.type==='ribbon'&&card.ribbonSet===profile.strongestRibbon?.family))return 1;
+    return 0;
+  }
   function trainingHitCompare(a,b,profile=trainingStrategyProfile()){
     const aEmergency=Number((a.urgency?.immediateScoreGain||0)>0||a.urgency?.severeBlock),bEmergency=Number((b.urgency?.immediateScoreGain||0)>0||b.urgency?.severeBlock);
     if(aEmergency!==bEmergency)return bEmergency-aEmergency;
-    const priorityDelta=trainingCapturePriority(b,profile)-trainingCapturePriority(a,profile);
-    if(priorityDelta)return priorityDelta;
+    const activeDelta=trainingActiveRoutePriority(b,profile)-trainingActiveRoutePriority(a,profile);
+    if(activeDelta)return activeDelta;
     const aTier=a.urgency?.tier||0,bTier=b.urgency?.tier||0;
-    return bTier-aTier||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
+    if(aTier!==bTier)return bTier-aTier;
+    const priorityDelta=trainingCapturePriority(b,profile)-trainingCapturePriority(a,profile);
+    return priorityDelta||b.score-a.score||a.card.month-b.card.month||a.card.id.localeCompare(b.card.id);
   }
   function trainingStrategicCardValue(card,profile=trainingStrategyProfile()){
     if(!card)return 0;
@@ -3284,7 +3294,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveRibbonSetAlive,competitiveCardValueForSide,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveDiscardContext,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingCapturePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingCapturePriority,trainingActiveRoutePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
