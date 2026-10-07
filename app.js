@@ -2737,6 +2737,7 @@
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
     if(candidate.opportunity)return candidate.opportunity;
     const gained=candidate.gained||[],urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,candidate.target);
+    if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.alive)return 'This secures a 5-BIRDIES Picture while the 5-BIRDIES set is still live.';
     if(urgency.familyLock){
       const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(candidate.target);
       return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use one '+family+' card now to capture '+targetName+' while keeping the other '+family+' card in hand.';
@@ -2755,7 +2756,6 @@
     }
     if(gained.some(card=>card.flags?.includes('doublePi')))return 'A 2x Single counts as two Singles, so it is worth more than an ordinary Single or Picture when no stronger set is close.';
     if(gained.some(card=>card.id==='m9-1'&&card.flags?.includes('switchPi')))return 'The Sake Cup can count as 2 Singles, making it much more valuable than an ordinary Single.';
-    if(gained.some(card=>card.flags?.includes('godori'))&&profile.godoriRoute?.strong)return 'This keeps 5-BIRDIES within reach.';
     if(gained.some(card=>card.type==='pi')){
       const familyStripe=MASTER_DECK.find(card=>card.month===candidate.card.month&&card.type==='ribbon'&&card.ribbonSet);
       const brokenStripe=familyStripe?profile.ribbonRoutes?.[familyStripe.ribbonSet]:null;
