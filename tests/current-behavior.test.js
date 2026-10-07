@@ -3193,7 +3193,7 @@ test('Training Mode records two immediately securable Blue Stripes separately fr
   assert.equal(route.veryStrong,false);
 });
 
-test('Training recommendation takes the Daisy Sake Cup instead of overvaluing three Plain Stripes held only in hand',()=>{
+test('Training takes a live 5-BIRDIES Picture ahead of the Daisy Sake Cup',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m4-1'),card('m5-3'),card('m5-1'),card('m9-1'),card('m10-3')],
@@ -3205,9 +3205,9 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
   assert.ok(plain.controlledCount<plain.potentialCount,'held Plain Stripes must not all be counted as already secured');
   assert.equal(plain.veryStrong,false,'three Stripes sitting in hand must not be treated as a completed/near-certain set');
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m9-3');
-  assert.equal(recommendation.target.id,'m9-1');
-  assert.match(recommendation.reason,/Sake Cup/);
+  assert.equal(recommendation.card.id,'m4-2');
+  assert.equal(recommendation.target.id,'m4-1');
+  assert.match(recommendation.reason,/5-BIRDIES/);
 });
 
 test('Training no-capture strategy uses fixed card priority inside a paired-family setup',()=>{
@@ -3315,7 +3315,7 @@ test('Training explains Iris recommendation through the Plain 3-Stripe opportuni
   assert.doesNotMatch(recommendation.reason,/to take|only Iris target|computer can remove|current hit/i);
 });
 
-test('Training prioritizes two-Iris family control and the live Plain Stripe over a 2x Single, Bush hit, or lone Red Stripe hit',()=>{
+test('Training live 5-BIRDIES priority overrides the two-Iris family-control move',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m5-2'),card('m7-4'),card('m2-2'),card('m12-4')],
@@ -3337,11 +3337,10 @@ test('Training prioritizes two-Iris family control and the live Plain Stripe ove
   assert.ok(api.competitiveMoveScore('human',card('m5-1'),card('m5-2'))>api.competitiveMoveScore('human',card('m7-1'),card('m7-4')));
   assert.ok(api.competitiveMoveScore('human',card('m5-1'),card('m5-2'))>api.competitiveMoveScore('human',card('m2-1'),card('m2-2')));
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.month,5);
-  assert.equal(recommendation.target.id,'m5-2');
-  assert.match(recommendation.reason,/You have 2 Iris cards in hand and 1 Iris card on the table/);
-  assert.match(recommendation.reason,/capture Iris Plain Stripe while keeping the other Iris card in hand/);
-  assert.doesNotMatch(recommendation.reason,/Willow 2x Single|Bush|Plum|Next best:/);
+  assert.equal(recommendation.card.id,'m2-1');
+  assert.equal(recommendation.target.id,'m2-2');
+  assert.match(recommendation.reason,/5-BIRDIES/);
+  assert.doesNotMatch(recommendation.reason,/Iris|Willow 2x Single|Bush|Next best:/);
 });
 
 test('Computer AI shares the two-in-hand family control priority and takes Iris Plain Stripe',()=>{
