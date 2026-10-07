@@ -3210,7 +3210,7 @@ test('Training recommendation takes the Daisy Sake Cup instead of overvaluing th
   assert.match(recommendation.reason,/Sake Cup/);
 });
 
-test('Training no-capture strategy chooses a paired-family setup but explains only the spotlight card',()=>{
+test('Training no-capture strategy uses fixed card priority inside a paired-family setup',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m2-3'),card('m3-3')],
@@ -3227,13 +3227,62 @@ test('Training no-capture strategy chooses a paired-family setup but explains on
   assert.equal(bush.retainedFamily.length,1);
   assert.ok(api.competitiveMoveScore('human',card('m7-1'),null)>api.competitiveMoveScore('human',card('m5-1'),null));
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m7-1');
+  assert.equal(recommendation.card.id,'m7-2');
   assert.equal(recommendation.target,null);
-  assert.match(recommendation.reason,/^Play Bush Picture\./);
+  assert.match(recommendation.reason,/^Play Bush Plain Stripe\./);
   assert.match(recommendation.reason,/No card for capture is available on the table\./);
   assert.match(recommendation.reason,/another Bush card in hand/);
   assert.match(recommendation.reason,/capture it on your next turn/);
   assert.doesNotMatch(recommendation.reason,/Iris|Keep |Next best:|No table capture is available for this card|throw|discard/i);
+});
+
+test('Training no-capture priority plays Iris Single before Iris Picture',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m5-1'),card('m5-3')]}),
+    ai:api.makePlayer()
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m5-3');
+  assert.equal(recommendation.target,null);
+  assert.match(recommendation.reason,/^Play Iris Single\./);
+  assert.match(recommendation.reason,/another Iris card in hand/);
+});
+
+test('Training treats a live 5-BIRDIES Picture as top priority and a broken one as an ordinary Picture',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m2-3')]}),
+    ai:api.makePlayer()
+  }));
+  assert.equal(api.trainingStrategyProfile().godoriRoute.alive,true);
+  assert.equal(api.trainingRecommendation().card.id,'m2-1');
+
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-3'),card('m3-3')],
+    human:api.makePlayer({hand:[card('m2-1'),card('m2-3')]}),
+    ai:api.makePlayer({captured:[card('m4-1')]})
+  }));
+  assert.equal(api.trainingStrategyProfile().godoriRoute.alive,false);
+  assert.equal(api.trainingRecommendation().card.id,'m2-3');
+});
+
+test('English-facing gameplay uses 5-BIRDIES instead of Godori',()=>{
+  const app=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const i18n=require('../i18n.js');
+  for(const phrase of [
+    'Godori bird set','Godori >','Godori is live','Godori is a strong backup',
+    'completing Godori','3-bird Godori set','Godori set within reach',
+    'Best plan: Godori','Godori adds 5 points','Godori is still within reach'
+  ])assert.equal(app.includes(phrase),false,phrase);
+  assert.doesNotMatch(i18n.translate('en','tutorialTypePictureDetail'),/Godori/);
+  assert.doesNotMatch(i18n.translate('en','birdiesLong'),/Godori/);
+  assert.doesNotMatch(html,/>5-BIRDIES \/ Godori</);
+  assert.match(html,/<td>5-BIRDIES<\/td>/);
 });
 
 test('Computer AI uses the same paired-family setup logic when no capture is available',()=>{
