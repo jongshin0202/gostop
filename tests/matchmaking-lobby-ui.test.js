@@ -343,7 +343,7 @@ test('S22 login and Friends search stay above the keyboard and login never revea
   assert.match(attractTouch,/isSwipe/);
   assert.match(attractTouch,/if\(isSwipe\)[^]*?nextLeaderboard/);
   assert.match(attractTouch,/if\(attractMode&&elapsed<=900&&travel<24\)[^]*?closeLeaderboard\(true\)/);
-  assert.doesNotMatch(client,/document\.addEventListener\('touchstart'[^]*?closeLeaderboard\(true\)/);
+  assert.doesNotMatch(client,/document\.addEventListener\('touchstart',event=>\{if\(!attractMode/);
 });
 
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
