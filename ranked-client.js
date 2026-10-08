@@ -765,6 +765,7 @@
     };
     const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
     if(!touchCapable)return;
+    button.dataset.gostopImmediateTap='1';
     button.style.touchAction='manipulation';
     button.addEventListener('touchstart',event=>{
       if(event.touches.length!==1){press=null;return;}
@@ -781,6 +782,42 @@
     button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
   }
   [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
+
+  // Mobile browsers may still deliver ordinary click activation noticeably after touchend
+  // under heavy pages. Give non-game UI controls the same immediate touch path as the
+  // main menu while leaving all card/table gesture handling untouched.
+  let immediateUiPress=null,immediateUiSuppressTarget=null,immediateUiSuppressUntil=0,immediateUiProgrammaticTarget=null;
+  const fastUiButton=target=>{
+    const button=target?.closest?.('button');
+    if(!button||button.disabled||button.dataset.gostopImmediateTap==='1')return null;
+    if(button.closest('#playerHand,.table,.game-stage'))return null;
+    return button;
+  };
+  document.addEventListener('click',event=>{
+    const button=event.target?.closest?.('button');
+    if(button===immediateUiProgrammaticTarget)return;
+    if(event.isTrusted&&button===immediateUiSuppressTarget&&Date.now()<immediateUiSuppressUntil){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+  },true);
+  document.addEventListener('touchstart',event=>{
+    if(event.touches.length!==1){immediateUiPress=null;return;}
+    const button=fastUiButton(event.target);if(!button){immediateUiPress=null;return;}
+    const touch=event.touches[0];
+    immediateUiPress={button,id:touch.identifier,x:touch.clientX,y:touch.clientY};
+    button.style.touchAction='manipulation';
+  },{capture:true,passive:true});
+  document.addEventListener('touchend',event=>{
+    const press=immediateUiPress;immediateUiPress=null;if(!press)return;
+    const touch=[...event.changedTouches].find(item=>item.identifier===press.id);
+    if(!touch||fastUiButton(event.target)!==press.button)return;
+    if(Math.hypot(touch.clientX-press.x,touch.clientY-press.y)>22)return;
+    event.preventDefault();event.stopPropagation();
+    immediateUiSuppressTarget=press.button;immediateUiSuppressUntil=Date.now()+450;
+    immediateUiProgrammaticTarget=press.button;
+    try{press.button.click();}finally{immediateUiProgrammaticTarget=null;}
+  },{capture:true,passive:false});
+  document.addEventListener('touchcancel',()=>{immediateUiPress=null;},{capture:true,passive:true});
   function installImmediateDesktopAccordion(button,section){
     if(!button)return;
     button.addEventListener('pointerdown',event=>{
@@ -823,13 +860,26 @@
     overlay.style.setProperty('--gostop-menu-account-top',`${accountTop}px`);
     overlay.classList.add('stable-mobile-menu-anchors');
   }
+  let mobileKeyboardTransitionUntil=0;
+  function textEntryFocused(){
+    const active=document.activeElement;
+    return !!active?.matches?.('input,textarea,select,[contenteditable="true"]');
+  }
+  function keyboardViewportTransitionActive(){
+    return textEntryFocused()||Date.now()<mobileKeyboardTransitionUntil;
+  }
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))mobileKeyboardTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
+  document.addEventListener('focusout',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))mobileKeyboardTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
   function scheduleStableMobileMenuAnchors(){
+    // Opening/closing the Android keyboard changes visualViewport dimensions.
+    // Do not collapse/re-expand the entire menu during either edge of that transition.
+    if(keyboardViewportTransitionActive())return;
     if(stableMenuAnchorFrame)cancelAnimationFrame(stableMenuAnchorFrame);
     stableMenuAnchorFrame=requestAnimationFrame(lockStableMobileMenuAnchors);
   }
   globalThis.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
   globalThis.addEventListener?.('orientationchange',scheduleStableMobileMenuAnchors);
-  globalThis.visualViewport?.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
+  globalThis.visualViewport?.addEventListener?.('resize',()=>{if(!keyboardViewportTransitionActive())scheduleStableMobileMenuAnchors();});
 
   const freePanel=document.createElement('section');freePanel.id='freeFriendPanel';freePanel.className='online-lobby-panel';freePanel.hidden=true;freePanel.innerHTML=`<div class="online-lobby-card"><h2 id="freeFriendTitle">Play With Friend</h2><p id="freeFriendHelp" class="account-help">Create a room and send your friend the share link. Friendly Gaming never uses Wallet Coins or leaderboards.</p><div class="online-method"><strong id="freeRoomShareTitle">Share Link</strong><div class="online-existing-controls"><button id="freeCreateRoomBtn" class="glass-btn strong" type="button">Create Room / Share Link</button><div id="freeShareLinkBox" class="room-share-link" hidden><a id="freeShareLink" target="_blank" rel="noopener"></a><div class="friendly-share-actions"><button id="freeShareBtn" type="button">Share Invite</button><button id="freeCopyLinkBtn" type="button">Copy Link</button></div></div><p id="freeOnlineStatus" class="online-status" role="status" aria-live="polite"></p></div></div><div class="online-lobby-actions"><button id="freeFriendClose" type="button">Return</button></div></div>`;document.body.appendChild(freePanel);
 
@@ -839,6 +889,49 @@
   const socialScreen=document.createElement('section');socialScreen.id='socialScreen';socialScreen.className='social-screen';socialScreen.hidden=true;socialScreen.innerHTML=`<div class="social-card"><header class="social-header"><div><h1>Friends</h1><p id="socialSummary">Stay connected with people you play on GoStop Live.</p></div><button id="socialCloseTop" type="button" aria-label="Close">×</button></header><nav class="social-tabs" aria-label="Friends views"><button type="button" data-social-tab="friends">Friends</button><button type="button" data-social-tab="requests">Requests <span id="friendRequestBadge" class="social-badge" hidden></span></button><button type="button" data-social-tab="history">History</button><button type="button" data-social-tab="recommendations">Recommended</button><button type="button" data-social-tab="search">Search</button></nav><div id="socialSearchBox" class="social-search-box" hidden><input id="socialSearchInput" autocomplete="off" placeholder="Search Player ID / nickname"><button id="socialSearchBtn" type="button">Search</button></div><p id="socialStatus" class="account-help" role="status"></p><div id="socialList" class="social-list"></div><footer class="online-lobby-actions"><button id="socialClose" type="button">Return</button></footer></div>`;document.body.appendChild(socialScreen);
 
   const authDialog=document.createElement('dialog');authDialog.id='accountDialog';authDialog.className='gostop-account-dialog';authDialog.innerHTML=`<div class="dialog-card account-dialog-card"><button class="dialog-close" id="accountDialogClose" type="button" aria-label="Close">×</button><h2>Log In</h2><div class="account-tabs"><button id="loginTab" class="glass-btn strong" type="button">Log In</button><button id="registerTab" class="glass-btn" type="button">Create ID</button></div><form id="loginForm" class="account-form"><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="go-btn" type="submit">Log In</button></form><form id="registerForm" class="account-form" hidden><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Nickname<input name="nickname" maxlength="16" required></label><label>Password<input name="password" type="password" autocomplete="new-password" required></label><label>Confirm Password<input name="confirmPassword" type="password" autocomplete="new-password" required></label><p class="account-help">Use at least 8 characters. Common passwords such as 12345 or qwerty are not accepted.</p><button class="go-btn" type="submit">Register</button></form><p id="accountError" class="account-error" role="alert"></p></div>`;document.body.appendChild(authDialog);
+  const mobileInputStyle=document.createElement('style');
+  mobileInputStyle.textContent=`
+    body:has(dialog[open]) .main-menu-hwatu-card,
+    body:has(dialog[open]) .main-menu-floor-card,
+    body:has(dialog[open]) .menu-category-toggle::before{animation-play-state:paused!important}
+    @media(max-width:700px){
+      html.gostop-keyboard-active dialog.gostop-account-dialog[open]{
+        position:fixed!important;left:50%!important;right:auto!important;bottom:auto!important;
+        top:calc(var(--gostop-vv-top,0px) + 6px)!important;transform:translateX(-50%)!important;margin:0!important;
+        width:min(96vw,480px)!important;max-height:calc(var(--gostop-vv-height,100dvh) - 12px)!important;overflow:auto!important;
+      }
+      html.gostop-keyboard-active dialog.gostop-account-dialog[open] .account-dialog-card{
+        width:100%!important;max-height:none!important;overflow:visible!important;padding-bottom:18px!important;
+      }
+      html.gostop-keyboard-active .main-menu-hwatu-card,
+      html.gostop-keyboard-active .main-menu-floor-card,
+      html.gostop-keyboard-active .menu-category-toggle::before{animation-play-state:paused!important}
+    }
+  `;
+  document.head.appendChild(mobileInputStyle);
+  let keyboardViewportFrame=0,ensureKeyboardInputVisible=false;
+  function syncKeyboardViewport(){
+    keyboardViewportFrame=0;
+    const vv=globalThis.visualViewport;
+    const active=document.activeElement,editing=!!active?.matches?.('input,textarea,select,[contenteditable="true"]');
+    const height=Math.max(1,Math.round(vv?.height||globalThis.innerHeight||document.documentElement.clientHeight||1));
+    const top=Math.max(0,Math.round(vv?.offsetTop||0));
+    document.documentElement.style.setProperty('--gostop-vv-height',height+'px');
+    document.documentElement.style.setProperty('--gostop-vv-top',top+'px');
+    document.documentElement.classList.toggle('gostop-keyboard-active',editing&&globalThis.innerWidth<=700);
+    if(ensureKeyboardInputVisible&&editing&&active?.closest?.('dialog[open]'))requestAnimationFrame(()=>active.scrollIntoView?.({block:'center',inline:'nearest',behavior:'auto'}));
+    ensureKeyboardInputVisible=false;
+  }
+  function scheduleKeyboardViewportSync(ensureVisible=false){
+    ensureKeyboardInputVisible=ensureKeyboardInputVisible||ensureVisible;
+    if(keyboardViewportFrame)cancelAnimationFrame(keyboardViewportFrame);
+    keyboardViewportFrame=requestAnimationFrame(syncKeyboardViewport);
+  }
+  globalThis.visualViewport?.addEventListener?.('resize',()=>scheduleKeyboardViewportSync(true),{passive:true});
+  globalThis.visualViewport?.addEventListener?.('scroll',()=>scheduleKeyboardViewportSync(false),{passive:true});
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))scheduleKeyboardViewportSync(true);},{passive:true});
+  document.addEventListener('focusout',()=>requestAnimationFrame(()=>scheduleKeyboardViewportSync(false)),{passive:true});
+  syncKeyboardViewport();
   const registrationPolicyDialog=document.createElement('dialog');registrationPolicyDialog.id='registrationPolicyDialog';registrationPolicyDialog.className='gostop-account-dialog';registrationPolicyDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="registrationPolicyTitle">Connection Protection</h2><p id="registrationPolicyText" style="white-space:pre-line;text-align:left"></p><button id="registrationPolicyOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(registrationPolicyDialog);
   const successDialog=document.createElement('dialog');successDialog.className='gostop-account-dialog';successDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2>Account Registered Successfully</h2><p>You received 100 signup bonus coins + 100 daily login bonus coins.</p><div class="decision-actions"><button id="registrationAddFriend" class="glass-btn" type="button" hidden>Add Inviter as Friend</button><button id="registrationCompetitive" class="go-btn" type="button" hidden>Try Competitive Gaming</button><button id="registrationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(successDialog);
   const verificationDialog=document.createElement('dialog');verificationDialog.className='gostop-account-dialog';verificationDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="verificationTitle">Verify Your Email</h2><p id="verificationText"></p><strong id="verificationEmail"></strong><p id="verificationStatus" class="account-help" role="status"></p><div class="decision-actions"><button id="verificationResend" class="go-btn" type="button">Resend Verification Email</button><button id="verificationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(verificationDialog);
@@ -1684,24 +1777,22 @@
     try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode,{resumeExisting:true}));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
     catch(error){returnReconnectState=null;returnReconnectBusy=false;closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);await refreshAccount();revealCurrentMainMenu();}
   });
-  $('returnGameNo').addEventListener('click',async()=>{
+  $('returnGameNo').addEventListener('click',()=>{
     if(activeReconnectPending()){void finishReconnectAsAbandonment();return;}
     const active=returnReconnectState||account?.activeRanked;
     const no=$('returnGameNo');if(no.disabled)return;no.disabled=true;
-    if(active?.mode==='solo'&&active?.roomCode){
-      if(account)account={...account,activeRanked:null};
-      try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
-      syncRankedButtons();renderAccountBox();patchGameIdentity();
-      try{
-        const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
-        if(data?.account)account=data.account;
-      }catch(error){showToast(localizedError(error),6000);}
-    }
     closeReturnGameDialog();
-    await refreshAccount();
-    syncRankedButtons();renderAccountBox();patchGameIdentity();
-    revealCurrentMainMenu();
-    no.disabled=false;
+    if(account)account={...account,activeRanked:null};
+    try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+    syncRankedButtons();renderAccountBox();patchGameIdentity();revealCurrentMainMenu();no.disabled=false;
+    void (async()=>{
+      if(active?.mode==='solo'&&active?.roomCode){
+        try{const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});if(data?.account)account=data.account;}
+        catch(error){showToast(localizedError(error),6000);}
+      }
+      try{await refreshAccount();}catch(_){}
+      syncRankedButtons();renderAccountBox();patchGameIdentity();
+    })();
   });
   $('returnGameOk').addEventListener('click',async()=>{const ok=$('returnGameOk');if(ok.disabled)return;ok.disabled=true;closeReturnGameDialog();await refreshAccount();revealCurrentMainMenu();ok.disabled=false;});
   returnGameDialog.addEventListener('cancel',event=>event.preventDefault());
