@@ -123,6 +123,17 @@
     }
   }
 
+  function requestActiveGameDecisionFullscreen(doc=document){
+    if(!isMobileFullscreenEligible(globalThis))return false;
+    // Yes resumes the competitive room; No returns to the main menu.
+    // Both choices are user gestures and must request fullscreen NOW, before
+    // any async join, dialog close, or main-menu boot gate can consume activation.
+    initialMenuGateComplete=true;
+    mainMenuAutoAttempted=true;
+    mainMenuFullscreenArmed=false;
+    return requestGameFullscreen(doc,{recovery:true});
+  }
+
   function isGameplayInteraction(target){
     return !!target?.closest?.('.app-shell');
   }
@@ -134,12 +145,20 @@
 
   function handleFullscreenClick(event){
     if(!isMobileFullscreenEligible(globalThis))return;
+    // The active-game dialog may be the first interactive surface on return.
+    // This capture-phase click also runs for immediate touchend -> button.click().
+    if(event.target?.closest?.('#returnGameYes, #returnGameNo')){
+      requestActiveGameDecisionFullscreen(document);
+      return;
+    }
     const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement?.classList?.contains('gostop-performance-lite');
-    if(lite)return;
-    if(resumeFullscreenArmed&&isGameplayInteraction(event.target)&&!event.target?.closest?.('input,textarea,select,[contenteditable="true"]')){
+    // If Android denied the initial request, a later explicit menu/game tap can
+    // recover it, even on performance-lite devices. Never trigger on text input.
+    if(resumeFullscreenArmed&&(isGameplayInteraction(event.target)||isMainMenuInteraction(event.target,document))&&!event.target?.closest?.('input,textarea,select,[contenteditable="true"]')){
       requestGameFullscreen(document,{recovery:true});
       return;
     }
+    if(lite)return;
     if((mainMenuFullscreenArmed||isStartScreenButton(event.target,document))&&isMainMenuInteraction(event.target,document)){
       requestMainMenuFullscreen(document,{userGesture:true});
       return;
@@ -208,7 +227,7 @@
     document.head.appendChild(style);
   }
 
-  globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible,gateInitialMainMenuFullscreen});
+  globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,requestActiveGameDecisionFullscreen,isMobileFullscreenEligible,gateInitialMainMenuFullscreen});
   document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))textEntryTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
   document.addEventListener('focusout',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))textEntryTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
   document.addEventListener('click',handleFullscreenClick,{capture:true});
@@ -220,7 +239,7 @@
 
   if(globalThis.GOSTOP_TEST_MODE===true){
     globalThis.GOSTOP_FULLSCREEN_TEST_API=Object.freeze({
-      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,isTextEntryActive,
+      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,requestActiveGameDecisionFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,isTextEntryActive,
       handleFullscreenClick,handleFullscreenChange,handleOrientationChange,handleVisibilityChange,handleForegroundReturn,
       isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
       isTextEntryTransitionActive:()=>Date.now()<textEntryTransitionUntil,
