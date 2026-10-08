@@ -35,6 +35,18 @@ test('Language and notification controls live in Settings instead of the main me
   assert.doesNotMatch(panel,/enablePlayNotificationsBtn/);
 });
 
+test('Settings language picker stays inside the dialog with readable language buttons',()=>{
+  assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\{position:static!important/);
+  assert.match(client,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\[hidden\]\{display:none!important\}/);
+  assert.match(client,/\.language-menu button\[aria-current="true"\]/);
+  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  assert.match(app,/button\.dataset\.locale=locale/);
+  assert.match(app,/button\.setAttribute\('aria-current','false'\)/);
+  assert.match(app,/button\.dataset\.locale===presentation\.locale\?'true':'false'/);
+  assert.match(app,/languageBtn\.setAttribute\('aria-expanded'/);
+});
+
 test('rank zero displays Not Yet Ranked with a transient hover or focus explanation and leaderboard has no provisional P prefix',()=>{
   assert.match(client,/notYetRanked:'Not Yet Ranked'/);assert.match(client,/rankAfterTen:'User will be ranked after first 10 games played'/);
   assert.match(client,/function notYetRankedHtml\(\)/);assert.match(client,/class="not-yet-ranked" tabindex="0"/);assert.match(client,/class="rank-tooltip" role="tooltip"/);
@@ -262,9 +274,9 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261005-3/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261004-1/);
+  assert.match(index,/ranked-client\.js\?v=20261007-1/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
-  assert.match(index,/app\.js\?v=20261007-3/);
+  assert.match(index,/app\.js\?v=20261007-4/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
   assert.match(index,/presentation-plan\.js\?v=20260928-1/);
   assert.match(index,/diagnostics\.js\?v=20260925-2/);
