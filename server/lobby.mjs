@@ -58,10 +58,17 @@ export class Lobby{
   }
   restoreHibernatingClients(extraSocket=null){
     if(typeof this.state?.getWebSockets!=='function')return;
-    this.clients.clear();
     const sockets=[...this.state.getWebSockets()];
     if(extraSocket&&!sockets.includes(extraSocket))sockets.push(extraSocket);
-    for(const socket of sockets)this.registerHibernatingClient(socket);
+    // Preserve live clients and their pending message queues. Rehydrating every
+    // callback from the last socket attachment loses in-flight availability changes.
+    // Cold Durable Objects still restore from saved attachments normally.
+    const previous=this.clients,next=new Map();
+    for(const socket of sockets){
+      const client=previous.get(socket)||this.clientFromAttachment(socket,this.socketAttachment(socket));
+      if(client)next.set(socket,client);
+    }
+    this.clients=next;
   }
   syncClientAttachment(client){const attachment=this.clientAttachment(client);if(!attachment)return false;try{client.socket.serializeAttachment(attachment);return true;}catch(_){return false;}}
   syncAllClientAttachments(){for(const client of this.clients.values())this.syncClientAttachment(client);}
@@ -226,7 +233,10 @@ export class Lobby{
       this.send(client.socket,{type:'socialProfiles',players});return;
     }
     if(message.type==='socialChanged'){const accountId=String(message.accountId||'').trim();if(accountId&&accountId!==client.account.id)this.sendToAccount(accountId,{type:'socialChanged',fromAccountId:client.account.id});return;}
-    if(message.type==='autoMatchStart'){if(!this.clientCanReceiveChallenge(client)||client.twoPlayer)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'You are already in a two-player game.'});client.autoMatching=true;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;try{await this.tryAutoMatch(client);}catch(_){client.autoMatching=false;client.autoMatchCandidateId=null;this.send(client.socket,{type:'challengeError',code:'MATCHMAKING_UNAVAILABLE',message:'Auto Match is temporarily unavailable. Please try again.'});}await this.broadcastRecommendations().catch(()=>{});return;}
+    if(message.type==='autoMatchStart'){
+      if(client.twoPlayer)return this.send(client.socket,{type:'challengeError',code:'PLAYER_IN_GAME',message:'You have an active two-player game. Finish or leave it before Auto Match.'});
+      if(!this.clientCanReceiveChallenge(client))return this.send(client.socket,{type:'challengeError',code:'PLAYER_NOT_AVAILABLE',message:'Your online availability is still updating. Please try Auto Match again.'});
+      client.autoMatching=true;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;try{await this.tryAutoMatch(client);}catch(_){client.autoMatching=false;client.autoMatchCandidateId=null;this.send(client.socket,{type:'challengeError',code:'MATCHMAKING_UNAVAILABLE',message:'Auto Match is temporarily unavailable. Please try again.'});}await this.broadcastRecommendations().catch(()=>{});return;}
     if(message.type==='autoMatchNext'){if(!client.autoMatching)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'Auto Match is no longer active.'});client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();if(client.autoMatchCandidateId)client.autoMatchTried.add(client.autoMatchCandidateId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);await this.broadcastRecommendations();return;}
     if(message.type==='autoMatchAccept'){await this.acceptAutoMatchCandidate(client,message.accountId);await this.broadcastRecommendations();return;}
     if(message.type==='autoMatchCancel'){const pending=this.pendingChallengeFor(client.account.id);if(pending?.automatic)this.cancelPendingChallenge(pending,'Auto Match was cancelled.');client.autoMatching=false;client.autoMatchTried=new Set();client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchCancelled'});await this.broadcastRecommendations();return;}
