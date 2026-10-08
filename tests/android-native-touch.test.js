@@ -89,6 +89,44 @@ test('Android Chrome uses native touch: second tap commits, upward flick commits
 });
 
 
+test('S22-style hold then quick upward flick still commits while a slow drag does not',()=>{
+  const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
+  const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const touchDescriptor=Object.getOwnPropertyDescriptor(globalThis,'ontouchstart');
+  const performanceDescriptor=Object.getOwnPropertyDescriptor(globalThis,'performance');
+  let clock=0;
+  try{
+    Object.defineProperty(globalThis,'PointerEvent',{value:function PointerEvent(){},configurable:true});
+    Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:5},configurable:true});
+    Object.defineProperty(globalThis,'ontouchstart',{value:null,configurable:true});
+    Object.defineProperty(globalThis,'performance',{value:{now:()=>clock},configurable:true});
+
+    const h=mobileHarness();
+    assert.equal(plan.installHandFlickGestures(h.doc),true);
+    const touchStart=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
+    const touchMove=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[h.touch(id,x,y)],changedTouches:[]});
+    const touchEnd=(id,x,y)=>({...h.eventBase(),target:h.card,touches:[],changedTouches:[h.touch(id,x,y)]});
+
+    clock=0;h.fire('touchstart',touchStart(10,125,550));
+    clock=700;h.fire('touchmove',touchMove(10,126,538));
+    clock=755;h.fire('touchmove',touchMove(10,127,505));
+    clock=805;h.fire('touchend',touchEnd(10,128,465));
+    assert.deepEqual(h.activations,[{cardId:'m1-1',blank:false}],'stationary hold before a quick flick must not invalidate the flick');
+
+    clock=1000;h.fire('touchstart',touchStart(11,125,550));
+    clock=1350;h.fire('touchmove',touchMove(11,126,535));
+    clock=1700;h.fire('touchmove',touchMove(11,127,500));
+    clock=1705;h.fire('touchend',touchEnd(11,127,500));
+    assert.equal(h.activations.length,1,'a genuinely slow upward drag must still not submit');
+  }finally{
+    if(pointerDescriptor)Object.defineProperty(globalThis,'PointerEvent',pointerDescriptor);else delete globalThis.PointerEvent;
+    if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;
+    if(touchDescriptor)Object.defineProperty(globalThis,'ontouchstart',touchDescriptor);else delete globalThis.ontouchstart;
+    if(performanceDescriptor)Object.defineProperty(globalThis,'performance',performanceDescriptor);else delete globalThis.performance;
+  }
+});
+
+
 test('native-touch second tap still emits stable card activation when the rendered card disappears before commit',()=>{
   const pointerDescriptor=Object.getOwnPropertyDescriptor(globalThis,'PointerEvent');
   const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
