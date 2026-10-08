@@ -2324,6 +2324,18 @@ test('multiplayer flow UI and Go submission remain authoritative and fail closed
   assert.doesNotMatch(source,/onlineSubmit\(\{type:'newHand'\}/);
 });
 
+test('authoritative snapshots immediately close Go Stop resolved on another device',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const reconcile=source.slice(source.indexOf('function reconcileAuthoritativeDecisionDialogs'),source.indexOf('function clearOnlineGameplayPresentation'));
+  assert.match(reconcile,/type!==\'goStopDecision\'\)setDialog\(els\.decisionDialog,false\)/);
+  assert.match(reconcile,/shakeDecision/);
+  assert.match(reconcile,/bombDecision/);
+  const snapshotListener=source.slice(source.indexOf("adapter.addEventListener('snapshot'"),source.indexOf("adapter.addEventListener('actionAccepted'"));
+  assert.match(snapshotListener,/reconcileAuthoritativeDecisionDialogs\(event\.detail\.snapshot\?\.state\)/);
+  const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('function enterOnlineMatchView'));
+  assert.ok(transition.indexOf('reconcileAuthoritativeDecisionDialogs(incomingMapped.state)')<transition.indexOf('for(const step of plan.steps)'),'resolved choices must close before queued presentation animation');
+});
+
 test('Online result offers localized Quit Game while replay waiting has no quit control',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   const result=html.slice(html.indexOf('id="resultDialog"'),html.indexOf('id="goCallout"'));
@@ -2971,7 +2983,7 @@ test('Training Mode recognizes held plus claimable 5-BIRDIES potential without c
   assert.equal(route.veryStrong,false);
   assert.equal(route.strategic,true);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/Best plan: 5-BIRDIES/);
+  assert.match(opening,/Best strateg(?:y|ies): .*5-BIRDIES/);
   assert.doesNotMatch(opening,/secured|Priority:|Reserved rule:|opponent has captured none/i);
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
   const coach=source.slice(source.indexOf('function armTrainingCoach'),source.indexOf('function openingStarterMessage'));
@@ -2987,7 +2999,7 @@ test('Training Mode recognizes held plus claimable 5-BIRDIES potential without c
 });
 
 
-test('Opening Strategy reports Red Stripe locations separately for hand and table',()=>{
+test('Opening Strategy summarizes a live Red Stripe route without irrelevant total-Stripe bookkeeping',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m2-2'),card('m3-3')],
@@ -2996,18 +3008,14 @@ test('Opening Strategy reports Red Stripe locations separately for hand and tabl
   }));
   const route=api.trainingRibbonRoute('red');
   assert.equal(route.controlledCount,2);
-  assert.equal(route.playableHandCount,1);
-  assert.equal(route.tableClaimableCount,1);
-  assert.equal(route.capturedCount,0);
+  assert.equal(route.potentialCount,2);
+  assert.equal(route.strategic,true);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/Best plan: Red Stripe set \(Pine, Plum, Cherry\)/);
-  assert.match(opening,/you have 1 of these set Stripe in hand/);
-  assert.match(opening,/1 more set Stripe is on the table you can take now/);
-  assert.match(opening,/That puts 2 of the 3 scoring-set Stripes within immediate reach/);
-  assert.doesNotMatch(opening,/including 2 on the table|2 more set Stripes? (?:is|are) on the table/);
+  assert.match(opening,/Red Stripes \(Pine, Plum, Cherry\): 2 of the 3 set Stripes/);
+  assert.doesNotMatch(opening,/Stripe cards total|only .* belong|scoring-set Stripes within immediate reach/i);
 });
 
-test('Opening Strategy counts all Red Stripes in hand even when only one can be played immediately',()=>{
+test('Opening Strategy keeps all Red Stripe potential even when only one can be played immediately',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m3-2')],
@@ -3016,31 +3024,23 @@ test('Opening Strategy counts all Red Stripes in hand even when only one can be 
   }));
   const route=api.trainingRibbonRoute('red');
   assert.equal(route.inHandCount,2);
-  assert.equal(route.playableHandCount,1);
-  assert.equal(route.tableClaimableCount,1);
-  assert.equal(route.controlledCount,2);
   assert.equal(route.potentialCount,3);
+  assert.equal(route.strategic,true);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/you have 2 of these set Stripes in hand \(Pine, Plum\)/);
-  assert.match(opening,/1 of your in-hand set Stripe can be played onto a matching family on the table now/);
-  assert.match(opening,/1 more set Stripe is on the table you can take now/);
-  assert.match(opening,/That puts 2 of the 3 scoring-set Stripes within immediate reach/);
-  assert.doesNotMatch(opening,/you have 1 of these set Stripe in hand/);
+  assert.match(opening,/Red Stripes \(Pine, Plum, Cherry\): 3 of the 3 set Stripes/);
+  assert.match(opening,/can be acted on now/);
 });
 
-test('Opening Strategy distinguishes total Stripe cards from Red scoring-set Stripes',()=>{
+test('Opening Strategy never explains unrelated total Stripe count',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m1-3'),card('m3-2')],
     human:api.makePlayer({hand:[card('m1-2'),card('m3-3'),card('m12-3')]}),
     ai:api.makePlayer()
   }));
-  const route=api.trainingRibbonRoute('red');
-  assert.equal(route.inHandCount,1);
-  assert.equal((api.getState().human.hand||[]).filter(card=>card.type==='ribbon').length,2);
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/You have 2 Stripe cards total in hand, but only 1 belongs to this 3-card scoring set/);
-  assert.match(opening,/Red Stripe set \(Pine, Plum, Cherry\)/);
+  assert.match(opening,/Red Stripes/);
+  assert.doesNotMatch(opening,/Stripe cards total|only .* belong/i);
 });
 
 test('Training Mode distinguishes a possible Blue Stripe set from Blue Stripes that can actually be secured now',()=>{
@@ -3265,14 +3265,82 @@ test('Training opening recognizes simultaneous 5-BIRDIES and Bright routes and t
   assert.equal(profile.godoriRoute.strategic,true);
   assert.equal(profile.brightRoute.potentialCount,3);
   assert.equal(profile.brightRoute.strategic,true);
-  assert.equal(profile.primary,'godori');
+  assert.ok(profile.strategyOptions.some(option=>option.type==='godori'));
+  assert.ok(profile.strategyOptions.some(option=>option.type==='bright'));
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/Best plan: 5-BIRDIES/);
-  assert.match(opening,/Brights are also strong/);
+  assert.match(opening,/5-BIRDIES/);
+  assert.match(opening,/Brights/);
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m8-1');
   assert.equal(recommendation.target.id,'m8-2');
   assert.match(recommendation.reason,/5-BIRDIES/);
+});
+
+test('Opening Strategy shows Plain Stripes and Brights together instead of irrelevant total Stripe count',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m4-3'),card('m5-3'),card('m8-1')],
+    human:api.makePlayer({hand:[card('m4-2'),card('m5-2'),card('m1-1'),card('m3-1'),card('m8-3')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.ribbonRoutes.grass.strategic,true);
+  assert.equal(profile.brightRoute.strategic,true);
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/Plain Stripes/);
+  assert.match(opening,/Brights/);
+  assert.doesNotMatch(opening,/Best strategy: Singles|Stripe cards total|only .* belong/i);
+});
+
+test('Opening Strategy recognizes Red Stripes, Plain Stripes, and Brights in the same hand',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m8-1'),card('m11-1')],
+    human:api.makePlayer({
+      hand:[card('m1-2'),card('m2-2'),card('m4-2'),card('m5-2'),card('m3-1'),card('m8-3'),card('m11-2')]
+    }),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.ribbonRoutes.red.strategic,true);
+  assert.equal(profile.ribbonRoutes.grass.strategic,true);
+  assert.equal(profile.brightRoute.strategic,true);
+  const opening=api.trainingOpeningStrategy();
+  assert.match(opening,/Red Stripes/);
+  assert.match(opening,/Plain Stripes/);
+  assert.match(opening,/Brights/);
+  assert.doesNotMatch(opening,/Best strategy: Singles/);
+});
+
+test('Training takes the live Plum Bird Picture instead of a Plain-Stripe hand card onto a Vine Single',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m2-1'),card('m4-3'),card('m5-3')],
+    human:api.makePlayer({hand:[card('m2-2'),card('m4-2'),card('m5-2')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile();
+  assert.equal(profile.ribbonRoutes.grass.strategic,true);
+  assert.equal(profile.godoriRoute.alive,true);
+  const recommendation=api.trainingRecommendation();
+  assert.equal(recommendation.card.id,'m2-2');
+  assert.equal(recommendation.target.id,'m2-1');
+  assert.match(recommendation.reason,/5-BIRDIES Picture|highest-priority table card/);
+});
+
+test('With equally valuable Bright targets, Training uses the worse hand card first',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-1'),card('m3-1')],
+    human:api.makePlayer({hand:[card('m1-3'),card('m3-2')]}),
+    ai:api.makePlayer()
+  }));
+  const recommendation=api.trainingRecommendation();
+  assert.equal(api.trainingCapturePriority(api.trainingCandidate(card('m1-3'))),500);
+  assert.equal(api.trainingCapturePriority(api.trainingCandidate(card('m3-2'))),500);
+  assert.ok(api.trainingHandPreservationRisk(card('m1-3'))<api.trainingHandPreservationRisk(card('m3-2')));
+  assert.equal(recommendation.card.id,'m1-3');
+  assert.equal(recommendation.target.id,'m1-1');
 });
 
 test('Training never discards a Bright when another legal discard exists and prefers the statistically safer family',()=>{
@@ -3405,7 +3473,7 @@ test('Computer AI shares the two-in-hand family control priority and takes Iris 
   assert.equal(move.urgency.liveStripeTarget,true);
 });
 
-test('Training priority is unique Star hit first, unique Rose hit second, two-target Iris hit third',()=>{
+test('Training uses the worse hand card when unique table targets are equally valuable',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m6-3'),card('m5-3'),card('m5-1'),card('m10-3')],
@@ -3422,9 +3490,10 @@ test('Training priority is unique Star hit first, unique Rose hit second, two-ta
   assert.ok(star.score>rose.score,'Blue Stripe + only Star floor target must outrank two ordinary Rose Singles');
   assert.ok(rose.score>iris.score,'unique Rose hit must outrank Iris while a second Iris target remains');
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m10-2');
-  assert.equal(recommendation.target.id,'m10-3');
-  assert.match(recommendation.reason,/Stripe/);
+  assert.equal(recommendation.card.id,'m6-4');
+  assert.equal(recommendation.target.id,'m6-3');
+  assert.ok(api.trainingHandPreservationRisk(card('m6-4'),profile)<api.trainingHandPreservationRisk(card('m10-2'),profile));
+  assert.match(recommendation.reason,/Single|best available table capture/i);
   assert.doesNotMatch(recommendation.reason,/only .*target|computer can remove|current hit/i);
 });
 

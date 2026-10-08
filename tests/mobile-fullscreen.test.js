@@ -25,7 +25,7 @@ function loadFullscreen({width=390,height=844,touchPoints=1,coarse=true,overlayH
   };
   const documentElement={requestFullscreen,classList:{contains(){return false;}}};
   const document={
-    fullscreenElement,documentElement,
+    fullscreenElement,documentElement,visibilityState:'visible',
     head:{appendChild(){}},
     createElement(){return {dataset:{}};},
     querySelector(){return null;},
@@ -171,6 +171,74 @@ test('mobile boot gate retries fullscreen instead of revealing the menu after a 
   assert.equal(api.isInitialMenuGateComplete(),true);
 });
 
+test('returning from background re-enters fullscreen or stays armed for the next S22 interaction',async()=>{
+  let calls=0,allow=false;
+  const {api,listeners,document}=loadFullscreen({overlayHidden:true,requestFullscreen:()=>{
+    calls++;
+    if(!allow)return Promise.reject(new Error('needs user activation'));
+    document.fullscreenElement=document.documentElement;
+    return Promise.resolve();
+  }});
+  const gameTarget={closest(selector){return selector==='.app-shell'?this:null;}};
+
+  document.fullscreenElement=document.documentElement;
+  listeners.fullscreenchange.fn();
+  document.visibilityState='hidden';
+  listeners.visibilitychange.fn();
+  document.fullscreenElement=null;
+  listeners.fullscreenchange.fn();
+  assert.equal(api.isResumeFullscreenArmed(),true);
+
+  document.visibilityState='visible';
+  listeners.visibilitychange.fn();
+  assert.equal(calls,1,'foreground return immediately attempts fullscreen');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isResumeFullscreenArmed(),true,'failed automatic request remains armed');
+
+  allow=true;
+  listeners.click.fn({target:gameTarget});
+  assert.equal(calls,2,'first gameplay tap retries fullscreen with user activation');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isResumeFullscreenArmed(),false);
+});
+
+test('keyboard-focused input and keyboard-hide grace do not trigger fullscreen recovery or synthetic layout refresh',()=>{
+  let fullscreenCalls=0,resizeEvents=0;
+  const {api,listeners,windowListeners,document,context}=loadFullscreen({requestFullscreen:()=>{fullscreenCalls++;return Promise.resolve();}});
+  const inputActive={matches(selector){return selector.includes('input');}};
+  document.activeElement=inputActive;
+  context.dispatchEvent=()=>{resizeEvents++;};
+  listeners.focusin.fn({target:inputActive});
+  assert.equal(api.isTextEntryTransitionActive(),true);
+
+  document.fullscreenElement=document.documentElement;
+  listeners.fullscreenchange.fn();
+  assert.equal(resizeEvents,0,'fullscreen change while typing must not force a whole-app resize');
+  document.fullscreenElement=null;
+
+  // Simulate background/foreground recovery being armed, then tapping an input.
+  document.visibilityState='hidden';
+  listeners.visibilitychange.fn();
+  document.visibilityState='visible';
+  windowListeners.focus.fn();
+  assert.equal(fullscreenCalls,0,'window focus while an input is active must not request fullscreen');
+
+  const input={closest(selector){
+    if(selector==='.app-shell')return this;
+    if(selector.includes('input'))return this;
+    return null;
+  }};
+  listeners.click.fn({target:input});
+  assert.equal(fullscreenCalls,0,'tapping a text input must not fight the keyboard with fullscreen recovery');
+  assert.equal(api.isResumeFullscreenArmed(),true);
+
+  document.activeElement={matches(){return false;}};
+  listeners.focusout.fn({target:inputActive});
+  listeners.fullscreenchange.fn();
+  assert.equal(resizeEvents,0,'keyboard-hide grace must also suppress the compositor resize flash');
+  assert.equal(api.isTextEntryTransitionActive(),true);
+});
+
 test('rotation-related fullscreen exit is re-armed only for the next gameplay gesture',()=>{
   let calls=0;
   const {api,listeners,windowListeners,document}=loadFullscreen({overlayHidden:true,requestFullscreen:()=>{calls++;return Promise.resolve();}});
@@ -194,6 +262,15 @@ test('rotation-related fullscreen exit is re-armed only for the next gameplay ge
   assert.equal(api.isOrientationRecoveryArmed(),false);
 });
 
+test('fullscreen transitions do not synthesize duplicate resize flashes and splash waits for viewport settle',()=>{
+  assert.match(source,/finishAfterViewportSettles/);
+  const change=source.slice(source.indexOf('function handleFullscreenChange'),source.indexOf('function handleOrientationChange'));
+  assert.doesNotMatch(change,/refreshLayout\(\)/);
+  const visibility=source.slice(source.indexOf('function handleVisibilityChange'),source.indexOf('if\(!document\.querySelector'));
+  assert.match(visibility,/hiddenWhileUiModal/);
+  assert.doesNotMatch(visibility,/refreshLayout\(\)/);
+});
+
 test('fullscreen integration preserves gameplay click propagation while splash touch owns only its start gesture',()=>{
   assert.doesNotMatch(source,/stopPropagation\s*\(/);
   assert.match(source,/const nativeTouch=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
@@ -203,6 +280,9 @@ test('fullscreen integration preserves gameplay click propagation while splash t
   assert.match(source,/addEventListener\('click',handleFullscreenClick,\{capture:true\}\)/);
   assert.match(source,/fullscreenchange/);
   assert.match(source,/orientationchange/);
+  assert.match(source,/visibilitychange/);
+  assert.match(source,/pageshow/);
+  assert.match(source,/resumeFullscreenArmed/);
   assert.match(source,/orientationRecoveryArmed/);
   assert.match(source,/requestMainMenuFullscreen/);
   assert.match(source,/mainMenuFullscreenArmed/);
@@ -229,7 +309,7 @@ test('fullscreen integration preserves gameplay click propagation while splash t
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
-  assert.match(index,/<script src="runtime-config\.js\?v=20260925-6"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20260925-9"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20261004-1"><\/script>/);
+  assert.match(index,/<script src="runtime-config\.js\?v=20260925-6"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20261008-2"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20261008-4"><\/script>/);
   assert.match(source,/requestFullscreen\(\{navigationUI:'hide'\}\)/);
   assert.doesNotMatch(runtimeConfig,/mobile-fullscreen\.js/);
   assert.doesNotMatch(generator,/mobile-fullscreen\.js/);

@@ -72,8 +72,7 @@ test('mobile leaderboards swipe horizontally in attract and manual views while o
   assert.match(board,/function leaderboardSwipeEnabled\(\)\{return !leaderboardScreen\.hidden&&globalThis\.matchMedia\?\.\('\(max-width:760px\)'\)\.matches;\}/);
   assert.match(board,/leaderboardScreen\.addEventListener\('touchstart'/);
   assert.match(board,/leaderboardScreen\.addEventListener\('touchend'/);
-  assert.match(board,/Math\.abs\(dx\)<48/);
-  assert.match(board,/Math\.abs\(dx\)<Math\.abs\(dy\)\*1\.15/);
+  assert.match(board,/isSwipe=elapsed<=900&&Math\.abs\(dx\)>=48&&Math\.abs\(dx\)>=Math\.abs\(dy\)\*1\.15/);
   assert.match(board,/nextLeaderboard\(dx<0\?1:-1\)/);
   assert.match(source,/Date\.now\(\)<leaderboardSwipeSuppressClickUntil/);
   assert.match(source,/leaderboardScreen\.classList\.toggle\('attract-mode',attractMode\)/);
@@ -115,8 +114,10 @@ test('main-menu attract mode starts fifteen seconds after the visible menu becom
   assert.match(source,/void openLeaderboard\(true\)/);
   assert.doesNotMatch(source,/clearInterval\(attractTimer\)/);
   assert.match(source,/lastMenuActivityAt=Date\.now\(\);startAttractWatcher\(\)/);
-  assert.match(source,/if\(event\.isTrusted&&!attractMode&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
-  assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;void prepareNotificationRegistration\(\);void watchNotificationPermission\(\);authRestorePromise=refreshAccount\(\)/);assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false/);assert.doesNotMatch(source,/resumeActiveRankedRoom/);
+  assert.match(source,/if\(!event\.isTrusted\)return;if\(attractMode&&!leaderboardScreen\.hidden&&!globalThis\.goStopOnlineSession\)\{[^]*?closeLeaderboard\(true\);return;\}if\(mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
+  assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;void prepareNotificationRegistration\(\);void watchNotificationPermission\(\);authRestorePromise=refreshAccount\(\)/);
+  assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true'[\s\S]*stablePortrait[\s\S]*overlay\.style\.visibility='hidden';overlay\.hidden=false;lockStableMobileMenuAnchors\(\);overlay\.style\.visibility=''/);
+  assert.doesNotMatch(source,/resumeActiveRankedRoom/);
   assert.match(docs,/After 15 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 15 seconds and repeats/);
 });
 test('inactivity warning dismissal is sticky for the current warning while server countdown continues',()=>{
@@ -238,7 +239,7 @@ test('room wallet mismatch refreshes the authoritative account without directly 
   const ack=source.slice(source.indexOf('async function acknowledgeAccountNotice'),source.indexOf('function showRankedEntryNotice'));
   assert.match(ack,/captureAccountPayload\(data\)/);
 });
-test('attract idle resets only on trusted user input',()=>{assert.match(source,/pointerdown',event=>\{if\(event\.isTrusted/);assert.match(source,/if\(event\.isTrusted&&mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);});
+test('attract idle resets only on trusted user input and exits immediately on pointerdown',()=>{assert.match(source,/pointerdown',event=>\{if\(!event\.isTrusted\)return/);assert.match(source,/if\(mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);assert.match(source,/attractMode&&!leaderboardScreen\.hidden[^]*?closeLeaderboard\(true\)/);});
 
 test('pending daily bonus never masks the authoritative Wallet or replays after acknowledgement',()=>{
   const display=source.slice(source.indexOf('function pendingDailyNotice'),source.indexOf('function saveSession'));
@@ -362,9 +363,10 @@ test('main menu is a polished balanced accordion lobby with compact choices, cen
   assert.doesNotMatch(source,/\.menu-category-toggle,\.menu-category-chevron,\.menu-utility\{transition:none!important\}/);
   assert.match(source,/touch-action:manipulation/);
   assert.match(source,/@media\(max-width:760px\)\{\.solo-start-overlay\{[^]*?min-height:100dvh!important[^]*?align-content:center!important[^]*?place-content:center!important/);
+  assert.match(source,/\.main-menu-title\{[^]*?width:max-content!important[^]*?white-space:nowrap!important[^]*?text-align:center!important/);
   assert.match(source,/\.gostop-main-menu\.main-menu-accordion:before\{content:none!important/);
   assert.match(source,/#accountMenuIdentity\{display:grid;grid-template-columns:minmax\(180px,1fr\) auto auto auto/);
-  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20261004-1/);
+  assert.match(source,/padding:clamp\(42px,5vh,58px\) clamp\(16px,3vw,42px\) 30px!important/);assert.match(source,/\.solo-start-overlay \.menu-category-title\{font:800 clamp\(36px,3\.05vw,42px\)[^]*?white-space:nowrap/);assert.match(source,/@media\(max-width:760px\)[^]*?\.menu-category-toggle\{min-height:56px[^]*?\.solo-start-overlay \.menu-category-title\{font-size:clamp\(24px,6vw,30px\)!important/);assert.match(html,/ranked-client\.js\?v=20261008-4/);
 });
 
 test('Friendly Play With Friend launches through a separate link-only non-ranked room flow',()=>{
@@ -443,7 +445,9 @@ test('root URL offers a Yes/No continuation dialog for another device and shows 
   assert.match(boot,/returnGameCountdown'\)\.hidden=!activeReconnectPending\(\)/);
   assert.match(boot,/returnReconnectTimer=setInterval\(updateReturnReconnectCountdown,250\)/);
   assert.match(boot,/\$\('returnGameYes'\)\.addEventListener\('click'[\s\S]*bridge=>bridge\.joinCompetitiveRoom\(active\.roomCode,\{resumeExisting:true\}\)/);
-  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',async\(\)=>\{[\s\S]*if\(activeReconnectPending\(\)\)\{void finishReconnectAsAbandonment\(\);return;\}/);
+  assert.match(boot,/\$\('returnGameNo'\)\.addEventListener\('click',\(\)=>\{[\s\S]*if\(activeReconnectPending\(\)\)\{void finishReconnectAsAbandonment\(\);return;\}/);
+  const noHandler=boot.slice(boot.indexOf("$('returnGameNo').addEventListener"),boot.indexOf("$('returnGameOk').addEventListener"));
+  assert.ok(noHandler.indexOf('closeReturnGameDialog()')<noHandler.indexOf("api('/api/solo/leave-for-challenge'"),'Continue No must close immediately before server cleanup');
   assert.match(boot,/function showReconnectAbandonmentOutcome\(result\)[\s\S]*returnGameDialog\.dataset\.outcome='1'[\s\S]*returnGameCountdown'\)\.hidden=true[\s\S]*returnGameActions'\)\.hidden=true[\s\S]*returnGameOk'\)\.hidden=false/);
   assert.match(boot,/\/api\/rooms\/\$\{active\.roomCode\}\/decline-reconnect/);
   assert.match(boot,/if\(promptActiveRankedGameIfNeeded\(\)\)return;revealCurrentMainMenu\(\)/);

@@ -26,7 +26,7 @@ test('mobile main menu keeps collapsed top controls and expanded Player info on 
   assert.match(anchors,/setMenuSection\('friendly'\)[^]*accountBox\.getBoundingClientRect\(\)\.top-overlayRect\.top/);
   assert.match(anchors,/--gostop-menu-shell-top/);
   assert.match(anchors,/--gostop-menu-account-top/);
-  assert.match(ranked,/overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false;scheduleStableMobileMenuAnchors\(\)/);
+  assert.match(ranked,/overlay\.dataset\.currentMenuReady='true'[^]*?stablePortrait[^]*?overlay\.style\.visibility='hidden';overlay\.hidden=false;lockStableMobileMenuAnchors\(\);overlay\.style\.visibility=''/);
   assert.match(ranked,/\.stable-mobile-menu-anchors \.gostop-main-menu\.main-menu-accordion\.has-expanded-section\{padding:7px!important;gap:5px!important\}/);
 });
 
@@ -79,7 +79,7 @@ test('Training strategy stays until user dismissal and gives concise tactical re
   assert.match(app,/trainingOpeningDismissLayer\.className='training-opening-dismiss-layer'/);
   assert.match(app,/Tap or click anywhere when you are ready to continue/);
   assert.match(app,/await showTrainingOpeningStrategy\(openingAdvice\)/);
-  assert.match(app,/Best plan:/);
+  assert.match(app,/Best strateg(?:y|ies):/);
   assert.match(app,/const action=best\.target\?'Play '/);
   assert.doesNotMatch(app,/\bI would\b/i);
   assert.doesNotMatch(app,/Reserved rule:/);

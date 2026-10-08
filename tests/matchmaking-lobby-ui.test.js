@@ -35,6 +35,80 @@ test('Language and notification controls live in Settings instead of the main me
   assert.doesNotMatch(panel,/enablePlayNotificationsBtn/);
 });
 
+test('deployed game never loads the DIAG control and diagnostics require explicit localhost opt-in',()=>{
+  const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const diagnostics=fs.readFileSync(new URL('../diagnostics.js',import.meta.url),'utf8');
+  assert.doesNotMatch(index,/diagnostics\.js/);
+  assert.doesNotMatch(index,/gostopDiagToggle|>DIAG</);
+  assert.doesNotMatch(diagnostics,/hostname\.endsWith\('\.vercel\.app'\)/);
+  assert.match(diagnostics,/localHost&&params\.get\('diag'\)==='1'/);
+});
+
+test('Settings interactions avoid blocking work before visual feedback',()=>{
+  assert.match(client,/\.settings-dialog::backdrop\{[^}]*backdrop-filter:none!important/);
+  assert.match(client,/function openSettings\(\)\{languageMenu\.hidden=true;if\(!settingsDialog\.open\)settingsDialog\.showModal\(\);setTimeout\(syncNotificationButton,0\);\}/);
+  assert.match(client,/notificationRegistrationPromise/);
+  const enableStart=client.indexOf('async function enablePlayNotifications()');
+  const enableEnd=client.indexOf('async function togglePlayNotifications()',enableStart);
+  const enableSource=client.slice(enableStart,enableEnd);
+  assert.ok(enableSource.indexOf('Notification.requestPermission()')<enableSource.indexOf('finishEnablingNotifications()'),'permission prompt must happen before registration completion work');
+  assert.doesNotMatch(enableSource,/await prepareNotificationRegistration\(\)/);
+  assert.match(client,/new MutationObserver\([^]*?scheduleRankedLocaleApply\(\)/);
+  assert.match(app,/function scheduleLocaleWork\(locale\)/);
+  assert.match(app,/requestAnimationFrame\(afterPaint\)/);
+  assert.match(app,/if\(els\.howToDialog\?\.open\)renderTutorialCards\(\)/);
+  assert.match(app,/if\(state&&els\.soloStartOverlay\?\.hidden!==false\)render\(\)/);
+});
+
+test('language highlight and dialog taps respond before deferred work',()=>{
+  const styles=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  assert.match(styles,/dialog::backdrop\{[^}]*backdrop-filter:none/);
+  assert.match(styles,/dialog button,\.language-menu button\{touch-action:manipulation/);
+  const localeStart=app.indexOf('function setLocale(locale)');
+  const localeEnd=app.indexOf('function refreshModeLocalizedLabels',localeStart);
+  const localeSource=app.slice(localeStart,localeEnd);
+  assert.ok(localeSource.indexOf("setAttribute('aria-current'")<localeSource.indexOf('scheduleLocaleWork(presentation.locale)'),'selected-language highlight must update before deferred locale work');
+  const scheduleStart=app.indexOf('function scheduleLocaleWork(locale)');
+  const scheduleEnd=app.indexOf('function setLocale(locale)',scheduleStart);
+  const scheduleSource=app.slice(scheduleStart,scheduleEnd);
+  assert.match(scheduleSource,/requestAnimationFrame\(afterPaint\)/);
+  assert.match(scheduleSource,/localStorage\.setItem\('gostop-language',locale\)/);
+  assert.match(scheduleSource,/document\.documentElement\.lang=locale/);
+});
+
+test('mobile non-game UI buttons use immediate touch activation and stable keyboard sheet',()=>{
+  const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.match(client,/button\.dataset\.gostopImmediateTap='1'/);
+  assert.match(client,/const fastUiButton=target=>/);
+  assert.match(client,/document\.addEventListener\('touchend'[^]*?press\.button\.click\(\)/);
+  assert.match(client,/function keyboardViewportTransitionActive\(\)/);
+  assert.match(client,/mobileKeyboardTransitionUntil=Date\.now\(\)\+1200/);
+  assert.match(client,/if\(keyboardViewportTransitionActive\(\)\)return;/);
+  assert.match(client,/gostop-mobile-ui-fast/);
+  assert.match(client,/#accountDialog\[open\]/);
+  assert.match(client,/height:min\(48svh,420px\)!important/);
+  assert.match(client,/#accountDialog::backdrop\{background:#14261d!important/);
+  assert.match(client,/function ensureFocusedInputVisible\(\)/);
+  assert.match(client,/container\.scrollTop\+=rect\.top-desiredTop/);
+  assert.match(client,/body:has\(dialog\[open\]\)[^]*?animation-play-state:paused!important/);
+  assert.match(client,/globalThis\.addEventListener\?\.\('orientationchange'/);
+  assert.doesNotMatch(client,/globalThis\.addEventListener\?\.\('resize',scheduleStableMobileMenuAnchors\)/);
+  assert.match(client,/if\(attractMode&&!leaderboardScreen\.hidden&&!globalThis\.goStopOnlineSession\)[^]*?closeLeaderboard\(true\)/);
+  assert.doesNotMatch(index,/interactive-widget=/);
+});
+
+test('Settings language picker stays inside the dialog with readable language buttons',()=>{
+  assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\{position:static!important/);
+  assert.match(client,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\[hidden\]\{display:none!important\}/);
+  assert.match(client,/\.language-menu button\[aria-current="true"\]/);
+  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  assert.match(app,/button\.dataset\.locale=locale/);
+  assert.match(app,/button\.setAttribute\('aria-current','false'\)/);
+  assert.match(app,/button\.dataset\.locale===presentation\.locale\?'true':'false'/);
+  assert.match(app,/languageBtn\.setAttribute\('aria-expanded'/);
+});
+
 test('rank zero displays Not Yet Ranked with a transient hover or focus explanation and leaderboard has no provisional P prefix',()=>{
   assert.match(client,/notYetRanked:'Not Yet Ranked'/);assert.match(client,/rankAfterTen:'User will be ranked after first 10 games played'/);
   assert.match(client,/function notYetRankedHtml\(\)/);assert.match(client,/class="not-yet-ranked" tabindex="0"/);assert.match(client,/class="rank-tooltip" role="tooltip"/);
@@ -257,17 +331,32 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 });
 
 
+test('S22 login and Friends search stay above the keyboard and login never reveals a blank handoff',()=>{
+  assert.match(client,/#accountDialog\[open\]:focus-within\{height:min\(48svh,420px\)!important/);
+  assert.match(client,/\.social-screen:focus-within,.online-lobby-panel:focus-within/);
+  assert.match(client,/function focusedInputScrollContainer/);
+  assert.match(client,/function ensureFocusedInputVisible/);
+  const login=client.slice(client.indexOf("$('loginForm').addEventListener"),client.indexOf('let pendingRegistrationBody'));
+  assert.match(login,/if\(!continuing\)revealCurrentMainMenu\(\)/);
+  assert.ok(login.indexOf('revealCurrentMainMenu()')<login.indexOf('authDialog.close()'));
+  const attractTouch=client.slice(client.indexOf("leaderboardScreen.addEventListener('touchend'"),client.indexOf("leaderboardBtn.addEventListener"));
+  assert.match(attractTouch,/isSwipe/);
+  assert.match(attractTouch,/if\(isSwipe\)[^]*?nextLeaderboard/);
+  assert.match(attractTouch,/if\(attractMode&&elapsed<=900&&travel<24\)[^]*?closeLeaderboard\(true\)/);
+  assert.doesNotMatch(client,/document\.addEventListener\('touchstart',event=>\{if\(!attractMode/);
+});
+
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20261007-1/);
-  assert.match(index,/styles\.css\?v=20261005-3/);
+  assert.match(index,/styles\.css\?v=20261008-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261004-1/);
+  assert.match(index,/ranked-client\.js\?v=20261008-4/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
-  assert.match(index,/app\.js\?v=20261007-2/);
+  assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
-  assert.match(index,/presentation-plan\.js\?v=20260928-1/);
-  assert.match(index,/diagnostics\.js\?v=20260925-2/);
+  assert.match(index,/presentation-plan\.js\?v=20261007-1/);
+  assert.doesNotMatch(index,/diagnostics\.js/);
   assert.match(index,/data-i18n="opponentEnded">Session Ended</);
 });
 
@@ -277,4 +366,26 @@ test('production browser REST and lobby transport use direct authority endpoints
   assert.ok(client.includes('fetch(apiUrl(path,method)'));
   assert.match(client,/function lobbyUrl\(\)\{const url=new URL\(\`\$\{baseUrl\}\/api\/lobby\/ws\`\)/);
   assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
+});
+
+
+test('Logout requires Yes confirmation and A17 player identity stays below expanded menu',()=>{
+  assert.match(client,/function confirmLogout\(\)/);
+  assert.match(client,/Are you sure you want to log out\?/);
+  assert.match(client,/id="logoutConfirmYes"/);
+  assert.match(client,/id="logoutConfirmNo"/);
+  assert.match(client,/logoutConfirmDialog\.querySelector\('#logoutConfirmNo'\)\.addEventListener\('click',\(\)=>logoutConfirmDialog\.close\(\)\)/);
+  assert.match(client,/logoutConfirmDialog\.querySelector\('#logoutConfirmYes'\)[^\n]*await logout\(\)/);
+  assert.match(client,/accountLogoutBtn'\)\?\.addEventListener\('click',confirmLogout\)/);
+  assert.match(client,/\.account-menu-box\{top:max\(var\(--gostop-menu-account-top\)/);
+  assert.match(client,/--gostop-expanded-menu-height/);
+  assert.match(client,/new ResizeObserver\(/);
+});
+
+
+test('mobile finished-game actions stack without overlapping',()=>{
+  const css=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  const mobileBlock=css.slice(css.indexOf('/* Mobile result actions must stack in normal flow, never overlap. */'));
+  assert.match(mobileBlock,/\.grand-result-card \.play-again-grand\{display:block;max-width:100%;margin:0 auto 12px\}/);
+  assert.match(mobileBlock,/\.grand-result-card \.result-quit-btn\{position:relative;inset:auto;display:block;margin:0 auto;min-height:42px/);
 });

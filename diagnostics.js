@@ -2,7 +2,8 @@
   'use strict';
 
   const params=new URLSearchParams(location.search);
-  const enabled=location.hostname.endsWith('.vercel.app')||params.get('diag')==='1';
+  const localHost=location.hostname==='localhost'||location.hostname==='127.0.0.1';
+  const enabled=localHost&&params.get('diag')==='1';
   if(!enabled)return;
 
   const VERSION='pr45-diag-2';

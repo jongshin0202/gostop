@@ -47,8 +47,10 @@
     },900);
   }
   initializeAdaptivePerformance();
+  const mobileUiFast=globalThis.matchMedia?.('(pointer:coarse)')?.matches===true||globalThis.innerWidth<=760;
+  if(mobileUiFast)document.documentElement.classList.add('gostop-mobile-ui-fast');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,friendlyOpponentProfile=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
-  let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false,pendingSocialChangedIds=new Set();
+  let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,notificationRegistrationPromise=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false,pendingSocialChangedIds=new Set();
   let friendlyReferralPollTimer=null,friendlyReferralProgressTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false,linkCopiedTimer=null;
   const lobbyTabId=(()=>{try{let value=sessionStorage.getItem(LOBBY_TAB_ID_KEY);if(!value){value=globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;sessionStorage.setItem(LOBBY_TAB_ID_KEY,value);}return value;}catch(_){return globalThis.crypto?.randomUUID?.()||`tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;}})();
   let missedRequestIndex=0;
@@ -217,7 +219,7 @@
     .solo-launch-message{display:none;position:absolute;inset:0;z-index:90;place-items:center;text-align:center;padding:24px;font:800 clamp(28px,5vw,46px)/1.2 system-ui,sans-serif;color:#f5e7cc;text-shadow:0 3px 18px #000;letter-spacing:.02em}
     .solo-start-overlay[data-launching="true"]>.solo-launch-message{display:grid!important}
     .gostop-main-menu{width:min(520px,92vw);display:grid;gap:12px;margin:22px auto 0;position:relative;z-index:2}.gostop-main-menu>button,.menu-mode-group>button{width:100%;min-height:52px;font-weight:800;font-size:clamp(17px,2.5vw,23px);border-radius:13px}.menu-mode-group{display:grid;gap:9px;padding:12px;border-radius:17px}.menu-mode-group:before{content:attr(data-label);font:700 10px/1 system-ui,sans-serif;letter-spacing:2px;text-align:center}.menu-mode-note{margin-top:-4px;margin-bottom:2px;font:600 11px/1.25 system-ui,sans-serif;text-align:center;letter-spacing:.01em;opacity:.84}.free-menu-group .menu-mode-note{color:#cfe0d0}.ranked-menu-group .menu-mode-note{color:#e8c98f}.free-menu-group{border:2px solid rgba(180,205,184,.48);background:linear-gradient(180deg,rgba(107,143,113,.14),rgba(31,57,37,.14));box-shadow:0 0 24px rgba(105,154,113,.08)}.free-menu-group:before{color:#d8ead9}.ranked-menu-group{border:2px solid #d7ad68;background:linear-gradient(180deg,rgba(215,173,104,.16),rgba(82,50,24,.14));box-shadow:0 0 24px rgba(215,173,104,.12)}.ranked-menu-group:before{color:#f2ce8b}.ranked-menu-group.referral-focus{animation:referralFocus 1.1s ease-in-out 3;box-shadow:0 0 0 3px rgba(240,204,123,.34),0 0 32px rgba(240,204,123,.32)}@keyframes referralFocus{0%,100%{transform:scale(1)}50%{transform:scale(1.018)}}.menu-secondary{background:rgba(28,19,14,.86);border:1px solid rgba(215,173,104,.36);color:#f5e7cc;cursor:pointer}.menu-free{background:linear-gradient(180deg,#355a3b,#263e2a);border:1px solid rgba(190,220,194,.62);color:#f2fff3;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.16),0 8px 20px rgba(0,0,0,.24)}.menu-ranked{background:linear-gradient(180deg,#b98a38,#80551e);border:1px solid #f0cc7b;color:#fff7df;cursor:pointer;box-shadow:inset 0 1px rgba(255,255,255,.22),0 8px 20px rgba(0,0,0,.28)}.menu-ranked:disabled{background:linear-gradient(180deg,#5d5a55,#3f3d39);border-color:#77716a;color:#c7c2ba;cursor:not-allowed;box-shadow:none;filter:grayscale(1);opacity:.62}.menu-ranked[data-active="true"]{box-shadow:inset 0 1px rgba(255,255,255,.24),0 0 0 2px rgba(240,204,123,.18),0 8px 20px rgba(0,0,0,.28)}
-    .account-menu-box{position:relative;width:min(520px,92vw);margin:10px auto 4px;padding:12px 14px;border:1px solid rgba(215,173,104,.52);border-radius:13px;background:rgba(18,12,8,.91);box-shadow:0 10px 28px rgba(0,0,0,.35);z-index:4;font-family:system-ui,sans-serif;text-align:left}.account-menu-box strong{display:block;font-size:15px;color:#fff}.account-menu-box .wallet{display:block;margin-top:3px;color:#f3cf81;font-weight:800}.account-menu-box .rank{display:block;margin-top:2px;color:#d7c8ac;font-size:12px}.account-menu-box p{font-size:11px;line-height:1.35;margin:0 0 9px;color:#d8c4a2}.account-menu-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.account-menu-actions button{font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid rgba(215,173,104,.4);background:#3b2417;color:#fff;cursor:pointer}.account-menu-controls{display:grid;gap:9px;margin-top:9px;padding-top:9px;border-top:1px solid rgba(215,173,104,.2)}.settings-dialog .account-menu-controls{margin-top:0;padding-top:0;border-top:0}.settings-dialog .dialog-card{width:min(460px,90vw)}.settings-dialog .account-menu-control{font-size:13px;padding:10px 12px}.account-menu-control{width:100%;font-size:11px;padding:7px 9px;border-radius:8px;border:1px solid rgba(215,173,104,.4);background:#3b2417;color:#fff;cursor:pointer;text-align:left}.notification-control::before{content:'●';display:inline-block;margin-right:7px;color:#62584f;text-shadow:none;transition:.15s ease}.notification-control.notification-enabled{background:linear-gradient(180deg,#2f7441,#20522f);border-color:#72dc89;color:#effff3;box-shadow:0 0 0 1px rgba(114,220,137,.22),0 0 14px rgba(72,210,104,.23)}.notification-control.notification-enabled::before{color:#7cff96;text-shadow:0 0 8px rgba(124,255,150,.85)}.notification-control:disabled{opacity:.58;cursor:not-allowed}.account-language-control{position:relative}.account-language-control .language-menu{position:absolute!important;right:0!important;top:100%!important;margin-top:4px;z-index:100;min-width:190px}.not-yet-ranked{position:relative;display:inline-block;color:#d7c8ac;text-decoration:underline dotted;text-underline-offset:2px;cursor:help;outline:none}.rank-tooltip{display:none;position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);z-index:2600;width:max-content;max-width:260px;padding:7px 9px;border:1px solid rgba(215,173,104,.55);border-radius:8px;background:#17100c;color:#f5e7cc;box-shadow:0 8px 24px rgba(0,0,0,.55);font:600 11px/1.35 system-ui,sans-serif;white-space:normal}.not-yet-ranked:hover .rank-tooltip,.not-yet-ranked:focus .rank-tooltip,.not-yet-ranked:focus-visible .rank-tooltip{display:block}.outgoing-opponent-profile{display:grid;gap:8px;margin:12px 0;padding:12px;border:1px solid rgba(215,173,104,.28);border-radius:10px;background:rgba(10,7,5,.38);text-align:left}.outgoing-opponent-profile[hidden],#rankedQuitActions[hidden],#returnGameActions[hidden],#returnGameOk[hidden],#verificationResend[hidden]{display:none!important}.outgoing-opponent-name{font-weight:900;color:#f5e7cc;font-size:17px}.outgoing-opponent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 14px;font:12px/1.35 system-ui,sans-serif;color:#d7c8ac}.outgoing-h2h{padding-top:8px;border-top:1px solid rgba(215,173,104,.18);font:12px/1.45 system-ui,sans-serif;color:#d7c8ac}.auto-match-candidate-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}.auto-match-candidate-actions button{min-width:0!important}
+    .account-menu-box{position:relative;width:min(520px,92vw);margin:10px auto 4px;padding:12px 14px;border:1px solid rgba(215,173,104,.52);border-radius:13px;background:rgba(18,12,8,.91);box-shadow:0 10px 28px rgba(0,0,0,.35);z-index:4;font-family:system-ui,sans-serif;text-align:left}.account-menu-box strong{display:block;font-size:15px;color:#fff}.account-menu-box .wallet{display:block;margin-top:3px;color:#f3cf81;font-weight:800}.account-menu-box .rank{display:block;margin-top:2px;color:#d7c8ac;font-size:12px}.account-menu-box p{font-size:11px;line-height:1.35;margin:0 0 9px;color:#d8c4a2}.account-menu-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.account-menu-actions button{font-size:11px;padding:6px 8px;border-radius:8px;border:1px solid rgba(215,173,104,.4);background:#3b2417;color:#fff;cursor:pointer}.account-menu-controls{display:grid;gap:9px;margin-top:9px;padding-top:9px;border-top:1px solid rgba(215,173,104,.2)}.settings-dialog::backdrop{background:rgba(0,0,0,.72)!important;backdrop-filter:none!important}.settings-dialog .account-menu-controls{margin-top:0;padding-top:0;border-top:0}.settings-dialog .dialog-card{width:min(460px,90vw);max-height:min(86dvh,720px);overflow:auto;contain:layout style}.settings-dialog .account-menu-control{font-size:13px;padding:10px 12px}.account-menu-control{width:100%;font-size:11px;padding:7px 9px;border-radius:8px;border:1px solid rgba(215,173,104,.4);background:#3b2417;color:#fff;cursor:pointer;text-align:left}.notification-control::before{content:'●';display:inline-block;margin-right:7px;color:#62584f;text-shadow:none;transition:.15s ease}.notification-control.notification-enabled{background:linear-gradient(180deg,#2f7441,#20522f);border-color:#72dc89;color:#effff3;box-shadow:0 0 0 1px rgba(114,220,137,.22),0 0 14px rgba(72,210,104,.23)}.notification-control.notification-enabled::before{color:#7cff96;text-shadow:0 0 8px rgba(124,255,150,.85)}.notification-control:disabled{opacity:.58;cursor:not-allowed}.account-language-control{position:relative}.settings-dialog .account-language-control .language-menu{position:static!important;inset:auto!important;margin:7px 0 0!important;z-index:auto!important;min-width:0!important;width:100%!important;max-width:none!important;max-height:min(42dvh,260px)!important;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:7px!important;overflow:auto;overscroll-behavior:contain;background:#17100c!important;border:1px solid rgba(215,173,104,.46)!important;border-radius:10px!important;box-shadow:inset 0 1px rgba(255,255,255,.04),0 8px 18px rgba(0,0,0,.28)!important}.settings-dialog .account-language-control .language-menu[hidden]{display:none!important}.settings-dialog .account-language-control .language-menu button{min-width:0;width:100%;padding:9px 10px!important;border:1px solid rgba(215,173,104,.28)!important;border-radius:7px!important;background:#332016!important;color:#fff!important;text-align:center!important;font:700 12px/1.2 system-ui,sans-serif!important;cursor:pointer}.settings-dialog .account-language-control .language-menu button:hover,.settings-dialog .account-language-control .language-menu button:focus-visible{background:#51321f!important;border-color:#d7ad68!important;outline:none}.settings-dialog .account-language-control .language-menu button[aria-current="true"]{background:#76501f!important;border-color:#efc973!important;color:#fff7df!important;box-shadow:0 0 0 1px rgba(239,201,115,.16)}.not-yet-ranked{position:relative;display:inline-block;color:#d7c8ac;text-decoration:underline dotted;text-underline-offset:2px;cursor:help;outline:none}.rank-tooltip{display:none;position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);z-index:2600;width:max-content;max-width:260px;padding:7px 9px;border:1px solid rgba(215,173,104,.55);border-radius:8px;background:#17100c;color:#f5e7cc;box-shadow:0 8px 24px rgba(0,0,0,.55);font:600 11px/1.35 system-ui,sans-serif;white-space:normal}.not-yet-ranked:hover .rank-tooltip,.not-yet-ranked:focus .rank-tooltip,.not-yet-ranked:focus-visible .rank-tooltip{display:block}.outgoing-opponent-profile{display:grid;gap:8px;margin:12px 0;padding:12px;border:1px solid rgba(215,173,104,.28);border-radius:10px;background:rgba(10,7,5,.38);text-align:left}.outgoing-opponent-profile[hidden],#rankedQuitActions[hidden],#returnGameActions[hidden],#returnGameOk[hidden],#verificationResend[hidden]{display:none!important}.outgoing-opponent-name{font-weight:900;color:#f5e7cc;font-size:17px}.outgoing-opponent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 14px;font:12px/1.35 system-ui,sans-serif;color:#d7c8ac}.outgoing-h2h{padding-top:8px;border-top:1px solid rgba(215,173,104,.18);font:12px/1.45 system-ui,sans-serif;color:#d7c8ac}.auto-match-candidate-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}.auto-match-candidate-actions button{min-width:0!important}
     .game-quit-header{background:linear-gradient(180deg,#a53c2c,#702119)!important;border-color:#db765f!important;color:#fff!important;font-weight:800!important}
     dialog.gostop-account-dialog::backdrop,dialog.gostop-request-dialog::backdrop,dialog.ranked-flow-dialog::backdrop{background:rgba(0,0,0,.72)}.account-dialog-card{width:min(440px,90vw);display:grid;gap:10px}.account-tabs{display:flex;gap:7px}.account-tabs button{flex:1}.account-form{display:grid;gap:8px}.account-form label{display:grid;gap:4px;font:600 12px/1.2 system-ui,sans-serif;color:#ead4af}.account-form input{width:100%;padding:11px 12px;border-radius:9px;border:1px solid rgba(215,173,104,.42);background:#130d09;color:#fff;font:15px system-ui,sans-serif}.account-error{min-height:18px;color:#ff9a86;font:12px system-ui,sans-serif}.account-help{color:#cbb894;font:11px/1.4 system-ui,sans-serif}.notification-permission-check{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid rgba(215,173,104,.24);border-radius:9px;background:rgba(20,13,9,.6);color:#f1dfbf;font:600 12px/1.35 system-ui,sans-serif}.notification-permission-check input{margin-top:2px;accent-color:#4fb96a}
     .leaderboard-screen{position:fixed;inset:0;z-index:1900;background:radial-gradient(circle at 50% 15%,#52321f,#130c08 58%,#080503);display:grid;grid-template-rows:auto 1fr auto;gap:12px;padding:clamp(18px,4vw,42px);color:#f5e7cc}.leaderboard-screen[hidden]{display:none}.leaderboard-title{text-align:center}.leaderboard-title h1{margin:0;font-size:clamp(32px,6vw,64px)}.leaderboard-title p{margin:4px 0 0;color:#d3bb92}.leaderboard-table-wrap{overflow:auto;width:min(1050px,92vw);margin:auto;border:1px solid rgba(215,173,104,.36);border-radius:15px;background:rgba(22,14,9,.78)}.leaderboard-table{width:100%;border-collapse:collapse;font-family:system-ui,sans-serif}.leaderboard-table th,.leaderboard-table td{padding:11px 12px;border-bottom:1px solid rgba(215,173,104,.14);text-align:right;white-space:nowrap}.leaderboard-table th:nth-child(2),.leaderboard-table td:nth-child(2){text-align:left}.leaderboard-table th{position:sticky;top:0;background:#29190f;color:#f3ce89}.leaderboard-provisional{opacity:.68}.leaderboard-footer{display:grid;gap:8px;align-self:end}.leaderboard-controls{display:grid;grid-template-columns:64px minmax(160px,220px) 64px;gap:12px;justify-content:center;align-items:center}.leaderboard-nav,.leaderboard-return{height:52px;border:1px solid rgba(215,173,104,.45);border-radius:12px;background:rgba(30,18,11,.82);color:#fff;cursor:pointer}.leaderboard-nav{position:static;transform:none;width:64px;font-size:30px}.leaderboard-return{min-width:0;padding:11px 22px;border-color:#d7ad68;background:#43281a;font-weight:800}.leaderboard-attract-note{text-align:center;font:11px system-ui,sans-serif;color:#9f8a6b;margin:0}
@@ -373,7 +375,7 @@
     }
     @media(max-width:420px){
       .gostop-main-menu{grid-template-columns:1fr!important}.menu-mode-group{grid-column:1}.gostop-main-menu:before{grid-column:1}
-      .main-menu-title{font-size:clamp(2.3rem,13vw,3.25rem)!important}#accountMenuIdentity{grid-template-columns:1fr auto}
+      .main-menu-title{font-size:clamp(2.25rem,11.5vw,3rem)!important;white-space:nowrap!important;width:max-content!important;max-width:94vw!important}#accountMenuIdentity{grid-template-columns:1fr auto}
     }
     @media(prefers-reduced-motion:reduce){
       .main-menu-hwatu-card,.main-menu-title,.main-menu-floor-cards,.menu-category-toggle:before{animation:none!important}.menu-mode-group:after{transition:none!important}
@@ -497,7 +499,8 @@
           linear-gradient(180deg,#12281d 0%,#1c2d22 24%,#21130d 62%,#0c0806 100%)!important;
       }
       .main-menu-title{
-        margin-top:4px!important;font-size:clamp(2.75rem,13.5vw,4rem)!important;line-height:.90!important;
+        display:block!important;width:max-content!important;max-width:94vw!important;white-space:nowrap!important;text-align:center!important;
+        margin-top:4px!important;font-size:clamp(2.55rem,12.2vw,3.65rem)!important;line-height:.90!important;
         text-shadow:0 3px 0 rgba(95,38,15,.64),0 9px 22px rgba(0,0,0,.72)!important;
       }
       .account-menu-box{
@@ -656,11 +659,10 @@
     @media(max-height:760px){.menu-submenu-inner{gap:5px;padding:5px 0 6px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
 
 
-    /* Stable mobile menu anchors: preserve the collapsed main-menu hit targets while
-       allowing either accordion to expand only inside the space above Player info. */
+    /* Keep the player identity below the expanded accordion even on short A17 viewports. */
     @media(max-width:760px) and (orientation:portrait){
       .solo-start-overlay.stable-mobile-menu-anchors{
-        align-content:start!important;place-content:start center!important;overflow:hidden!important
+        align-content:start!important;place-content:start center!important;overflow-y:auto!important;overflow-x:hidden!important
       }
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-title,
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-floor-cards,
@@ -671,7 +673,8 @@
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-title{top:var(--gostop-menu-title-top)!important}
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-floor-cards{top:var(--gostop-menu-cards-top)!important;margin:0 auto!important}
       .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion{top:var(--gostop-menu-shell-top)!important;margin:0!important}
-      .solo-start-overlay.stable-mobile-menu-anchors .account-menu-box{top:var(--gostop-menu-account-top)!important;margin:0!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .account-menu-box{top:max(var(--gostop-menu-account-top),calc(var(--gostop-menu-shell-top) + var(--gostop-expanded-menu-height,0px) + 12px))!important;margin:0!important}
+      .solo-start-overlay.stable-mobile-menu-anchors:has(.has-expanded-section){padding-bottom:28px!important}
       .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion.has-expanded-section{padding:7px!important;gap:5px!important}
       .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-category-toggle{min-height:52px!important;padding:6px 10px!important}
       .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-submenu-inner{gap:5px!important;padding:5px 0 6px!important}
@@ -739,6 +742,11 @@
       submenu.inert=!open;
       if(open)revealGroup=group;
     }
+    if(menu&&overlay.classList.contains('stable-mobile-menu-anchors')){
+      overlay.style.setProperty('--gostop-expanded-menu-height',`${Math.ceil(menu.getBoundingClientRect().height)}px`);
+      // Keep a scrollable tail behind the repositioned account box on short phones.
+      overlay.style.minHeight='';
+    }
     if(revealGroup)requestAnimationFrame(()=>{
       if(revealToken!==menuRevealToken||!revealGroup.classList.contains('expanded'))return;
       revealGroup.classList.add('menu-reveal');
@@ -764,6 +772,7 @@
     };
     const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
     if(!touchCapable)return;
+    button.dataset.gostopImmediateTap='1';
     button.style.touchAction='manipulation';
     button.addEventListener('touchstart',event=>{
       if(event.touches.length!==1){press=null;return;}
@@ -780,6 +789,42 @@
     button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
   }
   [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
+
+  // Mobile browsers may still deliver ordinary click activation noticeably after touchend
+  // under heavy pages. Give non-game UI controls the same immediate touch path as the
+  // main menu while leaving all card/table gesture handling untouched.
+  let immediateUiPress=null,immediateUiSuppressTarget=null,immediateUiSuppressUntil=0,immediateUiProgrammaticTarget=null;
+  const fastUiButton=target=>{
+    const button=target?.closest?.('button');
+    if(!button||button.disabled||button.dataset.gostopImmediateTap==='1')return null;
+    if(button.closest('#playerHand,.table,.game-stage'))return null;
+    return button;
+  };
+  document.addEventListener('click',event=>{
+    const button=event.target?.closest?.('button');
+    if(button===immediateUiProgrammaticTarget)return;
+    if(event.isTrusted&&button===immediateUiSuppressTarget&&Date.now()<immediateUiSuppressUntil){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+  },true);
+  document.addEventListener('touchstart',event=>{
+    if(event.touches.length!==1){immediateUiPress=null;return;}
+    const button=fastUiButton(event.target);if(!button){immediateUiPress=null;return;}
+    const touch=event.touches[0];
+    immediateUiPress={button,id:touch.identifier,x:touch.clientX,y:touch.clientY};
+    button.style.touchAction='manipulation';
+  },{capture:true,passive:true});
+  document.addEventListener('touchend',event=>{
+    const press=immediateUiPress;immediateUiPress=null;if(!press)return;
+    const touch=[...event.changedTouches].find(item=>item.identifier===press.id);
+    if(!touch||fastUiButton(event.target)!==press.button)return;
+    if(Math.hypot(touch.clientX-press.x,touch.clientY-press.y)>22)return;
+    event.preventDefault();event.stopPropagation();
+    immediateUiSuppressTarget=press.button;immediateUiSuppressUntil=Date.now()+450;
+    immediateUiProgrammaticTarget=press.button;
+    try{press.button.click();}finally{immediateUiProgrammaticTarget=null;}
+  },{capture:true,passive:false});
+  document.addEventListener('touchcancel',()=>{immediateUiPress=null;},{capture:true,passive:true});
   function installImmediateDesktopAccordion(button,section){
     if(!button)return;
     button.addEventListener('pointerdown',event=>{
@@ -800,6 +845,7 @@
   function clearStableMobileMenuAnchors(){
     overlay.classList.remove('stable-mobile-menu-anchors');
     for(const property of stableMenuAnchorProperties)overlay.style.removeProperty(property);
+    overlay.style.removeProperty('--gostop-expanded-menu-height');
   }
   function lockStableMobileMenuAnchors(){
     stableMenuAnchorFrame=0;
@@ -821,14 +867,35 @@
     overlay.style.setProperty('--gostop-menu-shell-top',`${menuTop}px`);
     overlay.style.setProperty('--gostop-menu-account-top',`${accountTop}px`);
     overlay.classList.add('stable-mobile-menu-anchors');
+    overlay.style.setProperty('--gostop-expanded-menu-height',`${Math.ceil(menu.getBoundingClientRect().height)}px`);
   }
+  if(typeof ResizeObserver==='function')new ResizeObserver(()=>{
+    if(overlay.classList.contains('stable-mobile-menu-anchors')&&!overlay.hidden){
+      const height=Math.ceil(menu.getBoundingClientRect().height);
+      overlay.style.setProperty('--gostop-expanded-menu-height',`${height}px`);
+    }
+  }).observe(menu);
+  let mobileKeyboardTransitionUntil=0;
+  function textEntryFocused(){
+    const active=document.activeElement;
+    return !!active?.matches?.('input,textarea,select,[contenteditable="true"]');
+  }
+  function keyboardViewportTransitionActive(){
+    return textEntryFocused()||Date.now()<mobileKeyboardTransitionUntil;
+  }
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))mobileKeyboardTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
+  document.addEventListener('focusout',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))mobileKeyboardTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
   function scheduleStableMobileMenuAnchors(){
+    // Opening/closing the Android keyboard changes visualViewport dimensions.
+    // Do not collapse/re-expand the entire menu during either edge of that transition.
+    if(keyboardViewportTransitionActive())return;
     if(stableMenuAnchorFrame)cancelAnimationFrame(stableMenuAnchorFrame);
     stableMenuAnchorFrame=requestAnimationFrame(lockStableMobileMenuAnchors);
   }
-  globalThis.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
-  globalThis.addEventListener?.('orientationchange',scheduleStableMobileMenuAnchors);
-  globalThis.visualViewport?.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
+  globalThis.addEventListener?.('orientationchange',()=>{
+    clearStableMobileMenuAnchors();
+    scheduleStableMobileMenuAnchors();
+  });
 
   const freePanel=document.createElement('section');freePanel.id='freeFriendPanel';freePanel.className='online-lobby-panel';freePanel.hidden=true;freePanel.innerHTML=`<div class="online-lobby-card"><h2 id="freeFriendTitle">Play With Friend</h2><p id="freeFriendHelp" class="account-help">Create a room and send your friend the share link. Friendly Gaming never uses Wallet Coins or leaderboards.</p><div class="online-method"><strong id="freeRoomShareTitle">Share Link</strong><div class="online-existing-controls"><button id="freeCreateRoomBtn" class="glass-btn strong" type="button">Create Room / Share Link</button><div id="freeShareLinkBox" class="room-share-link" hidden><a id="freeShareLink" target="_blank" rel="noopener"></a><div class="friendly-share-actions"><button id="freeShareBtn" type="button">Share Invite</button><button id="freeCopyLinkBtn" type="button">Copy Link</button></div></div><p id="freeOnlineStatus" class="online-status" role="status" aria-live="polite"></p></div></div><div class="online-lobby-actions"><button id="freeFriendClose" type="button">Return</button></div></div>`;document.body.appendChild(freePanel);
 
@@ -838,6 +905,67 @@
   const socialScreen=document.createElement('section');socialScreen.id='socialScreen';socialScreen.className='social-screen';socialScreen.hidden=true;socialScreen.innerHTML=`<div class="social-card"><header class="social-header"><div><h1>Friends</h1><p id="socialSummary">Stay connected with people you play on GoStop Live.</p></div><button id="socialCloseTop" type="button" aria-label="Close">×</button></header><nav class="social-tabs" aria-label="Friends views"><button type="button" data-social-tab="friends">Friends</button><button type="button" data-social-tab="requests">Requests <span id="friendRequestBadge" class="social-badge" hidden></span></button><button type="button" data-social-tab="history">History</button><button type="button" data-social-tab="recommendations">Recommended</button><button type="button" data-social-tab="search">Search</button></nav><div id="socialSearchBox" class="social-search-box" hidden><input id="socialSearchInput" autocomplete="off" placeholder="Search Player ID / nickname"><button id="socialSearchBtn" type="button">Search</button></div><p id="socialStatus" class="account-help" role="status"></p><div id="socialList" class="social-list"></div><footer class="online-lobby-actions"><button id="socialClose" type="button">Return</button></footer></div>`;document.body.appendChild(socialScreen);
 
   const authDialog=document.createElement('dialog');authDialog.id='accountDialog';authDialog.className='gostop-account-dialog';authDialog.innerHTML=`<div class="dialog-card account-dialog-card"><button class="dialog-close" id="accountDialogClose" type="button" aria-label="Close">×</button><h2>Log In</h2><div class="account-tabs"><button id="loginTab" class="glass-btn strong" type="button">Log In</button><button id="registerTab" class="glass-btn" type="button">Create ID</button></div><form id="loginForm" class="account-form"><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="go-btn" type="submit">Log In</button></form><form id="registerForm" class="account-form" hidden><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Nickname<input name="nickname" maxlength="16" required></label><label>Password<input name="password" type="password" autocomplete="new-password" required></label><label>Confirm Password<input name="confirmPassword" type="password" autocomplete="new-password" required></label><p class="account-help">Use at least 8 characters. Common passwords such as 12345 or qwerty are not accepted.</p><button class="go-btn" type="submit">Register</button></form><p id="accountError" class="account-error" role="alert"></p></div>`;document.body.appendChild(authDialog);
+  const mobileInputStyle=document.createElement('style');
+  mobileInputStyle.textContent=`
+    body:has(dialog[open]) .main-menu-hwatu-card,
+    body:has(dialog[open]) .main-menu-floor-card,
+    body:has(dialog[open]) .menu-category-toggle::before{animation-play-state:paused!important}
+    html.gostop-mobile-ui-fast .main-menu-title,
+    html.gostop-mobile-ui-fast .main-menu-hwatu-card,
+    html.gostop-mobile-ui-fast .main-menu-floor-cards,
+    html.gostop-mobile-ui-fast .menu-category-toggle::before{animation:none!important}
+    html.gostop-mobile-ui-fast .main-menu-card-fan,
+    html.gostop-mobile-ui-fast .main-menu-floor-cards{filter:none!important}
+    html.gostop-mobile-ui-fast .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important}
+    html.gostop-mobile-ui-fast .menu-category-toggle{filter:none!important;transition:transform .06s ease,border-radius .06s ease!important}
+    html.gostop-mobile-ui-fast .menu-submenu{will-change:auto!important;transition:max-height .12s ease,opacity .08s ease,transform .12s ease,padding .12s ease,border-color .08s ease,background .08s ease,visibility 0s linear .12s!important}
+    html.gostop-mobile-ui-fast .menu-category-block.expanded .menu-submenu{transition-delay:0s!important}
+    html.gostop-mobile-ui-fast dialog button,
+    html.gostop-mobile-ui-fast .language-menu button{transition:none!important}
+    @media(max-width:700px){
+      #accountDialog::backdrop{background:#14261d!important;backdrop-filter:none!important}
+      #accountDialog[open]{
+        position:fixed!important;inset:calc(env(safe-area-inset-top,0px) + 2px) 4px auto 4px!important;margin:0!important;transform:none!important;
+        width:calc(100vw - 8px)!important;max-width:none!important;height:auto!important;max-height:min(84svh,720px)!important;
+        overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;scroll-padding:12px 0 88px!important;
+      }
+      #accountDialog[open]:focus-within{height:min(48svh,420px)!important;max-height:min(48svh,420px)!important}
+      .social-screen:focus-within,.online-lobby-panel:focus-within{align-items:start!important;place-items:start center!important;padding:2px 4px!important;background:#100b08!important;overflow:hidden!important}
+      .social-screen:focus-within .social-card,.online-lobby-panel:focus-within .online-lobby-card{width:calc(100vw - 8px)!important;max-width:none!important;max-height:min(48svh,430px)!important;margin:0!important;overflow-y:auto!important;overflow-x:hidden!important;border-radius:12px!important;padding:10px 12px 18px!important;scroll-padding:8px 0 72px!important}
+      .social-screen:focus-within .social-header h1{font-size:28px!important;line-height:1.05!important}
+      .social-screen:focus-within .social-header p{font-size:12px!important;line-height:1.25!important}
+      .social-screen:focus-within .social-tabs{margin:7px 0!important;gap:5px!important}
+      .social-screen:focus-within .social-tabs button{padding:7px 9px!important}
+      .social-screen:focus-within .social-search-box{margin:5px 0 8px!important;position:sticky!important;top:0!important;z-index:2!important;background:#1d130d!important;padding:4px 0!important}
+      .social-screen:focus-within .social-search-box input,.online-lobby-panel:focus-within input{font-size:16px!important}
+      #accountDialog[open] .account-dialog-card{
+        box-sizing:border-box!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;
+        gap:6px!important;padding:10px 12px 18px!important;border-radius:12px!important;
+      }
+      #accountDialog[open] .account-dialog-card>h2{font-size:24px!important;line-height:1.05!important;margin:0 34px 4px 0!important}
+      #accountDialog[open] .account-tabs{gap:6px!important}
+      #accountDialog[open] .account-tabs button{min-height:38px!important;padding:7px 8px!important}
+      #accountDialog[open] .account-form{gap:5px!important}
+      #accountDialog[open] .account-form label{gap:2px!important;font-size:11px!important}
+      #accountDialog[open] .account-form input{padding:8px 9px!important;font-size:16px!important;line-height:1.15!important}
+      #accountDialog[open] .account-form .go-btn{min-height:38px!important;padding:8px 12px!important}
+      #accountDialog[open] .account-error{min-height:0!important;margin:0!important}
+      #accountDialog[open] .dialog-close{top:2px!important;right:6px!important}
+    }
+  `;
+  document.head.appendChild(mobileInputStyle);
+  let keyboardScrollTimer=null;
+  function focusedInputScrollContainer(active=document.activeElement){return active?.closest?.('dialog.gostop-account-dialog[open],.social-card,.online-lobby-card')||null;}
+  function ensureFocusedInputVisible(){
+    const active=document.activeElement,container=focusedInputScrollContainer(active);if(!container||globalThis.innerWidth>700)return;
+    const rect=active.getBoundingClientRect(),containerRect=container.getBoundingClientRect();
+    const visibleBottom=Math.min(containerRect.bottom,Number(globalThis.visualViewport?.height||globalThis.innerHeight||containerRect.bottom));
+    const desiredTop=containerRect.top+Math.min(150,Math.max(64,(visibleBottom-containerRect.top)*.38));
+    if(rect.top<containerRect.top+8||rect.bottom>visibleBottom-12)container.scrollTop+=rect.top-desiredTop;
+  }
+  function scheduleFocusedInputVisible(delay=80){if(keyboardScrollTimer)clearTimeout(keyboardScrollTimer);keyboardScrollTimer=setTimeout(()=>{keyboardScrollTimer=null;ensureFocusedInputVisible();},delay);}
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select'))scheduleFocusedInputVisible(30);},{passive:true});
+  globalThis.visualViewport?.addEventListener?.('resize',()=>{if(focusedInputScrollContainer())scheduleFocusedInputVisible(100);},{passive:true});
   const registrationPolicyDialog=document.createElement('dialog');registrationPolicyDialog.id='registrationPolicyDialog';registrationPolicyDialog.className='gostop-account-dialog';registrationPolicyDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="registrationPolicyTitle">Connection Protection</h2><p id="registrationPolicyText" style="white-space:pre-line;text-align:left"></p><button id="registrationPolicyOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(registrationPolicyDialog);
   const successDialog=document.createElement('dialog');successDialog.className='gostop-account-dialog';successDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2>Account Registered Successfully</h2><p>You received 100 signup bonus coins + 100 daily login bonus coins.</p><div class="decision-actions"><button id="registrationAddFriend" class="glass-btn" type="button" hidden>Add Inviter as Friend</button><button id="registrationCompetitive" class="go-btn" type="button" hidden>Try Competitive Gaming</button><button id="registrationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(successDialog);
   const verificationDialog=document.createElement('dialog');verificationDialog.className='gostop-account-dialog';verificationDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="verificationTitle">Verify Your Email</h2><p id="verificationText"></p><strong id="verificationEmail"></strong><p id="verificationStatus" class="account-help" role="status"></p><div class="decision-actions"><button id="verificationResend" class="go-btn" type="button">Resend Verification Email</button><button id="verificationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(verificationDialog);
@@ -949,6 +1077,13 @@
     if(action==='collect'){const data=await api('/api/referrals/collect',{method:'POST',body:{noticeId:friendlyInviterNoticeId}});captureAccountPayload(data);renderAccountBox();patchGameIdentity();showFriendlyInviterDialog('200 Bonus Coins Collected','You have collected 200 Bonus Coins!','collected-ok','OK');return;}
     if(action==='ack'||action==='collected-ok'){await acknowledgeAccountNotice(friendlyInviterNoticeId);friendlyInviterNoticeId=null;friendlyInviterDialog.close();renderAccountBox();patchGameIdentity();if(friendlyInviterReturnToMenu){friendlyInviterReturnToMenu=false;globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();revealCurrentMainMenu();}}
   }catch(error){showToast(localizedError(error),6000);}finally{button.disabled=false;}});
+  let rankedLocaleApplyScheduled=false;
+  function scheduleRankedLocaleApply(){
+    if(rankedLocaleApplyScheduled)return;
+    rankedLocaleApplyScheduled=true;
+    const run=()=>setTimeout(()=>{rankedLocaleApplyScheduled=false;applyRankedLocale();},0);
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(run);else run();
+  }
   function applyRankedLocale(){
     trainingBtn.textContent=rt('training');playPractice.textContent=rt('solo');freeTitle.textContent=rt('freeGaming');freeGroupNote.textContent=rt('freeGamingNote');freeFriendBtn.textContent=rt('playWithFriend');rankedTitle.textContent=rt('competitiveGaming');rankedGroupNote.textContent=rt('competitiveGamingNote');syncRankedButtons();syncFriendsButton();leaderboardBtn.textContent=rt('leaderboards');if(howTo)howTo.textContent=rt('howTo');
     $('freeFriendTitle').textContent=rt('playWithFriend');$('freeFriendHelp').textContent=rt('freeFriendHelp');$('freeRoomShareTitle').textContent=rt('roomShare');$('freeCreateRoomBtn').textContent=rt('createRoomShare');$('freeCopyLinkBtn').textContent=rt('copyLink');$('freeFriendClose').textContent=rt('cancel');
@@ -972,18 +1107,22 @@
     const text=invite.rewardReady?`🎁 200 referral Coins ready from ${friend}`:`🎁 ${friend} referral progress: ${played}/${required} games`;
     return `<span class="friendly-referral-progress${invite.rewardReady?' ready':''}">${escapeHtml(text)}</span>`;
   }
-  function openSettings(){languageMenu.hidden=true;syncNotificationButton();if(!settingsDialog.open)settingsDialog.showModal();}
+  function openSettings(){languageMenu.hidden=true;if(!settingsDialog.open)settingsDialog.showModal();setTimeout(syncNotificationButton,0);}
   function renderAccountBox(){
     accountBox.hidden=false;accountIdentity.hidden=!!authToken&&!account;
     if(authToken&&!account){accountIdentity.innerHTML='';return;}
     if(!account){accountIdentity.innerHTML=`<p>${escapeHtml(rt('pitch'))}</p><div class="account-menu-actions"><button id="accountCreateBtn" type="button">${escapeHtml(rt('createId'))}</button><button id="accountLoginBtn" type="button">${escapeHtml(rt('login'))}</button><button id="accountSettingsBtn" type="button">Settings</button></div>`;$('accountCreateBtn')?.addEventListener('click',()=>openAuth('register'));$('accountLoginBtn')?.addEventListener('click',()=>openAuth('login'));$('accountSettingsBtn')?.addEventListener('click',openSettings);return;}
     const row=rowFor(account.nickname),rankHtml=row?rankLabelHtml(row.rank):escapeHtml(rt('unranked'));
-    accountIdentity.innerHTML=`<strong>${flagEmoji(account.countryCode)} ${playerNicknameHtml({accountId:account.id,nickname:account.nickname})}</strong><span class="wallet">🪙 ${escapeHtml(coinText(displayedWalletCoins()))}</span><span class="rank">${rankHtml}</span>${friendlyReferralProgressHtml()}<div class="account-menu-actions"><button id="accountLogoutBtn" type="button">${escapeHtml(rt('logout'))}</button><button id="accountSettingsBtn" type="button">Settings</button></div>`;$('accountLogoutBtn')?.addEventListener('click',logout);$('accountSettingsBtn')?.addEventListener('click',openSettings);
+    accountIdentity.innerHTML=`<strong>${flagEmoji(account.countryCode)} ${playerNicknameHtml({accountId:account.id,nickname:account.nickname})}</strong><span class="wallet">🪙 ${escapeHtml(coinText(displayedWalletCoins()))}</span><span class="rank">${rankHtml}</span>${friendlyReferralProgressHtml()}<div class="account-menu-actions"><button id="accountLogoutBtn" type="button">${escapeHtml(rt('logout'))}</button><button id="accountSettingsBtn" type="button">Settings</button></div>`;$('accountLogoutBtn')?.addEventListener('click',confirmLogout);$('accountSettingsBtn')?.addEventListener('click',openSettings);
   }
   $('settingsOk').addEventListener('click',()=>settingsDialog.close());
   function openAuth(tab='login'){setAuthTab(tab);$('accountError').textContent='';if(!authDialog.open)authDialog.showModal();}
   function setAuthTab(tab){const login=tab!=='register';$('loginForm').hidden=!login;$('registerForm').hidden=login;$('loginTab').classList.toggle('strong',login);$('registerTab').classList.toggle('strong',!login);authDialog.querySelector('h2').textContent=rt(login?'login':'createId');}
   async function logout(){try{await api('/api/auth/logout',{method:'POST',body:{}});}catch(_){}clearSession();}
+  function confirmLogout(){if(!account||logoutConfirmDialog.open)return;logoutConfirmDialog.showModal();}
+  const logoutConfirmDialog=document.createElement('dialog');logoutConfirmDialog.id='logoutConfirmDialog';logoutConfirmDialog.className='gostop-account-dialog';logoutConfirmDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2>Are you sure you want to log out?</h2><div class="decision-actions"><button id="logoutConfirmYes" class="stop-btn" type="button">Yes</button><button id="logoutConfirmNo" class="go-btn" type="button">No</button></div></div>`;document.body.appendChild(logoutConfirmDialog);
+  logoutConfirmDialog.querySelector('#logoutConfirmNo').addEventListener('click',()=>logoutConfirmDialog.close());
+  logoutConfirmDialog.querySelector('#logoutConfirmYes').addEventListener('click',async()=>{const yes=logoutConfirmDialog.querySelector('#logoutConfirmYes');if(yes.disabled)return;yes.disabled=true;logoutConfirmDialog.close();try{await logout();}finally{yes.disabled=false;}});
   function continueAfterAccount(){if(!account||!accountContinuation)return;const {next}=accountContinuation;accountContinuation=null;next();}
   function cancelAccountContinuation(){if(!accountContinuation)return;const {onCancel}=accountContinuation;accountContinuation=null;onCancel?.();}
   let pendingVerificationCredentials=null,verificationWatchTimer=null,verificationWatchBusy=false;
@@ -1036,7 +1175,7 @@
   $('accountDialogClose').addEventListener('click',()=>{cancelAccountContinuation();authDialog.close();cancelFriendlySignupFromAuth();});authDialog.addEventListener('cancel',()=>{cancelAccountContinuation();setTimeout(()=>cancelFriendlySignupFromAuth(),0);});$('loginTab').addEventListener('click',()=>setAuthTab('login'));$('registerTab').addEventListener('click',()=>setAuthTab('register'));$('registrationOk').addEventListener('click',()=>{void finishFriendlySignupSuccess(false);});$('registrationCompetitive').addEventListener('click',()=>{void finishFriendlySignupSuccess(true);});$('registrationAddFriend').addEventListener('click',async()=>{const button=$('registrationAddFriend'),accountId=successDialog.dataset.friendAccountId;if(!accountId||button.disabled)return;button.disabled=true;try{await api('/api/social/request',{method:'POST',body:{accountId}});notifySocialChanged(accountId);button.textContent='Friend Request Sent';showToast('Friend Request sent.',2200);await refreshAccount();}catch(error){showToast(localizedError(error),5000);}finally{button.disabled=false;}});$('verificationOk').addEventListener('click',()=>{stopVerificationWatch();verificationDialog.close();pendingVerificationCredentials=null;cancelAccountContinuation();revealCurrentMainMenu();});verificationDialog.addEventListener('cancel',()=>{stopVerificationWatch();pendingVerificationCredentials=null;cancelAccountContinuation();revealCurrentMainMenu();});$('verificationResend').addEventListener('click',async()=>{if(!pendingVerificationCredentials)return;const button=$('verificationResend');if(button.disabled)return;button.disabled=true;$('verificationStatus').textContent='';try{await api('/api/auth/resend-verification',{method:'POST',body:pendingVerificationCredentials,auth:false});$('verificationStatus').textContent=rt('verificationEmailResent');}catch(error){$('verificationStatus').textContent=localizedError(error);}finally{button.disabled=false;}});$('accountNoticeOk').addEventListener('click',async()=>{const okBtn=$('accountNoticeOk');if(okBtn.disabled)return;okBtn.disabled=true;try{if(accountNoticeDialog.dataset.rankedEntry==='1'){const next=accountNoticeDialog.__rankedNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.close();if(next)next();return;}if(accountNoticeDialog.dataset.dailyLaunch==='1'){const next=accountNoticeDialog.__dailyNext,id=accountNoticeDialog.dataset.noticeId;await acknowledgeAccountNotice(id);delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__dailyNext=null;accountNoticeDialog.close();renderAccountBox();patchGameIdentity();if(next)next();return;}await acknowledgeVisibleAccountNotice();}catch(error){showToast(localizedError(error),6000);}finally{okBtn.disabled=false;}});
   accountNoticeDialog.addEventListener('cancel',event=>{if(accountNoticeDialog.dataset.rankedEntry==='1'||accountNoticeDialog.dataset.dailyLaunch==='1')event.preventDefault();});
   accountNoticeDialog.addEventListener('close',()=>{if(accountNoticeDialog.dataset.rankedEntry==='1'||accountNoticeDialog.dataset.dailyLaunch==='1'){delete accountNoticeDialog.dataset.noticeId;delete accountNoticeDialog.dataset.rankedEntry;delete accountNoticeDialog.dataset.dailyLaunch;accountNoticeDialog.__rankedNext=null;accountNoticeDialog.__dailyNext=null;clearRankedEntryPending();}});
-  $('loginForm').addEventListener('submit',async event=>{event.preventDefault();const form=new FormData(event.currentTarget),credentials={email:form.get('email'),password:form.get('password')};try{$('accountError').textContent='';const data=await api('/api/auth/login',{method:'POST',body:credentials,auth:false});const friendly=readFriendlyReferralContext();if(friendly?.signupStarted)sendFriendlyReferralStatus('declined',friendly.stage==='session-end'?'session-end':'game10');clearFriendlyReferralContext();saveSession(data);authDialog.close();continueAfterAccount();}catch(error){if(error?.code==='EMAIL_NOT_VERIFIED'){pendingVerificationCredentials=credentials;authDialog.close();showVerificationDialog(String(credentials.email||''));return;}$('accountError').textContent=localizedError(error);}});
+  $('loginForm').addEventListener('submit',async event=>{event.preventDefault();const formEl=event.currentTarget,form=new FormData(formEl),credentials={email:form.get('email'),password:form.get('password')},submit=formEl.querySelector('button[type="submit"]'),originalText=submit?.textContent||rt('login');if(submit){submit.disabled=true;submit.textContent='Logging In…';}try{$('accountError').textContent='';const data=await api('/api/auth/login',{method:'POST',body:credentials,auth:false});const friendly=readFriendlyReferralContext();if(friendly?.signupStarted)sendFriendlyReferralStatus('declined',friendly.stage==='session-end'?'session-end':'game10');clearFriendlyReferralContext();const continuing=!!accountContinuation;saveSession(data);if(!continuing)revealCurrentMainMenu();requestAnimationFrame(()=>{if(authDialog.open)authDialog.close();continueAfterAccount();});}catch(error){if(error?.code==='EMAIL_NOT_VERIFIED'){pendingVerificationCredentials=credentials;authDialog.close();showVerificationDialog(String(credentials.email||''));return;}$('accountError').textContent=localizedError(error);}finally{if(submit){submit.disabled=false;submit.textContent=originalText;}}});
   let pendingRegistrationBody=null;$('registerForm').addEventListener('submit',event=>{event.preventDefault();const form=new FormData(event.currentTarget),body={email:form.get('email'),nickname:form.get('nickname'),password:form.get('password'),confirmPassword:form.get('confirmPassword')},friendly=readFriendlyReferralContext();if(friendly?.signupStarted&&friendly.token&&friendly.stage){body.referralToken=friendly.token;body.referralStage=friendly.stage;body.deviceId=friendlyDeviceId();friendly.registrationSubmitted=true;writeFriendlyReferralContext(friendly);}if([body.email,body.nickname,body.password,body.confirmPassword].some(value=>!String(value||'').trim())){$('accountError').textContent=rt('fillRegistration');return;}$('accountError').textContent='';pendingRegistrationBody=body;authDialog.close();registrationPolicyDialog.showModal();});registrationPolicyDialog.addEventListener('cancel',event=>event.preventDefault());$('registrationPolicyOk').addEventListener('click',async()=>{if(!pendingRegistrationBody)return;const body=pendingRegistrationBody;pendingRegistrationBody=null;pendingVerificationCredentials={email:body.email,password:body.password};try{const data=await api('/api/auth/register',{method:'POST',body,auth:false});registrationPolicyDialog.close();if(data.verificationPending){showVerificationDialog(data.email||String(body.email||''));return;}saveSession(data);pendingVerificationCredentials=null;showAccountSuccess('registered',data);}catch(error){registrationPolicyDialog.close();if(['EMAIL_SEND_FAILED','EMAIL_PENDING_VERIFICATION'].includes(error?.code)){showVerificationDialog(error?.email||String(body.email||''),localizedError(error),true);return;}pendingVerificationCredentials=null;openAuth('register');$('accountError').textContent=localizedError(error);}});
 
   async function requireAccount(next,onCancel=()=>{}){if(!account&&authToken){if(authRestorePromise)await authRestorePromise;else await refreshAccount();}if(account){next();return;}accountContinuation={next,onCancel};openAuth('login');}
@@ -1118,7 +1257,7 @@
   let leaderboardTouchStart=null,leaderboardSwipeSuppressClickUntil=0;
   function leaderboardSwipeEnabled(){return !leaderboardScreen.hidden&&globalThis.matchMedia?.('(max-width:760px)').matches;}
   leaderboardScreen.addEventListener('touchstart',event=>{if(!leaderboardSwipeEnabled()||event.touches.length!==1){leaderboardTouchStart=null;return;}const touch=event.touches[0];leaderboardTouchStart={x:touch.clientX,y:touch.clientY,at:Date.now()};},{passive:true});
-  leaderboardScreen.addEventListener('touchend',event=>{if(!leaderboardTouchStart||!leaderboardSwipeEnabled()){leaderboardTouchStart=null;return;}const touch=event.changedTouches?.[0],start=leaderboardTouchStart;leaderboardTouchStart=null;if(!touch)return;const dx=touch.clientX-start.x,dy=touch.clientY-start.y,elapsed=Date.now()-start.at;if(elapsed>900||Math.abs(dx)<48||Math.abs(dx)<Math.abs(dy)*1.15)return;event.preventDefault();leaderboardSwipeSuppressClickUntil=Date.now()+650;nextLeaderboard(dx<0?1:-1);},{passive:false});
+  leaderboardScreen.addEventListener('touchend',event=>{if(!leaderboardTouchStart||!leaderboardSwipeEnabled()){leaderboardTouchStart=null;return;}const touch=event.changedTouches?.[0],start=leaderboardTouchStart;leaderboardTouchStart=null;if(!touch)return;const dx=touch.clientX-start.x,dy=touch.clientY-start.y,elapsed=Date.now()-start.at,isSwipe=elapsed<=900&&Math.abs(dx)>=48&&Math.abs(dx)>=Math.abs(dy)*1.15;if(isSwipe){event.preventDefault();leaderboardSwipeSuppressClickUntil=Date.now()+650;nextLeaderboard(dx<0?1:-1);return;}const travel=Math.hypot(dx,dy);if(attractMode&&elapsed<=900&&travel<24){event.preventDefault();leaderboardSwipeSuppressClickUntil=Date.now()+650;closeLeaderboard(true);}},{passive:false});
   leaderboardBtn.addEventListener('click',event=>{event.stopPropagation();openLeaderboard(false);});$('globalLeaderboardTab').addEventListener('click',event=>{event.stopPropagation();leaderboardPage=0;renderLeaderboard();restartLeaderboardTimer();});$('monthlyLeaderboardTab').addEventListener('click',event=>{event.stopPropagation();leaderboardPage=1;renderLeaderboard();restartLeaderboardTimer();});leaderboardScreen.querySelector('.leaderboard-return').addEventListener('click',event=>{event.stopPropagation();closeLeaderboard(true);});leaderboardScreen.addEventListener('click',event=>{if(Date.now()<leaderboardSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}if(event.target.closest('button'))return;closeLeaderboard(true);});
   function mainMenuIdleEligible(){return !overlay.hidden&&leaderboardScreen.hidden&&onlinePanel.hidden&&freePanel.hidden&&socialScreen.hidden&&!authDialog.open&&!registrationPolicyDialog.open&&!successDialog.open&&!verificationDialog.open&&!requestDialog.open&&!friendRequestSentDialog.open&&!playerInfoDialog.open&&!settingsDialog.open&&!accountNoticeDialog.open&&!returnGameDialog.open;}
   let lastMenuActivityAt=Date.now();
@@ -1135,7 +1274,7 @@
   function resetAttractTimer(){lastMenuActivityAt=Date.now();startAttractWatcher();}
   new MutationObserver(records=>{if(!records.some(record=>record.attributeName==='hidden'))return;lastMenuActivityAt=Date.now();patchGameIdentity();startAttractWatcher();}).observe(overlay,{attributes:true,attributeFilter:['hidden']});
   for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('close',()=>{if(!overlay.hidden)resetAttractTimer();});
-  document.addEventListener('pointerdown',event=>{if(event.isTrusted&&!attractMode&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});document.addEventListener('click',event=>{if(!attractMode||leaderboardScreen.hidden||globalThis.goStopOnlineSession)return;if(Date.now()<leaderboardSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();closeLeaderboard(true);},{capture:true});document.addEventListener('keydown',event=>{if(attractMode&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(event.isTrusted&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});
+  document.addEventListener('pointerdown',event=>{if(!event.isTrusted)return;if(attractMode&&!leaderboardScreen.hidden&&!globalThis.goStopOnlineSession){if(event.pointerType==='touch')return;event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(mainMenuIdleEligible())resetAttractTimer();},{capture:true});document.addEventListener('click',event=>{if(!attractMode||leaderboardScreen.hidden||globalThis.goStopOnlineSession)return;if(Date.now()<leaderboardSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();closeLeaderboard(true);},{capture:true});document.addEventListener('keydown',event=>{if(attractMode&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(event.isTrusted&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});
   document.addEventListener('pointerdown',markPlayerActivity,{capture:true,passive:true});document.addEventListener('keydown',markPlayerActivity,{capture:true});document.addEventListener('touchstart',markPlayerActivity,{capture:true,passive:true});document.addEventListener('wheel',markPlayerActivity,{capture:true,passive:true});document.addEventListener('visibilitychange',syncLobbyAvailability);globalThis.addEventListener('focus',syncLobbyAvailability);globalThis.addEventListener('blur',syncLobbyAvailability);
 
   function lobbyUrl(){const url=new URL(`${baseUrl}/api/lobby/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';return url;}
@@ -1155,7 +1294,7 @@
     const button=$('enablePlayNotificationsBtn');if(!button)return;
     const supported=typeof Notification!=='undefined'&&'serviceWorker' in navigator;
     if(!supported){button.textContent=rt('notificationUnsupported');button.classList.remove('notification-enabled');button.setAttribute('aria-pressed','false');button.disabled=true;return;}
-    const enabled=notificationPermissionGranted();button.disabled=false;button.classList.toggle('notification-enabled',enabled);button.setAttribute('aria-pressed',String(enabled));button.textContent=enabled?rt('notificationsOn'):rt('enableNotifications');button.title=Notification.permission==='denied'?rt('notificationsDenied'):'';
+    const pendingEnabled=notificationEnablePending&&Notification.permission==='granted'&&notificationPreferenceEnabled(),enabled=notificationPermissionGranted()||pendingEnabled;button.disabled=false;button.classList.toggle('notification-enabled',enabled);button.setAttribute('aria-pressed',String(enabled));button.textContent=enabled?rt('notificationsOn'):rt('enableNotifications');button.title=Notification.permission==='denied'?rt('notificationsDenied'):'';
   }
   function renderNotificationBlockedDialog(){
     $('notificationBlockedTitle').textContent=rt('notificationBlockedTitle');$('notificationBlockedText').textContent=rt('notificationBlockedText');$('notificationBlockedSteps').textContent=rt('notificationBlockedSteps');$('notificationBlockedReadyLabel').textContent=rt('notificationChangedCheck');$('notificationBlockedRetry').textContent=rt('recheckNotifications');$('notificationBlockedCancel').textContent=rt('cancel');
@@ -1165,21 +1304,29 @@
   }
   async function prepareNotificationRegistration(){
     if(!('serviceWorker' in navigator)||typeof Notification==='undefined')return null;
-    try{notificationRegistration=await navigator.serviceWorker.register('./gostop-notifications-sw.js?v=20260920-1');playRequestNotificationsReady=Notification.permission==='granted'&&notificationPreferenceEnabled();syncNotificationButton();syncLobbyAvailability();return notificationRegistration;}
-    catch(_){notificationRegistration=null;playRequestNotificationsReady=false;syncNotificationButton();return null;}
+    if(notificationRegistration)return notificationRegistration;
+    if(notificationRegistrationPromise)return notificationRegistrationPromise;
+    notificationRegistrationPromise=navigator.serviceWorker.register('./gostop-notifications-sw.js?v=20260920-1')
+      .then(registration=>{notificationRegistration=registration;playRequestNotificationsReady=Notification.permission==='granted'&&notificationPreferenceEnabled();syncNotificationButton();syncLobbyAvailability();return registration;})
+      .catch(()=>{notificationRegistration=null;playRequestNotificationsReady=false;syncNotificationButton();return null;})
+      .finally(()=>{notificationRegistrationPromise=null;});
+    return notificationRegistrationPromise;
   }
   async function finishEnablingNotifications(){
-    setNotificationPreference(true);const registration=notificationRegistration||await prepareNotificationRegistration();playRequestNotificationsReady=Notification.permission==='granted'&&!!registration;notificationEnablePending=false;syncNotificationButton();syncLobbyAvailability();if(notificationBlockedDialog.open)notificationBlockedDialog.close();return playRequestNotificationsReady;
+    setNotificationPreference(true);notificationEnablePending=true;syncNotificationButton();
+    const registration=notificationRegistration||await prepareNotificationRegistration();
+    playRequestNotificationsReady=Notification.permission==='granted'&&!!registration;notificationEnablePending=false;
+    if(!playRequestNotificationsReady)setNotificationPreference(false);
+    syncNotificationButton();syncLobbyAvailability();if(notificationBlockedDialog.open)notificationBlockedDialog.close();return playRequestNotificationsReady;
   }
   function disablePlayNotifications(){setNotificationPreference(false);notificationEnablePending=false;playRequestNotificationsReady=false;syncNotificationButton();syncLobbyAvailability();}
   async function enablePlayNotifications(){
     if(typeof Notification==='undefined'||!('serviceWorker' in navigator)){showToast(rt('notificationUnsupported'),4000);return;}
-    const registration=await prepareNotificationRegistration();if(!registration){showToast(rt('notificationSetupFailed'),5000);return;}
     let permission=Notification.permission;
     if(permission==='denied'){setNotificationPreference(false);playRequestNotificationsReady=false;syncNotificationButton();showNotificationBlockedDialog();return;}
     if(permission==='default')permission=await Notification.requestPermission();
-    if(permission==='granted'){await finishEnablingNotifications();return;}
-    setNotificationPreference(false);playRequestNotificationsReady=false;syncNotificationButton();syncLobbyAvailability();
+    if(permission==='granted'){const enabled=await finishEnablingNotifications();if(!enabled)showToast(rt('notificationSetupFailed'),5000);return;}
+    setNotificationPreference(false);notificationEnablePending=false;playRequestNotificationsReady=false;syncNotificationButton();syncLobbyAvailability();
     if(permission==='denied')showNotificationBlockedDialog();else showToast(rt('notificationPermissionDismissed'),4500);
   }
   async function togglePlayNotifications(){if(notificationPermissionGranted()){disablePlayNotifications();return;}await enablePlayNotifications();}
@@ -1613,7 +1760,12 @@
   function revealCurrentMainMenu(){
     const gate=globalThis.GoStopMobileFullscreen?.gateInitialMainMenuFullscreen?.();
     if(gate){Promise.resolve(gate).then(()=>revealCurrentMainMenu());return;}
-    playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';overlay.hidden=false;scheduleStableMobileMenuAnchors();globalThis.GoStopMobileFullscreen?.requestMainMenuFullscreen?.();syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();
+    playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';
+    const stablePortrait=globalThis.matchMedia?.('(max-width:760px) and (orientation:portrait)')?.matches===true;
+    if(stablePortrait){
+      overlay.style.visibility='hidden';overlay.hidden=false;lockStableMobileMenuAnchors();overlay.style.visibility='';
+    }else{overlay.hidden=false;clearStableMobileMenuAnchors();}
+    globalThis.GoStopMobileFullscreen?.requestMainMenuFullscreen?.();syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();
   }
   const inviteUrl=new URL(location.href),verificationHash=inviteUrl.hash.match(/^#verify=([a-f0-9]{64})$/i),verificationToken=verificationHash?.[1]||inviteUrl.searchParams.get('verify')||'',validVerificationToken=/^[a-f0-9]{64}$/i.test(verificationToken),roomParam=inviteUrl.searchParams.get('room'),inviteMode=inviteUrl.searchParams.get('mode')==='free'?'free':'competitive',referralParam=inviteUrl.searchParams.get('ref')||'',validReferralParam=/^[a-f0-9]{64}$/i.test(referralParam),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   function withGameBridge(callback){
@@ -1668,24 +1820,22 @@
     try{await withGameBridge(bridge=>bridge.joinCompetitiveRoom(active.roomCode,{resumeExisting:true}));returnReconnectState=null;returnReconnectBusy=false;clearRankedEntryPending();}
     catch(error){returnReconnectState=null;returnReconnectBusy=false;closeRequestDialog(matchHandoffDialog);cancelRankedEntry();playerTwoPlayerActive=false;playerPresenceMode='menu';syncLobbyAvailability();showToast(localizedError(error),6000);await refreshAccount();revealCurrentMainMenu();}
   });
-  $('returnGameNo').addEventListener('click',async()=>{
+  $('returnGameNo').addEventListener('click',()=>{
     if(activeReconnectPending()){void finishReconnectAsAbandonment();return;}
     const active=returnReconnectState||account?.activeRanked;
     const no=$('returnGameNo');if(no.disabled)return;no.disabled=true;
-    if(active?.mode==='solo'&&active?.roomCode){
-      if(account)account={...account,activeRanked:null};
-      try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
-      syncRankedButtons();renderAccountBox();patchGameIdentity();
-      try{
-        const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});
-        if(data?.account)account=data.account;
-      }catch(error){showToast(localizedError(error),6000);}
-    }
     closeReturnGameDialog();
-    await refreshAccount();
-    syncRankedButtons();renderAccountBox();patchGameIdentity();
-    revealCurrentMainMenu();
-    no.disabled=false;
+    if(account)account={...account,activeRanked:null};
+    try{localStorage.removeItem(ACTIVE_RANKED_ROOM_KEY);}catch(_){}
+    syncRankedButtons();renderAccountBox();patchGameIdentity();revealCurrentMainMenu();no.disabled=false;
+    void (async()=>{
+      if(active?.mode==='solo'&&active?.roomCode){
+        try{const data=await api('/api/solo/leave-for-challenge',{method:'POST',body:{}});if(data?.account)account=data.account;}
+        catch(error){showToast(localizedError(error),6000);}
+      }
+      try{await refreshAccount();}catch(_){}
+      syncRankedButtons();renderAccountBox();patchGameIdentity();
+    })();
   });
   $('returnGameOk').addEventListener('click',async()=>{const ok=$('returnGameOk');if(ok.disabled)return;ok.disabled=true;closeReturnGameDialog();await refreshAccount();revealCurrentMainMenu();ok.disabled=false;});
   returnGameDialog.addEventListener('cancel',event=>event.preventDefault());
@@ -1731,6 +1881,6 @@
     });
   });
   globalThis.GoStopRanked=Object.freeze({getAuthToken,getAccount,refreshAccount,refreshLeaderboardData,updateFromSnapshot,openLeaderboard,patchGameIdentity,handleFriendlyTerminal,handleFriendlySessionEnd});
-  new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))applyRankedLocale();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+  new MutationObserver(records=>{if(records.some(record=>record.attributeName==='lang'))scheduleRankedLocaleApply();}).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
   applyRankedLocale();globalThis.__gostopRankedBootComplete=true;void prepareNotificationRegistration();void watchNotificationPermission();authRestorePromise=refreshAccount();authRestorePromise.finally(async()=>{authRestorePromise=null;applyRankedLocale();if(validVerificationToken){await launchEmailVerification();return;}if(validRoomParam){void launchInviteRoom();return;}await settleInitialReconnectDecision();if(promptActiveRankedGameIfNeeded())return;revealCurrentMainMenu();});
 })();

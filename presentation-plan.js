@@ -60,6 +60,27 @@
     const cardIdentity=card=>String(card?.dataset?.cardId||card?.closest?.('.hand-card-slot')?.dataset?.handKey||'');
     const canUseCard=card=>!!card&&!card.disabled&&card.getAttribute?.('aria-disabled')!=='true';
     const cardByIdentity=id=>id?[...doc.querySelectorAll('#playerHand .hand-card')].find(card=>cardIdentity(card)===id)||null:null;
+    const recordGestureSample=(state,x,y,time=now())=>{
+      if(!state)return;
+      const sample={x:Number(x),y:Number(y),t:Number(time)};
+      if(![sample.x,sample.y,sample.t].every(Number.isFinite))return;
+      state.samples=Array.isArray(state.samples)?state.samples:[];
+      const last=state.samples[state.samples.length-1];
+      if(!last||Math.abs(last.x-sample.x)>.25||Math.abs(last.y-sample.y)>.25||sample.t-last.t>=12)state.samples.push(sample);
+      if(state.samples.length>14)state.samples.splice(0,state.samples.length-14);
+    };
+    const gestureIsUpwardFlick=(state,endX,endY,endTime)=>{
+      const options={minUpwardDistance:10,minTravelDistance:20,maxDuration:500,minSpeed:.11,maxHorizontalRatio:1.35};
+      if(isUpwardFlick({startX:state.startX,startY:state.startY,endX,endY,duration:Math.max(1,endTime-state.startTime)},options))return true;
+      // A user may intentionally hold a selected card, then flick it. For gestures
+      // longer than 500ms, judge only the recent movement window instead of counting
+      // the stationary hold against the flick duration.
+      const end={x:Number(endX),y:Number(endY),t:Number(endTime)};
+      const recent=[...(state.samples||[]),end].filter(sample=>Number.isFinite(sample.t)&&end.t-sample.t<=320);
+      if(recent.length<2)return false;
+      const start=recent[0];
+      return isUpwardFlick({startX:start.x,startY:start.y,endX:end.x,endY:end.y,duration:Math.max(1,end.t-start.t)},{...options,maxDuration:320});
+    };
 
     const clearVisual=()=>{
       if(visualSelectedSlot?.isConnected)visualSelectedSlot.classList.remove('is-hovered');
@@ -171,8 +192,9 @@
         pointerState={
           id:event.pointerId,card,cardId:id,wasSelected:selectedCardId===id,
           startX:event.clientX,startY:event.clientY,lastX:event.clientX,lastY:event.clientY,startTime:now(),
-          intent:null,geometry:snapshotHandGeometry(),ghost:null,hiddenCard:null,previousVisibility:''
+          intent:null,geometry:snapshotHandGeometry(),ghost:null,hiddenCard:null,previousVisibility:'',samples:[]
         };
+        recordGestureSample(pointerState,event.clientX,event.clientY,pointerState.startTime);
         showVisual(card);
         try{card.setPointerCapture?.(event.pointerId);}catch(_){}
         if(event.pointerType==='pen')event.preventDefault();
@@ -180,7 +202,7 @@
 
       doc.addEventListener('pointermove',event=>{
         const state=pointerState;if(!state||event.pointerId!==state.id||!gesturePointer(event))return;
-        state.lastX=event.clientX;state.lastY=event.clientY;
+        state.lastX=event.clientX;state.lastY=event.clientY;recordGestureSample(state,event.clientX,event.clientY);
         const dx=event.clientX-state.startX,dy=event.clientY-state.startY,up=-dy,sideways=Math.abs(dx);
         if(!state.intent){
           if(sideways>=10&&sideways>Math.max(8,Math.abs(up)*1.10))state.intent='browse';
@@ -203,10 +225,7 @@
         const state=pointerState;if(!state||event.pointerId!==state.id||!gesturePointer(event))return;
         pointerState=null;
         const endTime=now(),dx=event.clientX-state.startX,dy=event.clientY-state.startY;
-        const flick=isUpwardFlick(
-          {startX:state.startX,startY:state.startY,endX:event.clientX,endY:event.clientY,duration:Math.max(1,endTime-state.startTime)},
-          {minUpwardDistance:10,minTravelDistance:20,maxDuration:500,minSpeed:.11,maxHorizontalRatio:1.35}
-        );
+        const flick=gestureIsUpwardFlick(state,event.clientX,event.clientY,endTime);
         const browsed=!flick&&(state.intent==='browse'||Math.abs(dx)>=18&&Math.abs(dx)>Math.abs(dy)*.9);
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
         const tap=Math.abs(dx)<=28&&Math.abs(dy)<=28&&endTime-state.startTime<=1000;
@@ -245,15 +264,16 @@
         touchState={
           id:touch.identifier,card,cardId:id,wasSelected:selectedCardId===id,
           startX:touch.clientX,startY:touch.clientY,lastX:touch.clientX,lastY:touch.clientY,startTime:now(),
-          intent:null,geometry:snapshotHandGeometry(),ghost:null,hiddenCard:null,previousVisibility:''
+          intent:null,geometry:snapshotHandGeometry(),ghost:null,hiddenCard:null,previousVisibility:'',samples:[]
         };
+        recordGestureSample(touchState,touch.clientX,touch.clientY,touchState.startTime);
         showVisual(card);
       },{capture:true,passive:true});
 
       doc.addEventListener('touchmove',event=>{
         const state=touchState;if(!state)return;
         const touch=touchById(event.touches,state.id);if(!touch)return;
-        state.lastX=touch.clientX;state.lastY=touch.clientY;
+        state.lastX=touch.clientX;state.lastY=touch.clientY;recordGestureSample(state,touch.clientX,touch.clientY);
         const dx=touch.clientX-state.startX,dy=touch.clientY-state.startY,up=-dy,sideways=Math.abs(dx);
         if(!state.intent){
           if(sideways>=10&&sideways>Math.max(8,Math.abs(up)*1.10))state.intent='browse';
@@ -278,10 +298,7 @@
         const touch=touchById(event.changedTouches,state.id);touchState=null;
         if(!touch){restoreGhost(state);clearSelection();return;}
         const endTime=now(),dx=touch.clientX-state.startX,dy=touch.clientY-state.startY;
-        const flick=isUpwardFlick(
-          {startX:state.startX,startY:state.startY,endX:touch.clientX,endY:touch.clientY,duration:Math.max(1,endTime-state.startTime)},
-          {minUpwardDistance:10,minTravelDistance:20,maxDuration:500,minSpeed:.11,maxHorizontalRatio:1.35}
-        );
+        const flick=gestureIsUpwardFlick(state,touch.clientX,touch.clientY,endTime);
         const browsed=!flick&&(state.intent==='browse'||Math.abs(dx)>=18&&Math.abs(dx)>Math.abs(dy)*.9);
         restoreGhost(state);playerHand()?.classList.remove('gostop-touch-browsing');
         if(flick){
