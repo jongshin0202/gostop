@@ -351,7 +351,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261008-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-5/);
+  assert.match(index,/ranked-client\.js\?v=20261008-6/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
@@ -422,4 +422,15 @@ test('Lobby connection and Auto Match fail visibly rather than waiting indefinit
   assert.match(client,/Auto Match did not respond\. Check your connection and try again\./);
   assert.match(client,/if\(autoMatchInFlight\)pendingLobbyMessage=\{type:'autoMatchStart'\}/);
   assert.match(client,/if\(lobbySocket!==socket\)return;/);
+});
+
+
+test('Auto Match replaces Search Player and discards late search responses',()=>{
+  const handler=client.slice(client.indexOf('function showAutoMatchView()'),client.indexOf("$('autoMatchCandidateAccept').addEventListener"));
+  assert.match(handler,/browsePlayersActive=false;lobbySearchActive=false;lastSearchPlayers=\[\]/);
+  assert.match(handler,/searchSection\.hidden=true/);
+  assert.match(handler,/\$\('searchPlayerResults'\)\.hidden=true/);
+  assert.match(handler,/\$\('browsePlayerResults'\)\.hidden=true/);
+  assert.match(handler,/\$\('autoMatchBtn'\)\.addEventListener\('click',\(\)=>\{showAutoMatchView\(\)/);
+  assert.match(client,/if\(message\.type==='searchResults'\)\{if\(!lobbySearchActive\|\|autoMatchSearching\)return;/);
 });
