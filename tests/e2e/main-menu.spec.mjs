@@ -456,10 +456,21 @@ test('Online Play browser flow covers Browse Top 10, Search Player, and Auto Mat
   await expect(page.locator('#searchPlayerResults')).toContainText('Jjineeland');
 
   await page.locator('#autoMatchBtn').click();
+  await expect(page.locator('[data-online-section="search"]')).toBeHidden();
+  await expect(page.locator('#searchPlayerResults')).toBeHidden();
+  await expect(page.locator('#browsePlayerResults')).toBeHidden();
   await expect(page.locator('#autoMatchCandidateAccept')).toBeVisible();
   await expect(page.locator('body')).toContainText('Jjineeland');
   await page.locator('#autoMatchCandidateCancel').click();
   await expect(page.locator('#autoMatchCandidateAccept')).toBeHidden();
+
+  // Reproduce: Search Player -> Cancel Auto Match -> Auto Match again.
+  await page.locator('#searchPlayersBtn').click();
+  await expect(page.locator('[data-online-section="search"]')).toBeVisible();
+  await page.locator('#autoMatchBtn').click();
+  await expect(page.locator('[data-online-section="search"]')).toBeHidden();
+  await expect(page.locator('#searchPlayerResults')).toBeHidden();
+  await expect(page.locator('#browsePlayerResults')).toBeHidden();
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
@@ -478,9 +489,21 @@ test('Friends Search sends a Friend Request and shows the confirmation dialog',a
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
+test('Log Out No keeps the user signed in',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#accountLogoutBtn').click();
+  await expect(page.locator('#logoutConfirmDialog')).toHaveJSProperty('open',true);
+  await page.locator('#logoutConfirmNo').click();
+  await expect(page.locator('#logoutConfirmDialog')).toHaveJSProperty('open',false);
+  await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toContainText('Jong');
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
 test('Log Out clears the signed-in identity and restores Create ID and Log In controls',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#accountLogoutBtn').click();
+  await expect(page.locator('#logoutConfirmDialog')).toHaveJSProperty('open',true);
+  await page.locator('#logoutConfirmYes').click();
   await expect(page.locator('#accountCreateBtn')).toBeVisible();
   await expect(page.locator('#accountLoginBtn')).toBeVisible();
   await expect(page.locator('#accountMenuIdentity [data-player-info-account-id="acct-self"]')).toHaveCount(0);
@@ -491,6 +514,8 @@ test('Log Out clears the signed-in identity and restores Create ID and Log In co
 test('logout then login restores the authenticated Player HUD through the real login form',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#accountLogoutBtn').click();
+  await expect(page.locator('#logoutConfirmDialog')).toHaveJSProperty('open',true);
+  await page.locator('#logoutConfirmYes').click();
   await page.locator('#accountLoginBtn').click();
   await expect(page.locator('#accountDialog')).toHaveJSProperty('open',true);
   await page.locator('#loginForm input[name="email"]').fill('jong@example.com');
@@ -593,6 +618,8 @@ test('Friendly Solo Play launches a real local game without account or matchmaki
 test('Create ID browser flow requires Connection Protection acknowledgement before registration and reaches success UI',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#accountLogoutBtn').click();
+  await expect(page.locator('#logoutConfirmDialog')).toHaveJSProperty('open',true);
+  await page.locator('#logoutConfirmYes').click();
   await page.locator('#accountCreateBtn').click();
   await expect(page.locator('#accountDialog')).toHaveJSProperty('open',true);
   await expect(page.locator('#registerForm')).toBeVisible();

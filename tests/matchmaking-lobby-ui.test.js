@@ -351,7 +351,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261008-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-4/);
+  assert.match(index,/ranked-client\.js\?v=20261008-7/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
@@ -388,4 +388,50 @@ test('mobile finished-game actions stack without overlapping',()=>{
   const mobileBlock=css.slice(css.indexOf('/* Mobile result actions must stack in normal flow, never overlap. */'));
   assert.match(mobileBlock,/\.grand-result-card \.play-again-grand\{display:block;max-width:100%;margin:0 auto 12px\}/);
   assert.match(mobileBlock,/\.grand-result-card \.result-quit-btn\{position:relative;inset:auto;display:block;margin:0 auto;min-height:42px/);
+});
+
+
+test('Auto Match returns waiting without reading leaderboards when no eligible opponent exists',async()=>{
+  const {Lobby}=await import('../server/lobby.mjs');
+  const state={},lobby=new Lobby(state,{}),messages=[];
+  const client={account:{id:'one'},twoPlayer:false,autoMatching:false,autoMatchTried:new Set(),socket:{send:data=>messages.push(JSON.parse(data))}};
+  lobby.clientCanReceiveChallenge=()=>true;
+  lobby.activeChallengeFor=()=>null;
+  lobby.candidateClients=()=>[];
+  lobby.leaderboardRows=()=>{throw new Error('unnecessary leaderboard fetch would stall Auto Match');};
+  assert.equal(await lobby.tryAutoMatch(client),false);
+  assert.deepEqual(messages.map(message=>message.type),['autoMatchWaiting']);
+  assert.equal(client.autoMatching,true);
+});
+
+test('Lobby connection and Auto Match fail visibly rather than waiting indefinitely',()=>{
+  const handshake=server.slice(server.indexOf("if(request.method!=='GET'||url.pathname!=='/connect')"),server.indexOf('async webSocketMessage(socket,message)'));
+  assert.match(handshake,/const initialRecommendations=this\.broadcastRecommendations\(\)\.catch\(\(\)=>\{\}\)/);
+  assert.match(handshake,/this\.state\.waitUntil\?\.\(initialRecommendations\)/);
+  assert.ok(handshake.indexOf('return new Response(null,{status:101')>handshake.indexOf('const initialRecommendations='));
+  assert.doesNotMatch(handshake,/await this\.broadcastRecommendations\(\)/);
+  const start=server.slice(server.indexOf("if(message.type==='autoMatchStart'"),server.indexOf("if(message.type==='autoMatchNext'"));
+  assert.match(start,/code:'MATCHMAKING_UNAVAILABLE'/);
+  const waiting=server.slice(server.indexOf('async tryAutoMatch(client)'),server.indexOf('async acceptAutoMatchCandidate'));
+  assert.ok(waiting.indexOf("type:'autoMatchWaiting'")<waiting.indexOf('const rows=await this.leaderboardRows()'));
+  assert.match(client,/const LOBBY_CONNECT_TIMEOUT_MS=8000/);
+  assert.match(client,/const AUTOMATCH_START_TIMEOUT_MS=16000/);
+  assert.match(client,/socket\.readyState!==WebSocket\.CONNECTING/);
+  assert.match(client,/socket\.close\(\)/);
+  assert.match(client,/function armAutoMatchStartWatchdog\(\)/);
+  assert.match(client,/Auto Match did not respond\. Check your connection and try again\./);
+  assert.match(client,/if\(autoMatchInFlight\)pendingLobbyMessage=\{type:'autoMatchStart'\}/);
+  assert.match(client,/if\(lobbySocket!==socket\)return;/);
+});
+
+
+test('Auto Match replaces Search Player and discards late search responses',()=>{
+  assert.match(client,/\.online-player-list\[hidden\]\{display:none!important\}/);
+  const handler=client.slice(client.indexOf('function showAutoMatchView()'),client.indexOf("$('autoMatchCandidateAccept').addEventListener"));
+  assert.match(handler,/browsePlayersActive=false;lobbySearchActive=false;lastSearchPlayers=\[\]/);
+  assert.match(handler,/searchSection\.hidden=true/);
+  assert.match(handler,/\$\('searchPlayerResults'\)\.hidden=true/);
+  assert.match(handler,/\$\('browsePlayerResults'\)\.hidden=true/);
+  assert.match(handler,/\$\('autoMatchBtn'\)\.addEventListener\('click',\(\)=>\{showAutoMatchView\(\)/);
+  assert.match(client,/if\(message\.type==='searchResults'\)\{if\(!lobbySearchActive\|\|autoMatchSearching\)return;/);
 });
