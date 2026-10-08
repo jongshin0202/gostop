@@ -860,20 +860,26 @@
     overlay.style.setProperty('--gostop-menu-account-top',`${accountTop}px`);
     overlay.classList.add('stable-mobile-menu-anchors');
   }
+  let mobileKeyboardTransitionUntil=0;
   function textEntryFocused(){
     const active=document.activeElement;
     return !!active?.matches?.('input,textarea,select,[contenteditable="true"]');
   }
+  function keyboardViewportTransitionActive(){
+    return textEntryFocused()||Date.now()<mobileKeyboardTransitionUntil;
+  }
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))mobileKeyboardTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
+  document.addEventListener('focusout',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))mobileKeyboardTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
   function scheduleStableMobileMenuAnchors(){
     // Opening/closing the Android keyboard changes visualViewport dimensions.
-    // Do not collapse/re-expand the entire menu just to measure anchors while typing.
-    if(textEntryFocused())return;
+    // Do not collapse/re-expand the entire menu during either edge of that transition.
+    if(keyboardViewportTransitionActive())return;
     if(stableMenuAnchorFrame)cancelAnimationFrame(stableMenuAnchorFrame);
     stableMenuAnchorFrame=requestAnimationFrame(lockStableMobileMenuAnchors);
   }
   globalThis.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
   globalThis.addEventListener?.('orientationchange',scheduleStableMobileMenuAnchors);
-  globalThis.visualViewport?.addEventListener?.('resize',()=>{if(!textEntryFocused())scheduleStableMobileMenuAnchors();});
+  globalThis.visualViewport?.addEventListener?.('resize',()=>{if(!keyboardViewportTransitionActive())scheduleStableMobileMenuAnchors();});
 
   const freePanel=document.createElement('section');freePanel.id='freeFriendPanel';freePanel.className='online-lobby-panel';freePanel.hidden=true;freePanel.innerHTML=`<div class="online-lobby-card"><h2 id="freeFriendTitle">Play With Friend</h2><p id="freeFriendHelp" class="account-help">Create a room and send your friend the share link. Friendly Gaming never uses Wallet Coins or leaderboards.</p><div class="online-method"><strong id="freeRoomShareTitle">Share Link</strong><div class="online-existing-controls"><button id="freeCreateRoomBtn" class="glass-btn strong" type="button">Create Room / Share Link</button><div id="freeShareLinkBox" class="room-share-link" hidden><a id="freeShareLink" target="_blank" rel="noopener"></a><div class="friendly-share-actions"><button id="freeShareBtn" type="button">Share Invite</button><button id="freeCopyLinkBtn" type="button">Copy Link</button></div></div><p id="freeOnlineStatus" class="online-status" role="status" aria-live="polite"></p></div></div><div class="online-lobby-actions"><button id="freeFriendClose" type="button">Return</button></div></div>`;document.body.appendChild(freePanel);
 
