@@ -88,8 +88,8 @@ test('mobile non-game UI buttons use immediate touch activation and stable keybo
   assert.match(client,/#accountDialog\[open\]/);
   assert.match(client,/height:min\(48svh,420px\)!important/);
   assert.match(client,/#accountDialog::backdrop\{background:#14261d!important/);
-  assert.match(client,/function ensureFocusedAuthFieldVisible\(\)/);
-  assert.match(client,/dialog\.scrollTop\+=rect\.top-desiredTop/);
+  assert.match(client,/function ensureFocusedInputVisible\(\)/);
+  assert.match(client,/container\.scrollTop\+=rect\.top-desiredTop/);
   assert.match(client,/body:has\(dialog\[open\]\)[^]*?animation-play-state:paused!important/);
   assert.match(client,/globalThis\.addEventListener\?\.\('orientationchange'/);
   assert.doesNotMatch(client,/globalThis\.addEventListener\?\.\('resize',scheduleStableMobileMenuAnchors\)/);
@@ -331,12 +331,27 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 });
 
 
+test('S22 login and Friends search stay above the keyboard and login never reveals a blank handoff',()=>{
+  assert.match(client,/#accountDialog\[open\]:focus-within\{height:min\(48svh,420px\)!important/);
+  assert.match(client,/\.social-screen:focus-within,.online-lobby-panel:focus-within/);
+  assert.match(client,/function focusedInputScrollContainer/);
+  assert.match(client,/function ensureFocusedInputVisible/);
+  const login=client.slice(client.indexOf("$('loginForm').addEventListener"),client.indexOf('let pendingRegistrationBody'));
+  assert.match(login,/if\(!continuing\)revealCurrentMainMenu\(\)/);
+  assert.ok(login.indexOf('revealCurrentMainMenu()')<login.indexOf('authDialog.close()'));
+  const attractTouch=client.slice(client.indexOf("leaderboardScreen.addEventListener('touchend'"),client.indexOf("leaderboardBtn.addEventListener"));
+  assert.match(attractTouch,/isSwipe/);
+  assert.match(attractTouch,/if\(isSwipe\)[^]*?nextLeaderboard/);
+  assert.match(attractTouch,/if\(attractMode&&elapsed<=900&&travel<24\)[^]*?closeLeaderboard\(true\)/);
+  assert.doesNotMatch(client,/document\.addEventListener\('touchstart',event=>\{if\(!attractMode/);
+});
+
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-2/);
+  assert.match(index,/ranked-client\.js\?v=20261008-3/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
