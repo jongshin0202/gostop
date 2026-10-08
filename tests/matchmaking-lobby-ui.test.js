@@ -85,12 +85,15 @@ test('mobile non-game UI buttons use immediate touch activation and stable keybo
   assert.match(client,/mobileKeyboardTransitionUntil=Date\.now\(\)\+1200/);
   assert.match(client,/if\(keyboardViewportTransitionActive\(\)\)return;/);
   assert.match(client,/gostop-mobile-ui-fast/);
-  assert.match(client,/dialog\.gostop-account-dialog\[open\]:focus-within/);
-  assert.match(client,/height:48vh!important/);
+  assert.match(client,/#accountDialog\[open\]/);
+  assert.match(client,/height:min\(48svh,420px\)!important/);
   assert.match(client,/dialog\.gostop-account-dialog::backdrop\{background:#100b08!important/);
   assert.match(client,/function ensureFocusedAuthFieldVisible\(\)/);
   assert.match(client,/dialog\.scrollTop\+=rect\.top-desiredTop/);
   assert.match(client,/body:has\(dialog\[open\]\)[^]*?animation-play-state:paused!important/);
+  assert.match(client,/globalThis\.addEventListener\?\.\('orientationchange'/);
+  assert.doesNotMatch(client,/globalThis\.addEventListener\?\.\('resize',scheduleStableMobileMenuAnchors\)/);
+  assert.match(client,/if\(attractMode&&!leaderboardScreen\.hidden&&!globalThis\.goStopOnlineSession\)[^]*?closeLeaderboard\(true\)/);
   assert.doesNotMatch(index,/interactive-widget=/);
 });
 
@@ -333,7 +336,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-1/);
+  assert.match(index,/ranked-client\.js\?v=20261008-2/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
