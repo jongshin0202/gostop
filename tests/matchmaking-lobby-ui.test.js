@@ -331,12 +331,34 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 });
 
 
+test('mobile login and Friends search stay visible above the Android keyboard',()=>{
+  assert.match(client,/#accountDialog\[open\]\{[^]*?inset:calc\(env\(safe-area-inset-top,0px\) \+ 2px\) 4px auto 4px!important/);
+  assert.match(client,/#accountDialog\[open\]:focus-within\{height:min\(48svh,420px\)!important/);
+  assert.match(client,/\.social-screen:focus-within,.online-lobby-panel:focus-within\{[^]*?place-items:start center!important/);
+  assert.match(client,/\.social-screen:focus-within \.social-card[^]*?max-height:min\(48svh,430px\)!important/);
+  assert.match(client,/function focusedInputScrollContainer/);
+  assert.match(client,/function ensureFocusedInputVisible/);
+  assert.match(client,/scheduleFocusedInputVisible\(30\)/);
+});
+
+test('successful login prepares the menu before dismissing the auth dialog',()=>{
+  const handler=client.slice(client.indexOf("$('loginForm').addEventListener"),client.indexOf("let pendingRegistrationBody"));
+  assert.match(handler,/const continuing=!!accountContinuation/);
+  assert.match(handler,/saveSession\(data\);if\(!continuing\)revealCurrentMainMenu\(\)/);
+  assert.ok(handler.indexOf('revealCurrentMainMenu()')<handler.indexOf('authDialog.close()'),'main menu must be ready before the login modal disappears');
+  assert.match(handler,/requestAnimationFrame\(\(\)=>\{if\(authDialog\.open\)authDialog\.close\(\)/);
+});
+
+test('attract mode exits on touchstart without waiting for synthetic click',()=>{
+  assert.match(client,/document\.addEventListener\('touchstart',event=>\{if\(!attractMode\|\|leaderboardScreen\.hidden\|\|globalThis\.goStopOnlineSession\)return;event\.preventDefault\(\);event\.stopPropagation\(\);closeLeaderboard\(true\);\}/);
+});
+
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-2/);
+  assert.match(index,/ranked-client\.js\?v=20261008-3/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
