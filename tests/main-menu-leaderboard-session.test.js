@@ -116,7 +116,9 @@ test('main-menu attract mode starts fifteen seconds after the visible menu becom
   assert.doesNotMatch(source,/clearInterval\(attractTimer\)/);
   assert.match(source,/lastMenuActivityAt=Date\.now\(\);startAttractWatcher\(\)/);
   assert.match(source,/if\(!event\.isTrusted\)return;if\(attractMode&&!leaderboardScreen\.hidden&&!globalThis\.goStopOnlineSession\)\{[^]*?closeLeaderboard\(true\);return;\}if\(mainMenuIdleEligible\(\)\)resetAttractTimer\(\)/);
-  assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;void prepareNotificationRegistration\(\);void watchNotificationPermission\(\);authRestorePromise=refreshAccount\(\)/);assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true';overlay\.hidden=false/);assert.doesNotMatch(source,/resumeActiveRankedRoom/);
+  assert.match(source,/applyRankedLocale\(\);globalThis\.__gostopRankedBootComplete=true;void prepareNotificationRegistration\(\);void watchNotificationPermission\(\);authRestorePromise=refreshAccount\(\)/);
+  assert.match(source,/function revealCurrentMainMenu\(\)[\s\S]*overlay\.dataset\.currentMenuReady='true'[\s\S]*stablePortrait[\s\S]*overlay\.style\.visibility='hidden';overlay\.hidden=false;lockStableMobileMenuAnchors\(\);overlay\.style\.visibility=''/);
+  assert.doesNotMatch(source,/resumeActiveRankedRoom/);
   assert.match(docs,/After 15 seconds of main-menu inactivity, attract mode shows Global for 5 seconds, Monthly for 5 seconds, then returns to the main menu for 15 seconds and repeats/);
 });
 test('inactivity warning dismissal is sticky for the current warning while server countdown continues',()=>{
