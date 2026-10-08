@@ -351,7 +351,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-3/);
+  assert.match(index,/ranked-client\.js\?v=20261008-4/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
@@ -366,4 +366,18 @@ test('production browser REST and lobby transport use direct authority endpoints
   assert.ok(client.includes('fetch(apiUrl(path,method)'));
   assert.match(client,/function lobbyUrl\(\)\{const url=new URL\(\`\$\{baseUrl\}\/api\/lobby\/ws\`\)/);
   assert.match(online,/requestUrl\(path\)\{return \`\$\{this\.baseUrl\}\$\{path\}\`;\}/);
+});
+
+
+test('Logout requires Yes confirmation and A17 player identity stays below expanded menu',()=>{
+  assert.match(client,/function confirmLogout\(\)/);
+  assert.match(client,/Are you sure you want to log out\?/);
+  assert.match(client,/id="logoutConfirmYes"/);
+  assert.match(client,/id="logoutConfirmNo"/);
+  assert.match(client,/logoutConfirmDialog\.querySelector\('#logoutConfirmNo'\)\.addEventListener\('click',\(\)=>logoutConfirmDialog\.close\(\)\)/);
+  assert.match(client,/logoutConfirmDialog\.querySelector\('#logoutConfirmYes'\)[^\n]*await logout\(\)/);
+  assert.match(client,/accountLogoutBtn'\)\?\.addEventListener\('click',confirmLogout\)/);
+  assert.match(client,/\.account-menu-box\{top:max\(var\(--gostop-menu-account-top\)/);
+  assert.match(client,/--gostop-expanded-menu-height/);
+  assert.match(client,/new ResizeObserver\(/);
 });
