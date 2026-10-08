@@ -903,7 +903,7 @@
     }
   `;
   document.head.appendChild(mobileInputStyle);
-  let keyboardViewportFrame=0;
+  let keyboardViewportFrame=0,ensureKeyboardInputVisible=false;
   function syncKeyboardViewport(){
     keyboardViewportFrame=0;
     const vv=globalThis.visualViewport;
@@ -913,16 +913,18 @@
     document.documentElement.style.setProperty('--gostop-vv-height',height+'px');
     document.documentElement.style.setProperty('--gostop-vv-top',top+'px');
     document.documentElement.classList.toggle('gostop-keyboard-active',editing&&globalThis.innerWidth<=700);
-    if(editing&&active?.closest?.('dialog[open]'))requestAnimationFrame(()=>active.scrollIntoView?.({block:'center',inline:'nearest',behavior:'auto'}));
+    if(ensureKeyboardInputVisible&&editing&&active?.closest?.('dialog[open]'))requestAnimationFrame(()=>active.scrollIntoView?.({block:'center',inline:'nearest',behavior:'auto'}));
+    ensureKeyboardInputVisible=false;
   }
-  function scheduleKeyboardViewportSync(){
+  function scheduleKeyboardViewportSync(ensureVisible=false){
+    ensureKeyboardInputVisible=ensureKeyboardInputVisible||ensureVisible;
     if(keyboardViewportFrame)cancelAnimationFrame(keyboardViewportFrame);
     keyboardViewportFrame=requestAnimationFrame(syncKeyboardViewport);
   }
-  globalThis.visualViewport?.addEventListener?.('resize',scheduleKeyboardViewportSync,{passive:true});
-  globalThis.visualViewport?.addEventListener?.('scroll',scheduleKeyboardViewportSync,{passive:true});
-  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))scheduleKeyboardViewportSync();},{passive:true});
-  document.addEventListener('focusout',()=>requestAnimationFrame(scheduleKeyboardViewportSync),{passive:true});
+  globalThis.visualViewport?.addEventListener?.('resize',()=>scheduleKeyboardViewportSync(true),{passive:true});
+  globalThis.visualViewport?.addEventListener?.('scroll',()=>scheduleKeyboardViewportSync(false),{passive:true});
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))scheduleKeyboardViewportSync(true);},{passive:true});
+  document.addEventListener('focusout',()=>requestAnimationFrame(()=>scheduleKeyboardViewportSync(false)),{passive:true});
   syncKeyboardViewport();
   const registrationPolicyDialog=document.createElement('dialog');registrationPolicyDialog.id='registrationPolicyDialog';registrationPolicyDialog.className='gostop-account-dialog';registrationPolicyDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="registrationPolicyTitle">Connection Protection</h2><p id="registrationPolicyText" style="white-space:pre-line;text-align:left"></p><button id="registrationPolicyOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(registrationPolicyDialog);
   const successDialog=document.createElement('dialog');successDialog.className='gostop-account-dialog';successDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2>Account Registered Successfully</h2><p>You received 100 signup bonus coins + 100 daily login bonus coins.</p><div class="decision-actions"><button id="registrationAddFriend" class="glass-btn" type="button" hidden>Add Inviter as Friend</button><button id="registrationCompetitive" class="go-btn" type="button" hidden>Try Competitive Gaming</button><button id="registrationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(successDialog);
