@@ -403,6 +403,9 @@ body{overflow-x:hidden;background:radial-gradient(circle at 50% 20%,#55311f 0,#1
   .grand-result-card{min-height:410px;padding:34px 20px 28px}
   .result-breakdown{font-size:12px}
   .play-again-grand{min-width:210px;font-size:23px}
+  /* Mobile result actions must stack in normal flow, never overlap. */
+  .grand-result-card .play-again-grand{display:block;max-width:100%;margin:0 auto 12px}
+  .grand-result-card .result-quit-btn{position:relative;inset:auto;display:block;margin:0 auto;min-height:42px;min-width:150px;z-index:2}
 }
 
 /* V1.10.1 — top/bottom player areas mirror each other. */
