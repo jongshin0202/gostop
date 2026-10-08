@@ -44,6 +44,22 @@ test('deployed game never loads the DIAG control and diagnostics require explici
   assert.match(diagnostics,/localHost&&params\.get\('diag'\)==='1'/);
 });
 
+test('Settings interactions avoid blocking work before visual feedback',()=>{
+  assert.match(client,/\.settings-dialog::backdrop\{[^}]*backdrop-filter:none!important/);
+  assert.match(client,/function openSettings\(\)\{languageMenu\.hidden=true;if\(!settingsDialog\.open\)settingsDialog\.showModal\(\);setTimeout\(syncNotificationButton,0\);\}/);
+  assert.match(client,/notificationRegistrationPromise/);
+  const enableStart=client.indexOf('async function enablePlayNotifications()');
+  const enableEnd=client.indexOf('async function togglePlayNotifications()',enableStart);
+  const enableSource=client.slice(enableStart,enableEnd);
+  assert.ok(enableSource.indexOf('Notification.requestPermission()')<enableSource.indexOf('finishEnablingNotifications()'),'permission prompt must happen before registration completion work');
+  assert.doesNotMatch(enableSource,/await prepareNotificationRegistration\(\)/);
+  assert.match(client,/new MutationObserver\([^]*?scheduleRankedLocaleApply\(\)/);
+  assert.match(app,/function scheduleLocaleWork\(locale\)/);
+  assert.match(app,/requestAnimationFrame\(afterPaint\)/);
+  assert.match(app,/if\(els\.howToDialog\?\.open\)renderTutorialCards\(\)/);
+  assert.match(app,/if\(state&&els\.soloStartOverlay\?\.hidden!==false\)render\(\)/);
+});
+
 test('Settings language picker stays inside the dialog with readable language buttons',()=>{
   assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\{position:static!important/);
   assert.match(client,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
@@ -283,9 +299,9 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261005-3/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261007-2/);
+  assert.match(index,/ranked-client\.js\?v=20261007-3/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
-  assert.match(index,/app\.js\?v=20261007-4/);
+  assert.match(index,/app\.js\?v=20261007-5/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
   assert.match(index,/presentation-plan\.js\?v=20261007-1/);
   assert.doesNotMatch(index,/diagnostics\.js/);
