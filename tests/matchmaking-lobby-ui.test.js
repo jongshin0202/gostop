@@ -88,8 +88,8 @@ test('mobile non-game UI buttons use immediate touch activation and stable keybo
   assert.match(client,/#accountDialog\[open\]/);
   assert.match(client,/height:min\(48svh,420px\)!important/);
   assert.match(client,/#accountDialog::backdrop\{background:#14261d!important/);
-  assert.match(client,/function ensureFocusedAuthFieldVisible\(\)/);
-  assert.match(client,/dialog\.scrollTop\+=rect\.top-desiredTop/);
+  assert.match(client,/function ensureFocusedInputVisible\(\)/);
+  assert.match(client,/container\.scrollTop\+=rect\.top-desiredTop/);
   assert.match(client,/body:has\(dialog\[open\]\)[^]*?animation-play-state:paused!important/);
   assert.match(client,/globalThis\.addEventListener\?\.\('orientationchange'/);
   assert.doesNotMatch(client,/globalThis\.addEventListener\?\.\('resize',scheduleStableMobileMenuAnchors\)/);
