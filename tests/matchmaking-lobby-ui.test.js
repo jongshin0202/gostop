@@ -60,6 +60,22 @@ test('Settings interactions avoid blocking work before visual feedback',()=>{
   assert.match(app,/if\(state&&els\.soloStartOverlay\?\.hidden!==false\)render\(\)/);
 });
 
+test('language highlight and dialog taps respond before deferred work',()=>{
+  const styles=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  assert.match(styles,/dialog::backdrop\{[^}]*backdrop-filter:none/);
+  assert.match(styles,/dialog button,\.language-menu button\{touch-action:manipulation/);
+  const localeStart=app.indexOf('function setLocale(locale)');
+  const localeEnd=app.indexOf('function refreshModeLocalizedLabels',localeStart);
+  const localeSource=app.slice(localeStart,localeEnd);
+  assert.ok(localeSource.indexOf("setAttribute('aria-current'")<localeSource.indexOf('scheduleLocaleWork(presentation.locale)'),'selected-language highlight must update before deferred locale work');
+  const scheduleStart=app.indexOf('function scheduleLocaleWork(locale)');
+  const scheduleEnd=app.indexOf('function setLocale(locale)',scheduleStart);
+  const scheduleSource=app.slice(scheduleStart,scheduleEnd);
+  assert.match(scheduleSource,/requestAnimationFrame\(afterPaint\)/);
+  assert.match(scheduleSource,/localStorage\.setItem\('gostop-language',locale\)/);
+  assert.match(scheduleSource,/document\.documentElement\.lang=locale/);
+});
+
 test('Settings language picker stays inside the dialog with readable language buttons',()=>{
   assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\{position:static!important/);
   assert.match(client,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
@@ -297,11 +313,11 @@ test('Competitive Solo handoff route ends authoritative Solo session before mult
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20261007-1/);
-  assert.match(index,/styles\.css\?v=20261005-3/);
+  assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
   assert.match(index,/ranked-client\.js\?v=20261007-3/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
-  assert.match(index,/app\.js\?v=20261007-5/);
+  assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
   assert.match(index,/presentation-plan\.js\?v=20261007-1/);
   assert.doesNotMatch(index,/diagnostics\.js/);

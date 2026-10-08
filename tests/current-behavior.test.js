@@ -2324,6 +2324,18 @@ test('multiplayer flow UI and Go submission remain authoritative and fail closed
   assert.doesNotMatch(source,/onlineSubmit\(\{type:'newHand'\}/);
 });
 
+test('authoritative snapshots immediately close Go Stop resolved on another device',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
+  const reconcile=source.slice(source.indexOf('function reconcileAuthoritativeDecisionDialogs'),source.indexOf('function clearOnlineGameplayPresentation'));
+  assert.match(reconcile,/type!==\'goStopDecision\'\)setDialog\(els\.decisionDialog,false\)/);
+  assert.match(reconcile,/shakeDecision/);
+  assert.match(reconcile,/bombDecision/);
+  const snapshotListener=source.slice(source.indexOf("adapter.addEventListener('snapshot'"),source.indexOf("adapter.addEventListener('actionAccepted'"));
+  assert.match(snapshotListener,/reconcileAuthoritativeDecisionDialogs\(event\.detail\.snapshot\?\.state\)/);
+  const transition=source.slice(source.indexOf('async function presentOnlineTransition'),source.indexOf('function enterOnlineMatchView'));
+  assert.ok(transition.indexOf('reconcileAuthoritativeDecisionDialogs(incomingMapped.state)')<transition.indexOf('for(const step of plan.steps)'),'resolved choices must close before queued presentation animation');
+});
+
 test('Online result offers localized Quit Game while replay waiting has no quit control',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8'),html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
   const result=html.slice(html.indexOf('id="resultDialog"'),html.indexOf('id="goCallout"'));
