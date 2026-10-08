@@ -77,6 +77,7 @@ test('language highlight and dialog taps respond before deferred work',()=>{
 });
 
 test('mobile non-game UI buttons use immediate touch activation and keyboard-safe dialog viewport',()=>{
+  const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(client,/button\.dataset\.gostopImmediateTap='1'/);
   assert.match(client,/const fastUiButton=target=>/);
   assert.match(client,/document\.addEventListener\('touchend'[^]*?press\.button\.click\(\)/);
