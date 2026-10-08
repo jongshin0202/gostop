@@ -79,7 +79,7 @@ test('Training strategy stays until user dismissal and gives concise tactical re
   assert.match(app,/trainingOpeningDismissLayer\.className='training-opening-dismiss-layer'/);
   assert.match(app,/Tap or click anywhere when you are ready to continue/);
   assert.match(app,/await showTrainingOpeningStrategy\(openingAdvice\)/);
-  assert.match(app,/Best plan:/);
+  assert.match(app,/Best strateg(?:y|ies):/);
   assert.match(app,/const action=best\.target\?'Play '/);
   assert.doesNotMatch(app,/\bI would\b/i);
   assert.doesNotMatch(app,/Reserved rule:/);
