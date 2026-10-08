@@ -84,3 +84,53 @@ test('closing hibernated Lobby socket can be restored for disconnect handling',a
   assert.equal(lobby.clients.get(remaining)?.clientId,'remaining');
   assert.equal(lobby.clients.get(closing)?.clientId,'closing');
 });
+
+
+test('overlapping lobby presence and Auto Match messages keep the same client and queue',async()=>{
+  const {Lobby}=await import('../server/lobby.mjs');
+  const now=Date.now(),messages=[];
+  class FakeSocket{
+    constructor(){this.attachment={version:1,clientId:'live-1',account:{id:'player-1',nickname:'Player One',walletCoins:500},available:false,twoPlayer:false,mode:'menu',tabId:'tab-1',autoMatching:false,autoMatchTried:[],connectedAt:now,lastActivityAt:now,lastPresenceAt:now,foreground:true};}
+    deserializeAttachment(){return this.attachment;}
+    serializeAttachment(value){this.attachment=value;}
+    send(data){messages.push(JSON.parse(data));}
+    close(){}
+  }
+  const socket=new FakeSocket(),state={getWebSockets(){return [socket]}};
+  const lobby=new Lobby(state,{});
+  let wakeBroadcast,releaseBroadcast,broadcasts=0;
+  const broadcastStarted=new Promise(resolve=>{wakeBroadcast=resolve;});
+  lobby.broadcastRecommendations=async()=>{
+    if(++broadcasts===1){wakeBroadcast();await new Promise(resolve=>{releaseBroadcast=resolve;});}
+  };
+  lobby.tryWaitingAutoMatches=async()=>{};
+  // setAvailability is pending; the attachment still says available=false.
+  const first=lobby.webSocketMessage(socket,JSON.stringify({type:'setAvailability',tabId:'tab-1',available:true,twoPlayer:false,foreground:true,lastActivityAt:now,mode:'menu'}));
+  await broadcastStarted;
+  const current=lobby.clients.get(socket);
+  assert.equal(current.available,true);
+  assert.equal(socket.attachment.available,false);
+  const second=lobby.webSocketMessage(socket,JSON.stringify({type:'autoMatchStart'}));
+  assert.equal(lobby.clients.get(socket),current,'do not replace a live client during an async handler');
+  releaseBroadcast();
+  await Promise.all([first,second]);
+  assert.equal(lobby.clients.get(socket),current);
+  assert.equal(lobby.clients.get(socket).available,true);
+  assert.equal(socket.attachment.available,true);
+  assert.ok(messages.some(message=>message.type==='autoMatchWaiting'),'eligible player reaches waiting state');
+  assert.ok(!messages.some(message=>message.type==='challengeError'),'do not falsely accuse the player of being in a two-player game');
+});
+
+test('Auto Match reports unready lobby separately from a genuine active two-player game',async()=>{
+  const {Lobby}=await import('../server/lobby.mjs');
+  const now=Date.now(),sent=[];
+  const socket={attachment:{version:1,clientId:'live-2',account:{id:'player-2',nickname:'Player Two'},available:false,twoPlayer:false,mode:'menu',tabId:'tab-2',autoMatching:false,autoMatchTried:[],connectedAt:now,lastActivityAt:now,lastPresenceAt:now,foreground:true},deserializeAttachment(){return this.attachment;},serializeAttachment(value){this.attachment=value;},send(data){sent.push(JSON.parse(data));},close(){}};
+  const lobby=new Lobby({getWebSockets(){return [socket]}},{});
+  lobby.pruneChallenges=async()=>{};
+  await lobby.webSocketMessage(socket,JSON.stringify({type:'autoMatchStart'}));
+  assert.equal(sent.at(-1)?.code,'PLAYER_NOT_AVAILABLE');
+  assert.match(sent.at(-1)?.message,/availability/i);
+  lobby.clients.get(socket).twoPlayer=true;
+  await lobby.webSocketMessage(socket,JSON.stringify({type:'autoMatchStart'}));
+  assert.equal(sent.at(-1)?.code,'PLAYER_IN_GAME');
+});

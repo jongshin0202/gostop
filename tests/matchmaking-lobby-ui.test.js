@@ -351,7 +351,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261008-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261008-7/);
+  assert.match(index,/ranked-client\.js\?v=20261008-8/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
@@ -434,4 +434,13 @@ test('Auto Match replaces Search Player and discards late search responses',()=>
   assert.match(handler,/\$\('browsePlayerResults'\)\.hidden=true/);
   assert.match(handler,/\$\('autoMatchBtn'\)\.addEventListener\('click',\(\)=>\{showAutoMatchView\(\)/);
   assert.match(client,/if\(message\.type==='searchResults'\)\{if\(!lobbySearchActive\|\|autoMatchSearching\)return;/);
+});
+
+
+test('Auto Match refreshes player presence before requesting a candidate',()=>{
+  const start=client.slice(client.indexOf("$('autoMatchBtn').addEventListener"),client.indexOf("$('autoMatchCandidateAccept').addEventListener"));
+  assert.match(start,/lastPlayerActivityAt=Date\.now\(\);syncLobbyAvailability\(\);autoMatchSearching=true/);
+  assert.match(server,/code:'PLAYER_NOT_AVAILABLE'/);
+  assert.match(server,/code:'PLAYER_IN_GAME'/);
+  assert.doesNotMatch(server,/code:'PLAYER_UNAVAILABLE',message:'You are already in a two-player game\.'/);
 });

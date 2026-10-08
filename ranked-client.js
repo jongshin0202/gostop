@@ -1727,7 +1727,7 @@
     $('searchPlayerResults').hidden=true;$('browsePlayerResults').hidden=true;
     if(document.activeElement===$('onlineNicknameSearch'))$('onlineNicknameSearch').blur();
   }
-  $('autoMatchBtn').addEventListener('click',()=>{showAutoMatchView();autoMatchSearching=true;autoMatchCandidate=null;armAutoMatchStartWatchdog();syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchStart'});});
+  $('autoMatchBtn').addEventListener('click',()=>{showAutoMatchView();lastPlayerActivityAt=Date.now();syncLobbyAvailability();autoMatchSearching=true;autoMatchCandidate=null;armAutoMatchStartWatchdog();syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchStart'});});
   $('autoMatchCandidateAccept').addEventListener('click',()=>{if(!autoMatchCandidate?.accountId)return;const button=$('autoMatchCandidateAccept');button.disabled=true;button.textContent='Sending…';sendLobbyMessage({type:'autoMatchAccept',accountId:autoMatchCandidate.accountId});});
   $('autoMatchCandidateNext').addEventListener('click',()=>{if(!autoMatchCandidate)return;autoMatchCandidate=null;closeRequestDialog(autoMatchCandidateDialog);sendLobbyMessage({type:'autoMatchNext'});});
   $('autoMatchCandidateCancel').addEventListener('click',()=>{finishAutoMatchStart();autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();sendLobbyMessage({type:'autoMatchCancel'});});
