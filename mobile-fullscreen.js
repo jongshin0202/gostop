@@ -123,6 +123,11 @@
     return !!target?.closest?.('.app-shell');
   }
 
+  function isTextEntryActive(doc=document){
+    const active=doc?.activeElement;
+    return !!active?.matches?.('input,textarea,select,[contenteditable="true"]');
+  }
+
   function handleFullscreenClick(event){
     if(!isMobileFullscreenEligible(globalThis))return;
     const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement?.classList?.contains('gostop-performance-lite');
@@ -160,7 +165,9 @@
       if(document.visibilityState==='hidden')resumeFullscreenArmed=true;
       if(orientationChangeAt&&now-orientationChangeAt<=ORIENTATION_RECOVERY_WINDOW_MS)orientationRecoveryArmed=true;
     }
-    refreshLayout();
+    // Android keyboard transitions can trigger fullscreen/compositor changes while an
+    // input is focused. Avoid synthesizing a full app resize during that transition.
+    if(!isTextEntryActive(document))refreshLayout();
   }
 
   function handleOrientationChange(){
@@ -186,8 +193,11 @@
 
   function handleForegroundReturn(){
     if(!isMobileFullscreenEligible(globalThis)||document.visibilityState==='hidden'||document.fullscreenElement)return;
-    if(resumeFullscreenArmed)requestGameFullscreen(document,{recovery:true});
-    refreshLayout();
+    if(isTextEntryActive(document))return;
+    if(resumeFullscreenArmed){
+      requestGameFullscreen(document,{recovery:true});
+      refreshLayout();
+    }
   }
 
   if(!document.querySelector('link[data-gostop-fullscreen-style]')){
@@ -208,7 +218,7 @@
 
   if(globalThis.GOSTOP_TEST_MODE===true){
     globalThis.GOSTOP_FULLSCREEN_TEST_API=Object.freeze({
-      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,
+      isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,isTextEntryActive,
       handleFullscreenClick,handleFullscreenChange,handleOrientationChange,handleVisibilityChange,handleForegroundReturn,
       isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
       isResumeFullscreenArmed:()=>resumeFullscreenArmed,
