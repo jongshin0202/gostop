@@ -869,6 +869,12 @@
     overlay.classList.add('stable-mobile-menu-anchors');
     overlay.style.setProperty('--gostop-expanded-menu-height',`${Math.ceil(menu.getBoundingClientRect().height)}px`);
   }
+  if(typeof ResizeObserver==='function')new ResizeObserver(()=>{
+    if(overlay.classList.contains('stable-mobile-menu-anchors')&&!overlay.hidden){
+      const height=Math.ceil(menu.getBoundingClientRect().height);
+      overlay.style.setProperty('--gostop-expanded-menu-height',`${height}px`);
+    }
+  }).observe(menu);
   let mobileKeyboardTransitionUntil=0;
   function textEntryFocused(){
     const active=document.activeElement;
