@@ -339,7 +339,11 @@ test('S22 login and Friends search stay above the keyboard and login never revea
   const login=client.slice(client.indexOf("$('loginForm').addEventListener"),client.indexOf('let pendingRegistrationBody'));
   assert.match(login,/if\(!continuing\)revealCurrentMainMenu\(\)/);
   assert.ok(login.indexOf('revealCurrentMainMenu()')<login.indexOf('authDialog.close()'));
-  assert.match(client,/document\.addEventListener\('touchstart',event=>\{if\(!attractMode/);
+  const attractTouch=client.slice(client.indexOf("leaderboardScreen.addEventListener('touchend'"),client.indexOf("leaderboardBtn.addEventListener"));
+  assert.match(attractTouch,/isSwipe/);
+  assert.match(attractTouch,/if\(isSwipe\)[^]*?nextLeaderboard/);
+  assert.match(attractTouch,/if\(attractMode&&elapsed<=900&&travel<24\)[^]*?closeLeaderboard\(true\)/);
+  assert.doesNotMatch(client,/document\.addEventListener\('touchstart'[^]*?closeLeaderboard\(true\)/);
 });
 
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
