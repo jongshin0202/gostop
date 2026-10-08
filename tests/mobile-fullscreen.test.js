@@ -54,6 +54,41 @@ test('mobile fullscreen eligibility covers portrait and phone landscape but not 
   assert.equal(api.isMobileFullscreenEligible({navigator:{maxTouchPoints:1},innerWidth:1440,innerHeight:900,matchMedia:()=>({matches:true})}),false);
 });
 
+test('Continue Active Game Yes and No request fullscreen synchronously before navigation, including on lite phones',async()=>{
+  for(const id of ['returnGameYes','returnGameNo']){
+    let calls=0;
+    const {api,listeners,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{calls++;document.fullscreenElement=document.documentElement;return Promise.resolve();}});
+    const target={closest(selector){return selector==='#returnGameYes, #returnGameNo'?this:null;}};
+    // The capture listener runs before the dialog's Yes/No handlers.
+    listeners.click.fn({target});
+    assert.equal(calls,1,`${id}: the decision gesture must request fullscreen immediately`);
+    assert.equal(document.fullscreenElement,document.documentElement);
+    assert.equal(api.isInitialMenuGateComplete(),true,`${id}: no second Tap-to-Start gate after decision`);
+    assert.equal(api.gateInitialMainMenuFullscreen(document),null);
+    listeners.click.fn({target});
+    assert.equal(calls,1,'do not request fullscreen again when already active');
+  }
+});
+
+test('a denied active-game fullscreen attempt can retry on next menu tap without opening keyboard or boot gate',async()=>{
+  let calls=0;
+  const {api,listeners,document}=loadFullscreen({performanceLite:true,requestFullscreen:()=>{
+    calls++;
+    return calls===1?Promise.reject(new Error('activation denied')):Promise.resolve();
+  }});
+  const decision={closest(selector){return selector==='#returnGameYes, #returnGameNo'?this:null;}};
+  listeners.click.fn({target:decision});
+  assert.equal(calls,1);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isResumeFullscreenArmed(),true);
+  const menu={closest(selector){return selector==='#soloStartOverlay, .topbar'?this:null;}};
+  listeners.click.fn({target:menu});
+  assert.equal(calls,2,'next explicit main-menu gesture recovers fullscreen');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(api.isResumeFullscreenArmed(),false);
+  assert.equal(api.isInitialMenuGateComplete(),true);
+});
+
 test('fullscreen requests the document element and fails silently',async()=>{
   let calls=0;
   const {api,document}=loadFullscreen({requestFullscreen:()=>{calls++;return Promise.resolve();}});
@@ -309,7 +344,7 @@ test('fullscreen integration preserves gameplay click propagation while splash t
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
-  assert.match(index,/<script src="runtime-config\.js\?v=20260925-6"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20261008-2"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20261008-8"><\/script>/);
+  assert.match(index,/<script src="runtime-config\.js\?v=20260925-6"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20261008-3"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20261008-8"><\/script>/);
   assert.match(source,/requestFullscreen\(\{navigationUI:'hide'\}\)/);
   assert.doesNotMatch(runtimeConfig,/mobile-fullscreen\.js/);
   assert.doesNotMatch(generator,/mobile-fullscreen\.js/);
