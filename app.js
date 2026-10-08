@@ -2428,6 +2428,7 @@
     try{localStorage.setItem('gostop-language',presentation.locale);}catch(_){ }
     document.documentElement.lang=presentation.locale;
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
+    if(els.languageMenu)els.languageMenu.querySelectorAll('button[data-locale]').forEach(button=>button.setAttribute('aria-current',button.dataset.locale===presentation.locale?'true':'false'));
     document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
     document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
     refreshModeLocalizedLabels();
@@ -2448,10 +2449,11 @@
   }
   function setupLanguageMenu(){
     if(!els.languageBtn||!els.languageMenu||!i18n)return;
-    Object.entries(i18n.names).forEach(([locale,name])=>{const button=document.createElement('button');button.type='button';button.textContent=name;button.addEventListener('click',()=>{setLocale(locale);els.languageMenu.hidden=true;});els.languageMenu.appendChild(button);});
-    els.languageBtn.addEventListener('click',()=>{els.languageMenu.hidden=!els.languageMenu.hidden;});
-    document.addEventListener('pointerdown',event=>{if(!els.languageMenu.hidden&&!els.languageMenu.contains(event.target)&&event.target!==els.languageBtn)els.languageMenu.hidden=true;});
-    document.addEventListener('keydown',event=>{if(event.key==='Escape')els.languageMenu.hidden=true;});
+    Object.entries(i18n.names).forEach(([locale,name])=>{const button=document.createElement('button');button.type='button';button.dataset.locale=locale;button.textContent=name;button.setAttribute('aria-current','false');button.addEventListener('click',()=>{setLocale(locale);els.languageMenu.hidden=true;els.languageBtn.setAttribute('aria-expanded','false');});els.languageMenu.appendChild(button);});
+    els.languageBtn.setAttribute('aria-expanded','false');
+    els.languageBtn.addEventListener('click',()=>{els.languageMenu.hidden=!els.languageMenu.hidden;els.languageBtn.setAttribute('aria-expanded',els.languageMenu.hidden?'false':'true');});
+    document.addEventListener('pointerdown',event=>{if(!els.languageMenu.hidden&&!els.languageMenu.contains(event.target)&&event.target!==els.languageBtn){els.languageMenu.hidden=true;els.languageBtn.setAttribute('aria-expanded','false');}});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'){els.languageMenu.hidden=true;els.languageBtn.setAttribute('aria-expanded','false');}});
     try{presentation.locale=localStorage.getItem('gostop-language')||'en';}catch(_){presentation.locale='en';}
     setLocale(presentation.locale);
   }
