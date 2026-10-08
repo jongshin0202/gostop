@@ -314,7 +314,8 @@ export class Lobby{
     const pair=new WebSocketPair(),clientSocket=pair[0],serverSocket=pair[1];this.state.acceptWebSocket(serverSocket);const connectedAt=Date.now(),client={clientId:randomId(this.crypto,'client'),socket:serverSocket,account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null},available:false,twoPlayer:false,mode:'menu',tabId:null,autoMatching:false,autoMatchTried:new Set(),autoMatchCandidateId:null,searchQuery:'',connectedAt,lastActivityAt:connectedAt,lastPresenceAt:connectedAt,foreground:false,notificationsEnabled:false,messageQueue:Promise.resolve()};this.clients.set(serverSocket,client);this.syncClientAttachment(client);this.send(serverSocket,{type:'connected',account:{id:account.id,nickname:account.nickname,walletCoins:account.walletCoins,countryCode:account.countryCode||null,regionCode:account.regionCode||null}});
     // The HTTP 101 handshake must not depend on the leaderboard/account store.
     // A slow recommendations query otherwise leaves the browser CONNECTING forever.
-    this.state.waitUntil?.(this.broadcastRecommendations().catch(()=>{}));
+    const initialRecommendations=this.broadcastRecommendations().catch(()=>{});
+    this.state.waitUntil?.(initialRecommendations);
     this.syncAllClientAttachments();return new Response(null,{status:101,webSocket:clientSocket,headers:{'Sec-WebSocket-Protocol':protocol}});
   }
   async webSocketMessage(socket,message){this.restoreHibernatingClients(socket);const client=this.clients.get(socket);if(!client){try{socket.close(4003,'Lobby session state unavailable');}catch(_){}return;}return this.enqueueClientMessage(client,message);}
