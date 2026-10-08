@@ -2816,6 +2816,7 @@
     const target=candidate.target,urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,target);
     if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Take the '+trainingCardName(target)+' now. A live 5-BIRDIES Picture is the highest-priority table card.';
     if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. '+(candidate.opportunity||'Brights are a top-priority capture.');
+    if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Play the '+trainingCardName(candidate.card)+' now so the live 5-BIRDIES Picture becomes safely captured while also taking the '+trainingCardName(target)+'.';
     if(candidate.opportunity)return candidate.opportunity;
     if(urgency.familyLock){
       const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(target);
