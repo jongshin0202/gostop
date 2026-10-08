@@ -1348,6 +1348,24 @@
   function ensureLobbyPresence(){lobbyShouldConnect=!!authToken&&!!account;if(!lobbyShouldConnect){closeLobby();return;}startPresenceHeartbeat();connectLobby();}
   function syncAutoMatchControls(){const start=$('autoMatchBtn'),cancel=$('autoMatchCancelBtn');if(start)start.hidden=autoMatchSearching;if(cancel)cancel.hidden=!autoMatchSearching;for(const listId of ['browsePlayerResults','searchPlayerResults'])for(const button of $(listId)?.querySelectorAll('[data-challenge-account-id]')||[])button.disabled=autoMatchSearching||button.dataset.challengeable!=='true';}
   function renderLobbyPresence(players=lastLobbyPlayers,onlineCount=lastLobbyOnlineCount){lastLobbyPlayers=Array.isArray(players)?players:[];lastLobbyOnlineCount=Math.max(0,Number(onlineCount)||0);const count=$('onlinePlayerCount'),list=$('browsePlayerResults');if(count)count.textContent=rt('totalOnlineCount',{count:lastLobbyOnlineCount});if(list){list.hidden=!browsePlayersActive;if(browsePlayersActive)renderPlayers(lastLobbyPlayers,'browsePlayerResults');}syncAutoMatchControls();}
+  const LOBBY_CONNECT_TIMEOUT_MS=8000;
+  const AUTOMATCH_START_TIMEOUT_MS=16000;
+  let lobbyConnectWatchdog=null,autoMatchStartWatchdog=null,autoMatchInFlight=false;
+  function clearLobbyConnectWatchdog(){if(lobbyConnectWatchdog){clearTimeout(lobbyConnectWatchdog);lobbyConnectWatchdog=null;}}
+  function clearAutoMatchStartWatchdog(){if(autoMatchStartWatchdog){clearTimeout(autoMatchStartWatchdog);autoMatchStartWatchdog=null;}}
+  function finishAutoMatchStart(){autoMatchInFlight=false;clearAutoMatchStartWatchdog();}
+  function armAutoMatchStartWatchdog(){
+    clearAutoMatchStartWatchdog();autoMatchInFlight=true;
+    autoMatchStartWatchdog=setTimeout(()=>{
+      autoMatchStartWatchdog=null;if(!autoMatchInFlight)return;autoMatchInFlight=false;
+      if(pendingLobbyMessage?.type==='autoMatchStart')pendingLobbyMessage=null;
+      autoMatchSearching=false;autoMatchCandidate=null;
+      if(pendingOutgoingRequest?.automatic){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);}
+      closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();
+      if(lobbySocket?.readyState===WebSocket.OPEN)lobbySend({type:'autoMatchCancel'});
+      if(!onlinePanel.hidden)$('lobbyStatus').textContent='Auto Match did not respond. Check your connection and try again.';
+    },AUTOMATCH_START_TIMEOUT_MS);
+  }
   function connectLobby(){
     if(!authToken||!account||!baseUrl)return;
     lobbyShouldConnect=true;
@@ -1355,24 +1373,38 @@
     if(lobbySocket&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(lobbySocket.readyState))return;
     try{
       if(!onlinePanel.hidden)$('lobbyStatus').textContent='';
-      lobbySocket=new WebSocket(lobbyUrl(),`gostop-auth.${authToken}`);
-      lobbySocket.addEventListener('open',()=>{
+      const socket=new WebSocket(lobbyUrl(),`gostop-auth.${authToken}`);
+      lobbySocket=socket;
+      clearLobbyConnectWatchdog();
+      lobbyConnectWatchdog=setTimeout(()=>{
+        if(lobbySocket!==socket||socket.readyState!==WebSocket.CONNECTING)return;
+        if(!onlinePanel.hidden)$('lobbyStatus').textContent='Online lobby connection timed out. Retrying…';
+        socket.close();
+      },LOBBY_CONNECT_TIMEOUT_MS);
+      socket.addEventListener('open',()=>{
+        if(lobbySocket!==socket)return;
+        clearLobbyConnectWatchdog();
         syncLobbyAvailability();
         flushPendingSocialChanges();if(!onlinePanel.hidden&&browsePlayersActive)requestRecommendations();if(!socialScreen.hidden)requestSocialPresence();
         if(!onlinePanel.hidden&&lobbySearchActive){const query=$('onlineNicknameSearch')?.value?.trim();if(query)lobbySend({type:'search',query});}
         if(pendingLobbyMessage){const message=pendingLobbyMessage;pendingLobbyMessage=null;lobbySend(message);}
+        if(autoMatchInFlight&&!onlinePanel.hidden)$('lobbyStatus').textContent='Looking for available players…';
       });
-      lobbySocket.addEventListener('message',event=>{try{handleLobbyMessage(JSON.parse(event.data));}catch(_){if(!onlinePanel.hidden)$('lobbyStatus').textContent=rt('requestFailed');}});
-      lobbySocket.addEventListener('close',()=>{
-        lobbySocket=null;autoMatchSearching=false;syncAutoMatchControls();
+      socket.addEventListener('message',event=>{if(lobbySocket!==socket)return;try{handleLobbyMessage(JSON.parse(event.data));}catch(_){if(!onlinePanel.hidden)$('lobbyStatus').textContent=rt('requestFailed');}});
+      socket.addEventListener('close',()=>{
+        if(lobbySocket!==socket)return;
+        clearLobbyConnectWatchdog();lobbySocket=null;
+        if(autoMatchInFlight)pendingLobbyMessage={type:'autoMatchStart'};
+        else autoMatchSearching=false;
+        syncAutoMatchControls();
         if(!onlinePanel.hidden)$('lobbyStatus').textContent=rt('lobbyDisconnected');
         if(lobbyShouldConnect&&authToken&&account)lobbyReconnectTimer=setTimeout(()=>connectLobby(),1000);
       });
-      lobbySocket.addEventListener('error',()=>{if(!onlinePanel.hidden)$('lobbyStatus').textContent=rt('lobbyDisconnected');});
+      socket.addEventListener('error',()=>{if(lobbySocket===socket&&!onlinePanel.hidden)$('lobbyStatus').textContent=rt('lobbyDisconnected');});
     }catch(error){if(!onlinePanel.hidden)$('lobbyStatus').textContent=localizedError(error);}
   }
   function closeLobby(){
-    pendingLobbyMessage=null;autoMatchSearching=false;lobbyShouldConnect=false;stopPresenceHeartbeat();
+    clearLobbyConnectWatchdog();finishAutoMatchStart();pendingLobbyMessage=null;autoMatchSearching=false;lobbyShouldConnect=false;stopPresenceHeartbeat();
     if(lobbyReconnectTimer){clearTimeout(lobbyReconnectTimer);lobbyReconnectTimer=null;}
     if(lobbySocket){if(lobbySocket.readyState===WebSocket.OPEN)lobbySend({type:'autoMatchCancel'});lobbySocket.close();lobbySocket=null;}
     syncAutoMatchControls();
@@ -1599,19 +1631,19 @@
     }
   }
   function handleLobbyMessage(message){
-    if(message.type==='connected'){if(message.account){account={...account,...message.account};persistAccountCache();renderAccountBox();patchGameIdentity();}$('lobbyStatus').textContent='';syncLobbyAvailability();maybeShowMissedRequests();return;}
+    if(message.type==='connected'){if(message.account){account={...account,...message.account};persistAccountCache();renderAccountBox();patchGameIdentity();}if(!autoMatchInFlight)$('lobbyStatus').textContent='';syncLobbyAvailability();maybeShowMissedRequests();return;}
     if(message.type==='socialProfiles'){socialLiveProfiles=new Map((Array.isArray(message.players)?message.players:[]).map(player=>[String(player.accountId),player]));renderSocial();return;}
     if(message.type==='socialChanged'){void refreshAccount().then(()=>{if(!socialScreen.hidden)void refreshSocial();});return;}
     if(message.type==='recommendations'){
-      autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;
+      autoMatchSearching=autoMatchInFlight||autoMatchSearching&&message.autoMatching!==false;
       lastLobbyPlayers=Array.isArray(message.players)?message.players:[];lastLobbyOnlineCount=Math.max(0,Number(message.onlineCount)||0);
       renderLobbyPresence(lastLobbyPlayers,lastLobbyOnlineCount);return;
     }
     if(message.type==='searchResults'){lobbySearchActive=true;autoMatchSearching=message.autoMatching===true||autoMatchSearching&&message.autoMatching!==false;lastSearchPlayers=Array.isArray(message.players)?message.players:[];lastLobbyOnlineCount=Math.max(0,Number(message.onlineCount)||lastLobbyOnlineCount);const count=$('onlinePlayerCount');if(count)count.textContent=rt('totalOnlineCount',{count:lastLobbyOnlineCount});const list=$('searchPlayerResults');if(list){list.hidden=false;renderPlayers(lastSearchPlayers,'searchPlayerResults');}syncAutoMatchControls();if(!autoMatchSearching)$('lobbyStatus').textContent='';return;}
-    if(message.type==='autoMatchCandidate'){autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';pendingOutgoingRequest=null;showAutoMatchCandidate(message.candidate||null);return;}
-    if(message.type==='autoMatchWaiting'){autoMatchSearching=true;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';closeRequestDialog(autoMatchCandidateDialog);if(!pendingOutgoingRequest)showAutoMatchWaiting();return;}
-    if(message.type==='autoMatchCancelled'){autoMatchSearching=false;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';if(pendingOutgoingRequest?.automatic)pendingOutgoingRequest=null;closeRequestDialog(autoMatchCandidateDialog);closeRequestDialog(outgoingRequestDialog);refreshVisibleLobbyResults();return;}
-    if(message.type==='challengeSent'){autoMatchSearching=!!message.automatic;autoMatchCandidate=null;const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}syncAutoMatchControls();closeRequestDialog(autoMatchCandidateDialog);showOutgoingRequest(message);return;}
+    if(message.type==='autoMatchCandidate'){if(!autoMatchSearching&&!autoMatchInFlight){lobbySend({type:'autoMatchCancel'});return;}finishAutoMatchStart();autoMatchSearching=true;syncAutoMatchControls();$('lobbyStatus').textContent='';pendingOutgoingRequest=null;showAutoMatchCandidate(message.candidate||null);return;}
+    if(message.type==='autoMatchWaiting'){if(!autoMatchSearching&&!autoMatchInFlight){lobbySend({type:'autoMatchCancel'});return;}finishAutoMatchStart();autoMatchSearching=true;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';closeRequestDialog(autoMatchCandidateDialog);if(!pendingOutgoingRequest)showAutoMatchWaiting();return;}
+    if(message.type==='autoMatchCancelled'){finishAutoMatchStart();autoMatchSearching=false;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';if(pendingOutgoingRequest?.automatic)pendingOutgoingRequest=null;closeRequestDialog(autoMatchCandidateDialog);closeRequestDialog(outgoingRequestDialog);refreshVisibleLobbyResults();return;}
+    if(message.type==='challengeSent'){finishAutoMatchStart();autoMatchSearching=!!message.automatic;autoMatchCandidate=null;const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}syncAutoMatchControls();closeRequestDialog(autoMatchCandidateDialog);showOutgoingRequest(message);return;}
     if(message.type==='challengeDelivered'){return;}
     if(message.type==='playRequest'){
       if(!leaderboardScreen.hidden)closeLeaderboard(true);pendingRequest=message;lobbySend({type:'challengeReceipt',requestId:message.requestId});void showPlayRequestNotification(message);const from=message.from||{},name=from.nickname||rt('playerFallback'),rank=Number.isFinite(Number(from.globalRank??from.rank))?Number(from.globalRank??from.rank):0;
@@ -1644,7 +1676,7 @@
       const accept=$('autoMatchCandidateAccept');if(accept){accept.disabled=false;accept.textContent=rt('accept');}
       const incomingCancelled=!!pendingRequest&&(!message.requestId||pendingRequest.requestId===message.requestId),outgoingCancelled=!!pendingOutgoingRequest&&(!message.requestId||pendingOutgoingRequest.requestId===message.requestId);
       if(incomingCancelled){pendingRequest=null;closeRequestDialog(requestDialog);}if(outgoingCancelled){pendingOutgoingRequest=null;closeRequestDialog(outgoingRequestDialog);}
-      if(pendingChallengeCreate===message.requestId)pendingChallengeCreate=null;closeRequestDialog(matchHandoffDialog);closeRequestDialog(autoMatchCandidateDialog);autoMatchCandidate=null;autoMatchSearching=false;syncAutoMatchControls();
+      if(pendingChallengeCreate===message.requestId)pendingChallengeCreate=null;closeRequestDialog(matchHandoffDialog);closeRequestDialog(autoMatchCandidateDialog);finishAutoMatchStart();autoMatchCandidate=null;autoMatchSearching=false;syncAutoMatchControls();
       $('lobbyStatus').textContent=rankedLocale()==='en'&&message.message?message.message:rt('requestFailed');if(message.message)showToast(message.message,4500);refreshVisibleLobbyResults();return;
     }
   }
@@ -1686,11 +1718,11 @@
   $('notificationBlockedCancel').addEventListener('click',()=>{notificationEnablePending=false;notificationBlockedDialog.close();});
   notificationBlockedDialog.addEventListener('cancel',()=>{notificationEnablePending=false;});
   $('onlineNicknameSearchBtn').addEventListener('click',()=>{browsePlayersActive=false;$('browsePlayerResults').hidden=true;const searchSection=onlinePanel.querySelector('[data-online-section="search"]');if(searchSection)searchSection.hidden=false;const query=$('onlineNicknameSearch').value.trim();lobbySearchActive=!!query;const list=$('searchPlayerResults');if(!query){lastSearchPlayers=[];if(list){list.innerHTML='';list.hidden=true;}$('lobbyStatus').textContent='';return;}if(list)list.hidden=false;$('lobbyStatus').textContent=rt('searchingOnline');sendLobbyMessage({type:'search',query},'lobbyConnecting');});$('onlineNicknameSearch').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('onlineNicknameSearchBtn').click();}});
-  $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;autoMatchCandidate=null;syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchStart'});});
+  $('autoMatchBtn').addEventListener('click',()=>{autoMatchSearching=true;autoMatchCandidate=null;armAutoMatchStartWatchdog();syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchStart'});});
   $('autoMatchCandidateAccept').addEventListener('click',()=>{if(!autoMatchCandidate?.accountId)return;const button=$('autoMatchCandidateAccept');button.disabled=true;button.textContent='Sending…';sendLobbyMessage({type:'autoMatchAccept',accountId:autoMatchCandidate.accountId});});
   $('autoMatchCandidateNext').addEventListener('click',()=>{if(!autoMatchCandidate)return;autoMatchCandidate=null;closeRequestDialog(autoMatchCandidateDialog);sendLobbyMessage({type:'autoMatchNext'});});
-  $('autoMatchCandidateCancel').addEventListener('click',()=>{autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();sendLobbyMessage({type:'autoMatchCancel'});});
-  $('autoMatchCancelBtn').addEventListener('click',()=>{autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
+  $('autoMatchCandidateCancel').addEventListener('click',()=>{finishAutoMatchStart();autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();sendLobbyMessage({type:'autoMatchCancel'});});
+  $('autoMatchCancelBtn').addEventListener('click',()=>{finishAutoMatchStart();autoMatchCandidate=null;autoMatchSearching=false;closeRequestDialog(autoMatchCandidateDialog);syncAutoMatchControls();$('lobbyStatus').textContent='';sendLobbyMessage({type:'autoMatchCancel'});});
   function roomShareUrl(roomCode,mode,referralToken=''){
     const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('room',String(roomCode||'').toUpperCase());url.searchParams.set('mode',mode==='free'?'free':'competitive');if(/^[a-f0-9]{64}$/i.test(String(referralToken||'')))url.searchParams.set('ref',referralToken);return url.toString();
   }
