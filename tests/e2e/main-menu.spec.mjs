@@ -217,6 +217,51 @@ test('mobile main menu remains usable and visibly keeps Hwatu decoration at narr
 });
 
 
+test('Android Continue Active Game Yes and No return to fullscreen on their own tap',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',error=>errors.push(error));
+  await page.addInitScript(()=>{
+    let fullscreenElement=null;
+    window.__returnFullscreenRequests=0;
+    Object.defineProperty(Document.prototype,'fullscreenElement',{configurable:true,get(){return fullscreenElement;}});
+    Element.prototype.requestFullscreen=function(){
+      window.__returnFullscreenRequests++;
+      fullscreenElement=this;
+      document.dispatchEvent(new Event('fullscreenchange'));
+      return Promise.resolve();
+    };
+    window.__exitReturnFullscreen=()=>{
+      fullscreenElement=null;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    };
+  });
+  await installHarness(page);
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await expect(page.locator('#gostopBootSplash.gostop-boot-ready')).toBeVisible();
+  const splash=await page.locator('#gostopBootSplash').boundingBox();
+  await page.touchscreen.tap(splash.x+splash.width/2,splash.y+splash.height/2);
+  await expect(page.locator('#competitiveGamingBtn')).toBeVisible();
+  for(const choice of ['returnGameYes','returnGameNo']){
+    await page.evaluate(()=>{
+      window.__exitReturnFullscreen();
+      const dialog=document.querySelector('#returnGameYes').closest('dialog');
+      if(!dialog.open)dialog.showModal();
+    });
+    const before=await page.evaluate(()=>window.__returnFullscreenRequests);
+    await page.locator('#'+choice).tap();
+    await expect.poll(()=>page.evaluate(()=>({
+      fullscreen:document.fullscreenElement===document.documentElement,
+      calls:window.__returnFullscreenRequests
+    }))).toEqual({fullscreen:true,calls:before+1});
+    await page.locator('#returnGameYes').evaluate(button=>{
+      const dialog=button.closest('dialog');if(dialog.open)dialog.close();
+    });
+  }
+  expect(errors.map(error=>error.message)).toEqual([]);
+  await context.close();
+});
+
 test('Android native touch keeps immediate first-tap menu response, second tap, flick, and browse deterministic',async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
   const page=await context.newPage();
