@@ -2423,19 +2423,29 @@
     if(!showGameplayModal(els.firstPpeokDialog,epoch))return Promise.resolve();
     return new Promise(resolve=>els.firstPpeokDialog.addEventListener('close',resolve,{once:true}));
   }
+  let localeApplyToken=0;
+  function scheduleLocaleWork(locale){
+    const token=++localeApplyToken;
+    const apply=()=>{
+      if(token!==localeApplyToken||presentation.locale!==locale)return;
+      document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
+      document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
+      refreshModeLocalizedLabels();
+      if(els.howToDialog?.open)renderTutorialCards();
+      if(els.scoreDialog?.open&&presentation.scoreBreakdownPlayerId)openScoreBreakdown(presentation.scoreBreakdownPlayerId);
+      if(els.decisionDialog?.open&&state)humanGoStop(scorePlayer(state.human));
+      if(state&&els.soloStartOverlay?.hidden!==false)render();
+    };
+    const afterPaint=()=>setTimeout(apply,0);
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(afterPaint);else afterPaint();
+  }
   function setLocale(locale){
     presentation.locale=i18n?.dictionaries?.[locale]?locale:'en';
     try{localStorage.setItem('gostop-language',presentation.locale);}catch(_){ }
     document.documentElement.lang=presentation.locale;
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
     if(els.languageMenu)els.languageMenu.querySelectorAll('button[data-locale]').forEach(button=>button.setAttribute('aria-current',button.dataset.locale===presentation.locale?'true':'false'));
-    document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
-    document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
-    refreshModeLocalizedLabels();
-    renderTutorialCards();
-    if(els.scoreDialog?.open&&presentation.scoreBreakdownPlayerId)openScoreBreakdown(presentation.scoreBreakdownPlayerId);
-    if(els.decisionDialog?.open&&state)humanGoStop(scorePlayer(state.human));
-    if(state)render();
+    scheduleLocaleWork(presentation.locale);
   }
   function refreshModeLocalizedLabels(){
     const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');
@@ -3187,11 +3197,11 @@
     const mobile=(Number(globalThis.navigator?.maxTouchPoints||0)>0)||!!globalThis.matchMedia?.('(pointer: coarse)')?.matches;
     els.howToDialog.querySelectorAll('[data-tutorial-platform]').forEach(node=>{node.hidden=node.dataset.tutorialPlatform!==(mobile?'mobile':'desktop');});
   }
-  els.howToBtn.addEventListener('click',()=>{syncTutorialPlatformGuide();const sections=els.howToDialog.querySelector('.tutorial-sections');if(sections)sections.scrollTop=0;els.howToDialog.showModal();});
+  els.howToBtn.addEventListener('click',()=>{syncTutorialPlatformGuide();renderTutorialCards();const sections=els.howToDialog.querySelector('.tutorial-sections');if(sections)sections.scrollTop=0;els.howToDialog.showModal();});
   els.howToDialog.querySelector('.tutorial-nav')?.addEventListener('click',event=>{const link=event.target.closest('a[href^="#guide-"]');if(!link)return;const target=els.howToDialog.querySelector(link.getAttribute('href'));if(!target)return;event.preventDefault();target.scrollIntoView({block:'start',behavior:'smooth'});});
   els.howToDialog.addEventListener('click',event=>{if(event.target===els.howToDialog)els.howToDialog.close();});
   if(els.shakeReviewDialog)els.shakeReviewDialog.addEventListener('click',()=>els.shakeReviewDialog.close());
-  if(els.railHowTo)els.railHowTo.addEventListener('click',()=>{syncTutorialPlatformGuide();els.howToDialog.showModal();});
+  if(els.railHowTo)els.railHowTo.addEventListener('click',()=>{syncTutorialPlatformGuide();renderTutorialCards();els.howToDialog.showModal();});
   if(els.railNewGame)els.railNewGame.addEventListener('click',()=>els.newGameDialog.showModal());
   els.playerHand.addEventListener('pointerleave',()=>setActiveHoveredHandCard(null));
   if(els.soundToggle)els.soundToggle.addEventListener('click',()=>{presentation.soundEnabled=!presentation.soundEnabled;els.soundToggle.querySelector('span').textContent=presentation.soundEnabled?'Sound On':'Sound Off';if(presentation.soundEnabled)unlockAudio();});
