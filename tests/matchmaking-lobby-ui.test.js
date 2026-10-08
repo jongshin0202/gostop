@@ -76,7 +76,7 @@ test('language highlight and dialog taps respond before deferred work',()=>{
   assert.match(scheduleSource,/document\.documentElement\.lang=locale/);
 });
 
-test('mobile non-game UI buttons use immediate touch activation and keyboard-safe dialog viewport',()=>{
+test('mobile non-game UI buttons use immediate touch activation and stable keyboard sheet',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(client,/button\.dataset\.gostopImmediateTap='1'/);
   assert.match(client,/const fastUiButton=target=>/);
@@ -84,11 +84,14 @@ test('mobile non-game UI buttons use immediate touch activation and keyboard-saf
   assert.match(client,/function keyboardViewportTransitionActive\(\)/);
   assert.match(client,/mobileKeyboardTransitionUntil=Date\.now\(\)\+1200/);
   assert.match(client,/if\(keyboardViewportTransitionActive\(\)\)return;/);
-  assert.match(client,/gostop-keyboard-active/);
-  assert.match(client,/--gostop-vv-height/);
-  assert.match(client,/active\.scrollIntoView\?\./);
+  assert.match(client,/gostop-mobile-ui-fast/);
+  assert.match(client,/dialog\.gostop-account-dialog\[open\]:focus-within/);
+  assert.match(client,/height:48vh!important/);
+  assert.match(client,/dialog\.gostop-account-dialog::backdrop\{background:#100b08!important/);
+  assert.match(client,/function ensureFocusedAuthFieldVisible\(\)/);
+  assert.match(client,/dialog\.scrollTop\+=rect\.top-desiredTop/);
   assert.match(client,/body:has\(dialog\[open\]\)[^]*?animation-play-state:paused!important/);
-  assert.match(index,/interactive-widget=resizes-visual/);
+  assert.doesNotMatch(index,/interactive-widget=/);
 });
 
 test('Settings language picker stays inside the dialog with readable language buttons',()=>{
@@ -330,7 +333,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261007-4/);
+  assert.match(index,/ranked-client\.js\?v=20261008-1/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
