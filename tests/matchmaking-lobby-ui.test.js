@@ -81,7 +81,9 @@ test('mobile non-game UI buttons use immediate touch activation and keyboard-saf
   assert.match(client,/button\.dataset\.gostopImmediateTap='1'/);
   assert.match(client,/const fastUiButton=target=>/);
   assert.match(client,/document\.addEventListener\('touchend'[^]*?press\.button\.click\(\)/);
-  assert.match(client,/if\(textEntryFocused\(\)\)return;/);
+  assert.match(client,/function keyboardViewportTransitionActive\(\)/);
+  assert.match(client,/mobileKeyboardTransitionUntil=Date\.now\(\)\+1200/);
+  assert.match(client,/if\(keyboardViewportTransitionActive\(\)\)return;/);
   assert.match(client,/gostop-keyboard-active/);
   assert.match(client,/--gostop-vv-height/);
   assert.match(client,/active\.scrollIntoView\?\./);
