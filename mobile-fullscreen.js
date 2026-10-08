@@ -11,6 +11,7 @@
   let mainMenuAutoAttempted=false;
   let initialMenuGateComplete=false;
   let initialMenuGatePromise=null;
+  let textEntryTransitionUntil=0;
 
   function isMobileFullscreenEligible(env=globalThis){
     const touchPoints=Number(env.navigator?.maxTouchPoints||0);
@@ -125,7 +126,7 @@
 
   function isTextEntryActive(doc=document){
     const active=doc?.activeElement;
-    return !!active?.matches?.('input,textarea,select,[contenteditable="true"]');
+    return !!active?.matches?.('input,textarea,select,[contenteditable="true"]')||Date.now()<textEntryTransitionUntil;
   }
 
   function handleFullscreenClick(event){
@@ -209,6 +210,8 @@
   }
 
   globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible,gateInitialMainMenuFullscreen});
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))textEntryTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
+  document.addEventListener('focusout',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))textEntryTransitionUntil=Date.now()+1200;},{capture:true,passive:true});
   document.addEventListener('click',handleFullscreenClick,{capture:true});
   document.addEventListener('fullscreenchange',handleFullscreenChange);
   document.addEventListener('visibilitychange',handleVisibilityChange);
@@ -221,6 +224,7 @@
       isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,isTextEntryActive,
       handleFullscreenClick,handleFullscreenChange,handleOrientationChange,handleVisibilityChange,handleForegroundReturn,
       isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
+      isTextEntryTransitionActive:()=>Date.now()<textEntryTransitionUntil,
       isResumeFullscreenArmed:()=>resumeFullscreenArmed,
       isMainMenuFullscreenArmed:()=>mainMenuFullscreenArmed,
       isMainMenuAutoAttempted:()=>mainMenuAutoAttempted,
