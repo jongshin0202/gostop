@@ -765,6 +765,7 @@
     };
     const touchCapable=('ontouchstart' in globalThis)||Number(navigator.maxTouchPoints||0)>0;
     if(!touchCapable)return;
+    button.dataset.gostopImmediateTap='1';
     button.style.touchAction='manipulation';
     button.addEventListener('touchstart',event=>{
       if(event.touches.length!==1){press=null;return;}
@@ -781,6 +782,42 @@
     button.addEventListener('touchcancel',()=>{press=null;},{passive:true});
   }
   [rankedToggle,freeToggle,rankedSolo,onlinePlay,playPractice,freeFriendBtn,trainingBtn,friendsBtn,leaderboardBtn,howTo].forEach(installImmediateMobileTap);
+
+  // Mobile browsers may still deliver ordinary click activation noticeably after touchend
+  // under heavy pages. Give non-game UI controls the same immediate touch path as the
+  // main menu while leaving all card/table gesture handling untouched.
+  let immediateUiPress=null,immediateUiSuppressTarget=null,immediateUiSuppressUntil=0,immediateUiProgrammaticTarget=null;
+  const fastUiButton=target=>{
+    const button=target?.closest?.('button');
+    if(!button||button.disabled||button.dataset.gostopImmediateTap==='1')return null;
+    if(button.closest('#playerHand,.table,.game-stage'))return null;
+    return button;
+  };
+  document.addEventListener('click',event=>{
+    const button=event.target?.closest?.('button');
+    if(button===immediateUiProgrammaticTarget)return;
+    if(event.isTrusted&&button===immediateUiSuppressTarget&&Date.now()<immediateUiSuppressUntil){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+  },true);
+  document.addEventListener('touchstart',event=>{
+    if(event.touches.length!==1){immediateUiPress=null;return;}
+    const button=fastUiButton(event.target);if(!button){immediateUiPress=null;return;}
+    const touch=event.touches[0];
+    immediateUiPress={button,id:touch.identifier,x:touch.clientX,y:touch.clientY};
+    button.style.touchAction='manipulation';
+  },{capture:true,passive:true});
+  document.addEventListener('touchend',event=>{
+    const press=immediateUiPress;immediateUiPress=null;if(!press)return;
+    const touch=[...event.changedTouches].find(item=>item.identifier===press.id);
+    if(!touch||fastUiButton(event.target)!==press.button)return;
+    if(Math.hypot(touch.clientX-press.x,touch.clientY-press.y)>22)return;
+    event.preventDefault();event.stopPropagation();
+    immediateUiSuppressTarget=press.button;immediateUiSuppressUntil=Date.now()+450;
+    immediateUiProgrammaticTarget=press.button;
+    try{press.button.click();}finally{immediateUiProgrammaticTarget=null;}
+  },{capture:true,passive:false});
+  document.addEventListener('touchcancel',()=>{immediateUiPress=null;},{capture:true,passive:true});
   function installImmediateDesktopAccordion(button,section){
     if(!button)return;
     button.addEventListener('pointerdown',event=>{
