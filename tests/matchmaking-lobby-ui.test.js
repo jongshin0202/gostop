@@ -406,20 +406,20 @@ test('Auto Match returns waiting without reading leaderboards when no eligible o
 
 test('Lobby connection and Auto Match fail visibly rather than waiting indefinitely',()=>{
   const handshake=server.slice(server.indexOf("if(request.method!=='GET'||url.pathname!=='/connect')"),server.indexOf('async webSocketMessage(socket,message)'));
-  assert.match(handshake,/const initialRecommendations=this\\.broadcastRecommendations\\(\\)\\.catch\\(\\(\\)=>\\{\\}\\)/);
-  assert.match(handshake,/this\\.state\\.waitUntil\\?\\.\\(initialRecommendations\\)/);
+  assert.match(handshake,/const initialRecommendations=this\.broadcastRecommendations\(\)\.catch\(\(\)=>\{\}\)/);
+  assert.match(handshake,/this\.state\.waitUntil\?\.\(initialRecommendations\)/);
   assert.ok(handshake.indexOf('return new Response(null,{status:101')>handshake.indexOf('const initialRecommendations='));
-  assert.doesNotMatch(handshake,/await this\\.broadcastRecommendations\\(\\)/);
+  assert.doesNotMatch(handshake,/await this\.broadcastRecommendations\(\)/);
   const start=server.slice(server.indexOf("if(message.type==='autoMatchStart'"),server.indexOf("if(message.type==='autoMatchNext'"));
   assert.match(start,/code:'MATCHMAKING_UNAVAILABLE'/);
   const waiting=server.slice(server.indexOf('async tryAutoMatch(client)'),server.indexOf('async acceptAutoMatchCandidate'));
   assert.ok(waiting.indexOf("type:'autoMatchWaiting'")<waiting.indexOf('const rows=await this.leaderboardRows()'));
   assert.match(client,/const LOBBY_CONNECT_TIMEOUT_MS=8000/);
   assert.match(client,/const AUTOMATCH_START_TIMEOUT_MS=16000/);
-  assert.match(client,/socket\\.readyState!==WebSocket\\.CONNECTING/);
-  assert.match(client,/socket\\.close\\(\\)/);
-  assert.match(client,/function armAutoMatchStartWatchdog\\(\\)/);
-  assert.match(client,/Auto Match did not respond\\. Check your connection and try again\\./);
-  assert.match(client,/if\\(autoMatchInFlight\\)pendingLobbyMessage=\\{type:'autoMatchStart'\\}/);
-  assert.match(client,/if\\(lobbySocket!==socket\\)return;/);
+  assert.match(client,/socket\.readyState!==WebSocket\.CONNECTING/);
+  assert.match(client,/socket\.close\(\)/);
+  assert.match(client,/function armAutoMatchStartWatchdog\(\)/);
+  assert.match(client,/Auto Match did not respond\. Check your connection and try again\./);
+  assert.match(client,/if\(autoMatchInFlight\)pendingLobbyMessage=\{type:'autoMatchStart'\}/);
+  assert.match(client,/if\(lobbySocket!==socket\)return;/);
 });
