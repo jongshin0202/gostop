@@ -879,9 +879,10 @@
     if(stableMenuAnchorFrame)cancelAnimationFrame(stableMenuAnchorFrame);
     stableMenuAnchorFrame=requestAnimationFrame(lockStableMobileMenuAnchors);
   }
-  globalThis.addEventListener?.('resize',scheduleStableMobileMenuAnchors);
-  globalThis.addEventListener?.('orientationchange',scheduleStableMobileMenuAnchors);
-  globalThis.visualViewport?.addEventListener?.('resize',()=>{if(!keyboardViewportTransitionActive())scheduleStableMobileMenuAnchors();});
+  globalThis.addEventListener?.('orientationchange',()=>{
+    clearStableMobileMenuAnchors();
+    scheduleStableMobileMenuAnchors();
+  });
 
   const freePanel=document.createElement('section');freePanel.id='freeFriendPanel';freePanel.className='online-lobby-panel';freePanel.hidden=true;freePanel.innerHTML=`<div class="online-lobby-card"><h2 id="freeFriendTitle">Play With Friend</h2><p id="freeFriendHelp" class="account-help">Create a room and send your friend the share link. Friendly Gaming never uses Wallet Coins or leaderboards.</p><div class="online-method"><strong id="freeRoomShareTitle">Share Link</strong><div class="online-existing-controls"><button id="freeCreateRoomBtn" class="glass-btn strong" type="button">Create Room / Share Link</button><div id="freeShareLinkBox" class="room-share-link" hidden><a id="freeShareLink" target="_blank" rel="noopener"></a><div class="friendly-share-actions"><button id="freeShareBtn" type="button">Share Invite</button><button id="freeCopyLinkBtn" type="button">Copy Link</button></div></div><p id="freeOnlineStatus" class="online-status" role="status" aria-live="polite"></p></div></div><div class="online-lobby-actions"><button id="freeFriendClose" type="button">Return</button></div></div>`;document.body.appendChild(freePanel);
 
@@ -909,25 +910,25 @@
     html.gostop-mobile-ui-fast dialog button,
     html.gostop-mobile-ui-fast .language-menu button{transition:none!important}
     @media(max-width:700px){
-      dialog.gostop-account-dialog::backdrop{background:#100b08!important;backdrop-filter:none!important}
-      dialog.gostop-account-dialog[open]:focus-within{
-        position:fixed!important;inset:2px 4px auto 4px!important;margin:0!important;transform:none!important;
-        width:calc(100vw - 8px)!important;max-width:none!important;height:48vh!important;max-height:48vh!important;
+      #accountDialog::backdrop{background:#14261d!important;backdrop-filter:none!important}
+      #accountDialog[open]{
+        position:fixed!important;inset:calc(env(safe-area-inset-top,0px) + 2px) 4px auto 4px!important;margin:0!important;transform:none!important;
+        width:calc(100vw - 8px)!important;max-width:none!important;height:min(48svh,420px)!important;max-height:min(48svh,420px)!important;
         overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;scroll-padding:12px 0 88px!important;
       }
-      dialog.gostop-account-dialog[open]:focus-within .account-dialog-card{
+      #accountDialog[open] .account-dialog-card{
         box-sizing:border-box!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;
         gap:6px!important;padding:10px 12px 18px!important;border-radius:12px!important;
       }
-      dialog.gostop-account-dialog[open]:focus-within .account-dialog-card>h2{font-size:24px!important;line-height:1.05!important;margin:0 34px 4px 0!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-tabs{gap:6px!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-tabs button{min-height:38px!important;padding:7px 8px!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-form{gap:5px!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-form label{gap:2px!important;font-size:11px!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-form input{padding:8px 9px!important;font-size:16px!important;line-height:1.15!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-form .go-btn{min-height:38px!important;padding:8px 12px!important}
-      dialog.gostop-account-dialog[open]:focus-within .account-error{min-height:0!important;margin:0!important}
-      dialog.gostop-account-dialog[open]:focus-within .dialog-close{top:2px!important;right:6px!important}
+      #accountDialog[open] .account-dialog-card>h2{font-size:24px!important;line-height:1.05!important;margin:0 34px 4px 0!important}
+      #accountDialog[open] .account-tabs{gap:6px!important}
+      #accountDialog[open] .account-tabs button{min-height:38px!important;padding:7px 8px!important}
+      #accountDialog[open] .account-form{gap:5px!important}
+      #accountDialog[open] .account-form label{gap:2px!important;font-size:11px!important}
+      #accountDialog[open] .account-form input{padding:8px 9px!important;font-size:16px!important;line-height:1.15!important}
+      #accountDialog[open] .account-form .go-btn{min-height:38px!important;padding:8px 12px!important}
+      #accountDialog[open] .account-error{min-height:0!important;margin:0!important}
+      #accountDialog[open] .dialog-close{top:2px!important;right:6px!important}
     }
   `;
   document.head.appendChild(mobileInputStyle);
@@ -1253,7 +1254,7 @@
   function resetAttractTimer(){lastMenuActivityAt=Date.now();startAttractWatcher();}
   new MutationObserver(records=>{if(!records.some(record=>record.attributeName==='hidden'))return;lastMenuActivityAt=Date.now();patchGameIdentity();startAttractWatcher();}).observe(overlay,{attributes:true,attributeFilter:['hidden']});
   for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('close',()=>{if(!overlay.hidden)resetAttractTimer();});
-  document.addEventListener('pointerdown',event=>{if(event.isTrusted&&!attractMode&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});document.addEventListener('click',event=>{if(!attractMode||leaderboardScreen.hidden||globalThis.goStopOnlineSession)return;if(Date.now()<leaderboardSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();closeLeaderboard(true);},{capture:true});document.addEventListener('keydown',event=>{if(attractMode&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(event.isTrusted&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});
+  document.addEventListener('pointerdown',event=>{if(!event.isTrusted)return;if(attractMode&&!leaderboardScreen.hidden&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(mainMenuIdleEligible())resetAttractTimer();},{capture:true});document.addEventListener('click',event=>{if(!attractMode||leaderboardScreen.hidden||globalThis.goStopOnlineSession)return;if(Date.now()<leaderboardSwipeSuppressClickUntil){event.preventDefault();event.stopPropagation();return;}event.preventDefault();event.stopPropagation();closeLeaderboard(true);},{capture:true});document.addEventListener('keydown',event=>{if(attractMode&&!globalThis.goStopOnlineSession){event.preventDefault();event.stopPropagation();closeLeaderboard(true);return;}if(event.isTrusted&&mainMenuIdleEligible())resetAttractTimer();},{capture:true});
   document.addEventListener('pointerdown',markPlayerActivity,{capture:true,passive:true});document.addEventListener('keydown',markPlayerActivity,{capture:true});document.addEventListener('touchstart',markPlayerActivity,{capture:true,passive:true});document.addEventListener('wheel',markPlayerActivity,{capture:true,passive:true});document.addEventListener('visibilitychange',syncLobbyAvailability);globalThis.addEventListener('focus',syncLobbyAvailability);globalThis.addEventListener('blur',syncLobbyAvailability);
 
   function lobbyUrl(){const url=new URL(`${baseUrl}/api/lobby/ws`);url.protocol=url.protocol==='https:'?'wss:':'ws:';return url;}
@@ -1739,7 +1740,12 @@
   function revealCurrentMainMenu(){
     const gate=globalThis.GoStopMobileFullscreen?.gateInitialMainMenuFullscreen?.();
     if(gate){Promise.resolve(gate).then(()=>revealCurrentMainMenu());return;}
-    playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';overlay.hidden=false;scheduleStableMobileMenuAnchors();globalThis.GoStopMobileFullscreen?.requestMainMenuFullscreen?.();syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();
+    playerTwoPlayerActive=false;playerPresenceMode='menu';setSoloLaunchCover(false);document.documentElement.classList.remove('gostop-boot-pending');socialScreen.hidden=true;overlay.dataset.currentMenuReady='true';
+    const stablePortrait=globalThis.matchMedia?.('(max-width:760px) and (orientation:portrait)')?.matches===true;
+    if(stablePortrait){
+      overlay.style.visibility='hidden';overlay.hidden=false;lockStableMobileMenuAnchors();overlay.style.visibility='';
+    }else{overlay.hidden=false;clearStableMobileMenuAnchors();}
+    globalThis.GoStopMobileFullscreen?.requestMainMenuFullscreen?.();syncRankedButtons();applyRankedLocale();ensureLobbyPresence();syncLobbyAvailability();resetAttractTimer();
   }
   const inviteUrl=new URL(location.href),verificationHash=inviteUrl.hash.match(/^#verify=([a-f0-9]{64})$/i),verificationToken=verificationHash?.[1]||inviteUrl.searchParams.get('verify')||'',validVerificationToken=/^[a-f0-9]{64}$/i.test(verificationToken),roomParam=inviteUrl.searchParams.get('room'),inviteMode=inviteUrl.searchParams.get('mode')==='free'?'free':'competitive',referralParam=inviteUrl.searchParams.get('ref')||'',validReferralParam=/^[a-f0-9]{64}$/i.test(referralParam),validRoomParam=!!roomParam&&/^[A-Z2-9]{14}$/i.test(roomParam);
   function withGameBridge(callback){
