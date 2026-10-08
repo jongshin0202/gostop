@@ -47,6 +47,8 @@
     },900);
   }
   initializeAdaptivePerformance();
+  const mobileUiFast=globalThis.matchMedia?.('(pointer:coarse)')?.matches===true||globalThis.innerWidth<=760;
+  if(mobileUiFast)document.documentElement.classList.add('gostop-mobile-ui-fast');
   let authToken=null,account=null,leaderboardData=null,lobbySocket=null,leaderboardPage=0,leaderboardTimer=null,attractTimer=null,attractMode=false,currentSnapshot=null,friendlyOpponentProfile=null,leaderboardLoadFailed=false,activeRankedRefreshTimer=null;
   let pendingChallengeCreate=null,pendingRequest=null,pendingOutgoingRequest=null,pendingLobbyMessage=null,autoMatchSearching=false,autoMatchCandidate=null,browsePlayersActive=false,lobbySearchActive=false,lastLobbyPlayers=[],lastSearchPlayers=[],lastLobbyOnlineCount=0,playerTwoPlayerActive=false,playerPresenceMode='menu',lobbyShouldConnect=false,lobbyReconnectTimer=null,lastAlertKey='',statusTimer=null,authRestorePromise=null,pendingAccountNotices=[],walletRefreshMismatchKey='',accountContinuation=null,lastPlayerActivityAt=Date.now(),presenceHeartbeatTimer=null,playRequestNotificationsReady=false,notificationRegistration=null,notificationRegistrationPromise=null,lastReconnectSyncAt=0,lastPresenceActivitySyncAt=0,notificationPermissionStatus=null,notificationEnablePending=false,socialData=null,socialTab='friends',socialSearchResults=[],socialLiveProfiles=new Map(),socialBusy=false,pendingSocialChangedIds=new Set();
   let friendlyReferralPollTimer=null,friendlyReferralProgressTimer=null,friendlyResumeResult=false,friendlyInviterNoticeId=null,friendlyHostEndTimer=null,friendlyInviterStage=null,friendlyInviterReturnToMenu=false,linkCopiedTimer=null;
@@ -894,44 +896,59 @@
     body:has(dialog[open]) .main-menu-hwatu-card,
     body:has(dialog[open]) .main-menu-floor-card,
     body:has(dialog[open]) .menu-category-toggle::before{animation-play-state:paused!important}
+    html.gostop-mobile-ui-fast .main-menu-title,
+    html.gostop-mobile-ui-fast .main-menu-hwatu-card,
+    html.gostop-mobile-ui-fast .main-menu-floor-cards,
+    html.gostop-mobile-ui-fast .menu-category-toggle::before{animation:none!important}
+    html.gostop-mobile-ui-fast .main-menu-card-fan,
+    html.gostop-mobile-ui-fast .main-menu-floor-cards{filter:none!important}
+    html.gostop-mobile-ui-fast .gostop-main-menu.main-menu-accordion{backdrop-filter:none!important}
+    html.gostop-mobile-ui-fast .menu-category-toggle{filter:none!important;transition:transform .06s ease,border-radius .06s ease!important}
+    html.gostop-mobile-ui-fast .menu-submenu{will-change:auto!important;transition:max-height .12s ease,opacity .08s ease,transform .12s ease,padding .12s ease,border-color .08s ease,background .08s ease,visibility 0s linear .12s!important}
+    html.gostop-mobile-ui-fast .menu-category-block.expanded .menu-submenu{transition-delay:0s!important}
+    html.gostop-mobile-ui-fast dialog button,
+    html.gostop-mobile-ui-fast .language-menu button{transition:none!important}
     @media(max-width:700px){
-      html.gostop-keyboard-active dialog.gostop-account-dialog[open]{
-        position:fixed!important;left:50%!important;right:auto!important;bottom:auto!important;
-        top:calc(var(--gostop-vv-top,0px) + 6px)!important;transform:translateX(-50%)!important;margin:0!important;
-        width:min(96vw,480px)!important;max-height:calc(var(--gostop-vv-height,100dvh) - 12px)!important;overflow:auto!important;
+      dialog.gostop-account-dialog::backdrop{background:#100b08!important;backdrop-filter:none!important}
+      dialog.gostop-account-dialog[open]:focus-within{
+        position:fixed!important;inset:2px 4px auto 4px!important;margin:0!important;transform:none!important;
+        width:calc(100vw - 8px)!important;max-width:none!important;height:48vh!important;max-height:48vh!important;
+        overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;scroll-padding:12px 0 88px!important;
       }
-      html.gostop-keyboard-active dialog.gostop-account-dialog[open] .account-dialog-card{
-        width:100%!important;max-height:none!important;overflow:visible!important;padding-bottom:18px!important;
+      dialog.gostop-account-dialog[open]:focus-within .account-dialog-card{
+        box-sizing:border-box!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;
+        gap:6px!important;padding:10px 12px 18px!important;border-radius:12px!important;
       }
-      html.gostop-keyboard-active .main-menu-hwatu-card,
-      html.gostop-keyboard-active .main-menu-floor-card,
-      html.gostop-keyboard-active .menu-category-toggle::before{animation-play-state:paused!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-dialog-card>h2{font-size:24px!important;line-height:1.05!important;margin:0 34px 4px 0!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-tabs{gap:6px!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-tabs button{min-height:38px!important;padding:7px 8px!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-form{gap:5px!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-form label{gap:2px!important;font-size:11px!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-form input{padding:8px 9px!important;font-size:16px!important;line-height:1.15!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-form .go-btn{min-height:38px!important;padding:8px 12px!important}
+      dialog.gostop-account-dialog[open]:focus-within .account-error{min-height:0!important;margin:0!important}
+      dialog.gostop-account-dialog[open]:focus-within .dialog-close{top:2px!important;right:6px!important}
     }
   `;
   document.head.appendChild(mobileInputStyle);
-  let keyboardViewportFrame=0,ensureKeyboardInputVisible=false;
-  function syncKeyboardViewport(){
-    keyboardViewportFrame=0;
-    const vv=globalThis.visualViewport;
-    const active=document.activeElement,editing=!!active?.matches?.('input,textarea,select,[contenteditable="true"]');
-    const height=Math.max(1,Math.round(vv?.height||globalThis.innerHeight||document.documentElement.clientHeight||1));
-    const top=Math.max(0,Math.round(vv?.offsetTop||0));
-    document.documentElement.style.setProperty('--gostop-vv-height',height+'px');
-    document.documentElement.style.setProperty('--gostop-vv-top',top+'px');
-    document.documentElement.classList.toggle('gostop-keyboard-active',editing&&globalThis.innerWidth<=700);
-    if(ensureKeyboardInputVisible&&editing&&active?.closest?.('dialog[open]'))requestAnimationFrame(()=>active.scrollIntoView?.({block:'center',inline:'nearest',behavior:'auto'}));
-    ensureKeyboardInputVisible=false;
+  let keyboardScrollTimer=null;
+  function ensureFocusedAuthFieldVisible(){
+    const active=document.activeElement;
+    const dialog=active?.closest?.('dialog.gostop-account-dialog[open]');
+    if(!dialog||globalThis.innerWidth>700)return;
+    const rect=active.getBoundingClientRect(),dialogRect=dialog.getBoundingClientRect();
+    const visibleBottom=Math.min(dialogRect.bottom,Number(globalThis.visualViewport?.height||globalThis.innerHeight||dialogRect.bottom));
+    const desiredTop=dialogRect.top+Math.min(150,Math.max(72,(visibleBottom-dialogRect.top)*.42));
+    if(rect.top<dialogRect.top+12||rect.bottom>visibleBottom-18){
+      dialog.scrollTop+=rect.top-desiredTop;
+    }
   }
-  function scheduleKeyboardViewportSync(ensureVisible=false){
-    ensureKeyboardInputVisible=ensureKeyboardInputVisible||ensureVisible;
-    if(keyboardViewportFrame)cancelAnimationFrame(keyboardViewportFrame);
-    keyboardViewportFrame=requestAnimationFrame(syncKeyboardViewport);
+  function scheduleFocusedAuthFieldVisible(delay=90){
+    if(keyboardScrollTimer)clearTimeout(keyboardScrollTimer);
+    keyboardScrollTimer=setTimeout(()=>{keyboardScrollTimer=null;ensureFocusedAuthFieldVisible();},delay);
   }
-  globalThis.visualViewport?.addEventListener?.('resize',()=>scheduleKeyboardViewportSync(true),{passive:true});
-  globalThis.visualViewport?.addEventListener?.('scroll',()=>scheduleKeyboardViewportSync(false),{passive:true});
-  document.addEventListener('focusin',event=>{if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))scheduleKeyboardViewportSync(true);},{passive:true});
-  document.addEventListener('focusout',()=>requestAnimationFrame(()=>scheduleKeyboardViewportSync(false)),{passive:true});
-  syncKeyboardViewport();
+  document.addEventListener('focusin',event=>{if(event.target?.matches?.('dialog.gostop-account-dialog input,dialog.gostop-account-dialog textarea,dialog.gostop-account-dialog select'))scheduleFocusedAuthFieldVisible(40);},{passive:true});
+  globalThis.visualViewport?.addEventListener?.('resize',()=>{if(document.activeElement?.closest?.('dialog.gostop-account-dialog[open]'))scheduleFocusedAuthFieldVisible(110);},{passive:true});
   const registrationPolicyDialog=document.createElement('dialog');registrationPolicyDialog.id='registrationPolicyDialog';registrationPolicyDialog.className='gostop-account-dialog';registrationPolicyDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="registrationPolicyTitle">Connection Protection</h2><p id="registrationPolicyText" style="white-space:pre-line;text-align:left"></p><button id="registrationPolicyOk" class="go-btn" type="button">OK</button></div>`;document.body.appendChild(registrationPolicyDialog);
   const successDialog=document.createElement('dialog');successDialog.className='gostop-account-dialog';successDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2>Account Registered Successfully</h2><p>You received 100 signup bonus coins + 100 daily login bonus coins.</p><div class="decision-actions"><button id="registrationAddFriend" class="glass-btn" type="button" hidden>Add Inviter as Friend</button><button id="registrationCompetitive" class="go-btn" type="button" hidden>Try Competitive Gaming</button><button id="registrationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(successDialog);
   const verificationDialog=document.createElement('dialog');verificationDialog.className='gostop-account-dialog';verificationDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2 id="verificationTitle">Verify Your Email</h2><p id="verificationText"></p><strong id="verificationEmail"></strong><p id="verificationStatus" class="account-help" role="status"></p><div class="decision-actions"><button id="verificationResend" class="go-btn" type="button">Resend Verification Email</button><button id="verificationOk" class="glass-btn" type="button">OK</button></div></div>`;document.body.appendChild(verificationDialog);
