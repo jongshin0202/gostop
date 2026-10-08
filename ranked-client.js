@@ -659,11 +659,10 @@
     @media(max-height:760px){.menu-submenu-inner{gap:5px;padding:5px 0 6px}.menu-submenu-inner>button{min-height:36px!important;font-size:14px!important}}
 
 
-    /* Stable mobile menu anchors: preserve the collapsed main-menu hit targets while
-       allowing either accordion to expand only inside the space above Player info. */
+    /* Keep the player identity below the expanded accordion even on short A17 viewports. */
     @media(max-width:760px) and (orientation:portrait){
       .solo-start-overlay.stable-mobile-menu-anchors{
-        align-content:start!important;place-content:start center!important;overflow:hidden!important
+        align-content:start!important;place-content:start center!important;overflow-y:auto!important;overflow-x:hidden!important
       }
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-title,
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-floor-cards,
@@ -674,7 +673,8 @@
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-title{top:var(--gostop-menu-title-top)!important}
       .solo-start-overlay.stable-mobile-menu-anchors .main-menu-floor-cards{top:var(--gostop-menu-cards-top)!important;margin:0 auto!important}
       .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion{top:var(--gostop-menu-shell-top)!important;margin:0!important}
-      .solo-start-overlay.stable-mobile-menu-anchors .account-menu-box{top:var(--gostop-menu-account-top)!important;margin:0!important}
+      .solo-start-overlay.stable-mobile-menu-anchors .account-menu-box{top:max(var(--gostop-menu-account-top),calc(var(--gostop-menu-shell-top) + var(--gostop-expanded-menu-height,0px) + 12px))!important;margin:0!important}
+      .solo-start-overlay.stable-mobile-menu-anchors:has(.has-expanded-section){padding-bottom:28px!important}
       .solo-start-overlay.stable-mobile-menu-anchors .gostop-main-menu.main-menu-accordion.has-expanded-section{padding:7px!important;gap:5px!important}
       .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-category-toggle{min-height:52px!important;padding:6px 10px!important}
       .solo-start-overlay.stable-mobile-menu-anchors .has-expanded-section .menu-submenu-inner{gap:5px!important;padding:5px 0 6px!important}
@@ -741,6 +741,11 @@
       submenu.setAttribute('aria-hidden',open?'false':'true');
       submenu.inert=!open;
       if(open)revealGroup=group;
+    }
+    if(menu&&overlay.classList.contains('stable-mobile-menu-anchors')){
+      overlay.style.setProperty('--gostop-expanded-menu-height',`${Math.ceil(menu.getBoundingClientRect().height)}px`);
+      // Keep a scrollable tail behind the repositioned account box on short phones.
+      overlay.style.minHeight='';
     }
     if(revealGroup)requestAnimationFrame(()=>{
       if(revealToken!==menuRevealToken||!revealGroup.classList.contains('expanded'))return;
@@ -840,6 +845,7 @@
   function clearStableMobileMenuAnchors(){
     overlay.classList.remove('stable-mobile-menu-anchors');
     for(const property of stableMenuAnchorProperties)overlay.style.removeProperty(property);
+    overlay.style.removeProperty('--gostop-expanded-menu-height');
   }
   function lockStableMobileMenuAnchors(){
     stableMenuAnchorFrame=0;
@@ -861,6 +867,7 @@
     overlay.style.setProperty('--gostop-menu-shell-top',`${menuTop}px`);
     overlay.style.setProperty('--gostop-menu-account-top',`${accountTop}px`);
     overlay.classList.add('stable-mobile-menu-anchors');
+    overlay.style.setProperty('--gostop-expanded-menu-height',`${Math.ceil(menu.getBoundingClientRect().height)}px`);
   }
   let mobileKeyboardTransitionUntil=0;
   function textEntryFocused(){
@@ -1100,12 +1107,16 @@
     if(authToken&&!account){accountIdentity.innerHTML='';return;}
     if(!account){accountIdentity.innerHTML=`<p>${escapeHtml(rt('pitch'))}</p><div class="account-menu-actions"><button id="accountCreateBtn" type="button">${escapeHtml(rt('createId'))}</button><button id="accountLoginBtn" type="button">${escapeHtml(rt('login'))}</button><button id="accountSettingsBtn" type="button">Settings</button></div>`;$('accountCreateBtn')?.addEventListener('click',()=>openAuth('register'));$('accountLoginBtn')?.addEventListener('click',()=>openAuth('login'));$('accountSettingsBtn')?.addEventListener('click',openSettings);return;}
     const row=rowFor(account.nickname),rankHtml=row?rankLabelHtml(row.rank):escapeHtml(rt('unranked'));
-    accountIdentity.innerHTML=`<strong>${flagEmoji(account.countryCode)} ${playerNicknameHtml({accountId:account.id,nickname:account.nickname})}</strong><span class="wallet">🪙 ${escapeHtml(coinText(displayedWalletCoins()))}</span><span class="rank">${rankHtml}</span>${friendlyReferralProgressHtml()}<div class="account-menu-actions"><button id="accountLogoutBtn" type="button">${escapeHtml(rt('logout'))}</button><button id="accountSettingsBtn" type="button">Settings</button></div>`;$('accountLogoutBtn')?.addEventListener('click',logout);$('accountSettingsBtn')?.addEventListener('click',openSettings);
+    accountIdentity.innerHTML=`<strong>${flagEmoji(account.countryCode)} ${playerNicknameHtml({accountId:account.id,nickname:account.nickname})}</strong><span class="wallet">🪙 ${escapeHtml(coinText(displayedWalletCoins()))}</span><span class="rank">${rankHtml}</span>${friendlyReferralProgressHtml()}<div class="account-menu-actions"><button id="accountLogoutBtn" type="button">${escapeHtml(rt('logout'))}</button><button id="accountSettingsBtn" type="button">Settings</button></div>`;$('accountLogoutBtn')?.addEventListener('click',confirmLogout);$('accountSettingsBtn')?.addEventListener('click',openSettings);
   }
   $('settingsOk').addEventListener('click',()=>settingsDialog.close());
   function openAuth(tab='login'){setAuthTab(tab);$('accountError').textContent='';if(!authDialog.open)authDialog.showModal();}
   function setAuthTab(tab){const login=tab!=='register';$('loginForm').hidden=!login;$('registerForm').hidden=login;$('loginTab').classList.toggle('strong',login);$('registerTab').classList.toggle('strong',!login);authDialog.querySelector('h2').textContent=rt(login?'login':'createId');}
   async function logout(){try{await api('/api/auth/logout',{method:'POST',body:{}});}catch(_){}clearSession();}
+  function confirmLogout(){if(!account||logoutConfirmDialog.open)return;logoutConfirmDialog.showModal();}
+  const logoutConfirmDialog=document.createElement('dialog');logoutConfirmDialog.id='logoutConfirmDialog';logoutConfirmDialog.className='gostop-account-dialog';logoutConfirmDialog.innerHTML=`<div class="dialog-card account-dialog-card"><h2>Are you sure you want to log out?</h2><div class="decision-actions"><button id="logoutConfirmYes" class="stop-btn" type="button">Yes</button><button id="logoutConfirmNo" class="go-btn" type="button">No</button></div></div>`;document.body.appendChild(logoutConfirmDialog);
+  logoutConfirmDialog.querySelector('#logoutConfirmNo').addEventListener('click',()=>logoutConfirmDialog.close());
+  logoutConfirmDialog.querySelector('#logoutConfirmYes').addEventListener('click',async()=>{const yes=logoutConfirmDialog.querySelector('#logoutConfirmYes');if(yes.disabled)return;yes.disabled=true;logoutConfirmDialog.close();try{await logout();}finally{yes.disabled=false;}});
   function continueAfterAccount(){if(!account||!accountContinuation)return;const {next}=accountContinuation;accountContinuation=null;next();}
   function cancelAccountContinuation(){if(!accountContinuation)return;const {onCancel}=accountContinuation;accountContinuation=null;onCancel?.();}
   let pendingVerificationCredentials=null,verificationWatchTimer=null,verificationWatchBusy=false;
