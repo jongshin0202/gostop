@@ -2639,6 +2639,11 @@
     if(card.type==='pi')return 180;
     return 120;
   }
+  function trainingSecuredHandPriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
+    if(!candidate?.target||!candidate.card)return 0;
+    if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive)return 3;
+    return 0;
+  }
   function trainingActiveRoutePriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return 0;
     const target=candidate.target;
@@ -2654,6 +2659,8 @@
     if(aUnique!==bUnique)return bUnique-aUnique;
     const targetDelta=trainingCapturePriority(b,profile)-trainingCapturePriority(a,profile);
     if(targetDelta)return targetDelta;
+    const securedHandDelta=trainingSecuredHandPriority(b,profile)-trainingSecuredHandPriority(a,profile);
+    if(securedHandDelta)return securedHandDelta;
     const activeDelta=trainingActiveRoutePriority(b,profile)-trainingActiveRoutePriority(a,profile);
     if(activeDelta)return activeDelta;
     const handDelta=trainingHandPreservationRisk(a.card,profile)-trainingHandPreservationRisk(b.card,profile);
@@ -2808,7 +2815,7 @@
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
     const target=candidate.target,urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,target);
     if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Take the '+trainingCardName(target)+' now. A live 5-BIRDIES Picture is the highest-priority table card.';
-    if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. Brights are higher priority than Stripes, Singles, and ordinary Pictures.';
+    if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. '+(candidate.opportunity||'Brights are a top-priority capture.');
     if(candidate.opportunity)return candidate.opportunity;
     if(urgency.familyLock){
       const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(target);
@@ -2817,13 +2824,20 @@
     if(target.type==='ribbon'){
       const route=profile.ribbonRoutes?.[target.ribbonSet];
       if(route&&!route.alive)return 'This takes a Stripe, although its '+route.name+' 3-Stripe set is already broken.';
-      if(route?.potentialCount>=3)return 'This takes a '+route.name+' Stripe and gives you a strong chance to complete that 3-Stripe set.';
-      if(route?.potentialCount>=2)return 'This takes a '+route.name+' Stripe and keeps that 3-Stripe set within reach.';
+      if(route?.potentialCount>=3)return 'This takes a '+route.name+' Stripe and gives you a strong chance to complete the '+route.name+' 3-Stripe set.';
+      if(route?.potentialCount>=2)return 'This takes a '+route.name+' Stripe and keeps the '+route.name+' 3-Stripe set within reach.';
       return 'This takes a Stripe, which is higher priority than a Single or ordinary Picture.';
     }
     if(target.flags?.includes('doublePi'))return 'This takes a 2x Single, which counts as two Singles.';
     if(target.id==='m9-1'&&target.flags?.includes('switchPi'))return 'This takes the Sake Cup, which can be used as 2 Singles.';
-    if(target.type==='pi')return 'This takes the best available Single from the table while preserving higher-value cards in your hand.';
+    if(target.type==='pi'){
+      const brokenStripeAlternative=(candidate.targetAlternatives||[]).find(alternative=>alternative.target?.type==='ribbon'&&alternative.target.ribbonSet&&profile.ribbonRoutes?.[alternative.target.ribbonSet]&&!profile.ribbonRoutes[alternative.target.ribbonSet].alive);
+      if(brokenStripeAlternative){
+        const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
+        return 'The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
+      }
+      return 'This takes the best available Single from the table while preserving higher-value cards in your hand.';
+    }
     return 'This is the best available table capture while using a lower-value card from your hand when possible.';
   }
   function trainingAlternativeSummary(best,sorted){
@@ -3286,7 +3300,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveRibbonSetAlive,competitiveCardValueForSide,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveDiscardContext,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingFloorCardPriority,trainingCapturePriority,trainingHandPreservationRisk,trainingActiveRoutePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingFloorCardPriority,trainingCapturePriority,trainingHandPreservationRisk,trainingSecuredHandPriority,trainingActiveRoutePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
