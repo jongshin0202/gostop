@@ -349,7 +349,7 @@ test('S22 login and Friends search stay above the keyboard and login never revea
 test('frontend cache versions advance after Friendly referral and boot-screen fixes',()=>{
   const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(index,/i18n\.js\?v=20261007-1/);
-  assert.match(index,/styles\.css\?v=20261007-1/);
+  assert.match(index,/styles\.css\?v=20261008-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
   assert.match(index,/ranked-client\.js\?v=20261008-4/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
@@ -380,4 +380,12 @@ test('Logout requires Yes confirmation and A17 player identity stays below expan
   assert.match(client,/\.account-menu-box\{top:max\(var\(--gostop-menu-account-top\)/);
   assert.match(client,/--gostop-expanded-menu-height/);
   assert.match(client,/new ResizeObserver\(/);
+});
+
+
+test('mobile finished-game actions stack without overlapping',()=>{
+  const css=fs.readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  const mobileBlock=css.slice(css.indexOf('/* Mobile result actions must stack in normal flow, never overlap. */'));
+  assert.match(mobileBlock,/\.grand-result-card \.play-again-grand\{display:block;max-width:100%;margin:0 auto 12px\}/);
+  assert.match(mobileBlock,/\.grand-result-card \.result-quit-btn\{position:relative;inset:auto;display:block;margin:0 auto;min-height:42px/);
 });
