@@ -132,7 +132,7 @@
     if(!isMobileFullscreenEligible(globalThis))return;
     const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement?.classList?.contains('gostop-performance-lite');
     if(lite)return;
-    if(resumeFullscreenArmed&&isGameplayInteraction(event.target)){
+    if(resumeFullscreenArmed&&isGameplayInteraction(event.target)&&!event.target?.closest?.('input,textarea,select,[contenteditable="true"]')){
       requestGameFullscreen(document,{recovery:true});
       return;
     }
