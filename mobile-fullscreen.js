@@ -58,8 +58,7 @@
         resolve(true);
       };
       const finishAfterViewportSettles=()=>{
-        const done=()=>setTimeout(finish,32);
-        if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>requestAnimationFrame(done));else done();
+        if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>requestAnimationFrame(finish));else finish();
       };
       const nativeTouch=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
       const arm=()=>{
