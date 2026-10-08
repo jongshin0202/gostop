@@ -2428,6 +2428,10 @@
     const token=++localeApplyToken;
     const apply=()=>{
       if(token!==localeApplyToken||presentation.locale!==locale)return;
+      // Persist and publish the locale only after the selected-language highlight
+      // and menu close have had a chance to paint. This keeps Settings tactile.
+      try{localStorage.setItem('gostop-language',locale);}catch(_){ }
+      document.documentElement.lang=locale;
       document.querySelectorAll('[data-i18n]').forEach(node=>{let vars={};try{vars=JSON.parse(node.dataset.i18nVars||'{}');}catch(_){ }node.textContent=t(node.dataset.i18n,vars);});
       document.querySelectorAll('[data-i18n-aria]').forEach(node=>node.setAttribute('aria-label',t(node.dataset.i18nAria)));
       refreshModeLocalizedLabels();
@@ -2441,8 +2445,7 @@
   }
   function setLocale(locale){
     presentation.locale=i18n?.dictionaries?.[locale]?locale:'en';
-    try{localStorage.setItem('gostop-language',presentation.locale);}catch(_){ }
-    document.documentElement.lang=presentation.locale;
+    // Visual state first: the highlight and label must react in the same input task.
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
     if(els.languageMenu)els.languageMenu.querySelectorAll('button[data-locale]').forEach(button=>button.setAttribute('aria-current',button.dataset.locale===presentation.locale?'true':'false'));
     scheduleLocaleWork(presentation.locale);
@@ -3378,6 +3381,12 @@
       return false;
     };
     const setDialog=(dialog,open)=>{if(!dialog)return;if(open&&!dialog.open)dialog.showModal();else if(!open&&dialog.open)dialog.close();};
+    function reconcileAuthoritativeDecisionDialogs(authoritativeState){
+      const type=authoritativeState?.pendingDecision?.type||null;
+      if(type!=='goStopDecision')setDialog(els.decisionDialog,false);
+      if(!['shakeDecision','openingTripleDecision'].includes(type))setDialog(els.shakeDialog,false);
+      if(type!=='bombDecision')setDialog(els.bombDialog,false);
+    }
     function clearOnlineGameplayPresentation(){invalidateGameplayPresentation();}
     function onlineFlowBlocks(snapshot){const flow=snapshot?.sessionFlow;return !!(flow?.ended||flow?.replayReady?.you||flow?.newGameRequest||flow?.opponentReconnectUntil||els.quitConfirmDialog?.open);}
     function reconcileOnlineFlow(snapshot){
@@ -3474,6 +3483,10 @@
       presentation.locked=true;
       if(snapshot.matchId!==onlinePresentedMatchId)resetOnlinePresentationForMatch(snapshot.matchId);
       const incomingMapped=onlineStateFromSnapshot(snapshot,events),presentationEvents=incomingMapped.events;
+      // Another device logged into the same account can resolve a private decision.
+      // Close stale local choice dialogs as soon as that authoritative snapshot arrives,
+      // before any queued card animation is allowed to delay the UI reconciliation.
+      reconcileAuthoritativeDecisionDialogs(incomingMapped.state);
       reconcileOnlineFlow(snapshot);
       if(snapshot.sessionFlow?.ended)return;
       if(!state){state=incomingMapped.state;onlineLastEvents=presentationEvents;render();if(!onlineDealPresented){onlineDealPresented=true;if(!onlineSkipInitialOpening){await presentOpeningSequence(state.startingPlayerId,true);if(!isOnlinePresentationCurrent(epoch))return;}onlineSkipInitialOpening=false;}await driveOnline(snapshot,onlineLastEvents);return;}
@@ -3574,7 +3587,7 @@
       adapter.addEventListener('roomReady',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
       adapter.addEventListener('opponentConnected',()=>{if(!isCurrent())return;activeOnlineStatus.textContent=t('opponentConnectedMatchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();});
       adapter.addEventListener('disconnected',()=>{if(!isCurrent())return;onlineHandSourceRects.clear();onlineActions.clear();onlineActionSubmittedAt.clear();adapter.pendingActionId=null;onlinePendingCardId=null;els.playerHand.querySelectorAll('.pending-card').forEach(node=>node.classList.remove('pending-card'));if(!onlineMode)return;activeOnlineStatus.textContent=t('authorityDisconnected');presentation.locked=true;render();});
-      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();onlineActionSubmittedAt.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
+      adapter.addEventListener('snapshot',event=>{if(!isCurrent())return;latestOnlineSnapshot=event.detail.snapshot;onlineLastEvents=event.detail.events;reconcileAuthoritativeDecisionDialogs(event.detail.snapshot?.state);if(event.detail.snapshot?.sessionFlow?.ended){onlinePresentationEpoch++;onlinePresentationQueue=Promise.resolve();onlineActions.clear();onlineActionSubmittedAt.clear();adapter.pendingActionId=null;clearOnlineGameplayPresentation();reconcileOnlineFlow(event.detail.snapshot);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));return;}if(event.detail.snapshot?.matchId){activeOnlineStatus.textContent=t('matchReady');enterOnlineMatchView(anonymous);announceFriendlyJoin();}else if(event.detail.snapshot?.ranked&&els.soloStartOverlay?.dataset.launching!=='true')enterOnlineMatchView(anonymous);globalThis.dispatchEvent(new CustomEvent('gostop-online-snapshot',{detail:{...event.detail,sessionGeneration:generation,presentationEpoch:onlinePresentationEpoch}}));});
       adapter.addEventListener('actionAccepted',async event=>{
         if(!isCurrent())return;
         const action=onlineActions.get(event.detail.actionId);onlineActions.delete(event.detail.actionId);onlineActionSubmittedAt.delete(event.detail.actionId);
