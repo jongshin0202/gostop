@@ -76,6 +76,18 @@ test('language highlight and dialog taps respond before deferred work',()=>{
   assert.match(scheduleSource,/document\.documentElement\.lang=locale/);
 });
 
+test('mobile non-game UI buttons use immediate touch activation and keyboard-safe dialog viewport',()=>{
+  assert.match(client,/button\.dataset\.gostopImmediateTap='1'/);
+  assert.match(client,/const fastUiButton=target=>/);
+  assert.match(client,/document\.addEventListener\('touchend'[^]*?press\.button\.click\(\)/);
+  assert.match(client,/if\(textEntryFocused\(\)\)return;/);
+  assert.match(client,/gostop-keyboard-active/);
+  assert.match(client,/--gostop-vv-height/);
+  assert.match(client,/active\.scrollIntoView\?\./);
+  assert.match(client,/body:has\(dialog\[open\]\)[^]*?animation-play-state:paused!important/);
+  assert.match(index,/interactive-widget=resizes-visual/);
+});
+
 test('Settings language picker stays inside the dialog with readable language buttons',()=>{
   assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\{position:static!important/);
   assert.match(client,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
@@ -315,7 +327,7 @@ test('frontend cache versions advance after Friendly referral and boot-screen fi
   assert.match(index,/i18n\.js\?v=20261007-1/);
   assert.match(index,/styles\.css\?v=20261007-1/);
   assert.match(index,/game-engine\.js\?v=20260925-2/);
-  assert.match(index,/ranked-client\.js\?v=20261007-3/);
+  assert.match(index,/ranked-client\.js\?v=20261007-4/);
   assert.match(index,/online-client\.js\?v=20260929-1/);
   assert.match(index,/app\.js\?v=20261007-6/);
   assert.match(index,/tutorial-video\.js\?v=20261005-3/);
