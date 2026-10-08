@@ -35,6 +35,15 @@ test('Language and notification controls live in Settings instead of the main me
   assert.doesNotMatch(panel,/enablePlayNotificationsBtn/);
 });
 
+test('deployed game never loads the DIAG control and diagnostics require explicit localhost opt-in',()=>{
+  const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const diagnostics=fs.readFileSync(new URL('../diagnostics.js',import.meta.url),'utf8');
+  assert.doesNotMatch(index,/diagnostics\.js/);
+  assert.doesNotMatch(index,/gostopDiagToggle|>DIAG</);
+  assert.doesNotMatch(diagnostics,/hostname\.endsWith\('\.vercel\.app'\)/);
+  assert.match(diagnostics,/localHost&&params\.get\('diag'\)==='1'/);
+});
+
 test('Settings language picker stays inside the dialog with readable language buttons',()=>{
   assert.match(client,/\.settings-dialog \.account-language-control \.language-menu\{position:static!important/);
   assert.match(client,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
