@@ -262,6 +262,15 @@ test('rotation-related fullscreen exit is re-armed only for the next gameplay ge
   assert.equal(api.isOrientationRecoveryArmed(),false);
 });
 
+test('fullscreen transitions do not synthesize duplicate resize flashes and splash waits for viewport settle',()=>{
+  assert.match(source,/finishAfterViewportSettles/);
+  const change=source.slice(source.indexOf('function handleFullscreenChange'),source.indexOf('function handleOrientationChange'));
+  assert.doesNotMatch(change,/refreshLayout\(\)/);
+  const visibility=source.slice(source.indexOf('function handleVisibilityChange'),source.indexOf('if\(!document\.querySelector'));
+  assert.match(visibility,/hiddenWhileUiModal/);
+  assert.doesNotMatch(visibility,/refreshLayout\(\)/);
+});
+
 test('fullscreen integration preserves gameplay click propagation while splash touch owns only its start gesture',()=>{
   assert.doesNotMatch(source,/stopPropagation\s*\(/);
   assert.match(source,/const nativeTouch=\('ontouchstart' in globalThis\)\|\|Number\(globalThis\.navigator\?\.maxTouchPoints\|\|0\)>0/);
@@ -300,7 +309,7 @@ test('fullscreen integration preserves gameplay click propagation while splash t
   assert.match(css,/:fullscreen \.floor\{padding:0 3px;gap:0 2px\}/);
   assert.match(css,/:fullscreen \.captured-mini\{width:15px!important;height:auto!important;aspect-ratio:var\(--card-aspect\)\}/);
   assert.match(source,/mobile-fullscreen\.css\?v=20260924-2/);
-  assert.match(index,/<script src="runtime-config\.js\?v=20260925-6"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20261008-1"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20261008-2"><\/script>/);
+  assert.match(index,/<script src="runtime-config\.js\?v=20260925-6"><\/script>[\s\S]*<script src="mobile-fullscreen\.js\?v=20261008-2"><\/script>[\s\S]*<script src="ranked-client\.js\?v=20261008-3"><\/script>/);
   assert.match(source,/requestFullscreen\(\{navigationUI:'hide'\}\)/);
   assert.doesNotMatch(runtimeConfig,/mobile-fullscreen\.js/);
   assert.doesNotMatch(generator,/mobile-fullscreen\.js/);
