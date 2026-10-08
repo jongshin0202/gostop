@@ -56,13 +56,17 @@
         delete splash.dataset.startLabel;
         resolve(true);
       };
+      const finishAfterViewportSettles=()=>{
+        const done=()=>setTimeout(finish,32);
+        if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>requestAnimationFrame(done));else done();
+      };
       const nativeTouch=('ontouchstart' in globalThis)||Number(globalThis.navigator?.maxTouchPoints||0)>0;
       const arm=()=>{
         if(nativeTouch)splash.addEventListener('touchend',enter,{once:true,passive:false});
         else splash.addEventListener('pointerup',enter,{once:true});
       };
       const verify=()=>{
-        if(doc.fullscreenElement){finish();return;}
+        if(doc.fullscreenElement){finishAfterViewportSettles();return;}
         if(attempts<3){splash.dataset.startLabel='Tap Again for Full Screen';arm();return;}
         finish();
       };
@@ -165,9 +169,8 @@
       if(document.visibilityState==='hidden')resumeFullscreenArmed=true;
       if(orientationChangeAt&&now-orientationChangeAt<=ORIENTATION_RECOVERY_WINDOW_MS)orientationRecoveryArmed=true;
     }
-    // Android keyboard transitions can trigger fullscreen/compositor changes while an
-    // input is focused. Avoid synthesizing a full app resize during that transition.
-    if(!isTextEntryActive(document))refreshLayout();
+    // Browser fullscreen already emits its own viewport/resize updates. Do not
+    // synthesize another full-app resize here; on Android that can cause a black flash.
   }
 
   function handleOrientationChange(){
@@ -179,25 +182,24 @@
     refreshLayout();
   }
 
+  let hiddenWhileUiModal=false;
   function handleVisibilityChange(){
     if(!isMobileFullscreenEligible(globalThis))return;
     if(document.visibilityState==='hidden'){
       resumeFullscreenArmed=true;
+      hiddenWhileUiModal=isTextEntryActive(document)||!!document.querySelector?.('dialog[open]');
       return;
     }
-    if(document.visibilityState==='visible'&&resumeFullscreenArmed&&!document.fullscreenElement){
+    if(document.visibilityState==='visible'&&resumeFullscreenArmed&&!document.fullscreenElement&&!hiddenWhileUiModal&&!isTextEntryActive(document)&&!document.querySelector?.('dialog[open]')){
       requestGameFullscreen(document,{recovery:true});
     }
-    refreshLayout();
+    hiddenWhileUiModal=false;
   }
 
   function handleForegroundReturn(){
     if(!isMobileFullscreenEligible(globalThis)||document.visibilityState==='hidden'||document.fullscreenElement)return;
-    if(isTextEntryActive(document))return;
-    if(resumeFullscreenArmed){
-      requestGameFullscreen(document,{recovery:true});
-      refreshLayout();
-    }
+    if(isTextEntryActive(document)||document.querySelector?.('dialog[open]'))return;
+    if(resumeFullscreenArmed)requestGameFullscreen(document,{recovery:true});
   }
 
   if(!document.querySelector('link[data-gostop-fullscreen-style]')){
