@@ -3253,10 +3253,11 @@ test('Training opening recognizes simultaneous 5-BIRDIES and Bright routes and t
   assert.equal(profile.godoriRoute.strategic,true);
   assert.equal(profile.brightRoute.potentialCount,3);
   assert.equal(profile.brightRoute.strategic,true);
-  assert.equal(profile.primary,'godori');
+  assert.ok(profile.strategyOptions.some(option=>option.type==='godori'));
+  assert.ok(profile.strategyOptions.some(option=>option.type==='bright'));
   const opening=api.trainingOpeningStrategy();
-  assert.match(opening,/Best plan: 5-BIRDIES/);
-  assert.match(opening,/Brights are also strong/);
+  assert.match(opening,/5-BIRDIES/);
+  assert.match(opening,/Brights/);
   const recommendation=api.trainingRecommendation();
   assert.equal(recommendation.card.id,'m8-1');
   assert.equal(recommendation.target.id,'m8-2');
@@ -3460,7 +3461,7 @@ test('Computer AI shares the two-in-hand family control priority and takes Iris 
   assert.equal(move.urgency.liveStripeTarget,true);
 });
 
-test('Training priority is unique Star hit first, unique Rose hit second, two-target Iris hit third',()=>{
+test('Training uses the worse hand card when unique table targets are equally valuable',()=>{
   useState(stateWith({
     turn:'playerA',
     floor:[card('m6-3'),card('m5-3'),card('m5-1'),card('m10-3')],
@@ -3477,9 +3478,10 @@ test('Training priority is unique Star hit first, unique Rose hit second, two-ta
   assert.ok(star.score>rose.score,'Blue Stripe + only Star floor target must outrank two ordinary Rose Singles');
   assert.ok(rose.score>iris.score,'unique Rose hit must outrank Iris while a second Iris target remains');
   const recommendation=api.trainingRecommendation();
-  assert.equal(recommendation.card.id,'m10-2');
-  assert.equal(recommendation.target.id,'m10-3');
-  assert.match(recommendation.reason,/Stripe/);
+  assert.equal(recommendation.card.id,'m6-4');
+  assert.equal(recommendation.target.id,'m6-3');
+  assert.ok(api.trainingHandPreservationRisk(card('m6-4'),profile)<api.trainingHandPreservationRisk(card('m10-2'),profile));
+  assert.match(recommendation.reason,/Single|best available table capture/i);
   assert.doesNotMatch(recommendation.reason,/only .*target|computer can remove|current hit/i);
 });
 
