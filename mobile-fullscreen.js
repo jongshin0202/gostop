@@ -6,6 +6,7 @@
   let orientationChangeAt=0;
   let fullscreenExitAt=0;
   let orientationRecoveryArmed=false;
+  let resumeFullscreenArmed=false;
   let mainMenuFullscreenArmed=false;
   let mainMenuAutoAttempted=false;
   let initialMenuGateComplete=false;
@@ -20,14 +21,17 @@
     return touchLike&&phoneViewport;
   }
 
-  function requestGameFullscreen(doc=document){
+  function requestGameFullscreen(doc=document,{recovery=false}={}){
     const root=doc?.documentElement;
     if(!root||doc.fullscreenElement||typeof root.requestFullscreen!=='function')return false;
     try{
       const request=root.requestFullscreen({navigationUI:'hide'});
-      if(request&&typeof request.catch==='function')request.catch(()=>{});
+      if(request&&typeof request.then==='function'){
+        request.then(()=>{if(recovery)resumeFullscreenArmed=false;}).catch(()=>{if(recovery)resumeFullscreenArmed=true;});
+      }else if(recovery)resumeFullscreenArmed=false;
       return true;
     }catch(_){
+      if(recovery)resumeFullscreenArmed=true;
       return false;
     }
   }
@@ -123,6 +127,10 @@
     if(!isMobileFullscreenEligible(globalThis))return;
     const lite=globalThis.GOSTOP_PERFORMANCE_LITE===true||document.documentElement?.classList?.contains('gostop-performance-lite');
     if(lite)return;
+    if(resumeFullscreenArmed&&isGameplayInteraction(event.target)){
+      requestGameFullscreen(document,{recovery:true});
+      return;
+    }
     if((mainMenuFullscreenArmed||isStartScreenButton(event.target,document))&&isMainMenuInteraction(event.target,document)){
       requestMainMenuFullscreen(document,{userGesture:true});
       return;
@@ -144,10 +152,12 @@
     const now=Date.now();
     if(document.fullscreenElement){
       orientationRecoveryArmed=false;
+      resumeFullscreenArmed=false;
       mainMenuFullscreenArmed=false;
       fullscreenExitAt=0;
     }else{
       fullscreenExitAt=now;
+      if(document.visibilityState==='hidden')resumeFullscreenArmed=true;
       if(orientationChangeAt&&now-orientationChangeAt<=ORIENTATION_RECOVERY_WINDOW_MS)orientationRecoveryArmed=true;
     }
     refreshLayout();
@@ -162,6 +172,24 @@
     refreshLayout();
   }
 
+  function handleVisibilityChange(){
+    if(!isMobileFullscreenEligible(globalThis))return;
+    if(document.visibilityState==='hidden'){
+      resumeFullscreenArmed=true;
+      return;
+    }
+    if(document.visibilityState==='visible'&&resumeFullscreenArmed&&!document.fullscreenElement){
+      requestGameFullscreen(document,{recovery:true});
+    }
+    refreshLayout();
+  }
+
+  function handleForegroundReturn(){
+    if(!isMobileFullscreenEligible(globalThis)||document.visibilityState==='hidden'||document.fullscreenElement)return;
+    if(resumeFullscreenArmed)requestGameFullscreen(document,{recovery:true});
+    refreshLayout();
+  }
+
   if(!document.querySelector('link[data-gostop-fullscreen-style]')){
     const style=document.createElement('link');
     style.rel='stylesheet';
@@ -173,13 +201,17 @@
   globalThis.GoStopMobileFullscreen=Object.freeze({requestMainMenuFullscreen,requestGameFullscreen,isMobileFullscreenEligible,gateInitialMainMenuFullscreen});
   document.addEventListener('click',handleFullscreenClick,{capture:true});
   document.addEventListener('fullscreenchange',handleFullscreenChange);
+  document.addEventListener('visibilitychange',handleVisibilityChange);
   globalThis.addEventListener?.('orientationchange',handleOrientationChange);
+  globalThis.addEventListener?.('pageshow',handleForegroundReturn);
+  globalThis.addEventListener?.('focus',handleForegroundReturn);
 
   if(globalThis.GOSTOP_TEST_MODE===true){
     globalThis.GOSTOP_FULLSCREEN_TEST_API=Object.freeze({
       isMobileFullscreenEligible,requestGameFullscreen,requestMainMenuFullscreen,gateInitialMainMenuFullscreen,isStartScreenButton,isMainMenuInteraction,isGameplayInteraction,
-      handleFullscreenClick,handleFullscreenChange,handleOrientationChange,
+      handleFullscreenClick,handleFullscreenChange,handleOrientationChange,handleVisibilityChange,handleForegroundReturn,
       isOrientationRecoveryArmed:()=>orientationRecoveryArmed,
+      isResumeFullscreenArmed:()=>resumeFullscreenArmed,
       isMainMenuFullscreenArmed:()=>mainMenuFullscreenArmed,
       isMainMenuAutoAttempted:()=>mainMenuAutoAttempted,
       isInitialMenuGateComplete:()=>initialMenuGateComplete
