@@ -72,8 +72,7 @@ test('mobile leaderboards swipe horizontally in attract and manual views while o
   assert.match(board,/function leaderboardSwipeEnabled\(\)\{return !leaderboardScreen\.hidden&&globalThis\.matchMedia\?\.\('\(max-width:760px\)'\)\.matches;\}/);
   assert.match(board,/leaderboardScreen\.addEventListener\('touchstart'/);
   assert.match(board,/leaderboardScreen\.addEventListener\('touchend'/);
-  assert.match(board,/Math\.abs\(dx\)<48/);
-  assert.match(board,/Math\.abs\(dx\)<Math\.abs\(dy\)\*1\.15/);
+  assert.match(board,/isSwipe=elapsed<=900&&Math\.abs\(dx\)>=48&&Math\.abs\(dx\)>=Math\.abs\(dy\)\*1\.15/);
   assert.match(board,/nextLeaderboard\(dx<0\?1:-1\)/);
   assert.match(source,/Date\.now\(\)<leaderboardSwipeSuppressClickUntil/);
   assert.match(source,/leaderboardScreen\.classList\.toggle\('attract-mode',attractMode\)/);
