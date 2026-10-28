@@ -2449,6 +2449,7 @@
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
     if(els.languageMenu)els.languageMenu.querySelectorAll('button[data-locale]').forEach(button=>button.setAttribute('aria-current',button.dataset.locale===presentation.locale?'true':'false'));
     scheduleLocaleWork(presentation.locale);
+    renderTrainingCoachLocale();
   }
   function refreshModeLocalizedLabels(){
     const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');
@@ -3032,10 +3033,119 @@
     if(unlock){presentation.locked=false;render();}
     if(resolve)setTimeout(resolve,250);
   }
+  // Training decisions remain language-neutral. Only their displayed coaching
+  // explanation is localized; scoring, candidate ranking and card selection stay unchanged.
+  const TRAINING_FAMILIES_KO=Object.freeze({
+    1:'소나무',2:'매화',3:'벚꽃',4:'등나무',5:'붓꽃',6:'모란',
+    7:'싸리',8:'억새',9:'국화',10:'단풍',11:'오동',12:'버드나무'
+  });
+  const TRAINING_RIBBONS_KO=Object.freeze({red:'홍단',blue:'청단',grass:'초단'});
+  function trainingKoreanFamily(month){return TRAINING_FAMILIES_KO[month]||String(month)+'월';}
+  function trainingKoreanRibbon(family){return TRAINING_RIBBONS_KO[family]||'띠';}
+  function trainingKoreanCard(card){
+    if(!card)return '패';
+    const family=trainingKoreanFamily(card.month);
+    if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return family+' 국진 술잔';
+    if(card.type==='bright')return family+' 광';
+    if(card.type==='ribbon')return family+' '+trainingKoreanRibbon(card.ribbonSet)+' 띠';
+    if(card.flags?.includes('doublePi'))return family+' 쌍피';
+    if(card.flags?.includes('godori'))return family+' 고도리 열끗';
+    if(card.type==='animal')return family+' 열끗';
+    return family+' 피';
+  }
+  function koreanTrainingMove(candidate){
+    if(!candidate?.card)return '현재 손패와 바닥패를 비교하여 가장 유리한 수를 선택하세요.';
+    const source=trainingKoreanCard(candidate.card),target=candidate.target;
+    const action=target?'손에 있는 '+source+'를 바닥의 '+trainingKoreanCard(target)+'에 내세요.':'손에 있는 '+source+'를 내세요.';
+    const profile=candidate.profile||trainingStrategyProfile();
+    let why='';
+    if(!target){
+      const retained=candidate.discardContext?.retainedFamily?.length;
+      why=retained?'같은 종류의 더 좋은 패를 손에 남겨 두고 위험이 적은 패부터 내는 수입니다.':'지금 바닥에서 먹을 패가 없어, 중요한 패를 아끼면서 가장 위험이 적은 패를 내는 수입니다.';
+    }else if(target.flags?.includes('godori')&&profile.godoriRoute?.alive){
+      why='고도리를 완성할 수 있는 중요한 열끗이므로 우선 먹는 것이 좋습니다.';
+    }else if(target.type==='bright'){
+      why='광은 점수 가치가 높으므로 우선 확보하는 것이 좋습니다.';
+    }else if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive){
+      why='고도리 패를 안전하게 확보해 고도리 조합 가능성을 유지할 수 있습니다.';
+    }else if(candidate.opportunity){
+      const opportunity=candidate.opportunity;
+      const stripe=opportunity.match(/This completes the (Red|Blue|Plain) Stripe set/);
+      if(opportunity.includes('5-BIRDIES'))why='이 수로 고도리 조합을 완성합니다.';
+      else if(stripe)why='이 수로 '+({Red:'홍단',Blue:'청단',Plain:'초단'}[stripe[1]])+' 3장 조합을 완성합니다.';
+      else if(opportunity.includes('3 Brights'))why='광을 3장 모아 광 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('5 Pictures'))why='열끗을 5장 모아 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('5 Stripes'))why='띠를 5장 모아 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('10 Singles'))why='피 10장을 채워 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('visible score'))why='이 수로 현재 점수가 올라갑니다.';
+    }
+    if(!why&&candidate.urgency?.familyLock){
+      why='같은 종류의 손패 두 장 중 가치가 낮은 패를 먼저 사용해 더 좋은 패를 남깁니다.';
+    }
+    if(!why&&target?.type==='ribbon'){
+      const route=profile.ribbonRoutes?.[target.ribbonSet],name=trainingKoreanRibbon(target.ribbonSet);
+      if(route&&!route.alive)why=name+' 3장 조합은 이미 불가능하지만, 띠 한 장을 확보할 수 있습니다.';
+      else if(route?.potentialCount>=3)why=name+' 띠를 가져오면 '+name+' 3장 조합을 완성할 가능성이 높아집니다.';
+      else if(route?.potentialCount>=2)why=name+' 띠를 확보하여 '+name+' 3장 조합을 노릴 수 있습니다.';
+      else why='띠는 일반 피나 열끗보다 우선해서 확보할 가치가 있습니다.';
+    }
+    if(!why&&target?.flags?.includes('doublePi'))why='쌍피는 피 두 장으로 계산되므로 우선 먹는 것이 유리합니다.';
+    if(!why&&target?.flags?.includes('switchPi'))why='국진 술잔은 필요할 때 쌍피로 사용할 수 있습니다.';
+    if(!why&&target?.type==='pi')why='손에 있는 더 좋은 패를 아끼면서 바닥의 피를 확보하는 수입니다.';
+    if(!why)why='손패의 높은 가치 패를 보존하면서 유리한 바닥패를 확보하는 수입니다.';
+    if(candidate.reserved&&!candidate.profile?.strategyOptions?.length)why+=' 지금 먹을 수 있는 확실한 패라면 확보하는 것이 좋습니다.';
+    let threat='';
+    if(candidate.threat){
+      if(candidate.threat.includes('Stripe set'))threat='상대가 띠 조합을 완성하는 것도 막을 수 있습니다.';
+      else if(candidate.threat.includes('5-BIRDIES'))threat='상대가 고도리를 완성하는 것도 막을 수 있습니다.';
+      else if(candidate.threat.includes('3 Brights'))threat='상대의 3광 완성을 늦출 수 있습니다.';
+      else threat='상대의 득점을 늦추는 데에도 도움이 됩니다.';
+    }
+    return [action,why,threat].filter(Boolean).join(' ');
+  }
+  function koreanTrainingOpening(){
+    const profile=trainingStrategyProfile(),options=profile.strategyOptions||[];
+    if(!options.length)return '추천 전략: 피를 모으세요. 아직 광·고도리·삼단 조합이 가까운 상태가 아니므로, 먹을 수 있는 피와 쌍피를 우선 확보하세요.';
+    const labels=options.map(option=>option.type==='stripe'?trainingKoreanRibbon(option.family):option.type==='bright'?'광':'고도리');
+    const descriptions=options.map((option)=>{
+      const route=option.route,name=option.type==='stripe'?trainingKoreanRibbon(option.family):option.type==='bright'?'광':'고도리';
+      return name+' 조합에 필요한 패 중 '+route.potentialCount+'장을 손에 가지고 있거나 이미 먹었거나 바로 먹을 수 있습니다.';
+    });
+    return '추천 전략: '+labels.join(', ')+'. '+descriptions.join(' ');
+  }
+  function koreanTrainingGoStop(text){
+    const isStop=String(text).startsWith('STOP'),mine=scorePlayer(state?.human||{captured:[]}).total,theirs=scorePlayer(state?.ai||{captured:[]}).total;
+    if(isStop){
+      const points=calculateFinalScore('human').total;
+      if(text.includes('The computer is at'))return '스톱을 추천합니다. 현재 '+points+'점을 확정하세요. 상대가 다음 차례에 점수를 내어 승부를 끝낼 수 있으므로 지금 멈추는 편이 안전합니다.';
+      if(text.includes('already has'))return '스톱을 추천합니다. 현재 '+points+'점을 확정하세요. 상대가 이미 '+theirs+'점이라 다음 차례에 역전할 위험이 있습니다.';
+      if(text.includes('Only one scoring turn'))return '스톱을 추천합니다. 현재 '+points+'점을 확정하세요. 득점 기회가 한 번 정도만 남아 추가 고는 위험합니다.';
+      return '스톱을 추천합니다. 현재 '+points+'점을 확정하는 편이 추가 고의 위험보다 유리합니다.';
+    }
+    return '고를 추천합니다. 현재 나 '+mine+'점, 상대 '+theirs+'점이며, 남은 패에서 추가 득점을 노릴 여지가 있습니다.';
+  }
+  function koreanTrainingCoach(title,text){
+    const recommendation=presentation.trainingTurnRecommendation;
+    if(title==='Recommended Move')return {title:'추천 수',text:koreanTrainingMove(recommendation)};
+    if(title==='Strategy Note')return {title:'전략 안내',text:(text?.startsWith('The highlighted table card')?'강조된 바닥패가 더 유리합니다. ':'추천하는 수를 다시 확인하세요. ')+koreanTrainingMove(recommendation)};
+    if(title==='Opening Strategy')return {title:'시작 전략',text:koreanTrainingOpening()+' 준비되면 화면 아무 곳이나 누르세요.'};
+    if(title==='GO / STOP ADVICE')return {title:'고 / 스톱 조언',text:koreanTrainingGoStop(text)};
+    if(title==='BOMB ADVICE')return {title:'폭탄 조언',text:'폭탄을 사용하면 같은 종류의 패 네 장을 한꺼번에 먹고, 가능할 때 상대 피 한 장을 가져오며, 추가로 두 번의 빈 턴을 얻습니다. 이 기회를 놓치지 않는 것이 유리합니다.'};
+    if(title==='SHAKE ADVICE')return {title:'흔들기 조언',text:'흔들면 승리 시 점수 배수를 높일 수 있습니다. 네 번째 같은 종류의 패를 먹을 가능성과 폭탄 기회를 고려하여 선택하세요.'};
+    return {title:'훈련 안내',text:koreanTrainingMove(recommendation)};
+  }
+  let trainingCoachSource=null;
+  function renderTrainingCoachLocale(){
+    if(!trainingCoachSource||TEST_MODE)return;
+    const {title,text}=trainingCoachSource;
+    const shown=presentation.locale==='ko'?koreanTrainingCoach(title,text):{title:title||'Training Coach',text};
+    if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=shown.title;
+    if(els.trainingCoachText)els.trainingCoachText.textContent=shown.text;
+  }
   function showTrainingCoach(title,text){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
-    if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=title||'Training Coach';
-    if(els.trainingCoachText)els.trainingCoachText.textContent=text;
+    trainingCoachSource={title,text};
+    renderTrainingCoachLocale();
     if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
   }
   function restoreTrainingCoachHome(){
