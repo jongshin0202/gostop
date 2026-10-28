@@ -5,7 +5,7 @@ import fs from 'node:fs';
 const ranked=fs.readFileSync(new URL('../ranked-client.js',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+const adminCss=fs.readFileSync(new URL('../admin-portal/admin.css',import.meta.url),'utf8');
 
 test('ranked Solo and Online entry are single-flight and cannot overlap while a notice is pending',()=>{
   assert.match(ranked,/let rankedEntryPending=null/);
