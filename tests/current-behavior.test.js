@@ -3768,3 +3768,32 @@ test('score pill, Captured Cards title, and entire capture panels open the same 
   assert.match(appSource,/panel\.addEventListener\('click',event=>\{if\(event\.defaultPrevented\)return;event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(playerId\);\}\)/);
   assert.doesNotMatch(appSource,/btn\.addEventListener\('click',\(\)=>openCapturedGroup/);
 });
+
+test('Korean Training Mode uses the same recommended Pine capture with Korean card names and rationale',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-2')],
+    human:api.makePlayer({hand:[card('m1-3'),card('m2-2'),card('m3-2')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile(),candidate=api.trainingCandidate(card('m1-3'),profile);
+  assert.equal(candidate.target.id,'m1-2');
+  assert.equal(api.trainingKoreanCard(candidate.card),'소나무 피');
+  assert.equal(api.trainingKoreanCard(candidate.target),'소나무 홍단 띠');
+  assert.match(candidate.reason,/^$/); // candidate remains a strategy object, not a translated result
+  const rendered=api.koreanTrainingMove(candidate);
+  assert.match(rendered,/손에 있는 소나무 피를 바닥의 소나무 홍단 띠에 내세요/);
+  assert.match(rendered,/홍단 3장 조합을 완성할 가능성이 높아집니다/);
+  assert.doesNotMatch(rendered,/\b(?:Play|Stripe|Single|Pine|Recommended)\b/);
+});
+
+test('Korean training opening, GO-STOP and special coaching text has localized titles and explanations',()=>{
+  useState(stateWith({turn:'playerA',human:api.makePlayer({hand:[card('m1-2'),card('m2-2'),card('m3-2')]}),ai:api.makePlayer()}));
+  assert.match(api.koreanTrainingOpening(),/추천 전략/);
+  assert.match(api.koreanTrainingOpening(),/홍단/);
+  assert.equal(api.koreanTrainingCoach('Opening Strategy','Best strategies').title,'시작 전략');
+  assert.match(api.koreanTrainingCoach('Opening Strategy','Best strategies').text,/화면 아무 곳이나 누르세요/);
+  assert.equal(api.koreanTrainingCoach('GO / STOP ADVICE','STOP. Lock in 7 points now.').title,'고 / 스톱 조언');
+  assert.equal(api.koreanTrainingCoach('BOMB ADVICE','Bomb.').title,'폭탄 조언');
+  assert.equal(api.koreanTrainingCoach('SHAKE ADVICE','Shake.').title,'흔들기 조언');
+});
