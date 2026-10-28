@@ -246,11 +246,10 @@ test('admin login still cannot fail silently and keeps simple request progress p
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
   const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../admin-portal/vercel.json',import.meta.url),'utf8'));
   assert.match(adminHtml,/Admin build 2026-09-20\.1/);
-  const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
-  for(const source of ['/admin.html','/admin.js','/admin.css']){
-    const headers=bySource.get(source);assert.ok(headers,source);
-    assert.ok(headers.some(item=>item.key==='Cache-Control'&&/no-store/.test(item.value)),source);
-  }
+  const headers=vercel.headers?.find(item=>item.source==='/(.*)')?.headers;
+  assert.ok(headers,'standalone admin assets must share global no-store headers');
+  assert.ok(headers.some(item=>item.key==='Cache-Control'&&/no-store/.test(item.value)));
+  assert.ok(headers.some(item=>item.key==='X-Robots-Tag'&&/noindex/.test(item.value)));
 });
 
 
