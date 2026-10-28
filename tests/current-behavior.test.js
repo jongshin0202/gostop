@@ -3831,3 +3831,43 @@ test('Training does not claim an only available capture when multiple hand cards
   assert.doesNotMatch(api.koreanTrainingMove(rec),/유일한 패|더 좋은 패를 아끼/);
 });
 
+
+
+test('Training picks the higher-value card from two matching hand cards: double Pi, Sake Cup, and Single versus ordinary Picture',()=>{
+  const fixtures=[
+    {name:'Daisy Sake Cup before Daisy Single',floor:'m9-2',hand:['m9-1','m9-3'],recommended:'m9-1'},
+    {name:'Berry double Pi before ordinary Single',floor:'m11-2',hand:['m11-3','m11-4'],recommended:'m11-3'},
+    {name:'Iris Single before ordinary Picture',floor:'m5-2',hand:['m5-1','m5-3'],recommended:'m5-3'},
+    {name:'Rose Single before ordinary Picture',floor:'m6-4',hand:['m6-1','m6-3'],recommended:'m6-3'},
+    {name:'Godori Picture outranks ordinary Single',floor:'m4-2',hand:['m4-1','m4-3'],recommended:'m4-1'}
+  ];
+  for(const fixture of fixtures){
+    useState(stateWith({
+      turn:'playerA',floor:[card(fixture.floor)],
+      human:api.makePlayer({hand:fixture.hand.map(card)}),
+      ai:api.makePlayer()
+    }));
+    const chosen=api.trainingRecommendation();
+    assert.equal(chosen?.card.id,fixture.recommended,fixture.name);
+    assert.equal(chosen?.target.id,fixture.floor,fixture.name);
+    assert.doesNotMatch(chosen.reason,/lower.priority hand card|preserving the stronger option|denies the computer/i,fixture.name);
+    const ko=api.koreanTrainingMove(chosen);
+    assert.doesNotMatch(ko,/가치가 낮은 패를 먼저|더 좋은 패를 남깁니다|상대의 득점/,fixture.name);
+    const weaker=fixture.hand.find(id=>id!==fixture.recommended);
+    assert.ok(api.trainingPlayableHandCardValue(card(fixture.recommended))>api.trainingPlayableHandCardValue(card(weaker)),fixture.name);
+  }
+});
+
+test('Training does not append a redundant computer-denial sentence even if the target is a threat',()=>{
+  const ninePi=cards('m1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m4-3','m4-4','m5-3');
+  useState(stateWith({
+    turn:'playerA',floor:[card('m6-3')],
+    human:api.makePlayer({hand:[card('m6-1')]}),
+    ai:api.makePlayer({captured:ninePi})
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec?.target.id,'m6-3');
+  assert.ok(rec.threat,'defensive scoring analysis is still available for selection');
+  assert.doesNotMatch(rec.reason,/It also denies the computer|It also blocks the computer|It also slows the computer/i);
+  assert.doesNotMatch(api.koreanTrainingMove(rec),/상대가.*막을 수|상대의 득점을 늦추/);
+});
