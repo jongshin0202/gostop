@@ -2923,10 +2923,13 @@
     const why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
-    // The separate defensive-threat analysis still influences move ranking,
-    // but does not add repetitive "It also denies the computer..." coaching.
+    // Only explicit, imminent set-completion blocks merit a defensive note.
+    // Generic "denies the computer an immediate scoring card" text is omitted.
+    const majorBlock=best.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(best.threat)
+      ?best.threat.replace(/^It also blocks the computer from /,'Block the computer from ')
+      :'';
     best.shortWhy=why;
-    best.reason=[action,why+reservedNote].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    best.reason=[action,why+reservedNote,majorBlock].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     return best;
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
@@ -3131,7 +3134,12 @@
     if(!why&&target?.type==='pi')why='바닥의 피를 먹을 수 있는 수입니다.';
     if(!why)why='현재 선택할 수 있는 바닥패를 먹는 수입니다.';
     if(candidate.reserved&&!candidate.profile?.strategyOptions?.length)why+=' 지금 먹을 수 있는 확실한 패라면 확보하는 것이 좋습니다.';
-    return [action,why].filter(Boolean).join(' ');
+    const majorBlock=candidate.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(candidate.threat)
+      ?candidate.threat.includes('5-BIRDIES')
+        ?'상대의 고도리 완성을 막는 수입니다.'
+        :'상대가 '+trainingKoreanRibbon(candidate.target?.ribbonSet)+' 3장 조합을 완성하지 못하게 막는 수입니다.'
+      :'';
+    return [action,why,majorBlock].filter(Boolean).join(' ');
   }
   function koreanTrainingOpening(){
     const profile=trainingStrategyProfile(),options=profile.strategyOptions||[];
