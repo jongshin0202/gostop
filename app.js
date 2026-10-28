@@ -2829,6 +2829,7 @@
   }
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
+    if(candidate.onlyAvailableCapture)return 'This is the only card in your hand that can capture a card from the table.';
     const target=candidate.target,urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,target);
     if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Take the '+trainingCardName(target)+' now. A live 5-BIRDIES Picture is the highest-priority table card.';
     if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. '+(candidate.opportunity||'Brights are a top-priority capture.');
@@ -2860,9 +2861,9 @@
         const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
         return 'The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
       }
-      return 'This takes the best available Single from the table while preserving higher-value cards in your hand.';
+      return 'This captures an available Single from the table.';
     }
-    return 'This is the best available table capture while using a lower-value card from your hand when possible.';
+    return 'This captures the best available table card among your matching options.';
   }
   function trainingAlternativeSummary(best,sorted){
     const routeFamily=best?.target?.type==='ribbon'?best.target.ribbonSet:null;
@@ -2889,7 +2890,8 @@
     const sorted=[...pool].sort((a,b)=>noCaptureOnly
       ?trainingDiscardRisk(a.card,profile)-trainingDiscardRisk(b.card,profile)||b.score-a.score||a.card.id.localeCompare(b.card.id)
       :trainingHitCompare(a,b,profile));
-    const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
+    const best={...sorted[0],onlyAvailableCapture:hits.length===1&&!!sorted[0].target};
+    const why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
     const threat=best.threat?(' '+best.threat):'';
@@ -3059,7 +3061,9 @@
     const action=target?'손에 있는 '+source+'를 바닥의 '+trainingKoreanCard(target)+'에 내세요.':'손에 있는 '+source+'를 내세요.';
     const profile=candidate.profile||trainingStrategyProfile();
     let why='';
-    if(!target){
+    if(candidate.onlyAvailableCapture&&target){
+      why='현재 손패 중 바닥패를 먹을 수 있는 유일한 패입니다.';
+    }else if(!target){
       const retained=candidate.discardContext?.retainedFamily?.length;
       why=retained?'같은 종류의 더 좋은 패를 손에 남겨 두고 위험이 적은 패부터 내는 수입니다.':'지금 바닥에서 먹을 패가 없어, 중요한 패를 아끼면서 가장 위험이 적은 패를 내는 수입니다.';
     }else if(target.flags?.includes('godori')&&profile.godoriRoute?.alive){
@@ -3091,8 +3095,8 @@
     }
     if(!why&&target?.flags?.includes('doublePi'))why='쌍피는 피 두 장으로 계산되므로 우선 먹는 것이 유리합니다.';
     if(!why&&target?.flags?.includes('switchPi'))why='국진 술잔은 필요할 때 쌍피로 사용할 수 있습니다.';
-    if(!why&&target?.type==='pi')why='손에 있는 더 좋은 패를 아끼면서 바닥의 피를 확보하는 수입니다.';
-    if(!why)why='손패의 높은 가치 패를 보존하면서 유리한 바닥패를 확보하는 수입니다.';
+    if(!why&&target?.type==='pi')why='바닥의 피를 먹을 수 있는 수입니다.';
+    if(!why)why='현재 선택할 수 있는 바닥패를 먹는 수입니다.';
     if(candidate.reserved&&!candidate.profile?.strategyOptions?.length)why+=' 지금 먹을 수 있는 확실한 패라면 확보하는 것이 좋습니다.';
     let threat='';
     if(candidate.threat){
