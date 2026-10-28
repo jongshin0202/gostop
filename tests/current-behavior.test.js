@@ -2995,7 +2995,7 @@ test('Training Mode recognizes held plus claimable 5-BIRDIES potential without c
   assert.match(source,/await showTrainingOpeningStrategy\(openingAdvice\)/);
   const openingAdviceAt=source.indexOf('await showTrainingOpeningStrategy(openingAdvice)'),openingSpecialsAt=source.indexOf('await processOpeningSpecials(epoch)',openingAdviceAt);
   assert.ok(openingAdviceAt>=0&&openingSpecialsAt>openingAdviceAt,'Opening Strategy must be dismissed before opening specials and the first turn continue.');
-  assert.match(source,/The highlighted table card is the stronger target/);
+  assert.match(source,/showTrainingCoach\('Target Choice',trainingAdvice\.reason\)/);
 });
 
 
