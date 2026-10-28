@@ -2829,8 +2829,10 @@
   }
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
-    if(candidate.onlyAvailableCapture)return 'This is the only card in your hand that can capture a card from the table.';
     const target=candidate.target,urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,target);
+    // For ordinary Picture captures without a stronger scoring reason, explain
+    // the actual scarcity rather than inventing a hand-card value advantage.
+    if(candidate.onlyAvailableCapture&&target.type==='animal'&&!target.flags?.includes('godori')&&!candidate.opportunity)return 'This is the only card in your hand that can capture a card from the table.';
     if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Take the '+trainingCardName(target)+' now. A live 5-BIRDIES Picture is the highest-priority table card.';
     if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. '+(candidate.opportunity||'Brights are a top-priority capture.');
     if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive){
@@ -3061,7 +3063,7 @@
     const action=target?'손에 있는 '+source+'를 바닥의 '+trainingKoreanCard(target)+'에 내세요.':'손에 있는 '+source+'를 내세요.';
     const profile=candidate.profile||trainingStrategyProfile();
     let why='';
-    if(candidate.onlyAvailableCapture&&target){
+    if(candidate.onlyAvailableCapture&&target?.type==='animal'&&!target.flags?.includes('godori')&&!candidate.opportunity){
       why='현재 손패 중 바닥패를 먹을 수 있는 유일한 패입니다.';
     }else if(!target){
       const retained=candidate.discardContext?.retainedFamily?.length;
