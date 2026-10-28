@@ -2935,7 +2935,8 @@
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
   function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
     if(!chosen||!recommended||chosen.id===recommended.card.id)return '';
-    return 'Play '+trainingCardName(recommended.card)+(recommended.target?(' onto '+trainingCardName(recommended.target)):'')+' instead. '+(recommended.shortWhy||trainingMoveWhy(recommended));
+    const explanation=recommended.shortWhy||trainingMoveWhy(recommended);
+    return ['Play '+trainingCardName(recommended.card)+(recommended.target?(' onto '+trainingCardName(recommended.target)):'')+' instead.',explanation].filter(Boolean).join(' ');
   }
   function trainingOpeningStrategy(){
     if(!state?.human)return '';
@@ -3166,7 +3167,7 @@
   function koreanTrainingCoach(title,text){
     const recommendation=presentation.trainingTurnRecommendation;
     if(title==='Recommended Move')return {title:'추천 수',text:koreanTrainingMove(recommendation)};
-    if(title==='Strategy Note')return {title:'전략 안내',text:(text?.startsWith('The highlighted table card')?'강조된 바닥패가 더 유리합니다. ':'추천하는 수를 다시 확인하세요. ')+koreanTrainingMove(recommendation)};
+    if(title==='Strategy Note')return {title:'전략 안내',text:koreanTrainingMove(recommendation)};
     if(title==='Opening Strategy')return {title:'시작 전략',text:koreanTrainingOpening()+' 준비되면 화면 아무 곳이나 누르세요.'};
     if(title==='GO / STOP ADVICE')return {title:'고 / 스톱 조언',text:koreanTrainingGoStop(text)};
     if(title==='BOMB ADVICE')return {title:'폭탄 조언',text:'폭탄을 사용하면 같은 종류의 패 네 장을 한꺼번에 먹고, 가능할 때 상대 피 한 장을 가져오며, 추가로 두 번의 빈 턴을 얻습니다. 이 기회를 놓치지 않는 것이 유리합니다.'};
