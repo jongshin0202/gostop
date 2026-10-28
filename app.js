@@ -2890,9 +2890,9 @@
         const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
         return 'The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
       }
-      return '';
+      return candidate.onlyAvailableCapture?'This is the only available capture.':'';
     }
-    return '';
+    return candidate.onlyAvailableCapture?'This is the only available capture.':'';
   }
   function trainingAlternativeSummary(best,sorted){
     const routeFamily=best?.target?.type==='ribbon'?best.target.ribbonSet:null;
@@ -3133,6 +3133,7 @@
     if(!why&&target?.flags?.includes('switchPi'))why='국진 술잔은 필요할 때 쌍피로 사용할 수 있습니다.';
     if(!why&&target?.type==='pi')why='';
     
+    if(!why&&candidate.onlyAvailableCapture&&target)why='현재 먹을 수 있는 유일한 수입니다.';
     const majorBlock=candidate.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(candidate.threat)
       ?candidate.threat.includes('5-BIRDIES')
         ?'상대의 고도리 완성을 막는 수입니다.'
