@@ -3929,3 +3929,29 @@ test('Korean strategy notes give the recommended move without generic reminders'
   // Presentation-only: no generic "check the move again" preface.
   assert.doesNotMatch(note.text,/추천하는 수를 다시 확인하세요|강조된 바닥패가 더 유리합니다/);
 });
+
+
+test('Training shows target-specific advice when a selected hand card matches two table cards',()=>{
+  const floor=cards('m9-1','m9-4');
+  useState(stateWith({
+    turn:'playerA',floor,
+    human:api.makePlayer({hand:cards('m9-2','m4-3')}),
+    ai:api.makePlayer()
+  }));
+  const advice=api.trainingTargetChoiceRecommendation('m9-2',floor);
+  assert.equal(advice?.card.id,'m9-2');
+  assert.equal(advice?.target.id,'m9-1','take the Sake Cup instead of the ordinary Single');
+  assert.match(advice.reason,/^Choose Daisy Sake Cup on the table\./);
+  assert.match(advice.reason,/Sake Cup can count as two Singles\./);
+  assert.doesNotMatch(advice.reason,/denies the computer|lower.value card from your hand/i);
+  assert.equal(api.trainingTargetChoiceRecommendation('not-in-hand',floor),null);
+});
+
+test('Training target-choice UI keeps the hint visible while both floor targets are selectable',()=>{
+  const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
+  const chooser=source.slice(source.indexOf('async function chooseFloorTarget'),source.indexOf('function cleanupTargetChoice'));
+  assert.match(chooser,/trainingTargetChoiceRecommendation\(presentation\.pendingHumanCardId,matches\)/);
+  assert.match(chooser,/presentation\.trainingRecommendedFloorCardId=trainingAdvice\.target\.id/);
+  assert.match(chooser,/showTrainingCoach\('Target Choice',trainingAdvice\.reason\)/);
+  assert.match(source,/if\(title!=='SHAKE ADVICE'&&title!=='BOMB ADVICE'\)restoreTrainingCoachHome\(\)/);
+});
