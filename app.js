@@ -822,12 +822,18 @@
   function finishTargetChoice(cardId=null){
     const choice=presentation.targetChoice;if(!choice)return false;
     const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
-    const trainingRecommendationAtChoice=presentation.trainingTurnRecommendation;
-    if(presentation.trainingMode&&card&&trainingRecommendationAtChoice?.target&&choice.matches.some(item=>item.id===trainingRecommendationAtChoice.target.id)&&card.id!==trainingRecommendationAtChoice.target.id){
-      showTrainingCoach('Strategy Note',`The highlighted table card is the stronger target for this play. ${trainingRecommendationAtChoice.reason}`);
-    }
+    const advice=choice.trainingAdvice||null;
     presentation.targetChoice=null;presentation.targetChoiceCleanup=null;
     els.floor.querySelectorAll('[data-target-choice="1"]').forEach(el=>{el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');delete el.dataset.targetChoice;});
+    if(advice){
+      presentation.trainingRecommendedFloorCardId=null;
+      els.floor.querySelectorAll('.floor-card.training-recommended').forEach(el=>el.classList.remove('training-recommended'));
+      hideTrainingCoach();
+      if(card&&card.id!==advice.target.id){
+        const why=trainingMoveWhy(advice);
+        showTrainingCoach('Target Feedback',['The better target was '+trainingCardName(advice.target)+'.',why].filter(Boolean).join(' '));
+      }
+    }
     choice.resolve(card);return !!card;
   }
   async function chooseFloorTarget(matches, message='Choose which card to hit',{cancelable=false}={}){
@@ -839,10 +845,18 @@
     cleanupTargetChoice();
     presentation.locked=true;
     showActionCue('human','choose a table card');
+    const trainingAdvice=presentation.trainingMode&&!onlineMode
+      ?trainingTargetChoiceRecommendation(presentation.pendingHumanCardId,matches):null;
     return new Promise(resolve=>{
-      presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve,cancelable};
+      presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve,cancelable,trainingAdvice};
       presentation.targetChoiceCleanup=()=>finishTargetChoice(null);
       syncTargetChoiceUi();
+      if(trainingAdvice){
+        presentation.trainingTurnRecommendation=trainingAdvice;
+        presentation.trainingRecommendedFloorCardId=trainingAdvice.target.id;
+        els.floor.querySelector(`[data-card-id="${trainingAdvice.target.id}"]`)?.classList.add('training-recommended');
+        showTrainingCoach('Target Choice',trainingAdvice.reason);
+      }
     });
   }
   function cleanupTargetChoice(){if(presentation.targetChoiceCleanup){const fn=presentation.targetChoiceCleanup;presentation.targetChoiceCleanup=null;fn();}else if(presentation.targetChoice)finishTargetChoice(null);}
@@ -2932,6 +2946,16 @@
     best.reason=[action,reason].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     return best;
   }
+  function trainingTargetChoiceRecommendation(cardId,matches){
+    const card=state?.human?.hand?.find(item=>item.id===cardId);
+    if(!card||!matches?.length)return null;
+    // Use the existing strategy evaluator, but only compare legal targets for
+    // the hand card the player has already selected.
+    const candidate=trainingCandidate(card);
+    if(!candidate?.target||!matches.some(item=>item.id===candidate.target.id))return null;
+    const why=trainingMoveWhy(candidate);
+    return {...candidate,shortWhy:why,reason:['Choose '+trainingCardName(candidate.target)+' on the table.',why].filter(Boolean).join(' ')};
+  }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
   function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
     if(!chosen||!recommended||chosen.id===recommended.card.id)return '';
@@ -3167,6 +3191,16 @@
   function koreanTrainingCoach(title,text){
     const recommendation=presentation.trainingTurnRecommendation;
     if(title==='Recommended Move')return {title:'추천 수',text:koreanTrainingMove(recommendation)};
+    if(title==='Target Choice'||title==='Target Feedback'){
+      const target=recommendation?.target;
+      if(!target)return {title:'추천 대상',text};
+      const action='손에 있는 '+trainingKoreanCard(recommendation.card)+'를 바닥의 '+trainingKoreanCard(target)+'에 내세요.';
+      const move=koreanTrainingMove(recommendation);
+      const why=move.startsWith(action)?move.slice(action.length).trim():'';
+      const verb=title==='Target Feedback'?'더 좋은 선택은 ':'바닥에서 ';
+      return {title:title==='Target Feedback'?'선택 안내':'추천 대상',
+        text:[verb+trainingKoreanCard(target)+'을 선택하세요.',why].filter(Boolean).join(' ')};
+    }
     if(title==='Strategy Note')return {title:'전략 안내',text:koreanTrainingMove(recommendation)};
     if(title==='Opening Strategy')return {title:'시작 전략',text:koreanTrainingOpening()+' 준비되면 화면 아무 곳이나 누르세요.'};
     if(title==='GO / STOP ADVICE')return {title:'고 / 스톱 조언',text:koreanTrainingGoStop(text)};
@@ -3184,6 +3218,9 @@
   }
   function showTrainingCoach(title,text){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
+    // Shake and Bomb temporarily embed the panel inside their dialogs.
+    // Gameplay advice must always live in the visible game shell.
+    if(title!=='SHAKE ADVICE'&&title!=='BOMB ADVICE')restoreTrainingCoachHome();
     trainingCoachSource={title,text};
     renderTrainingCoachLocale();
     if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
