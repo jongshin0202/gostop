@@ -3871,3 +3871,48 @@ test('Training does not append a redundant computer-denial sentence even if the 
   assert.doesNotMatch(rec.reason,/It also denies the computer|It also blocks the computer|It also slows the computer/i);
   assert.doesNotMatch(api.koreanTrainingMove(rec),/상대가.*막을 수|상대의 득점을 늦추/);
 });
+
+
+test('Training recommendation provides only one situation-specific reason in English and Korean',()=>{
+  // Two equal-value hand cards share a target: no explanation is needed beyond the move.
+  useState(stateWith({
+    turn:'playerA',floor:[card('m5-2')],
+    human:api.makePlayer({hand:[card('m5-3'),card('m5-4')]}),
+    ai:api.makePlayer()
+  }));
+  let rec=api.trainingRecommendation();
+  assert.equal(rec?.target.id,'m5-2');
+  assert.match(rec.reason,/^Play Iris Single onto Iris Plain Stripe\.$/);
+  assert.match(api.koreanTrainingMove(rec),/^손에 있는 붓꽃 피를 바닥의 붓꽃 초단 띠에 내세요\.$/);
+
+  // If capturing is the only useful play, say that, without invented card-value or opponent claims.
+  useState(stateWith({
+    turn:'playerA',floor:[card('m6-3')],
+    human:api.makePlayer({hand:[card('m6-1'),card('m5-4')]}),
+    ai:api.makePlayer()
+  }));
+  rec=api.trainingRecommendation();
+  assert.equal(rec?.card.id,'m6-1');
+  assert.match(rec.reason,/This is the only available capture\./);
+  assert.doesNotMatch(rec.reason,/lower.value|preserv|computer|best available table/i);
+  assert.equal((rec.reason.match(/\./g)||[]).length,2);
+  const korean=api.koreanTrainingMove(rec);
+  assert.match(korean,/유일한 수/);
+  assert.equal((korean.match(/\./g)||[]).length,2);
+});
+
+test('Blocking an imminent opponent set replaces, rather than appends to, routine capture commentary',()=>{
+  useState(stateWith({
+    turn:'playerA',floor:[card('m3-2'),card('m5-3')],
+    human:api.makePlayer({hand:[card('m3-1'),card('m5-1')]}),
+    ai:api.makePlayer({captured:[card('m1-2'),card('m2-2')]})
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec.target.id,'m3-2');
+  assert.match(rec.reason,/Block the computer from completing its Red Stripe set/);
+  assert.doesNotMatch(rec.reason,/although|already broken|It also|This takes/i);
+  assert.equal((rec.reason.match(/\./g)||[]).length,2);
+  const korean=api.koreanTrainingMove(rec);
+  assert.match(korean,/상대가 홍단 3장 조합을 완성하지 못하게/);
+  assert.equal((korean.match(/\./g)||[]).length,2);
+});
