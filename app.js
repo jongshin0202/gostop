@@ -2856,15 +2856,15 @@
     // For ordinary Picture captures without a stronger scoring reason, explain
     // the actual scarcity rather than inventing a hand-card value advantage.
     if(candidate.onlyAvailableCapture&&target.type==='animal'&&!target.flags?.includes('godori')&&!candidate.opportunity)return 'This is the only card in your hand that can capture a card from the table.';
-    if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Take the '+trainingCardName(target)+' now. A live 5-BIRDIES Picture is the highest-priority table card.';
-    if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. '+(candidate.opportunity||'Brights are a top-priority capture.');
+    if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'This secures a needed 5-BIRDIES Picture.';
+    if(target.type==='bright')return candidate.opportunity||'This secures a Bright.';
     if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive){
       const brokenStripeAlternative=(candidate.targetAlternatives||[]).find(alternative=>alternative.target?.type==='ribbon'&&alternative.target.ribbonSet&&profile.ribbonRoutes?.[alternative.target.ribbonSet]&&!profile.ribbonRoutes[alternative.target.ribbonSet].alive);
       if(brokenStripeAlternative){
         const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
         return 'Play the '+trainingCardName(candidate.card)+' now so the live 5-BIRDIES Picture becomes safely captured. The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
       }
-      return 'Play the '+trainingCardName(candidate.card)+' now so the live 5-BIRDIES Picture becomes safely captured while also taking the '+trainingCardName(target)+'.';
+      return 'This secures your live 5-BIRDIES Picture.';
     }
     if(candidate.opportunity)return candidate.opportunity;
     if(urgency.familyLock){
@@ -2872,27 +2872,27 @@
       const hand=trainingSameTargetHandCards(candidate);
       const selectedValue=trainingPlayableHandCardValue(candidate.card);
       const hasWeaker=hand.some(card=>trainingPlayableHandCardValue(card)<selectedValue);
-      if(hasWeaker)return 'Use the higher-value '+trainingCardName(candidate.card)+' to capture '+targetName+'.';
-      return 'Capture '+targetName+' with '+trainingCardName(candidate.card)+'.';
+      if(hasWeaker)return 'This uses the higher-value hand card.';
+      return '';
     }
     if(target.type==='ribbon'){
       const route=profile.ribbonRoutes?.[target.ribbonSet];
       if(route&&!route.alive)return 'This takes a Stripe, although its '+route.name+' 3-Stripe set is already broken.';
       if(route?.potentialCount>=3)return 'This takes a '+route.name+' Stripe and gives you a strong chance to complete the '+route.name+' 3-Stripe set.';
       if(route?.potentialCount>=2)return 'This takes a '+route.name+' Stripe and keeps the '+route.name+' 3-Stripe set within reach.';
-      return 'This takes a Stripe, which is higher priority than a Single or ordinary Picture.';
+      return '';
     }
-    if(target.flags?.includes('doublePi'))return 'This takes a 2x Single, which counts as two Singles.';
-    if(target.id==='m9-1'&&target.flags?.includes('switchPi'))return 'This takes the Sake Cup, which can be used as 2 Singles.';
+    if(target.flags?.includes('doublePi'))return 'The 2x Single counts as two Singles.';
+    if(target.id==='m9-1'&&target.flags?.includes('switchPi'))return 'The Sake Cup can count as two Singles.';
     if(target.type==='pi'){
       const brokenStripeAlternative=(candidate.targetAlternatives||[]).find(alternative=>alternative.target?.type==='ribbon'&&alternative.target.ribbonSet&&profile.ribbonRoutes?.[alternative.target.ribbonSet]&&!profile.ribbonRoutes[alternative.target.ribbonSet].alive);
       if(brokenStripeAlternative){
         const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
         return 'The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
       }
-      return 'This captures an available Single from the table.';
+      return '';
     }
-    return 'This captures the best available table card among your matching options.';
+    return '';
   }
   function trainingAlternativeSummary(best,sorted){
     const routeFamily=best?.target?.type==='ribbon'?best.target.ribbonSet:null;
@@ -2922,14 +2922,14 @@
     const best={...sorted[0],onlyAvailableCapture:hits.length===1&&!!sorted[0].target};
     const why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
-    const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
-    // Only explicit, imminent set-completion blocks merit a defensive note.
-    // Generic "denies the computer an immediate scoring card" text is omitted.
+    // Offer one decisive reason. An immediate opponent set block replaces generic
+    // capture commentary, but never replaces completing our own scoring opportunity.
     const majorBlock=best.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(best.threat)
       ?best.threat.replace(/^It also blocks the computer from /,'Block the computer from ')
       :'';
-    best.shortWhy=why;
-    best.reason=[action,why+reservedNote,majorBlock].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    const reason=majorBlock&&!best.opportunity&&!(best.urgency?.immediateScoreGain>0)?majorBlock:why;
+    best.shortWhy=reason;
+    best.reason=[action,reason].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     return best;
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
@@ -3119,27 +3119,27 @@
     if(!why&&candidate.urgency?.familyLock){
       const hand=trainingSameTargetHandCards(candidate),value=trainingPlayableHandCardValue(candidate.card);
       why=hand.some(card=>trainingPlayableHandCardValue(card)<value)
-        ?'같은 종류의 손패 중 가치가 높은 패를 먼저 사용하여 바닥패를 먹으세요.'
-        :'같은 종류의 손패로 바닥패를 먹는 수입니다.';
+        ?'가치가 높은 손패를 먼저 사용합니다.'
+        :'';
     }
     if(!why&&target?.type==='ribbon'){
       const route=profile.ribbonRoutes?.[target.ribbonSet],name=trainingKoreanRibbon(target.ribbonSet);
       if(route&&!route.alive)why=name+' 3장 조합은 이미 불가능하지만, 띠 한 장을 확보할 수 있습니다.';
       else if(route?.potentialCount>=3)why=name+' 띠를 가져오면 '+name+' 3장 조합을 완성할 가능성이 높아집니다.';
       else if(route?.potentialCount>=2)why=name+' 띠를 확보하여 '+name+' 3장 조합을 노릴 수 있습니다.';
-      else why='띠는 일반 피나 열끗보다 우선해서 확보할 가치가 있습니다.';
+      else why='';
     }
     if(!why&&target?.flags?.includes('doublePi'))why='쌍피는 피 두 장으로 계산되므로 우선 먹는 것이 유리합니다.';
     if(!why&&target?.flags?.includes('switchPi'))why='국진 술잔은 필요할 때 쌍피로 사용할 수 있습니다.';
-    if(!why&&target?.type==='pi')why='바닥의 피를 먹을 수 있는 수입니다.';
-    if(!why)why='현재 선택할 수 있는 바닥패를 먹는 수입니다.';
-    if(candidate.reserved&&!candidate.profile?.strategyOptions?.length)why+=' 지금 먹을 수 있는 확실한 패라면 확보하는 것이 좋습니다.';
+    if(!why&&target?.type==='pi')why='';
+    
     const majorBlock=candidate.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(candidate.threat)
       ?candidate.threat.includes('5-BIRDIES')
         ?'상대의 고도리 완성을 막는 수입니다.'
         :'상대가 '+trainingKoreanRibbon(candidate.target?.ribbonSet)+' 3장 조합을 완성하지 못하게 막는 수입니다.'
       :'';
-    return [action,why,majorBlock].filter(Boolean).join(' ');
+    const reason=majorBlock&&!candidate.opportunity&&!(candidate.urgency?.immediateScoreGain>0)?majorBlock:why;
+    return [action,reason].filter(Boolean).join(' ');
   }
   function koreanTrainingOpening(){
     const profile=trainingStrategyProfile(),options=profile.strategyOptions||[];
