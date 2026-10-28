@@ -26,13 +26,18 @@ const storeWithBackup=(iso='2026-09-20T07:00:00.000Z')=>{
 };
 
 test('admin gateway requires configured secret and valid bearer token',async()=>{
-  const origin={'Origin':'https://gostoplive.com'};
-  const missing=await worker.fetch(new Request('https://worker/api/admin/health',{headers:origin}),{});
+  const origin={'Origin':'https://console.example.test'};
+  const origins={ADMIN_ORIGINS:'https://console.example.test'};
+  const missing=await worker.fetch(new Request('https://worker/api/admin/health',{headers:origin}),origins);
   assert.equal(missing.status,503);
-  const unauthorized=await worker.fetch(new Request('https://worker/api/admin/health',{headers:origin}),{ADMIN_TOKEN:'top-secret'});
+  const unauthorized=await worker.fetch(new Request('https://worker/api/admin/health',{headers:origin}),{...origins,ADMIN_TOKEN:'top-secret'});
   assert.equal(unauthorized.status,401);
-  const authorized=await worker.fetch(new Request('https://worker/api/admin/health',{headers:{...origin,Authorization:'Bearer top-secret'}}),{ADMIN_TOKEN:'top-secret'});
+  const authorized=await worker.fetch(new Request('https://worker/api/admin/health',{headers:{...origin,Authorization:'Bearer top-secret'}}),{...origins,ADMIN_TOKEN:'top-secret'});
   assert.equal(authorized.status,200);assert.equal((await authorized.json()).admin,true);
+  for(const forbiddenOrigin of ['https://gostoplive.com','https://www.gostoplive.com','https://admin.gostoplive.com']){
+    const denied=await worker.fetch(new Request('https://worker/api/admin/health',{headers:{Origin:forbiddenOrigin,Authorization:'Bearer top-secret'}}),{...origins,ADMIN_TOKEN:'top-secret'});
+    assert.equal(denied.status,403,forbiddenOrigin);
+  }
   const proxied=await worker.fetch(new Request('https://worker/api/admin/health',{headers:{Authorization:'Bearer top-secret'}}),{ADMIN_TOKEN:'top-secret'});
   assert.equal(proxied.status,200);assert.equal((await proxied.json()).admin,true);
 });
@@ -120,20 +125,20 @@ test('deleting a player removes ID-linked records and purges restore points',asy
 });
 
 test('new ranked settlements persist authoritative history and admin files stay unlinked from public menu',()=>{
-  const finalRoom=fs.readFileSync(new URL('../server/ranked-room-final.mjs',import.meta.url),'utf8'),index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
+  const finalRoom=fs.readFileSync(new URL('../server/ranked-room-final.mjs',import.meta.url),'utf8'),index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8');
   assert.match(finalRoom,/adminGameHistory\(\)/);assert.match(finalRoom,/history:this\.adminGameHistory\(\)/);
   assert.doesNotMatch(index,/admin\.html/);assert.match(adminHtml,/noindex,nofollow,noarchive/);assert.match(adminHtml,/Authorized administrators only/);
 });
 
 test('admin dashboard uses authoritative GoStop server configuration with Worker fallback',()=>{
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/const baseUrl='';/);
   assert.match(adminJs,/Cloudflare authority/);
   assert.doesNotMatch(adminJs,/globalThis\.GOSTOP_SERVER_URL/);
 });
 
 test('admin login uses explicit button handler, novice-friendly feedback, and cache-busted script',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="openDashboardBtn"/);
   assert.match(adminHtml,/Admin Password/);
   assert.match(adminHtml,/admin\.js\?v=20260920-1/);
@@ -144,7 +149,7 @@ test('admin login uses explicit button handler, novice-friendly feedback, and ca
 });
 
 test('admin authentication failures use plain-language messages instead of infrastructure instructions',()=>{
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/The admin password was not accepted\. Check it and try again\./);
   assert.match(adminJs,/Admin access is not ready on the game server yet/);
   assert.match(adminJs,/showFailureDialog\(error,message\)/);
@@ -154,7 +159,7 @@ test('admin authentication failures use plain-language messages instead of infra
 });
 
 test('admin authentication failure uses a simple in-page message with no technical diagnostic fields',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8'),adminCss=fs.readFileSync(new URL('../admin-portal/admin.css',import.meta.url),'utf8');
   assert.match(adminHtml,/id="failureOverlay"/);
   assert.match(adminHtml,/role="alertdialog"/);
   assert.match(adminHtml,/id="failureMessage"/);
@@ -167,7 +172,7 @@ test('admin authentication failure uses a simple in-page message with no technic
 });
 
 test('System Reset is the final admin section with two backup-first reset modes and restore',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
   assert.match(adminHtml,/data-view="audit">Audit Log<\/button>\s*<button data-view="system-reset">System Reset<\/button>/);
   assert.match(adminHtml,/id="resetKeepAccounts"/);assert.match(adminHtml,/id="resetEverything"/);assert.match(adminHtml,/id="restorePreviousReset"[^>]*disabled/);
   assert.match(adminJs,/systemResetAction\('preserve-accounts'\)/);assert.match(adminJs,/systemResetAction\('full'\)/);assert.match(adminJs,/restorePreviousResetPoint/);
@@ -175,7 +180,7 @@ test('System Reset is the final admin section with two backup-first reset modes 
 });
 
 test('player detail includes password-confirmed complete account deletion without blocking browser dialogs',()=>{
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8'),adminApi=fs.readFileSync(new URL('../server/admin-api.mjs',import.meta.url),'utf8');
   assert.match(adminJs,/Delete Account & All Records/);assert.match(adminJs,/kind==='delete-player'/);assert.match(adminJs,/adminPassword/);
   const start=adminJs.indexOf("else if(kind==='delete-player')"),end=adminJs.indexOf('async function leaderboardAction',start),flow=adminJs.slice(start,end);
   assert.doesNotMatch(flow,/window\.confirm\(|alert\(/);
@@ -184,7 +189,7 @@ test('player detail includes password-confirmed complete account deletion withou
 });
 
 test('admin action Cancel buttons never submit required fields or trigger validation',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="actionCancelTop" type="button"/);
   assert.match(adminHtml,/id="actionCancelBottom" type="button"/);
   assert.match(adminHtml,/id="actionConfirm" type="submit"/);
@@ -194,7 +199,7 @@ test('admin action Cancel buttons never submit required fields or trigger valida
 });
 
 test('admin UI never exposes raw structured-data editors or raw record blocks',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.doesNotMatch(adminHtml,/<pre|class="json"|>JSON</i);
   assert.doesNotMatch(adminJs,/<pre|class="json"|data-audit-json|systemJson|Raw Admin Player Record|Game field patch JSON|Wallet adjustments JSON array|Correction JSON is invalid/);
   assert.match(adminJs,/function friendlyData\(value,depth=0\)/);
@@ -205,7 +210,7 @@ test('admin UI never exposes raw structured-data editors or raw record blocks',(
 });
 
 test('every generated admin table header has hover and keyboard explanation help',()=>{
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8'),adminCss=fs.readFileSync(new URL('../admin-portal/admin.css',import.meta.url),'utf8');
   assert.match(adminJs,/const HEADER_HELP=Object\.freeze/);
   assert.match(adminJs,/const headerHelp=label=>HEADER_HELP\[label\]\|\|/);
   assert.match(adminJs,/<th tabindex="0" data-help="/);
@@ -215,7 +220,7 @@ test('every generated admin table header has hover and keyboard explanation help
 });
 
 test('sessions, system, player, game, and audit details use readable cards instead of raw developer payloads',()=>{
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8'),adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8');
   assert.match(adminJs,/async function showSession\(id,playerKey=''\)/);
   assert.match(adminHtml,/id="systemDetails"/);
   assert.match(adminJs,/\$\('systemDetails'\)\.innerHTML/);
@@ -227,7 +232,7 @@ test('sessions, system, player, game, and audit details use readable cards inste
 });
 
 test('admin login still cannot fail silently and keeps simple request progress plus runtime safeguards',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminHtml,/id="loginTrace"/);
   assert.match(adminJs,/function ensureFailureOverlay\(\)/);
   assert.match(adminJs,/document\.createElement\('div'\)/);
@@ -239,7 +244,7 @@ test('admin login still cannot fail silently and keeps simple request progress p
 });
 
 test('admin dashboard assets are no-store and expose a visible build stamp',()=>{
-  const adminHtml=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  const adminHtml=fs.readFileSync(new URL('../admin-portal/index.html',import.meta.url),'utf8'),vercel=JSON.parse(fs.readFileSync(new URL('../admin-portal/vercel.json',import.meta.url),'utf8'));
   assert.match(adminHtml,/Admin build 2026-09-20\.1/);
   const bySource=new Map((vercel.headers||[]).map(item=>[item.source,item.headers]));
   for(const source of ['/admin.html','/admin.js','/admin.css']){
@@ -256,15 +261,15 @@ test('Vercel has a same-origin player API rewrite',()=>{
   assert.equal(rule.destination,'https://gostop-authority.jwshin1.workers.dev/api/:path*');
 });
 
-test('Vercel proxies admin APIs to Cloudflare authority on the same browser origin',()=>{
-  const vercel=JSON.parse(fs.readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+test('standalone admin project proxies admin APIs to Cloudflare authority on its own origin',()=>{
+  const vercel=JSON.parse(fs.readFileSync(new URL('../admin-portal/vercel.json',import.meta.url),'utf8'));
   assert.ok((vercel.rewrites||[]).some(rule=>rule.source==='/api/admin/:path*'&&rule.destination==='https://gostop-authority.jwshin1.workers.dev/api/admin/:path*'));
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/const baseUrl='';/);
 });
 
 test('admin hidden attribute always wins over shell display styles',()=>{
-  const adminCss=fs.readFileSync(new URL('../admin.css',import.meta.url),'utf8');
+  const adminCss=fs.readFileSync(new URL('../admin-portal/admin.css',import.meta.url),'utf8');
   assert.match(adminCss,/\*\{box-sizing:border-box\}\[hidden\]\{display:none!important\}/);
   assert.match(adminCss,/\.login-shell\{[^}]*display:grid/);
   assert.match(adminCss,/\.app-shell\{[^}]*display:grid/);
@@ -282,7 +287,7 @@ test('game admin keeps session identity, Solo computer identity, and Full-histor
   }}));
   const listed=await (await store.fetch(admin('/admin/games?limit=20'))).json(),game=listed.games.find(item=>item.gameId==='solo-session-game-1');
   assert.ok(game);assert.equal(game.sessionId,'solo-room-1-session-1');assert.equal(game.computer.level,3);assert.equal(game.finalPoints,7);
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/\['Game ID','Session ID','Status','Mode','Players','Points','Coins Lost','Reason','History','Recorded'\]/);
   assert.match(adminJs,/function gamePlayerNames\(g\)/);
   assert.match(adminJs,/Computer #\$\{level\}/);
@@ -315,7 +320,7 @@ test('session admin summarizes players, wins, Coins and milestones with player a
   assert.equal(computer.wins,1);assert.equal(computer.coinsWon,9);assert.equal(computer.milestones.CLEAN_SWEEP,1);assert.equal(computer.milestones.BOMB,1);
   const detail=await (await store.fetch(admin('/admin/sessions/'+encodeURIComponent(sessionId)))).json();
   assert.equal(detail.session.games.length,2);assert.equal(detail.session.games[0].players.length,2);assert.equal(detail.session.games[1].players.find(player=>player.nickname==='Computer #2').won,true);
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.match(adminJs,/\['Session','Mode','Players','Games','Wins by Player','Coins Won by Player','Status','Started','Ended'\]/);
   assert.match(adminJs,/Players & Session Totals/);assert.match(adminJs,/All Games — Both Players/);
   assert.match(adminJs,/5 Brights/);assert.match(adminJs,/5 Birdies/);assert.match(adminJs,/3 Stripes/);assert.match(adminJs,/Shakes/);assert.match(adminJs,/3-Go/);assert.match(adminJs,/Ttadak/);assert.match(adminJs,/Sweep/);
@@ -324,7 +329,7 @@ test('session admin summarizes players, wins, Coins and milestones with player a
 });
 
 test('admin UI avoids browser-native blocking alert and confirm dialogs for normal dashboard actions',()=>{
-  const adminJs=fs.readFileSync(new URL('../admin.js',import.meta.url),'utf8');
+  const adminJs=fs.readFileSync(new URL('../admin-portal/admin.js',import.meta.url),'utf8');
   assert.doesNotMatch(adminJs,/\bwindow\.confirm\s*\(/);
   assert.doesNotMatch(adminJs,/\b(?:window\.)?alert\s*\(/);
   assert.match(adminJs,/function showAdminNotice\(/);
