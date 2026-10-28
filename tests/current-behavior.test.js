@@ -3797,3 +3797,37 @@ test('Korean training opening, GO-STOP and special coaching text has localized t
   assert.equal(api.koreanTrainingCoach('BOMB ADVICE','Bomb.').title,'폭탄 조언');
   assert.equal(api.koreanTrainingCoach('SHAKE ADVICE','Shake.').title,'흔들기 조언');
 });
+
+test('Training explains a single Bush Picture capture without claiming the hand card is lower value',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m7-1'),card('m10-1')],
+    human:api.makePlayer({hand:[card('m7-3'),card('m2-3'),card('m5-3')]}),
+    ai:api.makePlayer()
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec.card.id,'m7-3');
+  assert.equal(rec.target.id,'m7-1');
+  assert.equal(rec.onlyAvailableCapture,true);
+  assert.match(rec.reason,/^Play Bush Single onto Bush Picture\./);
+  assert.match(rec.reason,/only card in your hand that can capture a card from the table/);
+  assert.doesNotMatch(rec.reason,/lower.value|preserv(?:e|ing) higher.value/i);
+  const ko=api.koreanTrainingMove(rec);
+  assert.match(ko,/손에 있는 싸리 피를 바닥의 싸리 열끗에 내세요/);
+  assert.match(ko,/바닥패를 먹을 수 있는 유일한 패/);
+  assert.doesNotMatch(ko,/더 좋은 패를 아끼|가치가 낮은 패/);
+});
+
+test('Training does not claim an only available capture when multiple hand cards match the table',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m7-1'),card('m2-1')],
+    human:api.makePlayer({hand:[card('m7-3'),card('m2-3'),card('m5-3')]}),
+    ai:api.makePlayer()
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec.onlyAvailableCapture,false);
+  assert.doesNotMatch(rec.reason,/only card in your hand|lower.value card from your hand/i);
+  assert.doesNotMatch(api.koreanTrainingMove(rec),/유일한 패|더 좋은 패를 아끼/);
+});
+
