@@ -2655,6 +2655,23 @@
     if(card.type==='pi')return 180;
     return 120;
   }
+  function trainingPlayableHandCardValue(card){
+    if(!card)return 0;
+    // When two hand cards hit the SAME table card, play the more valuable one.
+    // Live Godori birds are an exception to the ordinary Picture ranking.
+    if(card.flags?.includes('godori'))return 7;
+    if(card.type==='bright')return 6;
+    if(card.type==='ribbon')return 5;
+    if(card.flags?.includes('doublePi')||(card.id==='m9-1'&&card.flags?.includes('switchPi')))return 4;
+    if(card.type==='pi')return 3;
+    if(card.type==='animal')return 2;
+    return 0;
+  }
+  function trainingSameTargetHandCards(candidate){
+    if(!candidate?.card||!candidate?.target)return [];
+    return (state?.human?.hand||[]).filter(card=>card.month===candidate.card.month&&
+      (state?.floor||[]).some(target=>target.id===candidate.target.id));
+  }
   function trainingSecuredHandPriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target||!candidate.card)return 0;
     if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive)return 3;
@@ -2669,6 +2686,12 @@
     return 0;
   }
   function trainingHitCompare(a,b,profile=trainingStrategyProfile()){
+    // Same guaranteed table capture: use the higher-value card from hand,
+    // instead of preserving it and spending the weaker card first.
+    if(a?.target&&b?.target&&a.target.id===b.target.id&&a.card?.month===b.card?.month){
+      const handDelta=trainingPlayableHandCardValue(b.card)-trainingPlayableHandCardValue(a.card);
+      if(handDelta)return handDelta;
+    }
     const aEmergency=Number((a.urgency?.immediateScoreGain||0)>0||a.urgency?.severeBlock),bEmergency=Number((b.urgency?.immediateScoreGain||0)>0||b.urgency?.severeBlock);
     if(aEmergency!==bEmergency)return bEmergency-aEmergency;
     const aUnique=Number(a.matchCount===1),bUnique=Number(b.matchCount===1);
@@ -2846,7 +2869,11 @@
     if(candidate.opportunity)return candidate.opportunity;
     if(urgency.familyLock){
       const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(target);
-      return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use the lower-priority hand card to capture '+targetName+' while preserving the stronger option.';
+      const hand=trainingSameTargetHandCards(candidate);
+      const selectedValue=trainingPlayableHandCardValue(candidate.card);
+      const hasWeaker=hand.some(card=>trainingPlayableHandCardValue(card)<selectedValue);
+      if(hasWeaker)return 'Use the higher-value '+trainingCardName(candidate.card)+' to capture '+targetName+'.';
+      return 'Capture '+targetName+' with '+trainingCardName(candidate.card)+'.';
     }
     if(target.type==='ribbon'){
       const route=profile.ribbonRoutes?.[target.ribbonSet];
@@ -2896,9 +2923,10 @@
     const why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
     const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
-    const threat=best.threat?(' '+best.threat):'';
+    // The separate defensive-threat analysis still influences move ranking,
+    // but does not add repetitive "It also denies the computer..." coaching.
     best.shortWhy=why;
-    best.reason=[action,why+reservedNote,threat].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    best.reason=[action,why+reservedNote].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     return best;
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
@@ -3086,7 +3114,10 @@
       else if(opportunity.includes('visible score'))why='이 수로 현재 점수가 올라갑니다.';
     }
     if(!why&&candidate.urgency?.familyLock){
-      why='같은 종류의 손패 두 장 중 가치가 낮은 패를 먼저 사용해 더 좋은 패를 남깁니다.';
+      const hand=trainingSameTargetHandCards(candidate),value=trainingPlayableHandCardValue(candidate.card);
+      why=hand.some(card=>trainingPlayableHandCardValue(card)<value)
+        ?'같은 종류의 손패 중 가치가 높은 패를 먼저 사용하여 바닥패를 먹으세요.'
+        :'같은 종류의 손패로 바닥패를 먹는 수입니다.';
     }
     if(!why&&target?.type==='ribbon'){
       const route=profile.ribbonRoutes?.[target.ribbonSet],name=trainingKoreanRibbon(target.ribbonSet);
@@ -3100,14 +3131,7 @@
     if(!why&&target?.type==='pi')why='바닥의 피를 먹을 수 있는 수입니다.';
     if(!why)why='현재 선택할 수 있는 바닥패를 먹는 수입니다.';
     if(candidate.reserved&&!candidate.profile?.strategyOptions?.length)why+=' 지금 먹을 수 있는 확실한 패라면 확보하는 것이 좋습니다.';
-    let threat='';
-    if(candidate.threat){
-      if(candidate.threat.includes('Stripe set'))threat='상대가 띠 조합을 완성하는 것도 막을 수 있습니다.';
-      else if(candidate.threat.includes('5-BIRDIES'))threat='상대가 고도리를 완성하는 것도 막을 수 있습니다.';
-      else if(candidate.threat.includes('3 Brights'))threat='상대의 3광 완성을 늦출 수 있습니다.';
-      else threat='상대의 득점을 늦추는 데에도 도움이 됩니다.';
-    }
-    return [action,why,threat].filter(Boolean).join(' ');
+    return [action,why].filter(Boolean).join(' ');
   }
   function koreanTrainingOpening(){
     const profile=trainingStrategyProfile(),options=profile.strategyOptions||[];
@@ -3439,7 +3463,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveRibbonSetAlive,competitiveCardValueForSide,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveDiscardContext,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingKoreanCard,koreanTrainingMove,koreanTrainingOpening,koreanTrainingGoStop,koreanTrainingCoach,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingFloorCardPriority,trainingCapturePriority,trainingHandPreservationRisk,trainingSecuredHandPriority,trainingActiveRoutePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingKoreanCard,koreanTrainingMove,koreanTrainingOpening,koreanTrainingGoStop,koreanTrainingCoach,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingFloorCardPriority,trainingCapturePriority,trainingHandPreservationRisk,trainingSecuredHandPriority,trainingActiveRoutePriority,trainingPlayableHandCardValue,trainingSameTargetHandCards,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
