@@ -3916,3 +3916,16 @@ test('Blocking an imminent opponent set replaces, rather than appends to, routin
   assert.match(korean,/상대가 홍단 3장 조합을 완성하지 못하게/);
   assert.equal((korean.match(/\./g)||[]).length,2);
 });
+
+
+test('Korean strategy notes give the recommended move without generic reminders',()=>{
+  useState(stateWith({
+    turn:'playerA',floor:[card('m5-2')],
+    human:api.makePlayer({hand:[card('m5-3'),card('m5-4')]}),ai:api.makePlayer()
+  }));
+  const rec=api.trainingRecommendation();
+  const note=api.koreanTrainingCoach('Strategy Note','The highlighted table card is the best choice.');
+  assert.equal(note.title,'전략 안내');
+  // Presentation-only: no generic "check the move again" preface.
+  assert.doesNotMatch(note.text,/추천하는 수를 다시 확인하세요|강조된 바닥패가 더 유리합니다/);
+});
