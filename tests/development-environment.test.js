@@ -47,3 +47,12 @@ test('development Vercel config is independent and blocks same-origin APIs',()=>
   assert.ok(dev.git.deploymentEnabled.develop);
   assert.equal(dev.git.deploymentEnabled.main,undefined);
 });
+
+test('expert feedback and model are NEVER included by the public production entrypoint',()=>{
+  // Production uses the unchanged root index.html, never the dev-site build output.
+  const publicHtml=readFileSync(join(root,'index.html'),'utf8');
+  assert.doesNotMatch(publicHtml,/training-learning-(?:model|feedback)\.js/);
+  assert.doesNotMatch(publicHtml,/trainingFeedbackDialog|GoStopTrainingFeedbackDev/);
+  const publicBuild=readFileSync(join(root,'scripts/build-game-public.mjs'),'utf8');
+  assert.doesNotMatch(publicBuild,/training-learning[\\/]/);
+});
