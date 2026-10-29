@@ -12,6 +12,9 @@ const gameFiles=[
 ];
 await rm(output,{recursive:true,force:true});await mkdir(output,{recursive:true});
 for(const file of gameFiles)await copyFile(join(root,file),join(output,file));
+// Removable, development-only Training feedback; not included in public game builds.
+await copyFile(join(root,'training-learning/learner.js'),join(output,'training-learning-model.js'));
+await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
 const htmlPath=join(output,'index.html');
 let html=await readFile(htmlPath,'utf8');
 const oldRuntimeConfig='runtime-config.js?v=20260925-6';
@@ -19,6 +22,9 @@ if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-conf
 html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
 // Only the development build advances the tutorial asset while production stays frozen.
 html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029-howto-1');
+const feedbackScripts='<script src="training-learning-model.js?v=20261029-1"></script>\\n  <script src="training-learning-feedback.js?v=20261029-1"></script>';
+if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
+html=html.replace('<script src="app.js?v=20261028-7"></script>','<script src="app.js?v=20261028-7"></script>\n  '+feedbackScripts);
 // Preserve the production leaderboard UI exactly. Dev data stays isolated.
 await writeFile(htmlPath,html);
 // A separate frontend is NOT an isolated backend. Fail closed unless an
