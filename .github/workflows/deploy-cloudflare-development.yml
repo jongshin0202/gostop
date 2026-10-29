@@ -1,0 +1,43 @@
+name: Deploy Cloudflare Development Authority
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - server/**
+      - wrangler.dev.toml
+      - package.json
+      - package-lock.json
+      - .github/workflows/deploy-cloudflare-development.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare-development
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Verify regression suite
+        run: npm test
+      - name: Deploy development Worker (separate Durable Object namespaces)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.131.2'
+          command: deploy --config wrangler.dev.toml
