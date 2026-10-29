@@ -742,7 +742,7 @@ test('all static HTML and CSS asset references resolve to real repository files'
   const path=await import('node:path');
   const {fileURLToPath}=await import('node:url');
   const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-  const candidates=['index.html','admin.html','styles.css','admin.css','mobile-fullscreen.css'];
+  const candidates=['index.html','admin-portal/index.html','styles.css','admin-portal/admin.css','mobile-fullscreen.css'];
   const missing=[];
   for(const relative of candidates){
     const source=fs.readFileSync(path.join(root,relative),'utf8');
@@ -753,7 +753,7 @@ test('all static HTML and CSS asset references resolve to real repository files'
     for(const raw of refs){
       if(!raw||/^(?:https?:|data:|blob:|mailto:|javascript:|#|\/\/)/i.test(raw))continue;
       const clean=raw.replace(/^\//,'');
-      if(!fs.existsSync(path.join(root,clean)))missing.push(`${relative} -> ${raw}`);
+      if(!fs.existsSync(path.join(root,path.dirname(relative),clean)))missing.push(`${relative} -> ${raw}`);
     }
   }
   expect(missing).toEqual([]);
