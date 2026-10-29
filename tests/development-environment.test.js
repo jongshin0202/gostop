@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {runInNewContext} from 'node:vm';
 import {readFileSync,readdirSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -26,8 +27,7 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:'https://gostop-authority-dev.jwshin1.workers.dev'}});
   assert.equal(r.status,0,r.stderr);
   const runtime=readFileSync(join(output,'runtime-config.js'),'utf8');
-  const vm=require('node:vm');
-  const context={};vm.runInNewContext(runtime,context);
+  const context={};runInNewContext(runtime,context);
   assert.equal(context.GOSTOP_CONFIG?.serverUrl,'https://gostop-authority-dev.jwshin1.workers.dev');
   const html=readFileSync(join(output,'index.html'),'utf8');
   assert.ok(html.indexOf('runtime-config.js')<html.indexOf('ranked-client.js'));
