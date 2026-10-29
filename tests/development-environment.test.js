@@ -13,13 +13,24 @@ test('development Vercel bundle includes Training Mode but excludes admin and pr
   for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js'])assert.ok(files.includes(filename),filename);
   for(const filename of ['admin.html','admin.css','admin.js','server','wrangler.toml','vercel.json'])assert.ok(!files.includes(filename),filename);
   const config=readFileSync(join(output,'runtime-config.js'),'utf8');
-  assert.match(config,/https:\/\/dev-api\.gostop\.invalid/);
+  assert.match(config,/https:\/\/gostop-authority-dev\.jwshin1\.workers\.dev/);
+  assert.doesNotMatch(config,/\.invalid/);
   assert.doesNotMatch(config,/gostop-authority\.jwshin1\.workers\.dev/);
 });
 test('development build refuses to connect to the live authoritative Worker',()=>{
   const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:'https://gostop-authority.jwshin1.workers.dev'}});
   assert.notEqual(r.status,0);
-  assert.match(r.stderr,/separate, validated development-only/);
+  assert.match(r.stderr,/verified isolated Cloudflare development Worker/);
+});
+test('explicit Cloudflare dev Worker produces a working runtime config before game scripts',()=>{
+  const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:'https://gostop-authority-dev.jwshin1.workers.dev'}});
+  assert.equal(r.status,0,r.stderr);
+  const runtime=readFileSync(join(output,'runtime-config.js'),'utf8');
+  const vm=require('node:vm');
+  const context={};vm.runInNewContext(runtime,context);
+  assert.equal(context.GOSTOP_CONFIG?.serverUrl,'https://gostop-authority-dev.jwshin1.workers.dev');
+  const html=readFileSync(join(output,'index.html'),'utf8');
+  assert.ok(html.indexOf('runtime-config.js')<html.indexOf('ranked-client.js'));
 });
 test('development Vercel config is independent and blocks same-origin APIs',()=>{
   const dev=JSON.parse(readFileSync(join(root,'dev-site/vercel.json'),'utf8'));
