@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "src": "^/api(?:/.*)?$",
+      "status": 503
+    }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "develop": true
+    }
+  }
+}
