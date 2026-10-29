@@ -13,10 +13,15 @@ const gameFiles=[
 await rm(output,{recursive:true,force:true});await mkdir(output,{recursive:true});
 for(const file of gameFiles)await copyFile(join(root,file),join(output,file));
 const htmlPath=join(output,'index.html');
-const html=await readFile(htmlPath,'utf8');
+let html=await readFile(htmlPath,'utf8');
 const oldRuntimeConfig='runtime-config.js?v=20260925-6';
 if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-config script reference');
-await writeFile(htmlPath,html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1'));
+html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
+const devScript='<script src="dev-leaderboard-empty-note.js?v=20261029-1"></script>';
+if(!html.includes('<script src="app.js?v='))throw new Error('Cannot locate game script for development-only note');
+html=html.replace(/(<script src="app\.js\?v=[^"]+"><\/script>)/,'$1\n  '+devScript);
+await writeFile(htmlPath,html);
+await copyFile(join(here,'leaderboard-empty-note.js'),join(output,'dev-leaderboard-empty-note.js'));
 // A separate frontend is NOT an isolated backend. Fail closed unless an
 // explicitly configured nonproduction Cloudflare Worker has been provisioned.
 const VERIFIED_DEV_WORKER='https://gostop-authority-dev.jwshin1.workers.dev';
