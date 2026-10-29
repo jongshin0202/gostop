@@ -53,6 +53,6 @@ test('expert feedback and model are NEVER included by the public production entr
   const publicHtml=readFileSync(join(root,'index.html'),'utf8');
   assert.doesNotMatch(publicHtml,/training-learning-(?:model|feedback)\.js/);
   assert.doesNotMatch(publicHtml,/trainingFeedbackDialog|GoStopTrainingFeedbackDev/);
-  const publicBuild=readFileSync(join(root,'scripts/build-game-public.mjs'),'utf8');
-  assert.doesNotMatch(publicBuild,/training-learning[\\/]/);
+  const publicConfig=readFileSync(join(root,'vercel.json'),'utf8');
+  assert.doesNotMatch(publicConfig,/training-learning-(?:model|feedback)/);
 });
