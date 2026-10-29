@@ -17,6 +17,8 @@ let html=await readFile(htmlPath,'utf8');
 const oldRuntimeConfig='runtime-config.js?v=20260925-6';
 if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-config script reference');
 html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
+// Only the development build advances the tutorial asset while production stays frozen.
+html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029-howto-1');
 // Preserve the production leaderboard UI exactly. Dev data stays isolated.
 await writeFile(htmlPath,html);
 // A separate frontend is NOT an isolated backend. Fail closed unless an
