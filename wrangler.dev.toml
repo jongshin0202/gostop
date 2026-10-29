@@ -1,0 +1,49 @@
+name = "gostop-authority-dev"
+main = "server/worker.mjs"
+compatibility_date = "2026-09-01"
+keep_vars = true
+
+[vars]
+INACTIVITY_NUDGE_SECONDS = "180"
+INACTIVITY_NUDGE_PHASE_SECONDS = "60"
+ABANDONMENT_COUNTDOWN_SECONDS = "30"
+PAUSE_DURATION_SECONDS = "180"
+EMAIL_VERIFICATION_REQUIRED = "false"
+EMAIL_VERIFY_BASE_URL = "https://gostop-dev.vercel.app"
+ALLOWED_ORIGINS = "https://gostop-dev.vercel.app,https://gostop-dev-jwshin1-5345s-projects.vercel.app"
+EMAIL_FROM = "GoStop Live Dev <noreply@gostoplive.com>"
+
+[[durable_objects.bindings]]
+name = "GAME_ROOMS"
+class_name = "GameRoom"
+
+[[durable_objects.bindings]]
+name = "ACCOUNT_STORE"
+class_name = "AccountStore"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[durable_objects.bindings]]
+name = "BACKUP_STORE"
+class_name = "BackupStore"
+
+[exports.GameRoom]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.AccountStore]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.Lobby]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.BackupStore]
+type = "durable-object"
+storage = "sqlite"
+
+[dev]
+port = 8788
