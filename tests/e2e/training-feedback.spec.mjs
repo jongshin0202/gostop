@@ -13,7 +13,7 @@ async function setup(page,email='expert@example.test'){
       <button class="hand-card" data-card-id="m6-4" id="alternate"><img alt="Rose Double Single"></button>
     </div><dialog id="resultDialog"></dialog>
   </body></html>`);
-  await page.evaluate(e=>{
+  await page.evaluate(async e=>{
     const cards=[
       {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
       {id:'m6-3',month:6,type:'pi',flags:[]},
