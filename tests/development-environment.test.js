@@ -11,7 +11,7 @@ test('development Vercel bundle includes Training Mode but excludes admin and pr
   const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:''}});
   assert.equal(r.status,0,r.stderr);
   const files=readdirSync(output);
-  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js'])assert.ok(files.includes(filename),filename);
+  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-model.js','training-learning-feedback.js'])assert.ok(files.includes(filename),filename);
   for(const filename of ['admin.html','admin.css','admin.js','server','wrangler.toml','vercel.json'])assert.ok(!files.includes(filename),filename);
   const config=readFileSync(join(output,'runtime-config.js'),'utf8');
   assert.match(config,/https:\/\/gostop-authority-dev\.jwshin1\.workers\.dev/);
@@ -32,6 +32,13 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   const html=readFileSync(join(output,'index.html'),'utf8');
   assert.ok(html.indexOf('runtime-config.js')<html.indexOf('ranked-client.js'));
   assert.match(html,/runtime-config\.js\?v=20261029-dev-cloudflare-1/);
+  assert.ok(html.indexOf('app.js?v=20261028-7')<html.indexOf('training-learning-model.js'));
+  assert.ok(html.indexOf('training-learning-model.js')<html.indexOf('training-learning-feedback.js'));
+  const feedback=readFileSync(join(output,'training-learning-feedback.js'),'utf8');
+  assert.match(feedback,/GoStopRanked\?\.getAccount/);
+  assert.match(feedback,/trainingModeBtn/);
+  assert.doesNotMatch(feedback,/\.preventDefault\(\)|\.stopPropagation\(\)/);
+
 });
 test('development Vercel config is independent and blocks same-origin APIs',()=>{
   const dev=JSON.parse(readFileSync(join(root,'dev-site/vercel.json'),'utf8'));
