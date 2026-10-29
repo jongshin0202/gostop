@@ -7,6 +7,7 @@ on:
     paths:
       - server/**
       - wrangler.dev.toml
+      - scripts/smoke-dev-worker.mjs
       - package.json
       - package-lock.json
       - .github/workflows/deploy-cloudflare-development.yml
@@ -41,3 +42,5 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.131.2'
           command: deploy --config wrangler.dev.toml
+      - name: Verify development leaderboards and browser CORS
+        run: node scripts/smoke-dev-worker.mjs
