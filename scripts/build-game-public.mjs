@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=join(root,'dist-game');
 const publicFiles=[
-  'index.html','styles.css','audio-ppeok.js','audio-shake.js','audio-fanfare.js',
+  'index.html','app.js','styles.css','audio-ppeok.js','audio-shake.js','audio-fanfare.js',
   'i18n.js','game-engine.js','session-authority.js','runtime-config.js',
   'mobile-fullscreen.css','mobile-fullscreen.js','ranked-client.js',
   'online-client.js','presentation-plan.js','tutorial-video.js',
