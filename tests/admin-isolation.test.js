@@ -19,6 +19,7 @@ test('public website deploy contains game assets only, and no admin files or sou
   const files=readdirSync(join(root,'dist-game')).sort();
   assert.ok(files.includes('index.html'));
   assert.ok(files.includes('ranked-client.js'));
+  assert.ok(files.includes('app.js'),'core gameplay app.js must be included');
   assert.ok(files.includes('runtime-config.js'));
   assert.ok(files.includes('gostop-notifications-sw.js'));
   assert.ok(!files.some(name=>name.startsWith('admin')));
