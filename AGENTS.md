@@ -39,3 +39,15 @@
 3. At minimum, run `node --check app.js` after JavaScript changes. Also run all repository tests and relevant syntax/programmatic checks available for the files changed. Manually exercise affected browser flows when automation cannot cover them.
 4. For perceptible web UI changes, inspect the result in a browser at desktop and mobile widths and capture a screenshot when the environment supports it.
 5. Keep Git history clean. Review `git diff` and `git status`, then use a concise, descriptive commit message. Do not commit generated or unrelated files.
+
+## Launch-candidate freeze — mandatory from 2026-10-29
+
+- The user's **main game is frozen**. NEVER modify gameplay, scoring, input, network, multiplayer, matchmaking, account, leaderboard, game rendering, audio, card art, or production Worker files as part of the final two launch priorities.
+- Only the following product features remain in scope before initial launch:
+  1. Training recommendation quality and concise localization in all seven languages. All new decision algorithms must live in **new isolated training-only modules** or an existing training-only module. Do not change `app.js` or the game engine. If a new runtime integration is impossible without editing a protected file, stop that integration and report the exact blocker instead of silently editing protected code.
+  2. How-To content and videos demonstrating How to Play, desktop and phone use, and cross-device gameplay. Edit only `tutorial-video.js`, new `tutorial-*` / `how-to-*` files, or documentation/test files dedicated to those tutorials.
+- **Protected game sources** (read-only): `app.js`, `index.html`, `game-engine.js`, `session-authority.js`, `ranked-client.js`, `online-client.js`, `presentation-plan.js`, `i18n.js`, `styles.css`, `mobile-fullscreen.js`, `mobile-fullscreen.css`, `runtime-config.js`, `server/**`, `audio-*.js`, the production `vercel.json`, and `wrangler.toml`. No opportunistic refactors, whitespace edits, or formatting changes.
+- Development and production must use the same game behavior, code, rules, and UI. Development uses its own Vercel project, Cloudflare Worker, credentials, and **isolated test data**. Never point development writes at production or copy production player data without explicit approval. Never add dev-only visible game UI that differs from production.
+- Only deploy to `gostop-dev.vercel.app` while developing these tasks. Never deploy changes to `gostoplive.com` or merge into `main` without explicit release approval after complete QA.
+- Previously requested unfinished work stays on the task ledger and is completed before starting unrelated new work, unless the user explicitly changes priority. Never mark a blocked or unverified task complete.
+- The two explicit launch gates are: (A) Training recommendations verified on representative hands, all languages and PC/mobile, (B) both How-To videos complete and verified with actual PC and phone UI, not simulated claims. Then perform broad full-game regression and obtain explicit production release approval.
