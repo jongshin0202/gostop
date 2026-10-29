@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 async function setup(page,email='expert@example.test'){
   // Load a static origin without starting frozen game code: test the removable module in isolation.
-  await page.goto('/README.md');
+  await page.goto('/training-learning/test-fixture.html');
   await page.setContent(`<!doctype html><html lang="en"><head></head><body>
     <button id="trainingModeBtn">Training</button>
     <button id="playSoloBtn">Friendly Solo</button><button id="quitYesBtn">Quit</button>
