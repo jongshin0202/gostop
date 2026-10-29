@@ -503,6 +503,23 @@ test('How to Play is an autoplay captioned film with only Full Rules and Trainin
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
+test('How-To offers separate How to Use cross-device and How to Play films',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#howToBtn').click();
+  const appFilm=page.locator('[data-tutorial-film="app"]');
+  const rulesFilm=page.locator('[data-tutorial-film="rules"]');
+  await expect(appFilm).toBeVisible();
+  await expect(rulesFilm).toBeVisible();
+  await expect(appFilm).toHaveAttribute('aria-pressed','true');
+  await rulesFilm.click();
+  await expect(rulesFilm).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('#tutorialVideoCaption')).toContainText('Now let’s learn the game itself',{timeout:30000});
+  await appFilm.click();
+  await expect(appFilm).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('#tutorialVideoCaption')).toContainText('Welcome to GoStop Live',{timeout:30000});
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
 test('How to Play preloads a real Training Mode game before the film reaches gameplay footage',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#howToBtn').click();
