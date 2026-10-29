@@ -25,7 +25,7 @@ const frozen=Object.freeze({
 for(const [file,expected] of Object.entries(frozen)){
   test('preserve frozen game source: '+file,()=>{
     const bytes=readFileSync(new URL('../'+file,import.meta.url));
-    const digest=createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex');
+    const digest=createHash('sha1').update('blob '+bytes.length).update(Buffer.from([0])).update(bytes).digest('hex');
     assert.equal(digest,expected,file+' is frozen; do not modify the working main game for Training or How-To tasks');
   });
 }
