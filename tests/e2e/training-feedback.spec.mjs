@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-async function setup(page,email='jwshin1@gmail.com'){
+async function setup(page,email='expert@example.test'){
   // Load a static origin without starting frozen game code: test the removable module in isolation.
   await page.goto('/README.md');
   await page.setContent(`<!doctype html><html lang="en"><head></head><body>
@@ -21,12 +21,16 @@ async function setup(page,email='jwshin1@gmail.com'){
     ];
     globalThis.GoStopEngine={masterDeck:()=>cards};
     globalThis.GoStopRanked={getAccount:()=>e?{email:e}:null};
+    const trusted='expert@example.test';
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(trusted));
+    globalThis.__GoStopFeedbackTestHash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
     globalThis.__actualPlays=0;
     document.getElementById('alternate').addEventListener('click',()=>globalThis.__actualPlays++);
   },email);
   await page.addScriptTag({path:'training-learning/learner.js'});
   await page.addScriptTag({path:'training-learning/feedback-ui.js'});
   await page.locator('#trainingModeBtn').click();
+  await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().authorized)).toBe(email==='expert@example.test');
 }
 test('only confirmed training disagreement is learned after finished game, without suppressing clicks',async({page})=>{
   await setup(page);
