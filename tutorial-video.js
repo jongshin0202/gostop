@@ -22,6 +22,7 @@
   const familyNames={1:'Pine',2:'Plum',3:'Cherry',4:'Vine',5:'Iris',6:'Rose',7:'Bush',8:'Hill',9:'Daisy',10:'Star',11:'Berry',12:'Willow'};
 
   let filmRun=0;
+  let filmPart='app'; // Separate How to Use and How to Play videos; no gameplay code changes.
   let voiceEnabled=true;
   let menuFrame=null;
   let gameFrame=null;
@@ -360,6 +361,7 @@
       return;
     }
 
+    if(filmPart==='app'){
     await shot(token,{
       caption:'Welcome to GoStop Live!',
       voice:'Welcome to GoStop Live!',
@@ -580,6 +582,14 @@
     });
 
     await shot(token,{
+      caption:'You can now play on desktop or mobile. Start with Training Mode to learn while you play.',
+      hold:4200,
+      action:async()=>{mountFrame(gameFrame,'mobile');clearOverlay();addTitleOverlay('Start with Training Mode','The same controls and rules work across devices.');}
+    });
+    return; // The How to Use video ends here. How to Play is a separate selectable film.
+    }
+
+    await shot(token,{
       caption:'Now let’s learn the game itself: match families, capture scoring cards, reach 7 points, then choose GO or STOP.',
       hold:5200,
       action:async()=>showGraphic('<div class="film-rules-intro"><h2>How to Play GoStop</h2><div><span>Match Families</span><b>→</b><span>Capture Cards</span><b>→</b><span>Reach 7 Points</span><b>→</b><span>GO or STOP</span></div></div>')
@@ -704,6 +714,25 @@
     view.hidden=false;
   };
 
+  const videoActions=view.querySelector('.tutorial-video-actions');
+  const filmButtons=new Map();
+  for(const [id,label] of [['app','How to Use the App'],['rules','How to Play GoStop']]){
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='tutorial-film-choice';
+    button.textContent=label;
+    button.dataset.tutorialFilm=id;
+    button.setAttribute('aria-pressed',String(filmPart===id));
+    button.addEventListener('click',()=>{
+      if(filmPart===id)return;
+      filmPart=id;
+      filmButtons.forEach((b,k)=>b.setAttribute('aria-pressed',String(k===filmPart)));
+      startFilm();
+    });
+    filmButtons.set(id,button);
+    videoActions?.prepend(button);
+  }
+
   const back=document.createElement('button');
   back.type='button';back.className='tutorial-video-back-rules';back.textContent='← Tutorial Video';
   back.addEventListener('click',()=>{showVideo();startFilm();});
@@ -722,6 +751,7 @@
   const openTutorial=()=>{
     showVideo();
     if(returnFromRules)returnFromRules=false;
+    filmButtons.forEach((button,id)=>button.setAttribute('aria-pressed',String(id===filmPart)));
     startFilm();
   };
 
