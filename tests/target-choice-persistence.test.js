@@ -6,7 +6,7 @@ const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 
 test('two-floor target choice survives authoritative floor rerenders',()=>{
   assert.match(source,/function renderFloor\(\)[\s\S]*?syncTargetChoiceUi\(\);\s*\}/);
-  assert.match(source,/presentation\.targetChoice=\{key,ids:new Set\(matches\.map\(card=>card\.id\)\),matches:\[\.\.\.matches\],resolve,cancelable\}/);
+  assert.match(source,/presentation\.targetChoice=\{key,ids:new Set\(matches\.map\(card=>card\.id\)\),matches:\[\.\.\.matches\],resolve,cancelable,trainingAdvice\}/);
   assert.match(source,/function syncTargetChoiceUi\(\)[\s\S]*?classList\.add\('target-option'\)/);
 });
 

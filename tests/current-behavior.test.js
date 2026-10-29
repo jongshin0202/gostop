@@ -2995,7 +2995,7 @@ test('Training Mode recognizes held plus claimable 5-BIRDIES potential without c
   assert.match(source,/await showTrainingOpeningStrategy\(openingAdvice\)/);
   const openingAdviceAt=source.indexOf('await showTrainingOpeningStrategy(openingAdvice)'),openingSpecialsAt=source.indexOf('await processOpeningSpecials(epoch)',openingAdviceAt);
   assert.ok(openingAdviceAt>=0&&openingSpecialsAt>openingAdviceAt,'Opening Strategy must be dismissed before opening specials and the first turn continue.');
-  assert.match(source,/The highlighted table card is the stronger target/);
+  assert.match(source,/showTrainingCoach\('Target Choice',trainingAdvice\.reason\)/);
 });
 
 
@@ -3767,4 +3767,191 @@ test('score pill, Captured Cards title, and entire capture panels open the same 
   assert.match(appSource,/panel\.contains\(els\.playerCaptured\)\?PLAYER_A:PLAYER_B/);
   assert.match(appSource,/panel\.addEventListener\('click',event=>\{if\(event\.defaultPrevented\)return;event\.preventDefault\(\);event\.stopPropagation\(\);closePlayerInfo\(\);openScoreBreakdown\(playerId\);\}\)/);
   assert.doesNotMatch(appSource,/btn\.addEventListener\('click',\(\)=>openCapturedGroup/);
+});
+
+test('Korean Training Mode uses the same recommended Pine capture with Korean card names and rationale',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m1-2')],
+    human:api.makePlayer({hand:[card('m1-3'),card('m2-2'),card('m3-2')]}),
+    ai:api.makePlayer()
+  }));
+  const profile=api.trainingStrategyProfile(),candidate=api.trainingCandidate(card('m1-3'),profile);
+  assert.equal(candidate.target.id,'m1-2');
+  assert.equal(api.trainingKoreanCard(candidate.card),'소나무 피');
+  assert.equal(api.trainingKoreanCard(candidate.target),'소나무 홍단 띠');
+  assert.match(candidate.reason,/^$/); // candidate remains a strategy object, not a translated result
+  const rendered=api.koreanTrainingMove(candidate);
+  assert.match(rendered,/손에 있는 소나무 피를 바닥의 소나무 홍단 띠에 내세요/);
+  assert.match(rendered,/홍단 3장 조합을 완성할 가능성이 높아집니다/);
+  assert.doesNotMatch(rendered,/\b(?:Play|Stripe|Single|Pine|Recommended)\b/);
+});
+
+test('Korean training opening, GO-STOP and special coaching text has localized titles and explanations',()=>{
+  useState(stateWith({turn:'playerA',human:api.makePlayer({hand:[card('m1-2'),card('m2-2'),card('m3-2')]}),ai:api.makePlayer()}));
+  assert.match(api.koreanTrainingOpening(),/추천 전략/);
+  assert.match(api.koreanTrainingOpening(),/홍단/);
+  assert.equal(api.koreanTrainingCoach('Opening Strategy','Best strategies').title,'시작 전략');
+  assert.match(api.koreanTrainingCoach('Opening Strategy','Best strategies').text,/화면 아무 곳이나 누르세요/);
+  assert.equal(api.koreanTrainingCoach('GO / STOP ADVICE','STOP. Lock in 7 points now.').title,'고 / 스톱 조언');
+  assert.equal(api.koreanTrainingCoach('BOMB ADVICE','Bomb.').title,'폭탄 조언');
+  assert.equal(api.koreanTrainingCoach('SHAKE ADVICE','Shake.').title,'흔들기 조언');
+});
+
+test('Training explains a single Bush Picture capture without claiming the hand card is lower value',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m7-1'),card('m10-1')],
+    human:api.makePlayer({hand:[card('m7-3'),card('m2-3'),card('m5-3')]}),
+    ai:api.makePlayer()
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec.card.id,'m7-3');
+  assert.equal(rec.target.id,'m7-1');
+  assert.equal(rec.onlyAvailableCapture,true);
+  assert.match(rec.reason,/^Play Bush Single onto Bush Picture\./);
+  assert.match(rec.reason,/only card in your hand that can capture a card from the table/);
+  assert.doesNotMatch(rec.reason,/lower.value|preserv(?:e|ing) higher.value/i);
+  const ko=api.koreanTrainingMove(rec);
+  assert.match(ko,/손에 있는 싸리 피를 바닥의 싸리 열끗에 내세요/);
+  assert.match(ko,/바닥패를 먹을 수 있는 유일한 패/);
+  assert.doesNotMatch(ko,/더 좋은 패를 아끼|가치가 낮은 패/);
+});
+
+test('Training does not claim an only available capture when multiple hand cards match the table',()=>{
+  useState(stateWith({
+    turn:'playerA',
+    floor:[card('m7-1'),card('m2-1')],
+    human:api.makePlayer({hand:[card('m7-3'),card('m2-3'),card('m5-3')]}),
+    ai:api.makePlayer()
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec.onlyAvailableCapture,false);
+  assert.doesNotMatch(rec.reason,/only card in your hand|lower.value card from your hand/i);
+  assert.doesNotMatch(api.koreanTrainingMove(rec),/유일한 패|더 좋은 패를 아끼/);
+});
+
+
+
+test('Training picks the higher-value card from two matching hand cards: double Pi, Sake Cup, and Single versus ordinary Picture',()=>{
+  const fixtures=[
+    {name:'Daisy Sake Cup before Daisy Single',floor:'m9-2',hand:['m9-1','m9-3'],recommended:'m9-1'},
+    {name:'Berry double Pi before ordinary Single',floor:'m11-2',hand:['m11-3','m11-4'],recommended:'m11-3'},
+    {name:'Iris Single before ordinary Picture',floor:'m5-2',hand:['m5-1','m5-3'],recommended:'m5-3'},
+    {name:'Rose Single before ordinary Picture',floor:'m6-4',hand:['m6-1','m6-3'],recommended:'m6-3'},
+    {name:'Godori Picture outranks ordinary Single',floor:'m4-2',hand:['m4-1','m4-3'],recommended:'m4-1'}
+  ];
+  for(const fixture of fixtures){
+    useState(stateWith({
+      turn:'playerA',floor:[card(fixture.floor)],
+      human:api.makePlayer({hand:fixture.hand.map(card)}),
+      ai:api.makePlayer()
+    }));
+    const chosen=api.trainingRecommendation();
+    assert.equal(chosen?.card.id,fixture.recommended,fixture.name);
+    assert.equal(chosen?.target.id,fixture.floor,fixture.name);
+    assert.doesNotMatch(chosen.reason,/lower.priority hand card|preserving the stronger option|denies the computer/i,fixture.name);
+    const ko=api.koreanTrainingMove(chosen);
+    assert.doesNotMatch(ko,/가치가 낮은 패를 먼저|더 좋은 패를 남깁니다|상대의 득점/,fixture.name);
+    const weaker=fixture.hand.find(id=>id!==fixture.recommended);
+    assert.ok(api.trainingPlayableHandCardValue(card(fixture.recommended))>api.trainingPlayableHandCardValue(card(weaker)),fixture.name);
+  }
+});
+
+test('Training does not append a redundant computer-denial sentence even if the target is a threat',()=>{
+  const ninePi=cards('m1-3','m1-4','m2-3','m2-4','m3-3','m3-4','m4-3','m4-4','m5-3');
+  useState(stateWith({
+    turn:'playerA',floor:[card('m6-3')],
+    human:api.makePlayer({hand:[card('m6-1')]}),
+    ai:api.makePlayer({captured:ninePi})
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec?.target.id,'m6-3');
+  assert.ok(rec.threat,'defensive scoring analysis is still available for selection');
+  assert.doesNotMatch(rec.reason,/It also denies the computer|It also blocks the computer|It also slows the computer/i);
+  assert.doesNotMatch(api.koreanTrainingMove(rec),/상대가.*막을 수|상대의 득점을 늦추/);
+});
+
+
+test('Training recommendation provides only one situation-specific reason in English and Korean',()=>{
+  // Two equal-value hand cards share a target: no explanation is needed beyond the move.
+  useState(stateWith({
+    turn:'playerA',floor:[card('m5-2')],
+    human:api.makePlayer({hand:[card('m5-3'),card('m5-4')]}),
+    ai:api.makePlayer()
+  }));
+  let rec=api.trainingRecommendation();
+  assert.equal(rec?.target.id,'m5-2');
+  assert.match(rec.reason,/^Play Iris Single onto Iris Plain Stripe\.$/);
+  assert.match(api.koreanTrainingMove(rec),/^손에 있는 붓꽃 피를 바닥의 붓꽃 초단 띠에 내세요\.$/);
+
+  // If capturing is the only useful play, say that, without invented card-value or opponent claims.
+  useState(stateWith({
+    turn:'playerA',floor:[card('m6-3')],
+    human:api.makePlayer({hand:[card('m6-1'),card('m5-4')]}),
+    ai:api.makePlayer()
+  }));
+  rec=api.trainingRecommendation();
+  assert.equal(rec?.card.id,'m6-1');
+  assert.match(rec.reason,/This is the only available capture\./);
+  assert.doesNotMatch(rec.reason,/lower.value|preserv|computer|best available table/i);
+  assert.equal((rec.reason.match(/\./g)||[]).length,2);
+  const korean=api.koreanTrainingMove(rec);
+  assert.match(korean,/유일한 수/);
+  assert.equal((korean.match(/\./g)||[]).length,2);
+});
+
+test('Blocking an imminent opponent set replaces, rather than appends to, routine capture commentary',()=>{
+  useState(stateWith({
+    turn:'playerA',floor:[card('m3-2'),card('m5-3')],
+    human:api.makePlayer({hand:[card('m3-1'),card('m5-1')]}),
+    ai:api.makePlayer({captured:[card('m1-2'),card('m2-2')]})
+  }));
+  const rec=api.trainingRecommendation();
+  assert.equal(rec.target.id,'m3-2');
+  assert.match(rec.reason,/Block the computer from completing its Red Stripe set/);
+  assert.doesNotMatch(rec.reason,/although|already broken|It also|This takes/i);
+  assert.equal((rec.reason.match(/\./g)||[]).length,2);
+  const korean=api.koreanTrainingMove(rec);
+  assert.match(korean,/상대가 홍단 3장 조합을 완성하지 못하게/);
+  assert.equal((korean.match(/\./g)||[]).length,2);
+});
+
+
+test('Korean strategy notes give the recommended move without generic reminders',()=>{
+  useState(stateWith({
+    turn:'playerA',floor:[card('m5-2')],
+    human:api.makePlayer({hand:[card('m5-3'),card('m5-4')]}),ai:api.makePlayer()
+  }));
+  const rec=api.trainingRecommendation();
+  const note=api.koreanTrainingCoach('Strategy Note','The highlighted table card is the best choice.');
+  assert.equal(note.title,'전략 안내');
+  // Presentation-only: no generic "check the move again" preface.
+  assert.doesNotMatch(note.text,/추천하는 수를 다시 확인하세요|강조된 바닥패가 더 유리합니다/);
+});
+
+
+test('Training shows target-specific advice when a selected hand card matches two table cards',()=>{
+  const floor=cards('m9-1','m9-4');
+  useState(stateWith({
+    turn:'playerA',floor,
+    human:api.makePlayer({hand:cards('m9-2','m4-3')}),
+    ai:api.makePlayer()
+  }));
+  const advice=api.trainingTargetChoiceRecommendation('m9-2',floor);
+  assert.equal(advice?.card.id,'m9-2');
+  assert.equal(advice?.target.id,'m9-1','take the Sake Cup instead of the ordinary Single');
+  assert.match(advice.reason,/^Choose Daisy Sake Cup on the table\./);
+  assert.match(advice.reason,/Sake Cup can count as two Singles\./);
+  assert.doesNotMatch(advice.reason,/denies the computer|lower.value card from your hand/i);
+  assert.equal(api.trainingTargetChoiceRecommendation('not-in-hand',floor),null);
+});
+
+test('Training target-choice UI keeps the hint visible while both floor targets are selectable',()=>{
+  const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
+  const chooser=source.slice(source.indexOf('async function chooseFloorTarget'),source.indexOf('function cleanupTargetChoice'));
+  assert.match(chooser,/trainingTargetChoiceRecommendation\(presentation\.pendingHumanCardId,matches\)/);
+  assert.match(chooser,/presentation\.trainingRecommendedFloorCardId=trainingAdvice\.target\.id/);
+  assert.match(chooser,/showTrainingCoach\('Target Choice',trainingAdvice\.reason\)/);
+  assert.match(source,/if\(title!=='SHAKE ADVICE'&&title!=='BOMB ADVICE'\)restoreTrainingCoachHome\(\)/);
 });

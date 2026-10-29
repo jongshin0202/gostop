@@ -353,6 +353,49 @@ test('Android native touch keeps immediate first-tap menu response, second tap, 
   await context.close();
 });
 
+test('Korean Training Mode opening and recommended move show Korean coaching, not English',async({page})=>{
+  const errors=await openMenu(page);
+  await page.locator('#accountSettingsBtn').click();
+  await page.locator('#languageBtn').click();
+  await page.locator('#languageMenu button').filter({hasText:/한국/}).first().click();
+  await page.locator('#settingsOk').click();
+  await page.locator('#friendlyGamingBtn').click();
+  await page.locator('#trainingModeBtn').click();
+  await expect(page.locator('#trainingCoachPanel')).toBeVisible({timeout:12000});
+  await expect(page.locator('#trainingCoachTitle')).toHaveText('시작 전략');
+  await expect(page.locator('#trainingCoachText')).toContainText('화면 아무 곳이나 누르세요');
+  await expect(page.locator('#trainingCoachText')).not.toContainText('Tap or click anywhere');
+  await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
+  await expect(page.locator('#trainingCoachPanel')).toBeHidden();
+  // The ordinary coach is shown after the turn starts and the 5-second hint timer.
+  // On non-player turns the opening locale assertion above is still deterministic.
+  const coach=page.locator('#trainingCoachTitle');
+  await expect.poll(async()=>coach.textContent(),{timeout:15000}).toMatch(/추천 수|시작 전략|훈련 안내|전략 안내/);
+  const result=await page.locator('#trainingCoachText').textContent();
+  expect(result).not.toMatch(/\b(?:Play|Stripe|Single|Recommended Move)\b/);
+  expect(errors.map(error=>error.message)).toEqual([]);
+});
+
+for(const [locale,expectedTitle] of [
+  ['es','Estrategia inicial'],['fr','Stratégie de départ'],
+  ['de','Startstrategie'],['ja','最初の作戦'],['zh','开局策略']
+]){
+  test('Training opening coaching is localized in '+locale,async({page})=>{
+    const errors=await openMenu(page);
+    await page.locator('#accountSettingsBtn').click();
+    await page.locator('#languageBtn').click();
+    await page.locator('#languageMenu button[data-locale="'+locale+'"]').click();
+    await page.locator('#settingsOk').click();
+    await page.locator('#friendlyGamingBtn').click();
+    await page.locator('#trainingModeBtn').click();
+    await expect(page.locator('#trainingCoachPanel')).toBeVisible({timeout:12000});
+    await expect(page.locator('#trainingCoachTitle')).toHaveText(expectedTitle);
+    await expect(page.locator('#trainingCoachText')).not.toContainText('Tap or click anywhere');
+    await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
+    expect(errors.map(error=>error.message)).toEqual([]);
+  });
+}
+
 test('Training Mode pins the opening strategy until the player dismisses it',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#friendlyGamingBtn').click();

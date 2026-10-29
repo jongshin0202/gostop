@@ -786,7 +786,7 @@
     if(!gukjin)return Promise.resolve();
     els.gukjinChoiceCard.innerHTML=''; els.gukjinChoiceCard.appendChild(createCardEl(gukjin,'card magnified-card'));
     const advice=presentation.trainingMode&&!onlineMode?trainingGukjinRecommendation(state.human):null;
-    if(els.gukjinTrainingReason){els.gukjinTrainingReason.hidden=!advice;els.gukjinTrainingReason.textContent=advice?.reason||'';}
+    if(els.gukjinTrainingReason){els.gukjinTrainingReason.hidden=!advice;els.gukjinTrainingReason.textContent=globalThis.GoStopTrainingLocales?.gukjin(presentation.locale,advice)||advice?.reason||'';}
     if(advice?.mode==='animal'){els.gukjinPictureBtn?.classList.add('training-choice-recommended');els.gukjinSingleBtn?.classList.remove('training-choice-recommended');}
     else if(advice?.mode==='pi'){els.gukjinSingleBtn?.classList.add('training-choice-recommended');els.gukjinPictureBtn?.classList.remove('training-choice-recommended');}
     else {els.gukjinPictureBtn?.classList.remove('training-choice-recommended');els.gukjinSingleBtn?.classList.remove('training-choice-recommended');}
@@ -822,12 +822,18 @@
   function finishTargetChoice(cardId=null){
     const choice=presentation.targetChoice;if(!choice)return false;
     const card=cardId?choice.matches.find(item=>item.id===cardId)||null:null;
-    const trainingRecommendationAtChoice=presentation.trainingTurnRecommendation;
-    if(presentation.trainingMode&&card&&trainingRecommendationAtChoice?.target&&choice.matches.some(item=>item.id===trainingRecommendationAtChoice.target.id)&&card.id!==trainingRecommendationAtChoice.target.id){
-      showTrainingCoach('Strategy Note',`The highlighted table card is the stronger target for this play. ${trainingRecommendationAtChoice.reason}`);
-    }
+    const advice=choice.trainingAdvice||null;
     presentation.targetChoice=null;presentation.targetChoiceCleanup=null;
     els.floor.querySelectorAll('[data-target-choice="1"]').forEach(el=>{el.classList.remove('target-option');el.removeAttribute('role');el.removeAttribute('tabindex');delete el.dataset.targetChoice;});
+    if(advice){
+      presentation.trainingRecommendedFloorCardId=null;
+      els.floor.querySelectorAll('.floor-card.training-recommended').forEach(el=>el.classList.remove('training-recommended'));
+      hideTrainingCoach();
+      if(card&&card.id!==advice.target.id){
+        const why=trainingMoveWhy(advice);
+        showTrainingCoach('Target Feedback',['The better target was '+trainingCardName(advice.target)+'.',why].filter(Boolean).join(' '));
+      }
+    }
     choice.resolve(card);return !!card;
   }
   async function chooseFloorTarget(matches, message='Choose which card to hit',{cancelable=false}={}){
@@ -839,10 +845,18 @@
     cleanupTargetChoice();
     presentation.locked=true;
     showActionCue('human','choose a table card');
+    const trainingAdvice=presentation.trainingMode&&!onlineMode
+      ?trainingTargetChoiceRecommendation(presentation.pendingHumanCardId,matches):null;
     return new Promise(resolve=>{
-      presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve,cancelable};
+      presentation.targetChoice={key,ids:new Set(matches.map(card=>card.id)),matches:[...matches],resolve,cancelable,trainingAdvice};
       presentation.targetChoiceCleanup=()=>finishTargetChoice(null);
       syncTargetChoiceUi();
+      if(trainingAdvice){
+        presentation.trainingTurnRecommendation=trainingAdvice;
+        presentation.trainingRecommendedFloorCardId=trainingAdvice.target.id;
+        els.floor.querySelector(`[data-card-id="${trainingAdvice.target.id}"]`)?.classList.add('training-recommended');
+        showTrainingCoach('Target Choice',trainingAdvice.reason);
+      }
     });
   }
   function cleanupTargetChoice(){if(presentation.targetChoiceCleanup){const fn=presentation.targetChoiceCleanup;presentation.targetChoiceCleanup=null;fn();}else if(presentation.targetChoice)finishTargetChoice(null);}
@@ -2449,6 +2463,7 @@
     if(els.languageBtn)els.languageBtn.textContent=`${i18n.names[presentation.locale]} ▾`;
     if(els.languageMenu)els.languageMenu.querySelectorAll('button[data-locale]').forEach(button=>button.setAttribute('aria-current',button.dataset.locale===presentation.locale?'true':'false'));
     scheduleLocaleWork(presentation.locale);
+    renderTrainingCoachLocale();
   }
   function refreshModeLocalizedLabels(){
     const opponentName=document.querySelector('.cpu-chip .player-identity strong'),opponentAvatar=document.querySelector('.cpu-avatar'),opponentZone=document.querySelector('.opponent-zone'),opponentCaptureTitle=document.querySelector('.cpu-capture-panel .capture-panel-title');
@@ -2654,6 +2669,23 @@
     if(card.type==='pi')return 180;
     return 120;
   }
+  function trainingPlayableHandCardValue(card){
+    if(!card)return 0;
+    // When two hand cards hit the SAME table card, play the more valuable one.
+    // Live Godori birds are an exception to the ordinary Picture ranking.
+    if(card.flags?.includes('godori'))return 7;
+    if(card.type==='bright')return 6;
+    if(card.type==='ribbon')return 5;
+    if(card.flags?.includes('doublePi')||(card.id==='m9-1'&&card.flags?.includes('switchPi')))return 4;
+    if(card.type==='pi')return 3;
+    if(card.type==='animal')return 2;
+    return 0;
+  }
+  function trainingSameTargetHandCards(candidate){
+    if(!candidate?.card||!candidate?.target)return [];
+    return (state?.human?.hand||[]).filter(card=>card.month===candidate.card.month&&
+      (state?.floor||[]).some(target=>target.id===candidate.target.id));
+  }
   function trainingSecuredHandPriority(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target||!candidate.card)return 0;
     if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive)return 3;
@@ -2668,6 +2700,12 @@
     return 0;
   }
   function trainingHitCompare(a,b,profile=trainingStrategyProfile()){
+    // Same guaranteed table capture: use the higher-value card from hand,
+    // instead of preserving it and spending the weaker card first.
+    if(a?.target&&b?.target&&a.target.id===b.target.id&&a.card?.month===b.card?.month){
+      const handDelta=trainingPlayableHandCardValue(b.card)-trainingPlayableHandCardValue(a.card);
+      if(handDelta)return handDelta;
+    }
     const aEmergency=Number((a.urgency?.immediateScoreGain||0)>0||a.urgency?.severeBlock),bEmergency=Number((b.urgency?.immediateScoreGain||0)>0||b.urgency?.severeBlock);
     if(aEmergency!==bEmergency)return bEmergency-aEmergency;
     const aUnique=Number(a.matchCount===1),bUnique=Number(b.matchCount===1);
@@ -2829,39 +2867,46 @@
   function trainingMoveWhy(candidate,profile=candidate?.profile||trainingStrategyProfile()){
     if(!candidate?.target)return candidate?.shortWhy||'No card for capture is available on the table.';
     const target=candidate.target,urgency=candidate.urgency||competitiveMoveUrgency('human',candidate.card,target);
-    if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'Take the '+trainingCardName(target)+' now. A live 5-BIRDIES Picture is the highest-priority table card.';
-    if(target.type==='bright')return 'Take the '+trainingCardName(target)+' now. '+(candidate.opportunity||'Brights are a top-priority capture.');
+    // For ordinary Picture captures without a stronger scoring reason, explain
+    // the actual scarcity rather than inventing a hand-card value advantage.
+    if(candidate.onlyAvailableCapture&&target.type==='animal'&&!target.flags?.includes('godori')&&!candidate.opportunity)return 'This is the only card in your hand that can capture a card from the table.';
+    if(target.flags?.includes('godori')&&profile.godoriRoute?.alive)return 'This secures a needed 5-BIRDIES Picture.';
+    if(target.type==='bright')return candidate.opportunity||'This secures a Bright.';
     if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive){
       const brokenStripeAlternative=(candidate.targetAlternatives||[]).find(alternative=>alternative.target?.type==='ribbon'&&alternative.target.ribbonSet&&profile.ribbonRoutes?.[alternative.target.ribbonSet]&&!profile.ribbonRoutes[alternative.target.ribbonSet].alive);
       if(brokenStripeAlternative){
         const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
         return 'Play the '+trainingCardName(candidate.card)+' now so the live 5-BIRDIES Picture becomes safely captured. The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
       }
-      return 'Play the '+trainingCardName(candidate.card)+' now so the live 5-BIRDIES Picture becomes safely captured while also taking the '+trainingCardName(target)+'.';
+      return 'This secures your live 5-BIRDIES Picture.';
     }
     if(candidate.opportunity)return candidate.opportunity;
     if(urgency.familyLock){
       const family=trainingFlowerName(candidate.card.month),targetName=trainingCardName(target);
-      return 'You have 2 '+family+' cards in hand and 1 '+family+' card on the table. Use the lower-priority hand card to capture '+targetName+' while preserving the stronger option.';
+      const hand=trainingSameTargetHandCards(candidate);
+      const selectedValue=trainingPlayableHandCardValue(candidate.card);
+      const hasWeaker=hand.some(card=>trainingPlayableHandCardValue(card)<selectedValue);
+      if(hasWeaker)return 'This uses the higher-value hand card.';
+      return '';
     }
     if(target.type==='ribbon'){
       const route=profile.ribbonRoutes?.[target.ribbonSet];
       if(route&&!route.alive)return 'This takes a Stripe, although its '+route.name+' 3-Stripe set is already broken.';
       if(route?.potentialCount>=3)return 'This takes a '+route.name+' Stripe and gives you a strong chance to complete the '+route.name+' 3-Stripe set.';
       if(route?.potentialCount>=2)return 'This takes a '+route.name+' Stripe and keeps the '+route.name+' 3-Stripe set within reach.';
-      return 'This takes a Stripe, which is higher priority than a Single or ordinary Picture.';
+      return '';
     }
-    if(target.flags?.includes('doublePi'))return 'This takes a 2x Single, which counts as two Singles.';
-    if(target.id==='m9-1'&&target.flags?.includes('switchPi'))return 'This takes the Sake Cup, which can be used as 2 Singles.';
+    if(target.flags?.includes('doublePi'))return 'The 2x Single counts as two Singles.';
+    if(target.id==='m9-1'&&target.flags?.includes('switchPi'))return 'The Sake Cup can count as two Singles.';
     if(target.type==='pi'){
       const brokenStripeAlternative=(candidate.targetAlternatives||[]).find(alternative=>alternative.target?.type==='ribbon'&&alternative.target.ribbonSet&&profile.ribbonRoutes?.[alternative.target.ribbonSet]&&!profile.ribbonRoutes[alternative.target.ribbonSet].alive);
       if(brokenStripeAlternative){
         const route=profile.ribbonRoutes[brokenStripeAlternative.target.ribbonSet];
         return 'The '+route.name+' 3-Stripe set is already broken, so take the Single instead; building Singles is more valuable now.';
       }
-      return 'This takes the best available Single from the table while preserving higher-value cards in your hand.';
+      return candidate.onlyAvailableCapture?'This is the only available capture.':'';
     }
-    return 'This is the best available table capture while using a lower-value card from your hand when possible.';
+    return candidate.onlyAvailableCapture?'This is the only available capture.':'';
   }
   function trainingAlternativeSummary(best,sorted){
     const routeFamily=best?.target?.type==='ribbon'?best.target.ribbonSet:null;
@@ -2888,18 +2933,34 @@
     const sorted=[...pool].sort((a,b)=>noCaptureOnly
       ?trainingDiscardRisk(a.card,profile)-trainingDiscardRisk(b.card,profile)||b.score-a.score||a.card.id.localeCompare(b.card.id)
       :trainingHitCompare(a,b,profile));
-    const best={...sorted[0]},why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
+    const best={...sorted[0],onlyAvailableCapture:hits.length===1&&!!sorted[0].target};
+    const why=best.target?trainingMoveWhy(best,profile):trainingNoCaptureReason(best);
     const action=best.target?'Play '+trainingCardName(best.card)+' onto '+trainingCardName(best.target)+'.':'Play '+trainingCardName(best.card)+'.';
-    const reservedNote=best.reserved&&!liveHits.length&&hits.length===1?' This is the only guaranteed table capture left, so now is the right time to take it.':'';
-    const threat=best.threat?(' '+best.threat):'';
-    best.shortWhy=why;
-    best.reason=[action,why+reservedNote,threat].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    // Offer one decisive reason. An immediate opponent set block replaces generic
+    // capture commentary, but never replaces completing our own scoring opportunity.
+    const majorBlock=best.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(best.threat)
+      ?best.threat.replace(/^It also blocks the computer from /,'Block the computer from ')
+      :'';
+    const reason=majorBlock&&!best.opportunity&&!(best.urgency?.immediateScoreGain>0)?majorBlock:why;
+    best.shortWhy=reason;
+    best.reason=[action,reason].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     return best;
+  }
+  function trainingTargetChoiceRecommendation(cardId,matches){
+    const card=state?.human?.hand?.find(item=>item.id===cardId);
+    if(!card||!matches?.length)return null;
+    // Use the existing strategy evaluator, but only compare legal targets for
+    // the hand card the player has already selected.
+    const candidate=trainingCandidate(card);
+    if(!candidate?.target||!matches.some(item=>item.id===candidate.target.id))return null;
+    const why=trainingMoveWhy(candidate);
+    return {...candidate,shortWhy:why,reason:['Choose '+trainingCardName(candidate.target)+' on the table.',why].filter(Boolean).join(' ')};
   }
   function recommendedHumanCard(){return trainingRecommendation()?.card||null;}
   function trainingAlternativeReason(chosen,recommended=trainingRecommendation()){
     if(!chosen||!recommended||chosen.id===recommended.card.id)return '';
-    return 'Play '+trainingCardName(recommended.card)+(recommended.target?(' onto '+trainingCardName(recommended.target)):'')+' instead. '+(recommended.shortWhy||trainingMoveWhy(recommended));
+    const explanation=recommended.shortWhy||trainingMoveWhy(recommended);
+    return ['Play '+trainingCardName(recommended.card)+(recommended.target?(' onto '+trainingCardName(recommended.target)):'')+' instead.',explanation].filter(Boolean).join(' ');
   }
   function trainingOpeningStrategy(){
     if(!state?.human)return '';
@@ -3032,10 +3093,142 @@
     if(unlock){presentation.locked=false;render();}
     if(resolve)setTimeout(resolve,250);
   }
+  // Training decisions remain language-neutral. Only their displayed coaching
+  // explanation is localized; scoring, candidate ranking and card selection stay unchanged.
+  const TRAINING_FAMILIES_KO=Object.freeze({
+    1:'소나무',2:'매화',3:'벚꽃',4:'등나무',5:'붓꽃',6:'모란',
+    7:'싸리',8:'억새',9:'국화',10:'단풍',11:'오동',12:'버드나무'
+  });
+  const TRAINING_RIBBONS_KO=Object.freeze({red:'홍단',blue:'청단',grass:'초단'});
+  function trainingKoreanFamily(month){return TRAINING_FAMILIES_KO[month]||String(month)+'월';}
+  function trainingKoreanRibbon(family){return TRAINING_RIBBONS_KO[family]||'띠';}
+  function trainingKoreanCard(card){
+    if(!card)return '패';
+    const family=trainingKoreanFamily(card.month);
+    if(card.id==='m9-1'&&card.flags?.includes('switchPi'))return family+' 국진 술잔';
+    if(card.type==='bright')return family+' 광';
+    if(card.type==='ribbon')return family+' '+trainingKoreanRibbon(card.ribbonSet)+' 띠';
+    if(card.flags?.includes('doublePi'))return family+' 쌍피';
+    if(card.flags?.includes('godori'))return family+' 고도리 열끗';
+    if(card.type==='animal')return family+' 열끗';
+    return family+' 피';
+  }
+  function koreanTrainingMove(candidate){
+    if(!candidate?.card)return '현재 손패와 바닥패를 비교하여 가장 유리한 수를 선택하세요.';
+    const source=trainingKoreanCard(candidate.card),target=candidate.target;
+    const action=target?'손에 있는 '+source+'를 바닥의 '+trainingKoreanCard(target)+'에 내세요.':'손에 있는 '+source+'를 내세요.';
+    const profile=candidate.profile||trainingStrategyProfile();
+    let why='';
+    if(candidate.onlyAvailableCapture&&target?.type==='animal'&&!target.flags?.includes('godori')&&!candidate.opportunity){
+      why='현재 손패 중 바닥패를 먹을 수 있는 유일한 패입니다.';
+    }else if(!target){
+      const retained=candidate.discardContext?.retainedFamily?.length;
+      why=retained?'같은 종류의 더 좋은 패를 손에 남겨 두고 위험이 적은 패부터 내는 수입니다.':'지금 바닥에서 먹을 패가 없어, 중요한 패를 아끼면서 가장 위험이 적은 패를 내는 수입니다.';
+    }else if(target.flags?.includes('godori')&&profile.godoriRoute?.alive){
+      why='고도리를 완성할 수 있는 중요한 열끗이므로 우선 먹는 것이 좋습니다.';
+    }else if(target.type==='bright'){
+      why='광은 점수 가치가 높으므로 우선 확보하는 것이 좋습니다.';
+    }else if(candidate.card.flags?.includes('godori')&&profile.godoriRoute?.alive){
+      why='고도리 패를 안전하게 확보해 고도리 조합 가능성을 유지할 수 있습니다.';
+    }else if(candidate.opportunity){
+      const opportunity=candidate.opportunity;
+      const stripe=opportunity.match(/This completes the (Red|Blue|Plain) Stripe set/);
+      if(opportunity.includes('5-BIRDIES'))why='이 수로 고도리 조합을 완성합니다.';
+      else if(stripe)why='이 수로 '+({Red:'홍단',Blue:'청단',Plain:'초단'}[stripe[1]])+' 3장 조합을 완성합니다.';
+      else if(opportunity.includes('3 Brights'))why='광을 3장 모아 광 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('5 Pictures'))why='열끗을 5장 모아 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('5 Stripes'))why='띠를 5장 모아 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('10 Singles'))why='피 10장을 채워 점수를 얻기 시작합니다.';
+      else if(opportunity.includes('visible score'))why='이 수로 현재 점수가 올라갑니다.';
+    }
+    if(!why&&candidate.urgency?.familyLock){
+      const hand=trainingSameTargetHandCards(candidate),value=trainingPlayableHandCardValue(candidate.card);
+      why=hand.some(card=>trainingPlayableHandCardValue(card)<value)
+        ?'가치가 높은 손패를 먼저 사용합니다.'
+        :'';
+    }
+    if(!why&&target?.type==='ribbon'){
+      const route=profile.ribbonRoutes?.[target.ribbonSet],name=trainingKoreanRibbon(target.ribbonSet);
+      if(route&&!route.alive)why=name+' 3장 조합은 이미 불가능하지만, 띠 한 장을 확보할 수 있습니다.';
+      else if(route?.potentialCount>=3)why=name+' 띠를 가져오면 '+name+' 3장 조합을 완성할 가능성이 높아집니다.';
+      else if(route?.potentialCount>=2)why=name+' 띠를 확보하여 '+name+' 3장 조합을 노릴 수 있습니다.';
+      else why='';
+    }
+    if(!why&&target?.flags?.includes('doublePi'))why='쌍피는 피 두 장으로 계산되므로 우선 먹는 것이 유리합니다.';
+    if(!why&&target?.flags?.includes('switchPi'))why='국진 술잔은 필요할 때 쌍피로 사용할 수 있습니다.';
+    if(!why&&target?.type==='pi')why='';
+    
+    if(!why&&candidate.onlyAvailableCapture&&target)why='현재 먹을 수 있는 유일한 수입니다.';
+    const majorBlock=candidate.threat&&/completing (?:its .* Stripe set|5-BIRDIES)/.test(candidate.threat)
+      ?candidate.threat.includes('5-BIRDIES')
+        ?'상대의 고도리 완성을 막는 수입니다.'
+        :'상대가 '+trainingKoreanRibbon(candidate.target?.ribbonSet)+' 3장 조합을 완성하지 못하게 막는 수입니다.'
+      :'';
+    const reason=majorBlock&&!candidate.opportunity&&!(candidate.urgency?.immediateScoreGain>0)?majorBlock:why;
+    return [action,reason].filter(Boolean).join(' ');
+  }
+  function koreanTrainingOpening(){
+    const profile=trainingStrategyProfile(),options=profile.strategyOptions||[];
+    if(!options.length)return '추천 전략: 피를 모으세요. 아직 광·고도리·삼단 조합이 가까운 상태가 아니므로, 먹을 수 있는 피와 쌍피를 우선 확보하세요.';
+    const labels=options.map(option=>option.type==='stripe'?trainingKoreanRibbon(option.family):option.type==='bright'?'광':'고도리');
+    const descriptions=options.map((option)=>{
+      const route=option.route,name=option.type==='stripe'?trainingKoreanRibbon(option.family):option.type==='bright'?'광':'고도리';
+      return name+' 조합에 필요한 패 중 '+route.potentialCount+'장을 손에 가지고 있거나 이미 먹었거나 바로 먹을 수 있습니다.';
+    });
+    return '추천 전략: '+labels.join(', ')+'. '+descriptions.join(' ');
+  }
+  function koreanTrainingGoStop(text){
+    const isStop=String(text).startsWith('STOP'),mine=scorePlayer(state?.human||{captured:[]}).total,theirs=scorePlayer(state?.ai||{captured:[]}).total;
+    if(isStop){
+      const points=calculateFinalScore('human').total;
+      if(text.includes('The computer is at'))return '스톱을 추천합니다. 현재 '+points+'점을 확정하세요. 상대가 다음 차례에 점수를 내어 승부를 끝낼 수 있으므로 지금 멈추는 편이 안전합니다.';
+      if(text.includes('already has'))return '스톱을 추천합니다. 현재 '+points+'점을 확정하세요. 상대가 이미 '+theirs+'점이라 다음 차례에 역전할 위험이 있습니다.';
+      if(text.includes('Only one scoring turn'))return '스톱을 추천합니다. 현재 '+points+'점을 확정하세요. 득점 기회가 한 번 정도만 남아 추가 고는 위험합니다.';
+      return '스톱을 추천합니다. 현재 '+points+'점을 확정하는 편이 추가 고의 위험보다 유리합니다.';
+    }
+    return '고를 추천합니다. 현재 나 '+mine+'점, 상대 '+theirs+'점이며, 남은 패에서 추가 득점을 노릴 여지가 있습니다.';
+  }
+  function koreanTrainingCoach(title,text){
+    const recommendation=presentation.trainingTurnRecommendation;
+    if(title==='Recommended Move')return {title:'추천 수',text:koreanTrainingMove(recommendation)};
+    if(title==='Target Choice'||title==='Target Feedback'){
+      const target=recommendation?.target;
+      if(!target)return {title:'추천 대상',text};
+      const action='손에 있는 '+trainingKoreanCard(recommendation.card)+'를 바닥의 '+trainingKoreanCard(target)+'에 내세요.';
+      const move=koreanTrainingMove(recommendation);
+      const why=move.startsWith(action)?move.slice(action.length).trim():'';
+      const verb=title==='Target Feedback'?'더 좋은 선택은 ':'바닥에서 ';
+      return {title:title==='Target Feedback'?'선택 안내':'추천 대상',
+        text:[verb+trainingKoreanCard(target)+'을 선택하세요.',why].filter(Boolean).join(' ')};
+    }
+    if(title==='Strategy Note')return {title:'전략 안내',text:koreanTrainingMove(recommendation)};
+    if(title==='Opening Strategy')return {title:'시작 전략',text:koreanTrainingOpening()+' 준비되면 화면 아무 곳이나 누르세요.'};
+    if(title==='GO / STOP ADVICE')return {title:'고 / 스톱 조언',text:koreanTrainingGoStop(text)};
+    if(title==='BOMB ADVICE')return {title:'폭탄 조언',text:'폭탄을 사용하면 같은 종류의 패 네 장을 한꺼번에 먹고, 가능할 때 상대 피 한 장을 가져오며, 추가로 두 번의 빈 턴을 얻습니다. 이 기회를 놓치지 않는 것이 유리합니다.'};
+    if(title==='SHAKE ADVICE')return {title:'흔들기 조언',text:'흔들면 승리 시 점수 배수를 높일 수 있습니다. 네 번째 같은 종류의 패를 먹을 가능성과 폭탄 기회를 고려하여 선택하세요.'};
+    return {title:'훈련 안내',text:koreanTrainingMove(recommendation)};
+  }
+  let trainingCoachSource=null;
+  function renderTrainingCoachLocale(){
+    if(!trainingCoachSource||TEST_MODE)return;
+    const {title,text}=trainingCoachSource;
+    const translated=presentation.locale!=='en'&&presentation.locale!=='ko'
+      ?globalThis.GoStopTrainingLocales?.render(presentation.locale,title,text,{
+        recommendation:presentation.trainingTurnRecommendation,
+        opening:title==='Opening Strategy'?trainingStrategyProfile():null,
+        goStop:title==='GO / STOP ADVICE'?{points:calculateFinalScore('human').total,opponent:scorePlayer(state.ai).total}:null
+      }):null;
+    const shown=presentation.locale==='ko'?koreanTrainingCoach(title,text):translated||{title:title||'Training Coach',text};
+    if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=shown.title;
+    if(els.trainingCoachText)els.trainingCoachText.textContent=shown.text;
+  }
   function showTrainingCoach(title,text){
     if(!presentation.trainingMode||!text||TEST_MODE)return;
-    if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=title||'Training Coach';
-    if(els.trainingCoachText)els.trainingCoachText.textContent=text;
+    // Shake and Bomb temporarily embed the panel inside their dialogs.
+    // Gameplay advice must always live in the visible game shell.
+    if(title!=='SHAKE ADVICE'&&title!=='BOMB ADVICE')restoreTrainingCoachHome();
+    trainingCoachSource={title,text};
+    renderTrainingCoachLocale();
     if(els.trainingCoachPanel)els.trainingCoachPanel.hidden=false;
   }
   function restoreTrainingCoachHome(){
@@ -3323,7 +3516,7 @@
       stackStealCount,makePpeokStack,score,scoreWithGukjinMode,formatScoreFormula,goCountLabel,detectNewMilestones,deckVisualBackCount,computeStageScale,competitiveCardValue,competitiveRibbonSetAlive,competitiveCardValueForSide,competitiveProgressValue,competitiveMoveUrgency,competitiveMoveIsBetter,competitiveDiscardContext,competitiveMoveScore,bestCompetitiveMove,bestAiCard,aiGoStopDecision,
       calculateFinalScore,resolveSingleCard,resolveCombinedTurn,applySweepIfNeeded,
       stealPiAnimated,consumeBombBlank,canDeclareShake,reachedNewFinishScore,
-      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingFloorCardPriority,trainingCapturePriority,trainingHandPreservationRisk,trainingSecuredHandPriority,trainingActiveRoutePriority,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
+      trainingThreatValue,trainingWarningCard,trainingThreatReason,trainingOpportunityReason,trainingFlowerName,trainingCardName,trainingKoreanCard,koreanTrainingMove,koreanTrainingOpening,koreanTrainingGoStop,koreanTrainingCoach,trainingRibbonRoute,trainingGodoriRoute,trainingBrightRoute,trainingStrategyProfile,trainingDiscardRisk,trainingNoCapturePriority,trainingFloorCardPriority,trainingCapturePriority,trainingHandPreservationRisk,trainingSecuredHandPriority,trainingActiveRoutePriority,trainingPlayableHandCardValue,trainingSameTargetHandCards,trainingHitCompare,trainingStrategicCardValue,trainingIsReservedPlay,trainingCandidate,trainingNoCaptureReason,trainingRecommendation,trainingTargetChoiceRecommendation,trainingAlternativeReason,trainingOpeningStrategy,trainingGukjinRecommendation,trainingScoreGainParts,trainingOpponentVisibleThreat,trainingOpponentThreatExplanation,trainingGoStopRecommendation,recommendedHumanCard,setTrainingMode,clearTrainingCoach,armTrainingCoach,
       executeBombTurn,processOpeningSpecials,finishNagari,concludeTurn,confirmNewGame,resetSession,consumeSessionStart,presentOpeningSequence,presentDealSequence,presentPiTransferEvents,presentNewMilestones,presentOnlineGoStopDecision,setActiveHoveredHandCard,playDiceSound,playKissSound,playSweepSound,playBombSound,resetHandPresentationState,
       stableFloorTilt,stableStackAngle,shuffle,cardSize,fullSizeSourceRect,presentationPacing:PRESENTATION_PACING,
       getLocked(){return presentation.locked;},
