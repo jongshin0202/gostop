@@ -42,4 +42,5 @@ class ExpertRanker{
  evaluate(decisions){let n=0,correct=0;for(const d of decisions||[]){if(!d?.legalMoves?.length||!d.chosenId)continue;const r=this.rank(d.legalMoves);if(!r)continue;n++;if(r.id===d.chosenId)correct++;}return {n,correct,accuracy:n?correct/n:null};}
  export(){return {weights:[...this.weights],games:[...this.games],examples:this.examples};}
 }
-module.exports={ExpertRanker,feature,id};
+if(typeof module!=='undefined'&&module.exports)module.exports={ExpertRanker,feature,id};
+if(typeof globalThis!=='undefined')globalThis.GoStopExpertLearning=Object.freeze({ExpertRanker,feature,id});
