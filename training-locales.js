@@ -459,6 +459,7 @@
     return {title:name,text:[action,why].filter(Boolean).join(' ')};
   }
   function gukjin(locale,advice){
+    if(locale==='ko'&&advice)return advice.mode==='pi'?'국진 술잔을 쌍피로 사용하세요.':'국진 술잔을 열끗으로 사용하세요.';
     const d=DATA[locale];if(!d||!advice)return null;
     return d.phrases[advice.mode==='pi'?33:34];
   }
