@@ -5,7 +5,19 @@
 (()=>{
 'use strict';
 if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(location.hostname))return;
-const ACCOUNT='jwshin1@gmail.com';
+// Public development assets contain only an account fingerprint, not the email address.
+const ACCOUNT_HASH='b0af0e03e53f7d69ecd33dcf425a83d237bd3aba9dfe34ed49a315980462b6a5';
+const expectedHash=(location.hostname==='localhost'||location.hostname==='127.0.0.1')&&globalThis.__GoStopFeedbackTestHash||ACCOUNT_HASH;
+let approvedEmail=null;
+async function checkAccount(){
+ const email=String(globalThis.GoStopRanked?.getAccount?.()?.email||'').trim().toLowerCase();
+ approvedEmail=null;
+ if(!email||!globalThis.crypto?.subtle)return false;
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(email));
+ const digest=[...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,'0')).join('');
+ if(digest===expectedHash)approvedEmail=email;
+ return !!approvedEmail;
+}
 const RECORD_KEY='gostop-training-feedback-v1';
 const MODEL_KEY='gostop-training-ml-shadow-v1';
 const ENABLE_KEY='gostop-training-feedback-enabled';
@@ -21,7 +33,7 @@ zh:['复盘出牌','你的出牌与推荐不同。哪一种策略更好？','推
 const $=id=>document.getElementById(id);
 const locale=()=>TEXT[document.documentElement.lang]||TEXT.en;
 const enabled=()=>localStorage.getItem(ENABLE_KEY)!=='false';
-const verifiedAccount=()=>String(globalThis.GoStopRanked?.getAccount?.()?.email||'').trim().toLowerCase()===ACCOUNT;
+const verifiedAccount=()=>!!approvedEmail&&String(globalThis.GoStopRanked?.getAccount?.()?.email||'').trim().toLowerCase()===approvedEmail;
 const deck=new Map((globalThis.GoStopEngine?.masterDeck?.()||[]).map(c=>[c.id,c]));
 const card=id=>deck.get(id)||null;
 const onTable=()=>[...document.querySelectorAll('#floor [data-card-id]')].map(el=>el.dataset.cardId).filter(Boolean);
@@ -158,13 +170,13 @@ function onTarget(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmed=[];lastHand=null;}
- else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;confirmed=[];lastHand=null;gameId=null;}
+ if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmed=[];lastHand=null;void checkAccount();}
+ else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmed=[];lastHand=null;gameId=null;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
- getStatus:()=>({enabled:enabled(),active,confirmed:confirmed.length,examples:read(RECORD_KEY,[]).length,modelExamples:model?.examples||0}),
+ getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmed.length,examples:read(RECORD_KEY,[]).length,modelExamples:model?.examples||0}),
  exportFeedback:()=>JSON.stringify(read(RECORD_KEY,[])),
  disable:()=>localStorage.setItem(ENABLE_KEY,'false'),
  enable:()=>localStorage.setItem(ENABLE_KEY,'true')
