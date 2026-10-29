@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 async function setup(page,email='jwshin1@gmail.com'){
   await page.goto('/');
-  await page.setContent(\`<!doctype html><html lang="en"><head></head><body>
+  await page.setContent(`<!doctype html><html lang="en"><head></head><body>
     <button id="trainingModeBtn">Training</button>
     <button id="playSoloBtn">Friendly Solo</button><button id="quitYesBtn">Quit</button>
     <aside id="trainingCoachPanel"><strong id="trainingCoachTitle">Recommended Move</strong></aside>
@@ -11,7 +11,7 @@ async function setup(page,email='jwshin1@gmail.com'){
       <button class="hand-card matchable" data-card-id="m6-3"><img alt="Rose Single"></button>
       <button class="hand-card" data-card-id="m6-4" id="alternate"><img alt="Rose Double Single"></button>
     </div><dialog id="resultDialog"></dialog>
-  </body></html>\`);
+  </body></html>`);
   await page.evaluate(e=>{
     const cards=[
       {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
