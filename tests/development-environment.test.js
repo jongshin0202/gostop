@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {readFileSync,readdirSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
+const output=join(root,'dev-site/dist');
+test('development Vercel bundle includes Training Mode but excludes admin and production Worker access',()=>{
+  const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:''}});
+  assert.equal(r.status,0,r.stderr);
+  const files=readdirSync(output);
+  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js'])assert.ok(files.includes(filename),filename);
+  for(const filename of ['admin.html','admin.css','admin.js','server','wrangler.toml','vercel.json'])assert.ok(!files.includes(filename),filename);
+  const config=readFileSync(join(output,'runtime-config.js'),'utf8');
+  assert.match(config,/https:\/\/dev-api\.gostop\.invalid/);
+  assert.doesNotMatch(config,/gostop-authority\.jwshin1\.workers\.dev/);
+});
+test('development build refuses to connect to the live authoritative Worker',()=>{
+  const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:'https://gostop-authority.jwshin1.workers.dev'}});
+  assert.notEqual(r.status,0);
+  assert.match(r.stderr,/separate, validated development-only/);
+});
+test('development Vercel config is independent and blocks same-origin APIs',()=>{
+  const dev=JSON.parse(readFileSync(join(root,'dev-site/vercel.json'),'utf8'));
+  assert.equal(dev.outputDirectory,'dist');
+  assert.ok(dev.routes.some(route=>route.status===503&&new RegExp(route.src).test('/api/auth/login')));
+  assert.ok(dev.git.deploymentEnabled.develop);
+  assert.equal(dev.git.deploymentEnabled.main,undefined);
+});
