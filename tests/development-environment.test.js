@@ -37,7 +37,7 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   const note=readFileSync(join(output,'dev-leaderboard-empty-note.js'),'utf8');
   assert.match(note,/rows\.length===10/);
   assert.match(note,/row\.classList\.contains\('leaderboard-empty-row'\)/);
-  for(const locale of ['en','ko','es','fr','de','ja','zh'])assert.match(note,new RegExp('\\\\b'+locale+':'));
+  for(const locale of ['en','ko','es','fr','de','ja','zh'])assert.ok(note.includes(locale+':'),locale);
   assert.doesNotMatch(note,/gostop-authority\.jwshin1\.workers\.dev/);
 });
 test('development Vercel config is independent and blocks same-origin APIs',()=>{
