@@ -48,3 +48,9 @@ test('Cloudflare admin origins must be configured separately and never default t
     assert.equal(isAllowedAdminOrigin(origin,env),false,origin);
   }
 });
+
+test('Cloudflare Worker admin allowlist only names the separated admin Vercel site',()=>{
+  const workerConfig=readFileSync(join(root,'wrangler.toml'),'utf8');
+  assert.match(workerConfig,/^ADMIN_ORIGINS = "https:\/\/gostop-admin\.vercel\.app,https:\/\/gostop-admin-jwshin1-5345s-projects\.vercel\.app"$/m);
+  assert.doesNotMatch(workerConfig,/^ADMIN_ORIGINS = "[^"]*gostoplive\.com/m);
+});
