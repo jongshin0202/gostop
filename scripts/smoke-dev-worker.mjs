@@ -19,7 +19,12 @@ for(const origin of origins){
   if(!data||typeof data!=='object'||data.error){
     throw new Error('Development leaderboard API returned an invalid response: '+body.slice(0,240));
   }
-  console.log('PASS dev leaderboard GET via '+origin+' (HTTP '+response.status+', CORS allowed)');
+  if(!Array.isArray(data.global)||!Array.isArray(data.monthly)){
+    throw new Error('Development leaderboard has unexpected response shape');
+  }
+  console.log('PASS dev leaderboard GET via '+origin+
+    ' (HTTP '+response.status+', CORS allowed, global='+data.global.length+
+    ', monthly='+data.monthly.length+', month='+data.month+')');
   const preflight=await fetch(base+'/api/auth/login',{
     method:'OPTIONS',
     headers:{Origin:origin,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'},
