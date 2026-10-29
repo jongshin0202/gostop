@@ -786,7 +786,7 @@
     if(!gukjin)return Promise.resolve();
     els.gukjinChoiceCard.innerHTML=''; els.gukjinChoiceCard.appendChild(createCardEl(gukjin,'card magnified-card'));
     const advice=presentation.trainingMode&&!onlineMode?trainingGukjinRecommendation(state.human):null;
-    if(els.gukjinTrainingReason){els.gukjinTrainingReason.hidden=!advice;els.gukjinTrainingReason.textContent=advice?.reason||'';}
+    if(els.gukjinTrainingReason){els.gukjinTrainingReason.hidden=!advice;els.gukjinTrainingReason.textContent=globalThis.GoStopTrainingLocales?.gukjin(presentation.locale,advice)||advice?.reason||'';}
     if(advice?.mode==='animal'){els.gukjinPictureBtn?.classList.add('training-choice-recommended');els.gukjinSingleBtn?.classList.remove('training-choice-recommended');}
     else if(advice?.mode==='pi'){els.gukjinSingleBtn?.classList.add('training-choice-recommended');els.gukjinPictureBtn?.classList.remove('training-choice-recommended');}
     else {els.gukjinPictureBtn?.classList.remove('training-choice-recommended');els.gukjinSingleBtn?.classList.remove('training-choice-recommended');}
@@ -3212,7 +3212,13 @@
   function renderTrainingCoachLocale(){
     if(!trainingCoachSource||TEST_MODE)return;
     const {title,text}=trainingCoachSource;
-    const shown=presentation.locale==='ko'?koreanTrainingCoach(title,text):{title:title||'Training Coach',text};
+    const translated=presentation.locale!=='en'&&presentation.locale!=='ko'
+      ?globalThis.GoStopTrainingLocales?.render(presentation.locale,title,text,{
+        recommendation:presentation.trainingTurnRecommendation,
+        opening:title==='Opening Strategy'?trainingStrategyProfile():null,
+        goStop:title==='GO / STOP ADVICE'?{points:calculateFinalScore('human').total,opponent:scorePlayer(state.ai).total}:null
+      }):null;
+    const shown=presentation.locale==='ko'?koreanTrainingCoach(title,text):translated||{title:title||'Training Coach',text};
     if(els.trainingCoachTitle)els.trainingCoachTitle.textContent=shown.title;
     if(els.trainingCoachText)els.trainingCoachText.textContent=shown.text;
   }
