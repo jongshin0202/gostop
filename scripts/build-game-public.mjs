@@ -1,5 +1,5 @@
 'use strict';
-import {copyFile,mkdir,rm} from 'node:fs/promises';
+import {copyFile,mkdir,rm,access} from 'node:fs/promises';
 import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -17,3 +17,5 @@ const publicFiles=[
 await rm(output,{recursive:true,force:true});
 await mkdir(output,{recursive:true});
 for(const file of publicFiles)await copyFile(join(root,file),join(output,file));
+// Present in the seven-language Training feature branch, absent in earlier baselines.
+try{await access(join(root,'training-locales.js'));await copyFile(join(root,'training-locales.js'),join(output,'training-locales.js'));}catch(error){if(error.code!=='ENOENT')throw error;}
