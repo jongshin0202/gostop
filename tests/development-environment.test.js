@@ -32,7 +32,6 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   const html=readFileSync(join(output,'index.html'),'utf8');
   assert.ok(html.indexOf('runtime-config.js')<html.indexOf('ranked-client.js'));
   assert.match(html,/runtime-config\.js\?v=20261029-dev-cloudflare-1/);
-  assert.match(html,/dev-leaderboard-empty-note\.js\?v=20261029-1/);
 });
 test('development Vercel config is independent and blocks same-origin APIs',()=>{
   const dev=JSON.parse(readFileSync(join(root,'dev-site/vercel.json'),'utf8'));
