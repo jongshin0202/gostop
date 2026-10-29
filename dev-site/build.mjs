@@ -18,7 +18,7 @@ const value=String(process.env.GOSTOP_DEV_SERVER_URL||'https://dev-api.gostop.in
 const url=new URL(value);
 if(url.protocol!=='https:'||url.origin!==value||url.hostname==='gostoplive.com'||
   url.hostname==='www.gostoplive.com'||url.hostname==='gostop-authority.jwshin1.workers.dev'||
-  (!url.hostname.endsWith('.invalid')&&!/^(?:gostop-dev|gostop-staging)[-.]/.test(url.hostname)))
+  (!url.hostname.endsWith('.invalid')&&!/^(?:gostop-dev|gostop-staging|gostop-authority-dev)[-.]/.test(url.hostname)))
   throw new Error('GOSTOP_DEV_SERVER_URL must use a separate, validated development-only HTTPS Worker origin.');
 await writeFile(join(output,'runtime-config.js'),
   '// Development-only API. Production game data must remain isolated.\n'+
