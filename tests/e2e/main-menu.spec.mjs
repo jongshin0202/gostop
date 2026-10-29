@@ -376,6 +376,26 @@ test('Korean Training Mode opening and recommended move show Korean coaching, no
   expect(errors.map(error=>error.message)).toEqual([]);
 });
 
+for(const [locale,expectedTitle] of [
+  ['es','Estrategia inicial'],['fr','Stratégie de départ'],
+  ['de','Startstrategie'],['ja','最初の作戦'],['zh','开局策略']
+]){
+  test('Training opening coaching is localized in '+locale,async({page})=>{
+    const errors=await openMenu(page);
+    await page.locator('#accountSettingsBtn').click();
+    await page.locator('#languageBtn').click();
+    await page.locator('#languageMenu button[data-locale="'+locale+'"]').click();
+    await page.locator('#settingsOk').click();
+    await page.locator('#friendlyGamingBtn').click();
+    await page.locator('#trainingModeBtn').click();
+    await expect(page.locator('#trainingCoachPanel')).toBeVisible({timeout:12000});
+    await expect(page.locator('#trainingCoachTitle')).toHaveText(expectedTitle);
+    await expect(page.locator('#trainingCoachText')).not.toContainText('Tap or click anywhere');
+    await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
+    expect(errors.map(error=>error.message)).toEqual([]);
+  });
+}
+
 test('Training Mode pins the opening strategy until the player dismisses it',async({page})=>{
   const errors=await openMenu(page);
   await page.locator('#friendlyGamingBtn').click();
