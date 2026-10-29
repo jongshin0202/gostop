@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +30,9 @@ jobs:
           node --check ranked-client.js
           node --check runtime-config.js
           node --check session-authority.js
-          node --check admin.js
+          node --check admin-portal/admin.js
+          node --check admin-portal/build.mjs
+          node --check scripts/build-game-public.mjs
           node --check scripts/write-runtime-config.mjs
           node --check server/account-store.mjs
           node --check server/admin-api.mjs

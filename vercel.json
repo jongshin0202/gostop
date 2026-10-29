@@ -1,6 +1,6 @@
 {
-  "buildCommand": "node scripts/write-runtime-config.mjs",
-  "outputDirectory": ".",
+  "buildCommand": "node scripts/write-runtime-config.mjs && node scripts/build-game-public.mjs",
+  "outputDirectory": "dist-game",
   "headers": [
     {
       "source": "/",
@@ -37,67 +37,7 @@
       ]
     },
     {
-      "source": "/admin.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, max-age=0"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
-        }
-      ]
-    },
-    {
-      "source": "/admin.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, max-age=0"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
-        }
-      ]
-    },
-    {
-      "source": "/admin.css",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, max-age=0"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
-        }
-      ]
-    },
-    {
       "source": "/runtime-config.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, no-cache, must-revalidate, max-age=0"
-        }
-      ]
-    },
-    {
-      "source": "/api/admin/:path*",
       "headers": [
         {
           "key": "Cache-Control",
@@ -117,10 +57,6 @@
   ],
   "rewrites": [
     {
-      "source": "/api/admin/:path*",
-      "destination": "https://gostop-authority.jwshin1.workers.dev/api/admin/:path*"
-    },
-    {
       "source": "/api/:path*",
       "destination": "https://gostop-authority.jwshin1.workers.dev/api/:path*"
     }
@@ -131,5 +67,15 @@
       "**": false,
       "main": true
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "^/admin(?:/.*|\\.(?:html|js|css))?$",
+      "status": 404
+    },
+    {
+      "src": "^/api/admin(?:/.*)?$",
+      "status": 404
+    }
+  ]
 }

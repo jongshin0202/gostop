@@ -10,6 +10,7 @@ ABANDONMENT_COUNTDOWN_SECONDS = "30"
 PAUSE_DURATION_SECONDS = "180"
 EMAIL_VERIFICATION_REQUIRED = "true"
 EMAIL_VERIFY_BASE_URL = "https://gostoplive.com"
+ADMIN_ORIGINS = "https://gostop-admin.vercel.app,https://gostop-admin-jwshin1-5345s-projects.vercel.app"
 EMAIL_FROM = "GoStop Live <noreply@gostoplive.com>"
 
 [[durable_objects.bindings]]
