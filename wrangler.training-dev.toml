@@ -1,0 +1,18 @@
+name = "gostop-training-learning-dev"
+main = "training-learning/worker.mjs"
+compatibility_date = "2026-09-01"
+keep_vars = true
+
+[vars]
+DEV_AUTH_URL = "https://gostop-authority-dev.jwshin1.workers.dev/api/me"
+
+[[durable_objects.bindings]]
+name = "TRAINING_DATA"
+class_name = "TrainingLearningStore"
+
+[exports.TrainingLearningStore]
+type = "durable-object"
+storage = "sqlite"
+
+[dev]
+port = 8789
