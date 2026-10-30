@@ -3,6 +3,7 @@
  * All requests require a verified session on the isolated development authority.
  */
 import learner from './learner.js';
+import {recordCompletedTrainingGame} from './update-cadence.mjs';
 const {ExpertRanker}=learner;
 const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store',...headers}});
 const allowed=origin=>origin==='https://gostop-dev.vercel.app'||origin==='https://gostop-dev-jwshin1-5345s-projects.vercel.app';
@@ -103,17 +104,40 @@ export class TrainingLearningStore{
       if(!validId(body?.gameId))return fail('INVALID_GAME_ID',400);
       const gameKey='game:'+body.gameId;
       const game=await this.ctx.storage.get(gameKey);
-      if(!game)return json({ok:true,trained:0,empty:true});
-      if(game.complete)return json({ok:true,trained:0,duplicate:true});
-      game.complete=true;
+      if(game?.complete)return json({ok:true,trained:0,duplicate:true,publishedToLive:false});
+      const completedGame=game||{complete:false,decisions:[]};
+      completedGame.complete=true;
       const model=new ExpertRanker(await this.ctx.storage.get('model')||null);
-      const trained=model.trainGame({id:body.gameId,complete:true,decisions:game.decisions.filter(d=>d.chosenId)});
-      const summary=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
-      if(trained){summary.trainingGames++;summary.lastTrainedAt=new Date().toISOString();}
+      const trained=model.trainGame({id:body.gameId,complete:true,decisions:completedGame.decisions.filter(d=>d.chosenId)});
+      const prior=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
+      // A disagreement is an actual differing played/recommended move. An "unsure"
+      // judgment still counts as a disagreement, but never trains weights.
+      const hadDisagreement=completedGame.decisions.length>0||body.hadDisagreement===true;
+      const summary=recordCompletedTrainingGame(prior,hadDisagreement);
+      if(trained){summary.trainingGames=(prior.trainingGames||0)+1;summary.lastTrainedAt=new Date().toISOString();}
+      // Prepare an isolated, versionable candidate; NEVER imply that the
+      // production server was updated. A validated production-model publisher
+      // must acknowledge activation before the completion UI can report success.
+      const newWeights=model.examples>Number(prior.lastLiveModelExamples||0);
+      let promotionPending=false;
+      if(summary.eligibilityReason&&newWeights){
+        const existing=await this.ctx.storage.get('promotionCandidate');
+        if(existing?.model?.examples!==model.examples||existing?.reason!==summary.eligibilityReason){
+          await this.ctx.storage.put('promotionCandidate',{
+            reason:summary.eligibilityReason,createdAt:new Date().toISOString(),
+            completedGames:summary.completedGames,model:{weights:[...model.weights],examples:model.examples}
+          });
+        }
+        promotionPending=true;
+        summary.pendingLiveUpdate={reason:summary.eligibilityReason,modelExamples:model.examples};
+      }
       await this.ctx.storage.put('model',model.export());
-      await this.ctx.storage.put(gameKey,game);
+      await this.ctx.storage.put(gameKey,completedGame);
       await this.ctx.storage.put('summary',summary);
-      return json({ok:true,trained,trainingGames:summary.trainingGames,modelExamples:model.examples});
+      return json({ok:true,trained,trainingGames:summary.trainingGames,
+        completedGames:summary.completedGames,consecutiveAgreementGames:summary.consecutiveAgreementGames,
+        modelExamples:model.examples,promotionPending,publishedToLive:false,
+        updateTrigger:promotionPending?summary.eligibilityReason:null});
     }
     return fail('NOT_FOUND',404);
   }
