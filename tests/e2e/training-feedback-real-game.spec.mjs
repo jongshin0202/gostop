@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 test('real guest Training game opens feedback for a different card',async({page})=>{
  test.setTimeout(90000);
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
- await page.goto('/');
+ await page.goto('/',{waitUntil:'domcontentloaded'});
  await page.addScriptTag({path:'training-learning/feedback-ui.js'});
  await expect.poll(()=>page.evaluate(()=>!!globalThis.GoStopTrainingFeedbackDev)).toBe(true);
  expect(await page.evaluate(()=>globalThis.GoStopEngine.masterDeck.length)).toBe(48);
