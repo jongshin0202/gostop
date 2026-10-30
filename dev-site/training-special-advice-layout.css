@@ -1,0 +1,46 @@
+/* Training-only development layout repair.
+ * The frozen game moves the shared fixed-position coach into <dialog> for
+ * Shake/Bomb decisions. Inside a positioned / transformed dialog a fixed
+ * left:50% + translateX(-50%) is relative to that dialog and pushes text offscreen.
+ * Make the coach a normal-flow child, without changing game logic, dialogs,
+ * controls or the ordinary floating coach outside special-rule dialogs.
+ */
+#shakeDialog > #trainingCoachPanel,
+#bombDialog > #trainingCoachPanel {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  transform: none;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+  z-index: auto;
+}
+#shakeDialog > #trainingCoachPanel .training-coach-copy,
+#bombDialog > #trainingCoachPanel .training-coach-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#shakeDialog > #trainingCoachPanel .training-coach-copy p,
+#bombDialog > #trainingCoachPanel .training-coach-copy p {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+/* Let compact viewports scroll the special dialog rather than clip its
+ * instructional text. No other dialog or game view is affected. */
+#shakeDialog[open],
+#bombDialog[open] {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+@media (max-width: 900px) {
+  #shakeDialog > #trainingCoachPanel,
+  #bombDialog > #trainingCoachPanel {
+    margin: 7px 0 0;
+  }
+}
