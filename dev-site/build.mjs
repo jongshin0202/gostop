@@ -29,7 +29,7 @@ if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-conf
 html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
 // Only the development build advances the tutorial asset while production stays frozen.
 html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029-howto-1');
-const feedbackScripts='<script src="training-learning-cloud.js?v=20261030-1"></script>\n  <script src="training-learning-feedback.js?v=20261030-1"></script>';
+const feedbackScripts='<script src="training-learning-cloud.js?v=20261030-1"></script>\n  <script src="training-learning-feedback.js?v=20261030-2"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>','<script src="app.js?v=20261028-7"></script>\n  '+feedbackScripts);
 html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261030-1"></script>');

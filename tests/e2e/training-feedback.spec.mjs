@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 function fakeCloud(){
   const items=[];const finished=new Set();
   let learned=0,announceLiveActivation=false;
-  return {items,confirmNextLiveActivation:()=>{announceLiveActivation=true;},
+  return {items,completedCount:()=>finished.size,confirmNextLiveActivation:()=>{announceLiveActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
       const reply=(status,obj)=>route.fulfill({status,contentType:'application/json',
@@ -48,7 +48,8 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
       {id:'m6-3',month:6,type:'pi',flags:[]},
       {id:'m6-4',month:6,type:'pi',flags:['doublePi']}
     ];
-    globalThis.GoStopEngine={masterDeck:()=>cards};
+    // Match the real GoStopEngine API: masterDeck is an array, NOT a function.
+    globalThis.GoStopEngine={masterDeck:cards};
     globalThis.GoStopRanked={getAccount:()=>e?{email:e}:null};
     globalThis.__GoStopLearningTestConfig={endpoint:'http://127.0.0.1:4173/mock-learning'};
     localStorage.setItem('gostop-auth-token','e2e-demo-token');
@@ -128,15 +129,17 @@ test('failed cloud saves do not train or claim success',async({page})=>{
   expect(server.items).toHaveLength(0);
 });
 
-test('successful live activation acknowledgement is required for update OK dialog',async({page})=>{
+test('ordinary completed Training game never shows a false live-update dialog',async({page})=>{
  const server=await setup(page);
  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
- await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().serverReady)).toBe(true);
+ await expect.poll(()=>server.completedCount()).toBe(1);
  await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
- await page.evaluate(()=>document.getElementById('resultDialog').removeAttribute('open'));
- await page.locator('#trainingModeBtn').click();
+});
+test('confirmed server activation alone permits update OK dialog',async({page})=>{
+ const server=await setup(page);
  server.confirmNextLiveActivation();
  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await expect.poll(()=>server.completedCount()).toBe(1);
  const dialog=page.getByRole('dialog',{name:'Training model update'});
  await expect(dialog).toBeVisible();
  await expect(dialog).toContainText('Update was made');

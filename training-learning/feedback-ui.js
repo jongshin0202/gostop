@@ -42,11 +42,24 @@ de:['Zug bewerten','Dein Zug weicht vom Vorschlag ab. Welcher war strategisch be
 ja:['手の比較','おすすめと別の手を選びました。戦略的にどちらが良いですか？','おすすめ','あなたの手','自分の手が良い','おすすめが良い','不明 / 試しただけ','確認をオフ','確認済みの評価のみ別の学習モデルに使用します。'],
 zh:['复盘出牌','你的出牌与推荐不同。哪一种策略更好？','推荐出牌','你的出牌','我的出牌更好','推荐出牌更好','不确定 / 只是尝试','关闭反馈','只有确认的反馈才用于独立模型训练。']
 };
+const GUEST_COPY={
+ en:['Sign in to the authorized development expert account to save feedback and train the server model. No feedback will be saved from this session.','Not saved. Sign in to the authorized development expert account before playing to submit feedback.'],
+ ko:['피드백을 저장하고 서버 모델을 학습시키려면 승인된 개발 전문가 계정으로 로그인하세요. 현재 피드백은 저장되지 않습니다.','저장되지 않았습니다. 피드백을 보내려면 게임 시작 전에 승인된 개발 전문가 계정으로 로그인하세요.'],
+ es:['Inicia sesión con la cuenta experta autorizada de desarrollo para guardar comentarios y entrenar el modelo. No se guardarán datos de esta sesión.','No guardado. Inicia sesión con la cuenta experta autorizada antes de jugar.'],
+ fr:['Connectez-vous au compte expert de développement autorisé pour enregistrer vos avis et entraîner le modèle. Aucun avis ne sera enregistré.','Non enregistré. Connectez-vous au compte expert autorisé avant de jouer.'],
+ de:['Melde dich mit dem autorisierten Entwicklungsexpertenkonto an, um Feedback zu speichern und das Modell zu trainieren. Hier wird nichts gespeichert.','Nicht gespeichert. Melde dich vor dem Spiel mit dem autorisierten Expertenkonto an.'],
+ ja:['フィードバックの保存とサーバーモデルの学習には、承認された開発用エキスパートアカウントでログインしてください。このセッションの内容は保存されません。','保存されませんでした。プレイ前に承認済みの開発用エキスパートアカウントでログインしてください。'],
+ zh:['如需保存反馈并训练服务器模型，请登录获授权的开发专家账号。本次会话的反馈不会保存。','未保存。请在开始游戏前登录获授权的开发专家账号。']
+};
 const $=id=>document.getElementById(id);
 const locale=()=>TEXT[document.documentElement.lang]||TEXT.en;
 const enabled=()=>localStorage.getItem(ENABLE_KEY)!=='false';
 const verifiedAccount=()=>!!approvedEmail&&String(globalThis.GoStopRanked?.getAccount?.()?.email||'').trim().toLowerCase()===approvedEmail;
-const deck=new Map((globalThis.GoStopEngine?.masterDeck?.()||[]).map(c=>[c.id,c]));
+// The real GoStopEngine exports masterDeck as an ARRAY. Test-only adapters can
+// expose a function. Support both without changing or monkey-patching game code.
+const sourceDeck=globalThis.GoStopEngine?.masterDeck;
+const deckItems=typeof sourceDeck==='function'?sourceDeck():sourceDeck;
+const deck=new Map((Array.isArray(deckItems)?deckItems:[]).map(c=>[c.id,c]));
 const card=id=>deck.get(id)||null;
 const onTable=()=>[...document.querySelectorAll('#floor [data-card-id]')].map(el=>el.dataset.cardId).filter(Boolean);
 const inHand=()=>[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')].filter(el=>!el.disabled).map(el=>el.dataset.cardId).filter(Boolean);
@@ -102,7 +115,9 @@ function completion(){
  alreadyCompleted=true;
  const completeId=gameId;
  const completeHadDisagreement=hadDisagreement;
+ const canSubmit=verifiedAccount();
  gameId=null;confirmedCount=0;hadDisagreement=false;
+ if(!canSubmit)return; // Do not send anonymous or unapproved Training data.
  // A completed game may finish before an asynchronous feedback write resolves.
  void Promise.allSettled([...pendingUploads]).then(async()=>{
   try{
@@ -136,7 +151,7 @@ async function safeRecord(data,label,choice){
  }finally{pendingUploads.delete(upload);}
 }
 function feedbackDialog(data){
- if(!active||!verifiedAccount()||!enabled()||showing)return;
+ if(!active||!enabled()||showing)return;
  showing=true;
  const [title,desc,recLabel,myLabel,chooseMine,chooseRec,unsure,off,done]=locale();
  modal.replaceChildren();
@@ -149,10 +164,22 @@ function feedbackDialog(data){
   comparison.appendChild(line);
  }
  const actions=document.createElement('div');actions.className='feedback-actions';
+ const canSubmit=verifiedAccount();
+ if(!canSubmit){
+  const notice=document.createElement('p');
+  notice.setAttribute('role','status');
+  notice.style.cssText='color:#f0cf91;margin:0 0 12px';
+  notice.textContent=(GUEST_COPY[document.documentElement.lang]||GUEST_COPY.en)[0];
+  comparison.appendChild(notice);
+ }
  const errorLine=document.createElement('p');
  errorLine.setAttribute('role','alert');errorLine.style.cssText='color:#ffbfbd;margin:8px 0 0';
  const answer=(text,choice)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=async()=>{
   if(choice==='off'){localStorage.setItem(ENABLE_KEY,'false');modal.close();return;}
+  // Reviewing a disagreement is allowed before login. Server-side learning
+  // remains restricted to the verified expert; never claim an unsaved choice
+  // was recorded, and never store training data on the device.
+  if(!canSubmit){errorLine.textContent=(GUEST_COPY[document.documentElement.lang]||GUEST_COPY.en)[1];return;}
   const chosen=choice==='mine'?moveId(data.played.hand,data.played.target):
     choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null;
   for(const button of actions.querySelectorAll('button'))button.disabled=true;
@@ -164,6 +191,10 @@ function feedbackDialog(data){
   }
  };actions.appendChild(b);};
  answer(chooseMine,'mine');answer(chooseRec,'recommended');answer(unsure,'unsure');answer(off,'off');
+ if(!canSubmit){
+  const dismiss=document.createElement('button');dismiss.type='button';dismiss.textContent='OK';
+  dismiss.addEventListener('click',()=>modal.close());actions.appendChild(dismiss);
+ }
  modal.append(heading,intro,comparison,actions,errorLine);
  modal.addEventListener('close',()=>{showing=false;if(queue.length)window.setTimeout(showNext,0);},{once:true});
  try{modal.showModal();}catch(_){showing=false;}
@@ -186,7 +217,7 @@ function beginDisagreement(recommended,played,observed){
  enqueue({recommended,played,visible:observed.visible,legalMoves:legal});
 }
 function onHand(event){
- if(!active||!enabled()||!verifiedAccount()||modal.open)return;
+ if(!active||!enabled()||modal.open)return;
  const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
  if(!el||el.disabled)return;
  const current=el.dataset.cardId,rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
@@ -202,7 +233,7 @@ function onHand(event){
  window.setTimeout(()=>{if(!active)return;beginDisagreement({hand:rec,target:originalTarget},{hand:current,target:actualTarget},observe);},200);
 }
 function onTarget(event){
- if(!active||!enabled()||!verifiedAccount()||modal.open)return;
+ if(!active||!enabled()||modal.open)return;
  const el=event.target?.closest?.('#floor .target-option[data-card-id]');
  if(!el)return;
  const target=el.dataset.cardId;
