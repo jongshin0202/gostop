@@ -1,2 +1,22 @@
 import {test,expect} from '@playwright/test';
-test('real game engine exports a deck array', async ({page})=>{await page.goto('/');await expect.poll(()=>page.evaluate(()=>globalThis.GoStopEngine?.masterDeck?.length)).toBe(48);});
+test('real guest Training game opens feedback for a different card',async({page})=>{
+ test.setTimeout(90000);
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('/');
+ await page.addScriptTag({path:'training-learning/feedback-ui.js'});
+ await expect.poll(()=>page.evaluate(()=>!!globalThis.GoStopTrainingFeedbackDev)).toBe(true);
+ expect(await page.evaluate(()=>globalThis.GoStopEngine.masterDeck.length)).toBe(48);
+ await page.locator('#friendlyGamingBtn').click();
+ await page.locator('#trainingModeBtn').click();
+ await expect(page.locator('.training-opening-dismiss-layer')).toBeVisible({timeout:20000});
+ await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
+ await expect.poll(()=>page.locator('#playerHand .hand-card.matchable:not([disabled])').count(),{timeout:40000}).toBeGreaterThan(0);
+ const other=page.locator('#playerHand .hand-card:not(.matchable):not([disabled]):not(.blank-turn-card)').first();
+ await other.click();
+ const dlg=page.locator('#trainingFeedbackDialog');
+ await expect(dlg).toBeVisible({timeout:10000});
+ await expect(dlg.getByRole('status')).toContainText('No feedback will be saved');
+ await dlg.getByRole('button',{name:'OK'}).click();
+ await expect(dlg).toBeHidden();
+ expect(errors).toEqual([]);
+});
