@@ -16,11 +16,23 @@ async function checkAccount(){
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(email));
  const digest=[...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,'0')).join('');
  if(digest===expectedHash)approvedEmail=email;
+ if(approvedEmail)await syncStatus();
  return !!approvedEmail;
 }
-const RECORD_KEY='gostop-training-feedback-v1';
-const MODEL_KEY='gostop-training-ml-shadow-v1';
+// The only local setting is the UI preference; training data and weights live on Cloudflare.
 const ENABLE_KEY='gostop-training-feedback-enabled';
+const cloud=globalThis.GoStopTrainingCloud;
+let serverFeedbackCount=0,serverModelExamples=0,lastError=null,serverReady=false;
+async function syncStatus(){
+ if(!cloud)return;
+ try{
+  const state=await cloud.state();
+  serverFeedbackCount=state.feedbackCount||0;
+  serverModelExamples=state.model?.examples||0;
+  serverReady=true;lastError=null;
+ }catch(error){serverReady=false;lastError=String(error.message||error);}
+}
+
 const TEXT={
 en:['Review this Training move','The recommended move and your chosen move were different. Which was strategically better?','Recommendation','Your move','My move was better','Recommendation was better','Not sure / experiment','Turn off feedback','Saved. Only confirmed feedback will train the separate model.'],
 ko:['훈련 수 검토','추천 수와 실제 선택이 다릅니다. 전략적으로 어떤 수가 더 좋습니까?','추천 수','실제 수','내 선택이 더 좋음','추천 수가 더 좋음','모르겠음 / 실험','피드백 끄기','확인된 피드백만 별도 학습 모델에 사용합니다.'],
@@ -54,11 +66,8 @@ const legalMoves=(handIds,floorIds)=>{
   return (matched.length?matched:[null]).map(t=>({card:h,target:t,moveId:moveId(handId,t?.id)}));
  });
 };
-const persist=(key,val)=>{try{localStorage.setItem(key,JSON.stringify(val));return true;}catch(_){return false;}};
-const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'null')||fallback;}catch(_){return fallback;}};
-let active=false,gameId=null,confirmed=[],pending=null,lastHand=null,showing=false,alreadyCompleted=false;
-let model;
-try{model=new globalThis.GoStopExpertLearning.ExpertRanker(read(MODEL_KEY,null));}catch(_){model=null;}
+let active=false,gameId=null,confirmedCount=0,lastHand=null,showing=false,alreadyCompleted=false;
+const pendingUploads=new Set();
 const modal=document.createElement('dialog');
 modal.id='trainingFeedbackDialog';
 modal.setAttribute('aria-label','Training move feedback');
@@ -70,34 +79,35 @@ function ensureGame(){if(!gameId){gameId='dev-training-'+Date.now()+'-'+Math.ran
 function completion(){
  if(!active||!gameId||alreadyCompleted||!$('resultDialog')?.open)return;
  alreadyCompleted=true;
- if(confirmed.length&&model){
-  const decisions=confirmed.filter(d=>d.label&&d.legalMoves?.length>1).map(d=>({
-   legalMoves:d.legalMoves,chosenId:d.label
-  }));
-  if(decisions.length){
-   try{
-    const count=model.trainGame({id:gameId,complete:true,decisions});
-    if(count)persist(MODEL_KEY,model.export());
-   }catch(_){}
-  }
- }
- confirmed=[];gameId=null;
+ const completeId=gameId;
+ gameId=null;confirmedCount=0;
+ // A completed game may finish before an asynchronous feedback write resolves.
+ void Promise.allSettled([...pendingUploads]).then(async()=>{
+  try{if(cloud)await cloud.complete(completeId);await syncStatus();}
+  catch(error){lastError=String(error.message||error);serverReady=false;}
+ });
 }
 const watchResult=new MutationObserver(completion);
 if($('resultDialog'))watchResult.observe($('resultDialog'),{attributes:true,attributeFilter:['open']});
-function safeRecord(data,label,choice){
- const rows=read(RECORD_KEY,[]);
- const entry={
-   timestamp:new Date().toISOString(),environment:'development',mode:'training',
-   recommended:data.recommended,played:data.played,choice,
-   visible:data.visible,legalMoves:data.legalMoves.map(m=>m.moveId)
- };
- rows.push(entry);
- persist(RECORD_KEY,rows.slice(-500));
- if(label&&data.legalMoves.some(m=>m.moveId===label)){
-  ensureGame();confirmed.push({label,legalMoves:data.legalMoves});
+async function safeRecord(data,label,choice){
+ if(!cloud)throw new Error('Cloud learning is not configured. No feedback was saved.');
+ if(!verifiedAccount())throw new Error('Please sign in to the authorized development account.');
+ ensureGame();
+ const upload=cloud.feedback({
+  gameId,feedbackId:crypto.randomUUID(),choice,
+  recommended:data.recommended,played:data.played,legalMoves:data.legalMoves
+ });
+ pendingUploads.add(upload);
+ try{
+  await upload;
+  serverFeedbackCount++;
+  if(label&&data.legalMoves.some(m=>m.moveId===label))confirmedCount++;
+  serverReady=true;lastError=null;
   completion();
- }
+ }catch(error){
+  lastError=String(error.message||error);serverReady=false;
+  throw error;
+ }finally{pendingUploads.delete(upload);}
 }
 function feedbackDialog(data){
  if(!active||!verifiedAccount()||!enabled()||showing)return;
@@ -113,13 +123,22 @@ function feedbackDialog(data){
   comparison.appendChild(line);
  }
  const actions=document.createElement('div');actions.className='feedback-actions';
- const answer=(text,choice)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=()=>{
-  if(choice==='off')localStorage.setItem(ENABLE_KEY,'false');
-  if(choice!=='off')safeRecord(data,choice==='mine'?moveId(data.played.hand,data.played.target):choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null,choice);
-  modal.close();
+ const errorLine=document.createElement('p');
+ errorLine.setAttribute('role','alert');errorLine.style.cssText='color:#ffbfbd;margin:8px 0 0';
+ const answer=(text,choice)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=async()=>{
+  if(choice==='off'){localStorage.setItem(ENABLE_KEY,'false');modal.close();return;}
+  const chosen=choice==='mine'?moveId(data.played.hand,data.played.target):
+    choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null;
+  for(const button of actions.querySelectorAll('button'))button.disabled=true;
+  errorLine.textContent='';
+  try{await safeRecord(data,chosen,choice);modal.close();}
+  catch(error){
+   errorLine.textContent=String(error.message||error);
+   for(const button of actions.querySelectorAll('button'))button.disabled=false;
+  }
  };actions.appendChild(b);};
  answer(chooseMine,'mine');answer(chooseRec,'recommended');answer(unsure,'unsure');answer(off,'off');
- modal.append(heading,intro,comparison,actions);
+ modal.append(heading,intro,comparison,actions,errorLine);
  modal.addEventListener('close',()=>{showing=false;if(queue.length)window.setTimeout(showNext,0);},{once:true});
  try{modal.showModal();}catch(_){showing=false;}
 }
@@ -170,14 +189,17 @@ function onTarget(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmed=[];lastHand=null;void checkAccount();}
- else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmed=[];lastHand=null;gameId=null;}
+ if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;void checkAccount();}
+ else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;gameId=null;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
- getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmed.length,examples:read(RECORD_KEY,[]).length,modelExamples:model?.examples||0}),
- exportFeedback:()=>JSON.stringify(read(RECORD_KEY,[])),
+ getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmedCount,
+  examples:serverFeedbackCount,modelExamples:serverModelExamples,serverReady,lastError,
+  storage:'development-cloudflare',pendingUploads:pendingUploads.size}),
+ exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),
+ refresh:syncStatus,
  disable:()=>localStorage.setItem(ENABLE_KEY,'false'),
  enable:()=>localStorage.setItem(ENABLE_KEY,'true')
 }),writable:false,configurable:true});
