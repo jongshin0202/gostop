@@ -66,7 +66,7 @@ const legalMoves=(handIds,floorIds)=>{
   return (matched.length?matched:[null]).map(t=>({card:h,target:t,moveId:moveId(handId,t?.id)}));
  });
 };
-let active=false,gameId=null,confirmedCount=0,lastHand=null,showing=false,alreadyCompleted=false;
+let active=false,gameId=null,confirmedCount=0,lastHand=null,showing=false,alreadyCompleted=false,hadDisagreement=false;
 const pendingUploads=new Set();
 const modal=document.createElement('dialog');
 modal.id='trainingFeedbackDialog';
@@ -76,14 +76,40 @@ const shade=document.createElement('style');
 shade.textContent='#trainingFeedbackDialog::backdrop{background:rgba(0,0,0,.62)}#trainingFeedbackDialog button{font:inherit;cursor:pointer;border-radius:9px;padding:10px;border:1px solid #aa7b37;background:#503226;color:#f7dcad}#trainingFeedbackDialog button:focus-visible{outline:3px solid #fbd686;outline-offset:2px}#trainingFeedbackDialog .feedback-actions{display:grid;grid-template-columns:1fr;gap:9px}';
 document.head.appendChild(shade);document.body.appendChild(modal);
 function ensureGame(){if(!gameId){gameId='dev-training-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);alreadyCompleted=false;}}
+// Only an acknowledged LIVE model activation warrants a success message.
+const UPDATE_TEXT={
+ en:'Update was made',ko:'업데이트가 완료되었습니다',es:'Actualización realizada',
+ fr:'Mise à jour effectuée',de:'Aktualisierung abgeschlossen',
+ ja:'更新が完了しました',zh:'更新已完成'
+};
+function showUpdateMade(){
+ if(!active)return;
+ const dialog=document.createElement('dialog');
+ dialog.setAttribute('aria-label','Training model update');
+ dialog.style.cssText=modal.style.cssText;
+ const message=document.createElement('p');
+ message.textContent=UPDATE_TEXT[document.documentElement.lang]||UPDATE_TEXT.en;
+ const ok=document.createElement('button');
+ ok.type='button';ok.textContent='OK';
+ ok.style.cssText='font:inherit;cursor:pointer;border-radius:9px;padding:10px 22px;border:1px solid #aa7b37;background:#503226;color:#f7dcad';
+ ok.addEventListener('click',()=>dialog.close());
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+ dialog.append(message,ok);document.body.append(dialog);
+ try{dialog.showModal();}catch(_){dialog.remove();}
+}
 function completion(){
  if(!active||!gameId||alreadyCompleted||!$('resultDialog')?.open)return;
  alreadyCompleted=true;
  const completeId=gameId;
- gameId=null;confirmedCount=0;
+ const completeHadDisagreement=hadDisagreement;
+ gameId=null;confirmedCount=0;hadDisagreement=false;
  // A completed game may finish before an asynchronous feedback write resolves.
  void Promise.allSettled([...pendingUploads]).then(async()=>{
-  try{if(cloud)await cloud.complete(completeId);await syncStatus();}
+  try{
+   const result=cloud?await cloud.complete(completeId,{hadDisagreement:completeHadDisagreement}):null;
+   await syncStatus();
+   if(result?.publishedToLive===true)showUpdateMade();
+  }
   catch(error){lastError=String(error.message||error);serverReady=false;}
  });
 }
@@ -156,6 +182,7 @@ function beginDisagreement(recommended,played,observed){
  const legal=observed.legalMoves;
  if(!legal.some(x=>x.moveId===moveId(recommended.hand,recommended.target))||
     !legal.some(x=>x.moveId===moveId(played.hand,played.target)))return;
+ hadDisagreement=true;
  enqueue({recommended,played,visible:observed.visible,legalMoves:legal});
 }
 function onHand(event){
@@ -189,8 +216,8 @@ function onTarget(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;void checkAccount();}
- else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;gameId=null;}
+ if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;gameId=null;hadDisagreement=false;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
 },{capture:true});
