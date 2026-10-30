@@ -20,18 +20,17 @@ function fixture(){
   put:async(k,v)=>{store.set(k,structuredClone(v));}
  };
  const durable=new TrainingLearningStore({storage},{});
+ let email='jwshin1@gmail.com';
  const env={DEV_AUTH_URL:'https://gostop-authority-dev.jwshin1.workers.dev/api/me',
+   DEV_AUTH:{fetch:async()=>new Response(JSON.stringify({ok:true,account:{id:'dev-account-id-123',email}}),{status:200,headers:{'content-type':'application/json'}})},
    TRAINING_DATA:{idFromName:name=>name,get:id=>({fetch:request=>durable.fetch(request)})}
  };
- const original=globalThis.fetch;
- let email='jwshin1@gmail.com';
- globalThis.fetch=async()=>new Response(JSON.stringify({ok:true,account:{id:'dev-account-id-123',email}}),{status:200,headers:{'content-type':'application/json'}});
  const request=(path,{method='GET',body,origin=ORIGIN,authorization=AUTH}={})=>{
   const headers={origin,authorization};
   if(body)headers['content-type']='application/json';
   return worker.fetch(new Request('https://learning.dev'+path,{method,headers,...(body?{body:JSON.stringify(body)}:{})}),env);
  };
- return {store,request,setEmail:v=>{email=v;},restore:()=>{globalThis.fetch=original;}};
+ return {store,request,setEmail:v=>{email=v;},restore:()=>{}};
 }
 test('learning Worker rejects production origins and unauthenticated requests',async()=>{
  const t=fixture();try{
