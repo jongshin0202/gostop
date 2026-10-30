@@ -46,7 +46,11 @@ const $=id=>document.getElementById(id);
 const locale=()=>TEXT[document.documentElement.lang]||TEXT.en;
 const enabled=()=>localStorage.getItem(ENABLE_KEY)!=='false';
 const verifiedAccount=()=>!!approvedEmail&&String(globalThis.GoStopRanked?.getAccount?.()?.email||'').trim().toLowerCase()===approvedEmail;
-const deck=new Map((globalThis.GoStopEngine?.masterDeck?.()||[]).map(c=>[c.id,c]));
+// The real GoStopEngine exports masterDeck as an ARRAY. Test-only adapters can
+// expose a function. Support both without changing or monkey-patching game code.
+const sourceDeck=globalThis.GoStopEngine?.masterDeck;
+const deckItems=typeof sourceDeck==='function'?sourceDeck():sourceDeck;
+const deck=new Map((Array.isArray(deckItems)?deckItems:[]).map(c=>[c.id,c]));
 const card=id=>deck.get(id)||null;
 const onTable=()=>[...document.querySelectorAll('#floor [data-card-id]')].map(el=>el.dataset.cardId).filter(Boolean);
 const inHand=()=>[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')].filter(el=>!el.disabled).map(el=>el.dataset.cardId).filter(Boolean);
@@ -102,7 +106,9 @@ function completion(){
  alreadyCompleted=true;
  const completeId=gameId;
  const completeHadDisagreement=hadDisagreement;
+ const canSubmit=verifiedAccount();
  gameId=null;confirmedCount=0;hadDisagreement=false;
+ if(!canSubmit)return; // Do not send anonymous or unapproved Training data.
  // A completed game may finish before an asynchronous feedback write resolves.
  void Promise.allSettled([...pendingUploads]).then(async()=>{
   try{
@@ -136,7 +142,7 @@ async function safeRecord(data,label,choice){
  }finally{pendingUploads.delete(upload);}
 }
 function feedbackDialog(data){
- if(!active||!verifiedAccount()||!enabled()||showing)return;
+ if(!active||!enabled()||showing)return;
  showing=true;
  const [title,desc,recLabel,myLabel,chooseMine,chooseRec,unsure,off,done]=locale();
  modal.replaceChildren();
@@ -149,10 +155,22 @@ function feedbackDialog(data){
   comparison.appendChild(line);
  }
  const actions=document.createElement('div');actions.className='feedback-actions';
+ const canSubmit=verifiedAccount();
+ if(!canSubmit){
+  const notice=document.createElement('p');
+  notice.setAttribute('role','status');
+  notice.style.cssText='color:#f0cf91;margin:0 0 12px';
+  notice.textContent='To save expert feedback and train the server model, sign in to the authorized development expert account. No feedback will be saved from this session.';
+  comparison.appendChild(notice);
+ }
  const errorLine=document.createElement('p');
  errorLine.setAttribute('role','alert');errorLine.style.cssText='color:#ffbfbd;margin:8px 0 0';
  const answer=(text,choice)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=async()=>{
   if(choice==='off'){localStorage.setItem(ENABLE_KEY,'false');modal.close();return;}
+  // Reviewing a disagreement is allowed before login. Server-side learning
+  // remains restricted to the verified expert; never claim an unsaved choice
+  // was recorded, and never store training data on the device.
+  if(!canSubmit){errorLine.textContent='Not saved. Log in to the authorized development expert account before playing to submit this feedback.';return;}
   const chosen=choice==='mine'?moveId(data.played.hand,data.played.target):
     choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null;
   for(const button of actions.querySelectorAll('button'))button.disabled=true;
@@ -186,7 +204,7 @@ function beginDisagreement(recommended,played,observed){
  enqueue({recommended,played,visible:observed.visible,legalMoves:legal});
 }
 function onHand(event){
- if(!active||!enabled()||!verifiedAccount()||modal.open)return;
+ if(!active||!enabled()||modal.open)return;
  const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
  if(!el||el.disabled)return;
  const current=el.dataset.cardId,rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
@@ -202,7 +220,7 @@ function onHand(event){
  window.setTimeout(()=>{if(!active)return;beginDisagreement({hand:rec,target:originalTarget},{hand:current,target:actualTarget},observe);},200);
 }
 function onTarget(event){
- if(!active||!enabled()||!verifiedAccount()||modal.open)return;
+ if(!active||!enabled()||modal.open)return;
  const el=event.target?.closest?.('#floor .target-option[data-card-id]');
  if(!el)return;
  const target=el.dataset.cardId;
