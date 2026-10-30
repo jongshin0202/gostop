@@ -1,0 +1,39 @@
+name: Deploy Isolated Training Learning (Development Only)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - training-learning/**
+      - wrangler.training-dev.toml
+      - .github/workflows/deploy-training-learning-development.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-gostop-training-learning-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Test isolated server learning
+        run: node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js
+      - name: Deploy isolated development learning Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.131.2'
+          command: deploy --config wrangler.training-dev.toml
+      - name: Verify unauthenticated access is denied
+        run: node scripts/smoke-training-learning-dev.mjs
