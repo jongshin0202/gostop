@@ -42,6 +42,15 @@ de:['Zug bewerten','Dein Zug weicht vom Vorschlag ab. Welcher war strategisch be
 ja:['手の比較','おすすめと別の手を選びました。戦略的にどちらが良いですか？','おすすめ','あなたの手','自分の手が良い','おすすめが良い','不明 / 試しただけ','確認をオフ','確認済みの評価のみ別の学習モデルに使用します。'],
 zh:['复盘出牌','你的出牌与推荐不同。哪一种策略更好？','推荐出牌','你的出牌','我的出牌更好','推荐出牌更好','不确定 / 只是尝试','关闭反馈','只有确认的反馈才用于独立模型训练。']
 };
+const GUEST_COPY={
+ en:['Sign in to the authorized development expert account to save feedback and train the server model. No feedback will be saved from this session.','Not saved. Sign in to the authorized development expert account before playing to submit feedback.'],
+ ko:['피드백을 저장하고 서버 모델을 학습시키려면 승인된 개발 전문가 계정으로 로그인하세요. 현재 피드백은 저장되지 않습니다.','저장되지 않았습니다. 피드백을 보내려면 게임 시작 전에 승인된 개발 전문가 계정으로 로그인하세요.'],
+ es:['Inicia sesión con la cuenta experta autorizada de desarrollo para guardar comentarios y entrenar el modelo. No se guardarán datos de esta sesión.','No guardado. Inicia sesión con la cuenta experta autorizada antes de jugar.'],
+ fr:['Connectez-vous au compte expert de développement autorisé pour enregistrer vos avis et entraîner le modèle. Aucun avis ne sera enregistré.','Non enregistré. Connectez-vous au compte expert autorisé avant de jouer.'],
+ de:['Melde dich mit dem autorisierten Entwicklungsexpertenkonto an, um Feedback zu speichern und das Modell zu trainieren. Hier wird nichts gespeichert.','Nicht gespeichert. Melde dich vor dem Spiel mit dem autorisierten Expertenkonto an.'],
+ ja:['フィードバックの保存とサーバーモデルの学習には、承認された開発用エキスパートアカウントでログインしてください。このセッションの内容は保存されません。','保存されませんでした。プレイ前に承認済みの開発用エキスパートアカウントでログインしてください。'],
+ zh:['如需保存反馈并训练服务器模型，请登录获授权的开发专家账号。本次会话的反馈不会保存。','未保存。请在开始游戏前登录获授权的开发专家账号。']
+};
 const $=id=>document.getElementById(id);
 const locale=()=>TEXT[document.documentElement.lang]||TEXT.en;
 const enabled=()=>localStorage.getItem(ENABLE_KEY)!=='false';
@@ -160,7 +169,7 @@ function feedbackDialog(data){
   const notice=document.createElement('p');
   notice.setAttribute('role','status');
   notice.style.cssText='color:#f0cf91;margin:0 0 12px';
-  notice.textContent='To save expert feedback and train the server model, sign in to the authorized development expert account. No feedback will be saved from this session.';
+  notice.textContent=(GUEST_COPY[document.documentElement.lang]||GUEST_COPY.en)[0];
   comparison.appendChild(notice);
  }
  const errorLine=document.createElement('p');
@@ -170,7 +179,7 @@ function feedbackDialog(data){
   // Reviewing a disagreement is allowed before login. Server-side learning
   // remains restricted to the verified expert; never claim an unsaved choice
   // was recorded, and never store training data on the device.
-  if(!canSubmit){errorLine.textContent='Not saved. Log in to the authorized development expert account before playing to submit this feedback.';return;}
+  if(!canSubmit){errorLine.textContent=(GUEST_COPY[document.documentElement.lang]||GUEST_COPY.en)[1];return;}
   const chosen=choice==='mine'?moveId(data.played.hand,data.played.target):
     choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null;
   for(const button of actions.querySelectorAll('button'))button.disabled=true;
