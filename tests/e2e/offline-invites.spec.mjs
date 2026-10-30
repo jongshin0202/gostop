@@ -1,8 +1,8 @@
 import {test,expect} from '@playwright/test';
 
 const origin='http://127.0.0.1:4173';
-async function setup(page){
-  const data={enabled:true,invite:null,friendOnline:false};
+async function setup(page,{incoming=false}={}){
+  const data={enabled:true,invite:incoming?{requestId:'invite_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',senderId:'acct-friend-12345',targetId:'acct-self-12345',expiresAt:Date.now()+30000,status:'pending'}:null,friendOnline:false};
   const json=(route,obj,status=200)=>route.fulfill({status,contentType:'application/json',
     headers:{'access-control-allow-origin':origin,'access-control-allow-headers':'authorization,content-type'},
     body:JSON.stringify(obj)});
@@ -24,14 +24,14 @@ async function setup(page){
   });
   await page.route('https://gostop-authority-dev.jwshin1.workers.dev/api/social',route=>json(route,{ok:true,
     friends:[{accountId:'acct-friend-12345',nickname:'Friend',friendState:'friend'}]}));
-  await page.goto('/training-learning/test-fixture.html');
+  await page.goto('/training-learning/test-fixture.html'+(incoming?'?offlineInvite=invite_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa':''));
   await page.setContent('<html><body><div id="settingsControlsHost"></div><button id="accountSettingsBtn"></button><dialog id="settingsDialog"></dialog><section id="socialScreen"><div id="socialList"><article data-social-account-id="acct-friend-12345"><small class="player-status offline">Offline</small><div class="social-actions"></div></article></div></section></body></html>');
   await page.evaluate(()=>{
     globalThis.GoStopRanked={getAccount:()=>({id:'acct-self-12345',nickname:'Self'}),getAuthToken:()=> 'test-auth-long-secret'};
     globalThis.GoStopGameBridge={
       prepareForMultiplayerChallenge:()=>true,
       createCompetitiveRoom:async()=>({roomCode:'ABCDEFGHJKLMNP'}),
-      joinCompetitiveRoom:async()=>({roomCode:'ABCDEFGHJKLMNP'})
+      joinCompetitiveRoom:async()=>{globalThis.__joinedInviteRoom='ABCDEFGHJKLMNP';return {roomCode:'ABCDEFGHJKLMNP'}; }
     };
   });
   await page.addScriptTag({path:'offline-invites/client.js'});
@@ -70,4 +70,11 @@ test('accepted request uses existing Competitive room bridge, not game state edi
   await expect.poll(()=>data.invite.status,{timeout:15000}).toBe('room-ready');
   await expect(page.locator('#devInviteDialog')).not.toBeVisible();
   expect(data.invite.roomCode).toBe('ABCDEFGHJKLMNP');
+});
+test('notification Play action opens the app and joins the accepted Competitive game',async({page})=>{
+  const data=await setup(page,{incoming:true});
+  await expect.poll(()=>data.invite.status,{timeout:12000}).toBe('accepted');
+  data.invite.status='room-ready';data.invite.roomCode='ABCDEFGHJKLMNP';
+  await expect.poll(async()=>page.evaluate(()=>globalThis.__joinedInviteRoom),{timeout:12000}).toBe('ABCDEFGHJKLMNP');
+  expect(new URL(page.url()).searchParams.has('offlineInvite')).toBe(false);
 });
