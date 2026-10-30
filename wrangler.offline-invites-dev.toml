@@ -1,0 +1,19 @@
+name = "gostop-offline-invites-dev"
+main = "offline-invites/worker.mjs"
+compatibility_date = "2026-09-01"
+keep_vars = true
+
+[[services]]
+binding = "DEV_AUTH"
+service = "gostop-authority-dev"
+
+[[durable_objects.bindings]]
+name = "INVITES"
+class_name = "OfflineInviteStore"
+
+[exports.OfflineInviteStore]
+type = "durable-object"
+storage = "sqlite"
+
+[dev]
+port = 8790
