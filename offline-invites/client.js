@@ -120,6 +120,18 @@ async function enablePush(){
  if(permission==='default')permission=await Notification.requestPermission();
  if(permission!=='granted')throw new Error('Notification permission is not granted.');
  const reg=await navigator.serviceWorker.register('/dev-invites/sw.js',{scope:'/dev-invites/'});
+ if(!reg.active){
+  const installing=reg.installing||reg.waiting;
+  if(!installing)throw new Error('Notification worker has not activated yet. Retry enabling phone alerts.');
+  await new Promise((resolve,reject)=>{
+   if(installing.state==='activated')return resolve();
+   const deadline=setTimeout(()=>reject(new Error('Notification worker could not activate.')),10000);
+   installing.addEventListener('statechange',()=>{
+    if(installing.state==='activated'){clearTimeout(deadline);resolve();}
+    else if(installing.state==='redundant'){clearTimeout(deadline);reject(new Error('Notification worker activation failed.'));}
+   });
+  });
+ }
  const key=await fetch(endpoint+'/public-key',{headers:{Origin:location.origin},signal:AbortSignal.timeout(9000)}).then(r=>r.json());
  if(!key.ok)throw new Error('Cannot obtain push signing key.');
  const encoded=key.publicKey.replace(/-/g,'+').replace(/_/g,'/');
