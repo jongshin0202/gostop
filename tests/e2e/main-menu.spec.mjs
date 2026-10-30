@@ -866,6 +866,7 @@ test('development guest Training Quit confirmation NO stays in game and YES retu
   await expect(page.locator('#gostopBootSplash')).toBeHidden();
   await expect(menu).toHaveAttribute('data-current-menu-ready','true');
   await expect(menu).not.toHaveAttribute('data-launching','true');
-  await page.locator('#friendlyGamingBtn').click();
+  if(await page.locator('#friendlyGamingBtn').getAttribute('aria-expanded')!=='true')
+    await page.locator('#friendlyGamingBtn').click();
   await expect(page.locator('#trainingModeBtn')).toBeVisible();
 });
