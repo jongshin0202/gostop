@@ -72,13 +72,21 @@ export class TrainingLearningStore{
       const ids=new Set(legalMoves.map(m=>m.moveId));
       if(recommendedId===playedId||!ids.has(recommendedId)||!ids.has(playedId))return fail('MOVE_MISMATCH',400);
       const chosenId=body.choice==='mine'?playedId:body.choice==='recommended'?recommendedId:null;
+      // Store only card IDs visible to the player. No hidden hands or account credentials.
+      const visible={};
+      for(const field of ['hand','floor','humanCaptured','computerCaptured']){
+        const cards=body.visible?.[field];
+        if(cards!==undefined&&(!Array.isArray(cards)||cards.length>48||cards.some(id=>!validCardId(id))))
+          return fail('INVALID_VISIBLE_STATE',400);
+        visible[field]=cards||[];
+      }
       const key='feedback:'+body.gameId+':'+body.feedbackId;
       if(await this.ctx.storage.get(key))return json({ok:true,duplicate:true});
       const gameKey='game:'+body.gameId;
       const game=await this.ctx.storage.get(gameKey)||{complete:false,decisions:[]};
       if(game.complete)return fail('GAME_ALREADY_COMPLETED',409);
       if(game.decisions.length>=150)return fail('GAME_LIMIT',429);
-      game.decisions.push({chosenId,legalMoves});
+      game.decisions.push({chosenId,legalMoves,visible});
       const summary=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       summary.feedbackCount++;if(chosenId)summary.confirmedCount++;
       await this.ctx.storage.put(key,{choice:body.choice,recommendedId,playedId,at:new Date().toISOString()});
