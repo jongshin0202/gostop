@@ -157,7 +157,8 @@ export class OfflineInviteStore{
      expiresAt:Date.now()+TTL,createdAt:Date.now(),status:'pending',roomCode:null};
    await this.put('invite:'+id,invite);
    await this.put('pending',[...pending.filter(Boolean).slice(-100),id]);
-   await this.ctx.storage.setAlarm(invite.expiresAt);
+   const existingAlarm=await this.ctx.storage.getAlarm();
+   await this.ctx.storage.setAlarm(existingAlarm&&existingAlarm>Date.now()?Math.min(existingAlarm,invite.expiresAt):invite.expiresAt);
    const deliveries=await this.push(targetId,{type:'request',requestId:id,from:actorName,expiresAt:invite.expiresAt});
    return json({ok:true,invite,deliveredDevices:deliveries});
   }
