@@ -11,7 +11,7 @@ test('development Vercel bundle includes Training Mode but excludes admin and pr
   const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:''}});
   assert.equal(r.status,0,r.stderr);
   const files=readdirSync(output);
-  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-cloud.js','training-learning-feedback.js'])assert.ok(files.includes(filename),filename);
+  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-cloud.js','training-learning-feedback.js','dev-main-ui-integrity.js'])assert.ok(files.includes(filename),filename);
   for(const filename of ['admin.html','admin.css','admin.js','server','wrangler.toml','vercel.json'])assert.ok(!files.includes(filename),filename);
   const config=readFileSync(join(output,'runtime-config.js'),'utf8');
   assert.match(config,/https:\/\/gostop-authority-dev\.jwshin1\.workers\.dev/);
@@ -34,7 +34,12 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   assert.match(html,/runtime-config\.js\?v=20261029-dev-cloudflare-1/);
   assert.ok(html.indexOf('app.js?v=20261028-7')<html.indexOf('training-learning-cloud.js'));
   assert.ok(html.indexOf('training-learning-cloud.js')<html.indexOf('training-learning-feedback.js'));
-  assert.doesNotMatch(html,/training-learning-model\.js/);
+  assert.ok(html.includes('dev-main-ui-integrity.js?v='));
+  const integrity=readFileSync(join(output,'dev-main-ui-integrity.js'),'utf8');
+  assert.ok(integrity.includes('#loginForm[hidden]'));
+  assert.match(integrity,/quitYesBtn/);
+  assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-main-ui-integrity/);
+  assert.ok(!html.includes('training-learning-model.js'));
   const cloud=readFileSync(join(output,'training-learning-cloud.js'),'utf8');
   assert.match(cloud,/gostop-training-learning-dev\.jwshin1\.workers\.dev/);
   assert.doesNotMatch(cloud,/localStorage\.setItem\(/);

@@ -15,6 +15,8 @@ for(const file of gameFiles)await copyFile(join(root,file),join(output,file));
 // Removable, development-only Training feedback; not included in public game builds.
 await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'training-learning-cloud.js'));
 await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
+// Isolated dev-only guard for existing login form hiding and local Quit return.
+await copyFile(join(root,'dev-site/main-ui-integrity.js'),join(output,'dev-main-ui-integrity.js'));
 // Offline friend invite feature uses separate files and its own service worker scope.
 await mkdir(join(output,'dev-invites'),{recursive:true});
 await copyFile(join(root,'offline-invites/sw.js'),join(output,'dev-invites/sw.js'));
@@ -30,7 +32,7 @@ html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029
 const feedbackScripts='<script src="training-learning-cloud.js?v=20261030-1"></script>\n  <script src="training-learning-feedback.js?v=20261030-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>','<script src="app.js?v=20261028-7"></script>\n  '+feedbackScripts);
-html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-offline-invites.js?v=20261030-1"></script>');
+html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261030-1"></script>');
 // Preserve the production leaderboard UI exactly. Dev data stays isolated.
 await writeFile(htmlPath,html);
 // A separate frontend is NOT an isolated backend. Fail closed unless an
