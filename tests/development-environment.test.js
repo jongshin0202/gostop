@@ -11,7 +11,7 @@ test('development Vercel bundle includes Training Mode but excludes admin and pr
   const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:''}});
   assert.equal(r.status,0,r.stderr);
   const files=readdirSync(output);
-  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-cloud.js','training-learning-feedback.js','dev-main-ui-integrity.js'])assert.ok(files.includes(filename),filename);
+  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-cloud.js','training-learning-feedback.js','dev-main-ui-integrity.js,'dev-training-special-advice.css'])assert.ok(files.includes(filename),filename);
   for(const filename of ['admin.html','admin.css','admin.js','server','wrangler.toml','vercel.json'])assert.ok(!files.includes(filename),filename);
   const config=readFileSync(join(output,'runtime-config.js'),'utf8');
   assert.match(config,/https:\/\/gostop-authority-dev\.jwshin1\.workers\.dev/);
@@ -35,6 +35,11 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   assert.ok(html.indexOf('app.js?v=20261028-7')<html.indexOf('training-learning-cloud.js'));
   assert.ok(html.indexOf('training-learning-cloud.js')<html.indexOf('training-learning-feedback.js'));
   assert.ok(html.includes('dev-main-ui-integrity.js?v='));
+  assert.ok(html.includes('dev-training-special-advice.css?v='));
+  const coachCss=readFileSync(join(output,'dev-training-special-advice.css'),'utf8');
+  assert.match(coachCss,/#shakeDialog > #trainingCoachPanel/);
+  assert.match(coachCss,/#bombDialog > #trainingCoachPanel/);
+  assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-training-special-advice/);
   const integrity=readFileSync(join(output,'dev-main-ui-integrity.js'),'utf8');
   assert.ok(integrity.includes('#loginForm[hidden]'));
   assert.match(integrity,/quitYesBtn/);
