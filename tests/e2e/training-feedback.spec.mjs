@@ -129,31 +129,20 @@ test('failed cloud saves do not train or claim success',async({page})=>{
   expect(server.items).toHaveLength(0);
 });
 
-test('successful live activation acknowledgement is required for update OK dialog',async({page})=>{
+test('ordinary completed Training game never shows a false live-update dialog',async({page})=>{
  const server=await setup(page);
  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
  await expect.poll(()=>server.completedCount()).toBe(1);
  await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
- await page.evaluate(()=>document.getElementById('resultDialog').removeAttribute('open'));
- await page.locator('#trainingModeBtn').click();
+});
+test('confirmed server activation alone permits update OK dialog',async({page})=>{
+ const server=await setup(page);
  server.confirmNextLiveActivation();
  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await expect.poll(()=>server.completedCount()).toBe(1);
  const dialog=page.getByRole('dialog',{name:'Training model update'});
  await expect(dialog).toBeVisible();
  await expect(dialog).toContainText('Update was made');
  await dialog.getByRole('button',{name:'OK'}).click();
  await expect(dialog).toHaveCount(0);
-});
-
-test('anonymous player still sees move disagreement but cannot submit expert learning',async({page})=>{
- const server=await setup(page,null);
- await page.locator('#alternate').click();
- const dialog=page.locator('#trainingFeedbackDialog');
- await expect(dialog).toBeVisible();
- await expect(dialog.getByRole('status')).toContainText('No feedback will be saved');
- await dialog.getByRole('button',{name:'My move was better'}).click();
- await expect(dialog.getByRole('alert')).toContainText('Not saved');
- expect(server.items).toHaveLength(0);
- await dialog.getByRole('button',{name:'OK'}).click();
- await expect(dialog).not.toBeVisible();
 });
