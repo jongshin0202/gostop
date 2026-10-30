@@ -37,7 +37,8 @@ async function verifyIdentity(req,env,origin){
   // The primary development Worker is authoritative for the account identity.
   let response;
   try{
-    response=await fetch(env.DEV_AUTH_URL||DEV_AUTH,{headers:{authorization:token,Origin:origin},redirect:'error',signal:AbortSignal.timeout(7000)});
+    if(!env.DEV_AUTH?.fetch)return null;
+    response=await env.DEV_AUTH.fetch(new Request(env.DEV_AUTH_URL||DEV_AUTH,{headers:{authorization:token,Origin:origin}}));
   }catch{return null;}
   if(!response.ok)return null;
   let payload;
