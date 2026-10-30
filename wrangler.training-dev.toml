@@ -6,6 +6,11 @@ keep_vars = true
 [vars]
 DEV_AUTH_URL = "https://gostop-authority-dev.jwshin1.workers.dev/api/me"
 
+# Internal Cloudflare-to-Cloudflare authentication. Never uses production authority.
+[[services]]
+binding = "DEV_AUTH"
+service = "gostop-authority-dev"
+
 [[durable_objects.bindings]]
 name = "TRAINING_DATA"
 class_name = "TrainingLearningStore"
