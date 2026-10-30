@@ -1,0 +1,33 @@
+name: Offline Friend Invite Browser Checks (Dev Only)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - offline-invites/**
+      - tests/e2e/offline-invites.spec.mjs
+      - .github/workflows/offline-invites-e2e.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-invites-browser-dev
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install browser test runner
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify isolated offline invitation UI
+        run: npx playwright test tests/e2e/offline-invites.spec.mjs --workers=1
