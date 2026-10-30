@@ -2,8 +2,8 @@ import {test,expect} from '@playwright/test';
 
 function fakeCloud(){
   const items=[];const finished=new Set();
-  let learned=0;
-  return {items,
+  let learned=0,announceLiveActivation=false;
+  return {items,confirmNextLiveActivation:()=>{announceLiveActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
       const reply=(status,obj)=>route.fulfill({status,contentType:'application/json',
@@ -21,7 +21,9 @@ function fakeCloud(){
         if(!finished.has(gameId)){
           learned+=items.filter(x=>x.gameId===gameId&&x.choice!=='unsure').length;finished.add(gameId);
         }
-        return reply(200,{ok:true,trained:learned,modelExamples:learned});
+        const publishedToLive=announceLiveActivation;
+        announceLiveActivation=false;
+        return reply(200,{ok:true,trained:learned,modelExamples:learned,publishedToLive});
       }
       return reply(404,{ok:false});
     }
@@ -124,4 +126,20 @@ test('failed cloud saves do not train or claim success',async({page})=>{
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('alert')).toContainText('SERVER_UNAVAILABLE');
   expect(server.items).toHaveLength(0);
+});
+
+test('successful live activation acknowledgement is required for update OK dialog',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().serverReady)).toBe(true);
+ await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
+ await page.evaluate(()=>document.getElementById('resultDialog').removeAttribute('open'));
+ await page.locator('#trainingModeBtn').click();
+ server.confirmNextLiveActivation();
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ const dialog=page.getByRole('dialog',{name:'Training model update'});
+ await expect(dialog).toBeVisible();
+ await expect(dialog).toContainText('Update was made');
+ await dialog.getByRole('button',{name:'OK'}).click();
+ await expect(dialog).toHaveCount(0);
 });
