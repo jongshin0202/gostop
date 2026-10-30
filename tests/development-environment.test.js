@@ -34,12 +34,12 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   assert.match(html,/runtime-config\.js\?v=20261029-dev-cloudflare-1/);
   assert.ok(html.indexOf('app.js?v=20261028-7')<html.indexOf('training-learning-cloud.js'));
   assert.ok(html.indexOf('training-learning-cloud.js')<html.indexOf('training-learning-feedback.js'));
-  assert.match(html,/dev-main-ui-integrity\\.js\\?v=/);
+  assert.ok(html.includes('dev-main-ui-integrity.js?v='));
   const integrity=readFileSync(join(output,'dev-main-ui-integrity.js'),'utf8');
-  assert.match(integrity,/#loginForm\\[hidden\\]/);
+  assert.ok(integrity.includes('#loginForm[hidden]'));
   assert.match(integrity,/quitYesBtn/);
   assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-main-ui-integrity/);
-  assert.doesNotMatch(html,/training-learning-model\\.js/);
+  assert.ok(!html.includes('training-learning-model.js'));
   const cloud=readFileSync(join(output,'training-learning-cloud.js'),'utf8');
   assert.match(cloud,/gostop-training-learning-dev\.jwshin1\.workers\.dev/);
   assert.doesNotMatch(cloud,/localStorage\.setItem\(/);
