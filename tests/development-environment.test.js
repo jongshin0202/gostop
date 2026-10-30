@@ -52,6 +52,26 @@ test('development Vercel config is independent and blocks same-origin APIs',()=>
   assert.equal(dev.git.deploymentEnabled.main,undefined);
 });
 
+test('offline Competitive request module exists in development bundle only, without replacing the game service worker',()=>{
+  const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:''}});
+  assert.equal(r.status,0,r.stderr);
+  const html=readFileSync(join(output,'index.html'),'utf8');
+  assert.match(html,/dev-offline-invites\.js\?v=/);
+  assert.ok(readdirSync(output).includes('dev-offline-invites.js'));
+  assert.ok(readdirSync(join(output,'dev-invites')).includes('sw.js'));
+  assert.ok(readdirSync(output).includes('gostop-notifications-sw.js'),'existing game notification worker must remain');
+  const devClient=readFileSync(join(output,'dev-offline-invites.js'),'utf8');
+  assert.match(devClient,/gostop-offline-invites-dev\.jwshin1\.workers\.dev/);
+  assert.match(devClient,/Request in Progress/);
+  assert.match(devClient,/dev-invites\/sw\.js/);
+  const pushWorker=readFileSync(join(output,'dev-invites','sw.js'),'utf8');
+  assert.match(pushWorker,/notificationclick/);
+  assert.match(pushWorker,/getNotifications/);
+  assert.match(pushWorker,/devInviteSettings/);
+  assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-offline-invites|dev-invites\/sw\.js/);
+  assert.doesNotMatch(readFileSync(join(root,'vercel.json'),'utf8'),/dev-offline-invites/);
+});
+
 test('expert feedback and model are NEVER included by the public production entrypoint',()=>{
   // Production uses the unchanged root index.html, never the dev-site build output.
   const publicHtml=readFileSync(join(root,'index.html'),'utf8');
