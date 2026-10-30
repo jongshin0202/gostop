@@ -48,7 +48,8 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
       {id:'m6-3',month:6,type:'pi',flags:[]},
       {id:'m6-4',month:6,type:'pi',flags:['doublePi']}
     ];
-    globalThis.GoStopEngine={masterDeck:()=>cards};
+    // Match the real GoStopEngine API: masterDeck is an array, NOT a function.
+    globalThis.GoStopEngine={masterDeck:cards};
     globalThis.GoStopRanked={getAccount:()=>e?{email:e}:null};
     globalThis.__GoStopLearningTestConfig={endpoint:'http://127.0.0.1:4173/mock-learning'};
     localStorage.setItem('gostop-auth-token','e2e-demo-token');
@@ -142,4 +143,17 @@ test('successful live activation acknowledgement is required for update OK dialo
  await expect(dialog).toContainText('Update was made');
  await dialog.getByRole('button',{name:'OK'}).click();
  await expect(dialog).toHaveCount(0);
+});
+
+test('anonymous player still sees move disagreement but cannot submit expert learning',async({page})=>{
+ const server=await setup(page,null);
+ await page.locator('#alternate').click();
+ const dialog=page.locator('#trainingFeedbackDialog');
+ await expect(dialog).toBeVisible();
+ await expect(dialog.getByRole('status')).toContainText('No feedback will be saved');
+ await dialog.getByRole('button',{name:'My move was better'}).click();
+ await expect(dialog.getByRole('alert')).toContainText('Not saved');
+ expect(server.items).toHaveLength(0);
+ await dialog.getByRole('button',{name:'OK'}).click();
+ await expect(dialog).not.toBeVisible();
 });
