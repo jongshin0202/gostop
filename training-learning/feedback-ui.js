@@ -95,7 +95,7 @@ async function safeRecord(data,label,choice){
  ensureGame();
  const upload=cloud.feedback({
   gameId,feedbackId:crypto.randomUUID(),choice,
-  recommended:data.recommended,played:data.played,legalMoves:data.legalMoves
+  recommended:data.recommended,played:data.played,legalMoves:data.legalMoves,visible:data.visible
  });
  pendingUploads.add(upload);
  try{
