@@ -1,0 +1,42 @@
+name: Deploy Offline Friend Invitations (Development Only)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - offline-invites/**
+      - wrangler.offline-invites-dev.toml
+      - scripts/smoke-offline-invites-dev.mjs
+      - tests/offline-invites.test.mjs
+      - .github/workflows/deploy-offline-invites-development.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-offline-invites-development
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install isolated push encryption dependency
+        run: npm install --prefix offline-invites
+      - name: Verify isolated invite state machine
+        run: node --test tests/offline-invites.test.mjs
+      - name: Deploy isolated development push authority
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.131.2'
+          command: deploy --config wrangler.offline-invites-dev.toml
+      - name: Verify development-only push service endpoints
+        run: node scripts/smoke-offline-invites-dev.mjs
