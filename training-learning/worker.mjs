@@ -127,7 +127,7 @@ export default {
     const id=env.TRAINING_DATA.idFromName(account.accountId);
     const suffix=url.pathname.replace('/api/training','');
     const internal=new Request('https://training.internal'+suffix,{method:request.method,
-      ...(request.method==='POST'?{headers:{'content-type':'application/json'},body:request.body}:{})});
+      ...(request.method==='POST'?{headers:{'content-type':'application/json'},body:await request.text()}:{})});
     const response=await env.TRAINING_DATA.get(id).fetch(internal);
     const headers=new Headers(response.headers);Object.entries(responseHeaders).forEach(([k,v])=>headers.set(k,v));
     return new Response(response.body,{status:response.status,headers});
