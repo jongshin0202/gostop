@@ -32,7 +32,7 @@ const profileFor=id=>id==='acct-other'?{
 };
 
 async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false,notificationPermission=null,guest=false}={}){
-  await page.addInitScript(({account,other,notificationPermission})=>{
+  await page.addInitScript(({account,other,notificationPermission,guest})=>{
     if(!guest){localStorage.setItem('gostop-auth-token','e2e-token');
       localStorage.setItem('gostop-account-cache',JSON.stringify(account));}
     class FakeWebSocket extends EventTarget{
@@ -848,12 +848,16 @@ test('development guest Training Quit confirmation NO stays in game and YES retu
   await page.locator('#friendlyGamingBtn').click();
   await page.locator('#trainingModeBtn').click();
   await expect(menu).toBeHidden();
-  await page.locator('#newGameBtn').click({force:true});
+  await expect(page.locator('#trainingCoachPanel')).toBeVisible({timeout:15000});
+  await page.locator('.training-opening-dismiss-layer').click({position:{x:8,y:8}});
+  await expect(page.locator('#trainingCoachPanel')).toBeHidden();
+  await page.locator('#newGameBtn').click();
   await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',true);
   await page.locator('#quitNoBtn').click();
   await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',false);
   await expect(menu).toBeHidden();
-  await page.locator('#newGameBtn').click({force:true});
+  await page.locator('#newGameBtn').click();
+  await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',true);
   await page.locator('#quitYesBtn').click();
   await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',false);
   await expect(menu).toBeVisible();
