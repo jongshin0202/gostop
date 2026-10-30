@@ -6,6 +6,7 @@ on:
     paths:
       - training-learning/**
       - wrangler.training-dev.toml
+      - scripts/smoke-training-learning-dev.mjs
       - .github/workflows/deploy-training-learning-development.yml
   workflow_dispatch:
 
