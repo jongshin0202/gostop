@@ -5,6 +5,7 @@ on:
     branches: [develop]
     paths:
       - training-learning/**
+      - tests/training-learning-server.test.mjs
       - wrangler.training-dev.toml
       - scripts/smoke-training-learning-dev.mjs
       - .github/workflows/deploy-training-learning-development.yml
