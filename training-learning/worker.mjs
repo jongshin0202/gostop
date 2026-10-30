@@ -57,6 +57,7 @@ export class TrainingLearningStore{
       const model=await this.ctx.storage.get('model')||new ExpertRanker().export();
       return json({ok:true,...state,model});
     }
+    if(request.method==='GET'&&path==='/history')return json({ok:true,feedback:await this.ctx.storage.get('history')||[]});
     if(request.method==='POST'&&path==='/feedback'){
       const body=await readJson(request);
       if(!validId(body?.gameId)||!validId(body?.feedbackId)||!['mine','recommended','unsure'].includes(body?.choice))
@@ -82,6 +83,9 @@ export class TrainingLearningStore{
       await this.ctx.storage.put(key,{choice:body.choice,recommendedId,playedId,at:new Date().toISOString()});
       await this.ctx.storage.put(gameKey,game);
       await this.ctx.storage.put('summary',summary);
+      const history=await this.ctx.storage.get('history')||[];
+      history.push({gameId:body.gameId,feedbackId:body.feedbackId,choice:body.choice,playedId,recommendedId,at:new Date().toISOString()});
+      await this.ctx.storage.put('history',history.slice(-500));
       return json({ok:true,confirmed:!!chosenId,feedbackCount:summary.feedbackCount});
     }
     if(request.method==='POST'&&path==='/complete'){
@@ -116,7 +120,7 @@ export default {
       if(!['GET','POST'].includes(method)||headers.some(h=>!['authorization','content-type'].includes(h)))return json({ok:false},403,responseHeaders);
       return new Response(null,{status:204,headers:responseHeaders});
     }
-    const supported=new Set(['/api/training/state','/api/training/feedback','/api/training/complete']);
+    const supported=new Set(['/api/training/state','/api/training/history','/api/training/feedback','/api/training/complete']);
     if(!supported.has(url.pathname)||!['GET','POST'].includes(request.method))return json({ok:false,error:'NOT_FOUND'},404,responseHeaders);
     const account=await verifyIdentity(request,env,origin);
     if(!account)return json({ok:false,error:'AUTH_REQUIRED'},401,responseHeaders);
