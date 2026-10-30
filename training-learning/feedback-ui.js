@@ -182,6 +182,10 @@ function feedbackDialog(data){
   }
  };actions.appendChild(b);};
  answer(chooseMine,'mine');answer(chooseRec,'recommended');answer(unsure,'unsure');answer(off,'off');
+ if(!canSubmit){
+  const dismiss=document.createElement('button');dismiss.type='button';dismiss.textContent='OK';
+  dismiss.addEventListener('click',()=>modal.close());actions.appendChild(dismiss);
+ }
  modal.append(heading,intro,comparison,actions,errorLine);
  modal.addEventListener('close',()=>{showing=false;if(queue.length)window.setTimeout(showNext,0);},{once:true});
  try{modal.showModal();}catch(_){showing=false;}
