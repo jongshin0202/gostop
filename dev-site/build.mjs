@@ -17,6 +17,9 @@ await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'train
 await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
 // Isolated dev-only guard for existing login form hiding and local Quit return.
 await copyFile(join(root,'dev-site/main-ui-integrity.js'),join(output,'dev-main-ui-integrity.js'));
+// Isolated CSS overrides only Training advice embedded in special-rule dialogs.
+await copyFile(join(root,'dev-site/training-special-advice-layout.css'),join(output,'dev-training-special-advice.css'));
+
 // Offline friend invite feature uses separate files and its own service worker scope.
 await mkdir(join(output,'dev-invites'),{recursive:true});
 await copyFile(join(root,'offline-invites/sw.js'),join(output,'dev-invites/sw.js'));
@@ -24,6 +27,8 @@ await copyFile(join(root,'offline-invites/client.js'),join(output,'dev-offline-i
 
 const htmlPath=join(output,'index.html');
 let html=await readFile(htmlPath,'utf8');
+if(!html.includes('</head>'))throw new Error('Missing HTML head for isolated Training dialog layout');
+html=html.replace('</head>','  <link rel="stylesheet" href="dev-training-special-advice.css?v=20261030-1">\n</head>');
 const oldRuntimeConfig='runtime-config.js?v=20260925-6';
 if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-config script reference');
 html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
