@@ -32,6 +32,16 @@
 - `styles.css` contains the responsive table/card presentation and historical override layers. Later rules intentionally supersede earlier prototypes (notably card-only choreography and the mirrored capture layout), so check the full cascade before removing or modifying apparently obsolete selectors.
 - `audio-*.js` files are generated single-line base64 data-URI globals. Do not hand-format or casually edit them.
 
+## Strict sequential task completion — mandatory across this project (2026-10-30)
+
+- **Finish the previous request before starting the next one.** Treat all GoStop Live Development requests as a strict first-in, first-out work queue, even when a user sends another message or presses the blue circular arrow while an implementation, test, PR, or deployment is still in progress. A new request must not interrupt, replace, silently cancel, or cause abandonment of the unfinished request.
+- Before acting on each new instruction, first review the immediately preceding request and any other open tasks across relevant GoStop Live Development chats, branches, PRs, test runs, and deployment results. Identify any earlier unfinished work, continue it from its last verified state, and **finish and verify it** before beginning implementation of the new request.
+- A task is complete only when all of its requested functionality has been implemented, relevant automated/manual checks and regression tests have passed or their specific limitations are disclosed, the requested destination state has been verified, and any required PR/merge/deployment action has been performed within existing release restrictions. Partial code, a queued test, a green unit test without required end-to-end verification, or a created PR is not completion.
+- On each interruption, recover the actual last known state from durable evidence (Git commits, PRs, CI status, deployment status, and prior conversation). **Never assume a previously running tool or deployment is still progressing** after interruption. Re-run or resume unfinished steps where safe, avoiding duplicate changes.
+- Keep an explicit pending-task ledger in the current PR/working notes, including acceptance criteria, last verified step, next step, blockers, and completion status. Do not silently drop previously requested work. When blocked, explain the exact blocker, keep that request pending, and do not switch to a newer task unless the user explicitly cancels or changes the priority of the old request.
+- New user messages are normally **queued, not executed immediately**, when a prior request is incomplete. A direct instruction from the user to **stop/cancel/reprioritize** is the only exception. Respect those instructions rather than finishing a task that the user explicitly canceled. Do not promise that execution continues in the background across messages; if the platform interrupts a turn, recover and finish the earlier work on the next available turn.
+- This sequencing rule applies to coding, testing, debugging, bug fixes, documentation, PRs, environment verification, and deployments, and it does **not** override the frozen-source policy, security safeguards, production release approval, or any restrictions on the available tools.
+
 ## Change workflow
 
 1. Inspect the complete affected rule, state, rendering, animation, audio, and responsive-CSS flow before editing.
