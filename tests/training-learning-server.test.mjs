@@ -89,3 +89,54 @@ test('preflight permits development origin without allowing other origins',async
   assert.equal(response.headers.get('access-control-allow-origin'),ORIGIN);
  }finally{t.restore();}
 });
+
+
+test('every completed Training game counts exactly once even without feedback',async()=>{
+ const t=fixture();try{
+  for(let n=1;n<=20;n++){
+   const response=await(await t.request('/api/training/complete',{
+     method:'POST',body:{gameId:'clean-game-'+n,hadDisagreement:false}
+   })).json();
+   assert.equal(response.ok,true);
+   assert.equal(response.publishedToLive,false);
+   assert.equal(response.completedGames,n);
+  }
+  const summary=await(await t.request('/api/training/state')).json();
+  assert.equal(summary.completedGames,20);
+  assert.equal(summary.eligibilityReason,'20-completed-games');
+  assert.equal(summary.pendingLiveUpdate,undefined,'No weights changed, so no candidate is published');
+  const duplicate=await(await t.request('/api/training/complete',{
+   method:'POST',body:{gameId:'clean-game-20',hadDisagreement:false}
+  })).json();
+  assert.equal(duplicate.duplicate,true);
+  assert.equal((await(await t.request('/api/training/state')).json()).completedGames,20);
+ }finally{t.restore();}
+});
+test('a disagreement followed by ten clean games stages a versioned candidate without claiming live deployment',async()=>{
+ const t=fixture();try{
+  await t.request('/api/training/feedback',{method:'POST',body:feedback('dispute-game-1')});
+  const first=await(await t.request('/api/training/complete',{
+   method:'POST',body:{gameId:'dispute-game-1',hadDisagreement:true}
+  })).json();
+  assert.equal(first.trained,1);
+  for(let n=1;n<=9;n++){
+   const r=await(await t.request('/api/training/complete',{
+     method:'POST',body:{gameId:'agreement-'+n,hadDisagreement:false}
+   })).json();
+   assert.equal(r.promotionPending,false);
+  }
+  const tenth=await(await t.request('/api/training/complete',{
+    method:'POST',body:{gameId:'agreement-10',hadDisagreement:false}
+  })).json();
+  assert.equal(tenth.promotionPending,true);
+  assert.equal(tenth.updateTrigger,'10-agreement-games-after-disagreement');
+  assert.equal(tenth.publishedToLive,false);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.completedGames,11);
+  assert.equal(state.pendingLiveUpdate.modelExamples,1);
+  const candidate=t.store.get('promotionCandidate');
+  assert.equal(candidate.reason,'10-agreement-games-after-disagreement');
+  assert.equal(candidate.model.weights.length,16);
+  assert.equal(candidate.model.examples,1);
+ }finally{t.restore();}
+});

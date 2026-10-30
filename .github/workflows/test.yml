@@ -45,6 +45,13 @@ jobs:
           node --check server/worker.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
+      - name: Isolated Training learner syntax and cadence tests
+        run: |
+          node --check training-learning/worker.mjs
+          node --check training-learning/feedback-ui.js
+          node --check training-learning/cloud-client.js
+          node --check training-learning/update-cadence.mjs
+          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs
       - name: Install browser test runner
         run: |
           npm install --no-save @playwright/test@1.55.0
