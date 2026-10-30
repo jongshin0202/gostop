@@ -11,10 +11,11 @@ const DEV_AUTH='https://gostop-authority-dev.jwshin1.workers.dev/api/me';
 const EXPERT_HASH='b0af0e03e53f7d69ecd33dcf425a83d237bd3aba9dfe34ed49a315980462b6a5';
 const MAX_BYTES=45000;
 const validId=id=>typeof id==='string'&&id.length>=5&&id.length<=100&&/^[a-z0-9._:-]+$/i.test(id);
+const validCardId=id=>typeof id==='string'&&/^[a-z0-9._:-]{3,64}$/i.test(id);
 const moveId=move=>move?.moveId||(move?.card?.id?move.card.id+'|'+(move.target?.id||'-'):'');
 const safeMove=move=>{
-  if(!move||typeof move!=='object'||!validId(move.card?.id)||!Number.isInteger(move.card?.month)||move.card.month<1||move.card.month>12)return null;
-  if(move.target&&(!validId(move.target.id)||!Number.isInteger(move.target.month)||move.target.month!==move.card.month))return null;
+  if(!move||typeof move!=='object'||!validCardId(move.card?.id)||!Number.isInteger(move.card?.month)||move.card.month<1||move.card.month>12)return null;
+  if(move.target&&(!validCardId(move.target.id)||!Number.isInteger(move.target.month)||move.target.month!==move.card.month))return null;
   const cleanCard=c=>c?({
     id:c.id,month:c.month,type:['pi','animal','bright','ribbon'].includes(c.type)?c.type:'pi',
     flags:Array.isArray(c.flags)?c.flags.filter(flag=>['doublePi','switchPi','godori'].includes(flag)):[],
