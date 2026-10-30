@@ -31,10 +31,10 @@ const profileFor=id=>id==='acct-other'?{
   headToHead:{sessionsPlayedTogether:0,gamesPlayedTogether:0,wins:0,losses:0,coinsWon:0,coinsLost:0,netCoins:0}
 };
 
-async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false,notificationPermission=null}={}){
+async function installHarness(page,{boards={global:globalRows,monthly:monthlyRows},socialSnapshot=null,profileFailure=false,notificationPermission=null,guest=false}={}){
   await page.addInitScript(({account,other,notificationPermission})=>{
-    localStorage.setItem('gostop-auth-token','e2e-token');
-    localStorage.setItem('gostop-account-cache',JSON.stringify(account));
+    if(!guest){localStorage.setItem('gostop-auth-token','e2e-token');
+      localStorage.setItem('gostop-account-cache',JSON.stringify(account));}
     class FakeWebSocket extends EventTarget{
       static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;
       constructor(){super();this.readyState=FakeWebSocket.CONNECTING;setTimeout(()=>{this.readyState=FakeWebSocket.OPEN;const event=new Event('open');this.dispatchEvent(event);this.onopen?.(event);},0);}
@@ -56,7 +56,7 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
       Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:{register:async()=>({showNotification:async()=>{}})}});
       Object.defineProperty(navigator,'permissions',{configurable:true,value:{query:async()=>({state:notificationPermission==='granted'?'granted':notificationPermission==='denied'?'denied':'prompt',addEventListener:()=>{}})}});
     }
-  },{account:selfAccount,other:otherPlayer,notificationPermission});
+  },{account:selfAccount,other:otherPlayer,notificationPermission,guest});
 
   await page.route('https://commons.wikimedia.org/**',route=>route.abort());
   await page.route(authority+'/**',async route=>{
@@ -69,7 +69,7 @@ async function installHarness(page,{boards={global:globalRows,monthly:monthlyRow
     };
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});
     let body={ok:true};
-    if(path==='/api/me')body={ok:true,account:selfAccount,notices:[]};
+    if(path==='/api/me')body=guest?{ok:false,error:'AUTH_REQUIRED'}:{ok:true,account:selfAccount,notices:[]};
     else if(path==='/api/leaderboards')body={ok:true,month:'2026-09',global:boards.global,monthly:boards.monthly};
     else if(path==='/api/player-profile'){
       if(profileFailure)return route.abort();
@@ -817,4 +817,51 @@ test('all static HTML and CSS asset references resolve to real repository files'
     }
   }
   expect(missing).toEqual([]);
+});
+
+test('development guest login shows exactly one email/password pair and never leaks hidden registration',async({page})=>{
+  await installHarness(page,{guest:true});
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await page.addScriptTag({path:'dev-site/main-ui-integrity.js'});
+  await expect(page.locator('#accountLoginBtn')).toBeVisible();
+  await page.locator('#accountLoginBtn').click();
+  await expect(page.locator('#accountDialog')).toBeVisible();
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await expect(page.locator('#registerForm')).toBeHidden();
+  await expect(page.locator('#accountDialog input:visible')).toHaveCount(2);
+  await page.locator('#registerTab').click();
+  await expect(page.locator('#loginForm')).toBeHidden();
+  await expect(page.locator('#registerForm')).toBeVisible();
+  await expect(page.locator('#accountDialog input:visible')).toHaveCount(4);
+  await page.locator('#loginTab').click();
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await expect(page.locator('#registerForm')).toBeHidden();
+  await expect(page.locator('#accountDialog input:visible')).toHaveCount(2);
+});
+test('development guest Training Quit confirmation NO stays in game and YES returns directly to initialized menu',async({page})=>{
+  test.setTimeout(90000);
+  await installHarness(page,{guest:true});
+  await page.goto('/',{waitUntil:'domcontentloaded'});
+  await page.addScriptTag({path:'dev-site/main-ui-integrity.js'});
+  const menu=page.locator('#soloStartOverlay');
+  await expect(page.locator('#accountLoginBtn')).toBeVisible();
+  await page.locator('#friendlyGamingBtn').click();
+  await page.locator('#trainingModeBtn').click();
+  await expect(menu).toBeHidden();
+  await page.locator('#newGameBtn').click({force:true});
+  await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',true);
+  await page.locator('#quitNoBtn').click();
+  await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',false);
+  await expect(menu).toBeHidden();
+  await page.locator('#newGameBtn').click({force:true});
+  await page.locator('#quitYesBtn').click();
+  await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',false);
+  await expect(menu).toBeVisible();
+  await expect(page.locator('#friendlyGamingBtn')).toBeVisible();
+  await expect(page.locator('#competitiveGamingBtn')).toBeVisible();
+  await expect(page.locator('#gostopBootSplash')).toBeHidden();
+  await expect(menu).toHaveAttribute('data-current-menu-ready','true');
+  await expect(menu).not.toHaveAttribute('data-launching','true');
+  await page.locator('#friendlyGamingBtn').click();
+  await expect(page.locator('#trainingModeBtn')).toBeVisible();
 });
