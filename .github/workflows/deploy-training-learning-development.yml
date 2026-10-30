@@ -6,6 +6,7 @@ on:
     paths:
       - training-learning/**
       - tests/training-learning-server.test.mjs
+      - tests/training-update-cadence.test.mjs
       - wrangler.training-dev.toml
       - scripts/smoke-training-learning-dev.mjs
       - .github/workflows/deploy-training-learning-development.yml
@@ -29,7 +30,7 @@ jobs:
           node-version: 22
       - run: npm install
       - name: Test isolated server learning
-        run: node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js
+        run: node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs
       - name: Deploy isolated development learning Worker
         uses: cloudflare/wrangler-action@v3
         with:
