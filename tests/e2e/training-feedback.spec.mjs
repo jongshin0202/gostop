@@ -59,6 +59,7 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
   await page.addScriptTag({path:'training-learning/feedback-ui.js'});
   await page.locator('#trainingModeBtn').click();
   await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().authorized)).toBe(email==='expert@example.test');
+  if(email==='expert@example.test')await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().serverReady)).toBe(true);
   return server;
 }
 test('confirmed disagreement syncs to cloud and trains only after game completion',async({page})=>{
