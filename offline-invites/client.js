@@ -3,7 +3,7 @@
  */
 (()=>{
 'use strict';
-if(!/^gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app$/.test(location.hostname))return;
+if(!/^gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app$/.test(location.hostname)&&!['localhost','127.0.0.1'].includes(location.hostname))return;
 const endpoint='https://gostop-offline-invites-dev.jwshin1.workers.dev/api/invites';
 const $=id=>document.getElementById(id);
 const account=()=>globalThis.GoStopRanked?.getAccount?.(),auth=()=>globalThis.GoStopRanked?.getAuthToken?.();
@@ -97,7 +97,7 @@ function renderButtons(){
  const host=$('socialList');if(!host||!friends||$('socialScreen')?.hidden!==false)return;
  for(const row of host.querySelectorAll('[data-social-account-id]')){
   const player=friends.get(row.dataset.socialAccountId),button=row.querySelector('.devInviteOfflineButton');
-  if(!player||player.friendState!=='friend'||player.online!==false){button?.remove();continue;}
+  if(!player||player.friendState!=='friend'||!row.querySelector('.player-status.offline')){button?.remove();continue;}
   if(button)continue;
   const target=row.querySelector('.social-actions');if(!target)continue;
   const b=document.createElement('button');b.type='button';b.className='devInviteOfflineButton';
@@ -139,7 +139,7 @@ notify?.addEventListener('click',async()=>{
 async function refreshPreference(){
  if(!auth())return;
  try{prefs=await api('/state');if(on)on.checked=prefs.enabled;
-  if(prefs.enabled&&Notification.permission==='granted')void enablePush().catch(()=>{});
+  if(prefs.enabled&&typeof Notification!=='undefined'&&Notification.permission==='granted')void enablePush().catch(()=>{});
  }catch(_){}
 }
 async function acceptInvite(id){
