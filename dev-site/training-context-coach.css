@@ -1,0 +1,22 @@
+/* Development Training draw-target advice only.
+ * A small noninteractive banner above the table, never over the player's hand.
+ */
+.dev-draw-target-coach{
+ position:fixed;left:50%;top:clamp(74px,9vh,114px);transform:translateX(-50%);
+ z-index:1374;box-sizing:border-box;
+ width:min(600px,calc(100vw - 26px));max-height:24vh;overflow:auto;
+ border:1px solid rgba(240,190,86,.85);border-radius:12px;
+ background:rgba(28,20,13,.95);padding:9px 16px;
+ color:#ffe6aa;text-align:center;font:700 14px/1.35 system-ui,sans-serif;
+ box-shadow:0 12px 26px #0008;pointer-events:none;
+}
+.dev-draw-target-coach[hidden]{display:none!important}
+#floor .floor-card.dev-drawn-target-recommended{
+ outline:4px solid #ffd966;outline-offset:3px;
+ box-shadow:0 0 0 6px #ffd96633,0 0 28px #ffce6a99;
+ z-index:25;
+}
+@media(max-width:700px){
+ .dev-draw-target-coach{top:55px;padding:8px 12px;font-size:12px;}
+ #floor .floor-card.dev-drawn-target-recommended{outline-width:3px;outline-offset:2px;}
+}
