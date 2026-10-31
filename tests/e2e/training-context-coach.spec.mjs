@@ -9,7 +9,7 @@ const cards=[
  {id:'m4-2',month:4,type:'animal',flags:[]}
 ];
 async function setup(page){
- await page.goto('/',{waitUntil:'domcontentloaded'});
+ await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
  await page.setContent(`<!DOCTYPE html><html lang="en"><body>
  <button id="trainingModeBtn">Training</button><button id="playSoloBtn">Solo</button>
  <div id="trainingCoachPanel" hidden><strong id="trainingCoachTitle">Recommended Move</strong><p id="trainingCoachText"></p></div>
@@ -19,7 +19,9 @@ async function setup(page){
  await page.addScriptTag({path:'dev-site/training-advice-logic.js'});
  await page.addScriptTag({path:'dev-site/training-context-coach.js'});
  await page.addStyleTag({path:'dev-site/training-context-coach.css'});
+ await expect.poll(()=>page.evaluate(()=>!!globalThis.GoStopDevTrainingContextCoach)).toBe(true);
  await page.locator('#trainingModeBtn').click();
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevTrainingContextCoach.getStatus().active)).toBe(true);
 }
 test('after deck flip two floor cards get a visible choice recommendation without preventing gameplay',async({page})=>{
  await setup(page);
