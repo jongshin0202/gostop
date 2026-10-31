@@ -51,7 +51,7 @@ function ensureDrawPanel(){
  return drawPanel;
 }
 function clearDraw(){
- if(!drawPanel?.hidden)drawPanel.hidden=true;
+ if(drawPanel&&!drawPanel.hidden)drawPanel.hidden=true;
  if(lockedDrawId){
   floor.querySelectorAll('.dev-drawn-target-recommended').forEach(el=>el.classList.remove('dev-drawn-target-recommended'));
  }
