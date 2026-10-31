@@ -22,13 +22,14 @@ async function checkAccount(){
 // The only local setting is the UI preference; training data and weights live on Cloudflare.
 const ENABLE_KEY='gostop-training-feedback-enabled';
 const cloud=globalThis.GoStopTrainingCloud;
-let serverFeedbackCount=0,serverModelExamples=0,lastError=null,serverReady=false;
+let serverFeedbackCount=0,serverModelExamples=0,serverSpecialExamples=0,lastError=null,serverReady=false;
 async function syncStatus(){
  if(!cloud)return;
  try{
   const state=await cloud.state();
   serverFeedbackCount=state.feedbackCount||0;
   serverModelExamples=state.model?.examples||0;
+  serverSpecialExamples=state.specialModel?.examples||0;
   serverReady=true;lastError=null;
  }catch(error){serverReady=false;lastError=String(error.message||error);}
 }
@@ -41,6 +42,20 @@ fr:['Évaluer ce coup','Votre choix diffère du conseil. Quel coup était le mei
 de:['Zug bewerten','Dein Zug weicht vom Vorschlag ab. Welcher war strategisch besser?','Vorschlag','Dein Zug','Mein Zug war besser','Der Vorschlag war besser','Unsicher / Test','Feedback ausschalten','Nur bestätigte Rückmeldungen trainieren das separate Modell.'],
 ja:['手の比較','おすすめと別の手を選びました。戦略的にどちらが良いですか？','おすすめ','あなたの手','自分の手が良い','おすすめが良い','不明 / 試しただけ','確認をオフ','確認済みの評価のみ別の学習モデルに使用します。'],
 zh:['复盘出牌','你的出牌与推荐不同。哪一种策略更好？','推荐出牌','你的出牌','我的出牌更好','推荐出牌更好','不确定 / 只是尝试','关闭反馈','只有确认的反馈才用于独立模型训练。']
+};
+// Labels are separate from strategy recommendations and never affect gameplay.
+const SPECIAL_ACTION_LABELS={
+ en:{shake:'Shake',keepForBomb:'Keep for Bomb',bomb:'Bomb',playOne:'Play One'},
+ ko:{shake:'흔들기',keepForBomb:'폭탄 기회 유지',bomb:'폭탄',playOne:'한 장 내기'},
+ es:{shake:'Sacudir',keepForBomb:'Guardar para bomba',bomb:'Bomba',playOne:'Jugar una carta'},
+ fr:{shake:'Secouer',keepForBomb:'Garder pour une bombe',bomb:'Bombe',playOne:'Jouer une carte'},
+ de:{shake:'Schütteln',keepForBomb:'Für Bombe behalten',bomb:'Bombe',playOne:'Eine Karte spielen'},
+ ja:{shake:'振り',keepForBomb:'爆弾用に残す',bomb:'爆弾',playOne:'1枚出す'},
+ zh:{shake:'摇牌',keepForBomb:'保留炸弹机会',bomb:'炸弹',playOne:'出一张'}
+};
+const specialActionLabel=(action,context)=>{
+ const label=(SPECIAL_ACTION_LABELS[document.documentElement.lang]||SPECIAL_ACTION_LABELS.en)[action]||action;
+ return action==='shake'?label+' (×'+(context.month>=11?4:2)+')':label;
 };
 const GUEST_COPY={
  en:['Sign in to the authorized development expert account to save feedback and train the server model. No feedback will be saved from this session.','Not saved. Sign in to the authorized development expert account before playing to submit feedback.'],
@@ -134,15 +149,21 @@ async function safeRecord(data,label,choice){
  if(!cloud)throw new Error('Cloud learning is not configured. No feedback was saved.');
  if(!verifiedAccount())throw new Error('Please sign in to the authorized development account.');
  ensureGame();
- const upload=cloud.feedback({
-  gameId,feedbackId:crypto.randomUUID(),choice,
-  recommended:data.recommended,played:data.played,legalMoves:data.legalMoves,visible:data.visible
- });
+ const upload=data.kind==='special'?
+  cloud.specialFeedback({
+   gameId,feedbackId:crypto.randomUUID(),choice,
+   recommendedAction:data.recommended.action,playedAction:data.played.action,
+   legalActions:data.legalActions,context:data.context,visible:data.visible
+  }):
+  cloud.feedback({
+   gameId,feedbackId:crypto.randomUUID(),choice,
+   recommended:data.recommended,played:data.played,legalMoves:data.legalMoves,visible:data.visible
+  });
  pendingUploads.add(upload);
  try{
   await upload;
   serverFeedbackCount++;
-  if(label&&data.legalMoves.some(m=>m.moveId===label))confirmedCount++;
+  if(label&&(data.kind==='special'?data.legalActions.includes(label):data.legalMoves.some(m=>m.moveId===label)))confirmedCount++;
   serverReady=true;lastError=null;
   completion();
  }catch(error){
@@ -160,7 +181,7 @@ function feedbackDialog(data){
  const comparison=document.createElement('div');comparison.style.cssText='display:grid;gap:5px;margin-bottom:16px';
  for(const [label,move] of [[recLabel,data.recommended],[myLabel,data.played]]){
   const line=document.createElement('div');
-  line.textContent=label+': '+picture(move.hand)+(move.target?' → '+picture(move.target):'');
+  line.textContent=label+': '+(data.kind==='special'?specialActionLabel(move.action,data.context):picture(move.hand)+(move.target?' → '+picture(move.target):''));
   comparison.appendChild(line);
  }
  const actions=document.createElement('div');actions.className='feedback-actions';
@@ -180,8 +201,10 @@ function feedbackDialog(data){
   // remains restricted to the verified expert; never claim an unsaved choice
   // was recorded, and never store training data on the device.
   if(!canSubmit){errorLine.textContent=(GUEST_COPY[document.documentElement.lang]||GUEST_COPY.en)[1];return;}
-  const chosen=choice==='mine'?moveId(data.played.hand,data.played.target):
-    choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null;
+  const chosen=data.kind==='special'?
+    (choice==='mine'?data.played.action:choice==='recommended'?data.recommended.action:null):
+    (choice==='mine'?moveId(data.played.hand,data.played.target):
+      choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null);
   for(const button of actions.querySelectorAll('button'))button.disabled=true;
   errorLine.textContent='';
   try{await safeRecord(data,chosen,choice);modal.close();}
@@ -245,16 +268,53 @@ function onTarget(event){
  lastHand=null;
  window.setTimeout(()=>{if(active)beginDisagreement(advised,chosen,prior.observe);},200);
 }
+// Read the frozen game's existing recommendation button classes. Never
+// intercept a Shake/Bomb click or invent a strategic recommendation ourselves.
+function onSpecialDecision(event){
+ if(!active||!enabled()||modal.open)return;
+ const selected=event.target?.closest?.('#shakeBtn,#keepSecretBtn,#bombBtn,#playOneBtn');
+ const dialog=selected?.closest?.('#shakeDialog,#bombDialog');
+ if(!selected||!dialog?.open)return;
+ const shake=dialog.id==='shakeDialog';
+ const shakeBtn=dialog.querySelector('#shakeBtn');
+ const keepBtn=dialog.querySelector('#keepSecretBtn');
+ const bombBtn=dialog.querySelector('#bombBtn');
+ const recommendedButton=shake?
+  (shakeBtn?.classList.contains('training-choice-recommended')?shakeBtn:
+   keepBtn?.classList.contains('training-choice-recommended')?keepBtn:null):
+  (bombBtn?.classList.contains('training-choice-recommended')?bombBtn:null);
+ if(!recommendedButton||selected===recommendedButton)return;
+ const bombReady=shake?recommendedButton===keepBtn:true;
+ const action=button=>button?.id==='shakeBtn'?'shake':button?.id==='keepSecretBtn'?
+  (bombReady?'bomb':'keepForBomb'):button?.id==='bombBtn'?'bomb':'playOne';
+ const recommendedAction=action(recommendedButton),playedAction=action(selected);
+ const legalActions=shake?['shake',bombReady?'bomb':'keepForBomb']:['bomb','playOne'];
+ if(!legalActions.includes(recommendedAction)||!legalActions.includes(playedAction)
+   ||recommendedAction===playedAction)return;
+ const cardIds=[...dialog.querySelectorAll('.shake-cards [data-card-id]')].map(el=>el.dataset.cardId);
+ const month=card(cardIds[0])?.month;
+ if(!Number.isInteger(month)||cardIds.length<3||cardIds.length>4||
+   cardIds.some(id=>card(id)?.month!==month))return;
+ const visible={hand:[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')].map(el=>el.dataset.cardId),
+  floor:onTable(),humanCaptured:captured('#playerCaptured'),computerCaptured:captured('#aiCaptured')};
+ if(cardIds.some(id=>!visible.hand.includes(id)))return;
+ const observed={kind:'special',context:{kind:shake?'shake':'bomb',month,bombReady,cardIds},
+  legalActions,recommended:{action:recommendedAction},played:{action:playedAction},visible};
+ // Record this mismatch even if the player later answers "Not sure".
+ hadDisagreement=true;
+ window.setTimeout(()=>{if(active)enqueue(observed);},150);
+}
 document.addEventListener('click',event=>{
  const t=event.target;
  if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;hadDisagreement=false;ensureGame();void checkAccount();}
  else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;gameId=null;hadDisagreement=false;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
+ if(t?.closest?.('#shakeDialog,#bombDialog'))onSpecialDecision(event);
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
  getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmedCount,
-  examples:serverFeedbackCount,modelExamples:serverModelExamples,serverReady,lastError,
+  examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,serverReady,lastError,
   storage:'development-cloudflare',pendingUploads:pendingUploads.size}),
  exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),
  refresh:syncStatus,
