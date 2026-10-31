@@ -37,12 +37,12 @@ test('real Training opening shows the dev-only strategy review without obscuring
  const comparison=await page.evaluate(()=>{
   const coach=document.getElementById('trainingCoachText')?.textContent||'';
   const shown=document.querySelector('#devOpeningReview .dev-opening-review-recommendation')?.textContent||'';
-  const native=coach.match(/^Best strateg(?:y|ies):\\s*([^.!?]+)[.!?]/i);
+  const native=coach.match(/^Best strateg(?:y|ies):\s*([^.!?]+)[.!?]/i);
   return {coach,shown,native:native?.[1]||''};
  });
  expect(comparison.native).not.toBe('');
- const nativeNames=comparison.native.replace(/,?\\s+and\\s+/g,',').split(',').map(x=>x.trim());
- const displayedNames=comparison.shown.replace(/^Recommended opening strategies:\\s*/,'').split(',').map(x=>x.trim());
+ const nativeNames=comparison.native.replace(/,?\s+and\s+/g,',').split(',').map(x=>x.trim());
+ const displayedNames=comparison.shown.replace(/^Recommended opening strategies:\s*/,'').split(',').map(x=>x.trim());
  expect(displayedNames).toEqual(nativeNames);
  await expect(review.getByRole('button',{name:'Yes, I agree'})).toBeVisible();
  await expect(review.getByRole('button',{name:'No, change strategies'})).toBeVisible();
