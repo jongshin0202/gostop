@@ -121,6 +121,8 @@ test('Skip continues without network, and an unverified expert cannot silently s
 });
 test('opening review and strategy feedback stay absent from ordinary Solo',async({page})=>{
  await setup(page);
+ // The modal deliberately blocks the underlying game until an explicit answer.
+ await page.getByRole('button',{name:'Continue without saving'}).click();
  await page.locator('#playSoloBtn').click();
  await expect(page.locator('#devOpeningReview')).toHaveCount(0);
  await page.evaluate(()=>{
