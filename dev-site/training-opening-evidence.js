@@ -78,7 +78,7 @@ function nativeOpeningStrategies(visible,deck){
  for(const [family,strategy] of [['red','red-stripes'],['blue','blue-stripes'],['grass','plain-stripes']]){
   const r=route(c=>c.type==='ribbon'&&c.ribbonSet===family);
   if(r.lost||r.potentialCount<2)continue;
-  options.push({strategy,label:strategy,score:300+(r.strong?120:0)+(r.veryStrong?120:0)+r.controlledCount*45+r.immediateCount*30+r.potentialCount*20});
+  options.push({strategy,label:({red:'Red',blue:'Blue',grass:'Plain'}[family]+' Stripes'),score:300+(r.strong?120:0)+(r.veryStrong?120:0)+r.controlledCount*45+r.immediateCount*30+r.potentialCount*20});
  }
  const bright=route(c=>c.type==='bright','id');
  if(5-bright.lost>=3&&bright.potentialCount>=2)
@@ -88,6 +88,20 @@ function nativeOpeningStrategies(visible,deck){
   options.push({strategy:'godori',label:'5-BIRDIES',score:360+(godori.strong?120:0)+(godori.veryStrong?140:0)+godori.controlledCount*50+godori.immediateCount*35+godori.potentialCount*30});
  options.sort((a,b)=>b.score-a.score||a.label.localeCompare(b.label));
  return options.length?options.map(o=>o.strategy):['singles'];
+}
+
+// When the frozen Training coach renders English opening advice, its heading
+// is authoritative. Never train on a second recommendation that disagrees
+// with what the player saw. Other locales retain the exact native route rules.
+function strategiesFromEnglishCoach(text){
+ const match=String(text||'').match(/^\s*Best strateg(?:y|ies):\s*([^.!?]+)[.!?]/i);
+ if(!match)return null;
+ const names={'brights':'brights','5-birdies':'godori','red stripes':'red-stripes',
+  'blue stripes':'blue-stripes','plain stripes':'plain-stripes','singles':'singles'};
+ const labels=match[1].replace(/,?\s+and\s+/gi,',').split(',').map(s=>s.trim().toLowerCase());
+ const options=labels.map(x=>names[x]);
+ if(!options.length||options.some(x=>!x)||new Set(options).size!==options.length)return null;
+ return options;
 }
 
 function withLearnedWeights(review,model){
@@ -115,7 +129,7 @@ function withLearnedWeights(review,model){
  // deterministic prior rather than produce an empty or misleading hint.
  return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
 }
-const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,STRATEGIES});
+const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
