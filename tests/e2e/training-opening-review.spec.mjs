@@ -43,7 +43,8 @@ test('opening confirmation asks if the expert agrees before exposing alternative
  const review=page.locator('#devOpeningReview');
  await expect(review).toHaveAttribute('open','');
  await expect(review).toContainText('Do you agree with these opening strategies?');
- await expect(review).toContainText('Recommended opening strategies');
+ await expect(review).toContainText('Recommended opening strategies: Singles');
+ await expect(review).not.toContainText('Recommended opening strategies: Brights');
  await expect(review.getByRole('button',{name:'Yes, I agree'})).toBeVisible();
  await expect(review.getByRole('button',{name:'No, change strategies'})).toBeVisible();
  await expect(review.locator('.dev-opening-review-options')).toBeHidden();
@@ -64,9 +65,10 @@ test('choosing No reveals all eight selectable strategies and saves expert corre
  const options=review.locator('.dev-opening-review-options');
  await expect(options).toBeVisible();
  await expect(options.locator('input[type=checkbox]')).toHaveCount(8);
- await expect(options.locator('input[value="brights"]')).toBeChecked();
+ await expect(options.locator('input[value="brights"]')).not.toBeChecked();
  await expect(options.locator('input[value="singles"]')).toBeChecked();
  await expect(options.locator('input[value="red-stripes"]')).not.toBeChecked();
+ await options.locator('input[value="brights"]').check();
  await options.locator('input[value="blue-stripes"]').check();
  await options.locator('input[value="singles"]').uncheck();
  await review.getByRole('button',{name:'Submit my strategies'}).click();
