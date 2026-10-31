@@ -79,7 +79,9 @@ function updateDraw(){
   floor.querySelectorAll('.dev-drawn-target-recommended').forEach(el=>el.classList.remove('dev-drawn-target-recommended'));
   lockedDrawId=candidate.cardId;
  }
- floor.querySelector('[data-card-id="'+candidate.cardId+'"]')?.classList.add('dev-drawn-target-recommended');
+ const recommended=floor.querySelector('[data-card-id="'+candidate.cardId+'"]');
+ if(recommended&&!recommended.classList.contains('dev-drawn-target-recommended'))
+  recommended.classList.add('dev-drawn-target-recommended');
 }
 function updateCopy(){
  if(!active||coach.hidden||!text.textContent)return;
