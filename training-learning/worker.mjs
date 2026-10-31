@@ -3,7 +3,7 @@
  * All requests require a verified session on the isolated development authority.
  */
 import learner from './learner.js';
-import {recordCompletedTrainingGame} from './update-cadence.mjs';
+import {recordCompletedTrainingGame,recordSuccessfulDevelopmentModelUpdate} from './update-cadence.mjs';
 import {SpecialDecisionRanker,legalSpecialActions} from './special-learner.mjs';
 import {OpeningStrategyRanker,STRATEGIES,validEvidence,validChoices} from './opening-learner.mjs';
 const {ExpertRanker}=learner;
@@ -62,7 +62,8 @@ export class TrainingLearningStore{
       const model=await this.ctx.storage.get('model')||new ExpertRanker().export();
       const specialModel=await this.ctx.storage.get('specialModel')||new SpecialDecisionRanker().export();
       const openingModel=await this.ctx.storage.get('openingModel')||new OpeningStrategyRanker().export();
-      return json({ok:true,...state,model,specialModel,openingModel});
+      const activeOpeningModel=await this.ctx.storage.get('activeOpeningModel')||null;
+      return json({ok:true,...state,model,specialModel,openingModel,activeOpeningModel});
     }
     if(request.method==='GET'&&path==='/history')return json({ok:true,feedback:await this.ctx.storage.get('history')||[]});
     if(request.method==='POST'&&path==='/opening-feedback'){
@@ -221,11 +222,12 @@ export class TrainingLearningStore{
       // Prepare an isolated, versionable candidate; NEVER imply that the
       // production server was updated. A validated production-model publisher
       // must acknowledge activation before the completion UI can report success.
-      const newWeights=model.examples>Number(prior.lastLiveModelExamples||0)||
-        specialModel.examples>Number(prior.lastLiveSpecialModelExamples||0)||
-        openingModel.examples>Number(prior.lastLiveOpeningModelExamples||0);
-      let promotionPending=false;
-      if(summary.eligibilityReason&&newWeights){
+      const newWeights=model.examples>Number(prior.lastDevelopmentModelExamples||0)||
+        specialModel.examples>Number(prior.lastDevelopmentSpecialModelExamples||0)||
+        openingModel.examples>Number(prior.lastDevelopmentOpeningModelExamples||0);
+      let promotionPending=false,developmentModelUpdated=false;
+      const updateTrigger=summary.eligibilityReason;
+      if(updateTrigger&&newWeights){
         const existing=await this.ctx.storage.get('promotionCandidate');
         if(existing?.model?.examples!==model.examples||existing?.specialModel?.examples!==specialModel.examples||
           existing?.openingModel?.examples!==openingModel.examples||existing?.reason!==summary.eligibilityReason){
@@ -236,9 +238,22 @@ export class TrainingLearningStore{
             openingModel:{weights:openingModel.weights.map(row=>[...row]),examples:openingModel.examples}
           });
         }
-        promotionPending=true;
-        summary.pendingLiveUpdate={reason:summary.eligibilityReason,modelExamples:model.examples,
-          specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples};
+        // Activate ONLY in the isolated DEVELOPMENT Worker, never the public
+        // game or production authority. The new weights are available for the
+        // next Training game, and the update dialog is shown only after ack.
+        await this.ctx.storage.put('activeCardModel',model.export());
+        await this.ctx.storage.put('activeSpecialModel',specialModel.export());
+        await this.ctx.storage.put('activeOpeningModel',openingModel.export());
+        const nextVersion=Number(prior.developmentModelVersion||0)+1;
+        const acknowledged=recordSuccessfulDevelopmentModelUpdate(summary,nextVersion);
+        summary=Object.assign(acknowledged,{
+          lastDevelopmentModelExamples:model.examples,
+          lastDevelopmentSpecialModelExamples:specialModel.examples,
+          lastDevelopmentOpeningModelExamples:openingModel.examples,
+          pendingLiveUpdate:{reason:updateTrigger,modelExamples:model.examples,
+            specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples}
+        });
+        promotionPending=true;developmentModelUpdated=true;
       }
       await this.ctx.storage.put('model',model.export());
       await this.ctx.storage.put('specialModel',specialModel.export());
@@ -249,7 +264,8 @@ export class TrainingLearningStore{
         completedGames:summary.completedGames,consecutiveAgreementGames:summary.consecutiveAgreementGames,
         modelExamples:model.examples,specialModelExamples:specialModel.examples,
         openingModelExamples:openingModel.examples,promotionPending,publishedToLive:false,
-        updateTrigger:promotionPending?summary.eligibilityReason:null});
+        developmentModelUpdated,developmentModelVersion:developmentModelUpdated?summary.developmentModelVersion:null,
+        updateTrigger:promotionPending?updateTrigger:null});
     }
     return fail('NOT_FOUND',404);
   }
