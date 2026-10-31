@@ -129,3 +129,25 @@ test('without a Training session the adapter does not rewrite ordinary game UI',
  await expect(page.locator('#trainingCoachText')).toHaveText('Normal hint');
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().locked)).toBe(false);
 });
+
+test('new turn can capture a fresh recommendation only after the previous hint clears',async({page})=>{
+ await fixture(page);
+ await previewAlternative(page);
+ await page.evaluate(()=>document.querySelector('#playerHand [data-hand-key="m2-1"]').remove());
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().locked)).toBe(false);
+ await page.evaluate(()=>{
+  document.querySelector('#playerHand [data-card-id="m1-1"]').classList.remove('matchable');
+  document.querySelector('#trainingCoachPanel').hidden=true;
+ });
+ await page.waitForTimeout(50);
+ await page.evaluate(()=>{
+  const hand=document.getElementById('playerHand');
+  hand.insertAdjacentHTML('beforeend','<div class="hand-card-slot" data-hand-key="m3-1"><button class="card hand-card" data-card-id="m3-1">Next card</button></div>');
+  document.getElementById('trainingCoachTitle').textContent='RECOMMENDED MOVE';
+  document.getElementById('trainingCoachText').textContent='New turn strategy.';
+  document.querySelector('#playerHand [data-card-id="m1-1"]').classList.add('matchable');
+  document.querySelector('#trainingCoachPanel').hidden=false;
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().locked)).toBe(true);
+ await expect(page.locator('#trainingCoachText')).toHaveText('New turn strategy.');
+});
