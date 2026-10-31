@@ -104,7 +104,7 @@ const shade=document.createElement('style');
 shade.textContent='#trainingFeedbackDialog::backdrop{background:rgba(0,0,0,.62)}#trainingFeedbackDialog button{font:inherit;cursor:pointer;border-radius:9px;padding:10px;border:1px solid #aa7b37;background:#503226;color:#f7dcad}#trainingFeedbackDialog button:focus-visible{outline:3px solid #fbd686;outline-offset:2px}#trainingFeedbackDialog .feedback-actions{display:grid;grid-template-columns:1fr;gap:9px}';
 document.head.appendChild(shade);document.body.appendChild(modal);
 function ensureGame(){if(!gameId){gameId='dev-training-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);alreadyCompleted=false;}}
-// Only an acknowledged LIVE model activation warrants a success message.
+// Only an acknowledged isolated DEVELOPMENT model activation warrants the update dialog.
 const UPDATE_TEXT={
  en:'Update was made',ko:'업데이트가 완료되었습니다',es:'Actualización realizada',
  fr:'Mise à jour effectuée',de:'Aktualisierung abgeschlossen',
@@ -138,7 +138,7 @@ function completion(){
   try{
    const result=cloud?await cloud.complete(completeId,{hadDisagreement:completeHadDisagreement}):null;
    await syncStatus();
-   if(result?.publishedToLive===true)showUpdateMade();
+   if(result?.developmentModelUpdated===true)showUpdateMade();
   }
   catch(error){lastError=String(error.message||error);serverReady=false;}
  });
@@ -347,6 +347,13 @@ function onSpecialDecision(event){
 document.addEventListener('click',event=>{
  const t=event.target;
  if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ else if(t?.closest?.('#playAgainBtn,#newGameYesBtn')&&active){
+  // A Training replay is a NEW completed-game sample with its own opening
+  // strategy review. Never reuse the prior game's feedback/identity.
+  gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;
+  observedRecommendation=null;previousActivation=null;hadDisagreement=false;
+  ensureGame();void checkAccount();
+ }
  else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;gameId=null;hadDisagreement=false;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
@@ -359,7 +366,7 @@ document.addEventListener('gostop-hand-activate',event=>{
  if(id&&!event.detail?.blank)onHandActivation(id,'gesture');
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
- getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmedCount,
+ getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),gameId,confirmed:confirmedCount,
   examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,serverReady,lastError,
   storage:'development-cloudflare',pendingUploads:pendingUploads.size}),
  exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),

@@ -11,7 +11,7 @@ test('development Vercel bundle includes Training Mode but excludes admin and pr
   const r=spawnSync(process.execPath,['dev-site/build.mjs'],{cwd:root,encoding:'utf8',env:{...process.env,GOSTOP_DEV_SERVER_URL:''}});
   assert.equal(r.status,0,r.stderr);
   const files=readdirSync(output);
-  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-cloud.js','training-learning-feedback.js','dev-main-ui-integrity.js','dev-training-special-advice.css','dev-training-recommendation-preserver.js','dev-training-recommendation-preserver.css','dev-training-sake-cup-copy.js','dev-training-advice-logic.js','dev-training-context-coach.js','dev-training-context-coach.css'])assert.ok(files.includes(filename),filename);
+  for(const filename of ['index.html','app.js','training-locales.js','ranked-client.js','runtime-config.js','training-learning-cloud.js','training-learning-feedback.js','dev-main-ui-integrity.js','dev-training-special-advice.css','dev-training-recommendation-preserver.js','dev-training-recommendation-preserver.css','dev-training-sake-cup-copy.js','dev-training-advice-logic.js','dev-training-context-coach.js','dev-training-context-coach.css','dev-training-opening-evidence.js','dev-training-opening-review.js','dev-training-opening-review.css'])assert.ok(files.includes(filename),filename);
   for(const filename of ['admin.html','admin.css','admin.js','server','wrangler.toml','vercel.json'])assert.ok(!files.includes(filename),filename);
   const config=readFileSync(join(output,'runtime-config.js'),'utf8');
   assert.match(config,/https:\/\/gostop-authority-dev\.jwshin1\.workers\.dev/);
@@ -40,6 +40,12 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   assert.ok(html.includes('dev-training-recommendation-preserver.js?v='));
   assert.ok(html.includes('dev-training-context-coach.js?v='));
   assert.ok(html.includes('dev-training-context-coach.css?v='));
+  assert.ok(html.includes('dev-training-opening-review.js?v='));
+  assert.ok(html.includes('dev-training-opening-review.css?v='));
+  assert.ok(html.indexOf('training-learning-feedback.js')<html.indexOf('dev-training-opening-review.js'));
+  assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-training-opening-review/);
+  assert.match(readFileSync(join(output,'dev-training-opening-review.js'),'utf8'),/openingFeedback/);
+  assert.doesNotMatch(readFileSync(join(output,'dev-training-opening-review.js'),'utf8'),/localStorage\.setItem/);
   assert.ok(html.indexOf('dev-training-context-coach.js')<html.indexOf('dev-training-recommendation-preserver.js'));
   const targetCoach=readFileSync(join(output,'dev-training-context-coach.js'),'utf8');
   assert.match(targetCoach,/target-option/);

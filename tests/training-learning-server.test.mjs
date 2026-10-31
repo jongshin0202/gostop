@@ -131,9 +131,15 @@ test('a disagreement followed by ten clean games stages a versioned candidate wi
   assert.equal(tenth.promotionPending,true);
   assert.equal(tenth.updateTrigger,'10-agreement-games-after-disagreement');
   assert.equal(tenth.publishedToLive,false);
+  assert.equal(tenth.developmentModelUpdated,true);
+  assert.equal(tenth.developmentModelVersion,1);
   const state=await(await t.request('/api/training/state')).json();
   assert.equal(state.completedGames,11);
   assert.equal(state.pendingLiveUpdate.modelExamples,1);
+  assert.equal(state.gamesSinceLiveUpdate,0,'cadence resets after acknowledged dev activation');
+  assert.equal(state.developmentModelVersion,1);
+  assert.equal(t.store.get('activeCardModel').examples,1);
+  assert.equal(t.store.get('activeOpeningModel').examples,0);
   const candidate=t.store.get('promotionCandidate');
   assert.equal(candidate.reason,'10-agreement-games-after-disagreement');
   assert.equal(candidate.model.weights.length,16);
@@ -234,3 +240,93 @@ test('special-only learning is included in staged weights after the update thres
   assert.equal(candidate.model.examples,0);
  }finally{t.restore();}
 });
+
+
+const openingEntry=(gameId='opening-expert-1',choice='confirmed')=>({
+ gameId,feedbackId:'opening-feedback-0001',choice,
+ suggested:['singles'],selected:choice==='confirmed'?['singles','brights']:[],
+ evidence:[1,.2,.2,.1,0,0,0,0,.5,.2,0,0],
+ visible:{hand:['m1-1','m2-4','m3-4','m4-4'],floor:['m8-1'],
+  humanCaptured:[],computerCaptured:[]}
+});
+test('opening expert can select multiple goals, saved on server and trained only on completion',async()=>{
+ const t=fixture();try{
+  const x=openingEntry();
+  const first=await t.request('/api/training/opening-feedback',{method:'POST',body:x});
+  assert.equal(first.status,200,await first.text());
+  const before=await(await t.request('/api/training/state')).json();
+  assert.equal(before.feedbackCount,1);assert.equal(before.confirmedCount,1);
+  assert.equal(before.openingModel.examples,0);
+  assert.equal(before.activeOpeningModel,null,'draft feedback cannot change active opening advice');
+  const duplicate=await(await t.request('/api/training/opening-feedback',{method:'POST',body:{
+   ...x,feedbackId:'opening-feedback-0002'}})).json();
+  assert.equal(duplicate.duplicate,true);
+  const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}})).json();
+  assert.equal(result.trained,1);assert.equal(result.openingModelExamples,1);
+  assert.equal(result.publishedToLive,false);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.openingModel.examples,1);
+  assert.equal(state.activeOpeningModel,null,'learning is draft until 20/10 trigger');
+  assert.equal(state.disagreementObservedAfterUpdate,true);
+  const history=await(await t.request('/api/training/history')).json();
+  assert.equal(history.feedback[0].kind,'opening');
+  assert.deepEqual(history.feedback[0].selected,['singles','brights']);
+ }finally{t.restore();}
+});
+test('not-sure opening feedback never trains and does not count a disagreement',async()=>{
+ const t=fixture();try{
+  const x=openingEntry('opening-unsure','unsure');
+  assert.equal((await t.request('/api/training/opening-feedback',{method:'POST',body:x})).status,200);
+  const done=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}})).json();
+  assert.equal(done.trained,0);assert.equal(done.openingModelExamples,0);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.disagreementObservedAfterUpdate,false);
+  assert.equal(state.confirmedCount,0);
+ }finally{t.restore();}
+});
+test('opening endpoint refuses unknown goals, invalid features, blank selections, completed or unauthorized games',async()=>{
+ const t=fixture();try{
+  const good=openingEntry('opening-valid');
+  const invalid=[
+   {...openingEntry('opening-invalid-1'),selected:['brights','invented']},
+   {...openingEntry('opening-invalid-2'),selected:[]},
+   {...openingEntry('opening-invalid-3'),suggested:['singles','singles']},
+   {...openingEntry('opening-invalid-4'),evidence:[1,10,0]},
+   {...openingEntry('opening-invalid-5'),visible:{...good.visible,hand:['invalid card id']}},
+   {...openingEntry('opening-invalid-6'),visible:{...good.visible,floor:[]},choice:'incorrect'},
+  ];
+  for(const x of invalid)assert.equal((await t.request('/api/training/opening-feedback',{method:'POST',body:x})).status,400);
+  assert.equal((await t.request('/api/training/opening-feedback',{method:'POST',body:good,authorization:''})).status,401);
+  await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-finished'}});
+  assert.equal((await t.request('/api/training/opening-feedback',{method:'POST',body:openingEntry('opening-finished')})).status,409);
+ }finally{t.restore();}
+});
+test('ten agreement games after an opening-strategy correction stage separate opening weights only',async()=>{
+ const t=fixture();try{
+  const first=openingEntry('opening-threshold-1');
+  await t.request('/api/training/opening-feedback',{method:'POST',body:first});
+  const a=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:first.gameId}})).json();
+  assert.equal(a.openingModelExamples,1);
+  for(let n=1;n<=9;n++){
+   const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-'+n}})).json();
+   assert.equal(result.promotionPending,false);
+  }
+  const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-10'}})).json();
+  assert.equal(result.updateTrigger,'10-agreement-games-after-disagreement');
+  assert.equal(result.publishedToLive,false);
+  assert.equal(result.developmentModelUpdated,true);
+  const current=await(await t.request('/api/training/state')).json();
+  assert.equal(current.activeOpeningModel.examples,1);
+  assert.equal(current.gamesSinceLiveUpdate,0);
+  const afterNextGame=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-after-update'}})).json();
+  assert.equal(afterNextGame.developmentModelUpdated,false);
+  assert.equal(afterNextGame.promotionPending,false);
+  const candidate=t.store.get('promotionCandidate');
+  assert.equal(candidate.openingModel.examples,1);
+  assert.equal(candidate.openingModel.weights.length,8);
+  assert.equal(candidate.model.examples,0);
+  assert.equal(candidate.specialModel.examples,0);
+ }finally{t.restore();}
+});
+
+

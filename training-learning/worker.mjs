@@ -3,8 +3,9 @@
  * All requests require a verified session on the isolated development authority.
  */
 import learner from './learner.js';
-import {recordCompletedTrainingGame} from './update-cadence.mjs';
+import {recordCompletedTrainingGame,recordSuccessfulDevelopmentModelUpdate} from './update-cadence.mjs';
 import {SpecialDecisionRanker,legalSpecialActions} from './special-learner.mjs';
+import {OpeningStrategyRanker,STRATEGIES,validEvidence,validChoices} from './opening-learner.mjs';
 const {ExpertRanker}=learner;
 const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store',...headers}});
 const allowed=origin=>origin==='https://gostop-dev.vercel.app'||origin==='https://gostop-dev-jwshin1-5345s-projects.vercel.app';
@@ -60,9 +61,46 @@ export class TrainingLearningStore{
       const state=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       const model=await this.ctx.storage.get('model')||new ExpertRanker().export();
       const specialModel=await this.ctx.storage.get('specialModel')||new SpecialDecisionRanker().export();
-      return json({ok:true,...state,model,specialModel});
+      const openingModel=await this.ctx.storage.get('openingModel')||new OpeningStrategyRanker().export();
+      const activeOpeningModel=await this.ctx.storage.get('activeOpeningModel')||null;
+      return json({ok:true,...state,model,specialModel,openingModel,activeOpeningModel});
     }
     if(request.method==='GET'&&path==='/history')return json({ok:true,feedback:await this.ctx.storage.get('history')||[]});
+    if(request.method==='POST'&&path==='/opening-feedback'){
+      const body=await readJson(request);
+      if(!validId(body?.gameId)||!validId(body?.feedbackId)||
+        !['confirmed','unsure'].includes(body?.choice)||
+        !validChoices(body?.suggested)||!validChoices(body?.selected)||
+        !validEvidence(body?.evidence)||
+        (body.choice==='confirmed'&&body.selected.length<1))
+        return fail('INVALID_OPENING_FEEDBACK',400);
+      const visible={};
+      for(const field of ['hand','floor','humanCaptured','computerCaptured']){
+        const cards=body.visible?.[field];
+        if(!Array.isArray(cards)||cards.length>48||new Set(cards).size!==cards.length||
+          cards.some(id=>!validCardId(id)))return fail('INVALID_VISIBLE_STATE',400);
+        visible[field]=cards;
+      }
+      // Only the logged-in, verified development expert can reach this store.
+      const gameKey='game:'+body.gameId;
+      const game=await this.ctx.storage.get(gameKey)||{complete:false,decisions:[],specialDecisions:[]};
+      if(game.complete)return fail('GAME_ALREADY_COMPLETED',409);
+      if(game.openingFeedback)return json({ok:true,duplicate:true});
+      game.openingFeedback={choice:body.choice,suggested:body.suggested,
+        selected:body.choice==='confirmed'?body.selected:[],evidence:body.evidence,visible};
+      const key='opening-feedback:'+body.gameId;
+      await this.ctx.storage.put(key,{feedbackId:body.feedbackId,choice:body.choice,
+        at:new Date().toISOString()});
+      await this.ctx.storage.put(gameKey,game);
+      const summary=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
+      summary.feedbackCount++;if(body.choice==='confirmed')summary.confirmedCount++;
+      await this.ctx.storage.put('summary',summary);
+      const history=await this.ctx.storage.get('history')||[];
+      history.push({gameId:body.gameId,kind:'opening',choice:body.choice,
+        suggested:body.suggested,selected:game.openingFeedback.selected,at:new Date().toISOString()});
+      await this.ctx.storage.put('history',history.slice(-500));
+      return json({ok:true,confirmed:body.choice==='confirmed',feedbackCount:summary.feedbackCount});
+    }
     if(request.method==='POST'&&path==='/special-feedback'){
       const body=await readJson(request);
       if(!validId(body?.gameId)||!validId(body?.feedbackId)||!['mine','recommended','unsure'].includes(body?.choice))
@@ -166,38 +204,68 @@ export class TrainingLearningStore{
       const specialModel=new SpecialDecisionRanker(await this.ctx.storage.get('specialModel')||null);
       const specialTrained=specialModel.trainGame({id:body.gameId,complete:true,
         decisions:(completedGame.specialDecisions||[]).filter(d=>d.chosenAction)});
-      const trained=cardTrained+specialTrained;
+      const openingModel=new OpeningStrategyRanker(await this.ctx.storage.get('openingModel')||null);
+      const openingTrained=openingModel.trainGame({id:body.gameId,complete:true,
+        openings:completedGame.openingFeedback?[completedGame.openingFeedback]:[]});
+      const trained=cardTrained+specialTrained+openingTrained;
       const prior=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       // A disagreement is an actual differing played/recommended move. An "unsure"
       // judgment still counts as a disagreement, but never trains weights.
-      const hadDisagreement=completedGame.decisions.length>0||(completedGame.specialDecisions||[]).length>0||body.hadDisagreement===true;
-      const summary=recordCompletedTrainingGame(prior,hadDisagreement);
+      const opening=completedGame.openingFeedback;
+      const openingDisagreement=opening?.choice==='confirmed'&&
+        (opening.selected.length!==opening.suggested.length||
+         opening.selected.some(x=>!opening.suggested.includes(x)));
+      const hadDisagreement=completedGame.decisions.length>0||
+        (completedGame.specialDecisions||[]).length>0||openingDisagreement||body.hadDisagreement===true;
+      let summary=recordCompletedTrainingGame(prior,hadDisagreement);
       if(trained){summary.trainingGames=(prior.trainingGames||0)+1;summary.lastTrainedAt=new Date().toISOString();}
       // Prepare an isolated, versionable candidate; NEVER imply that the
       // production server was updated. A validated production-model publisher
       // must acknowledge activation before the completion UI can report success.
-      const newWeights=model.examples>Number(prior.lastLiveModelExamples||0)||specialModel.examples>Number(prior.lastLiveSpecialModelExamples||0);
-      let promotionPending=false;
-      if(summary.eligibilityReason&&newWeights){
+      const newWeights=model.examples>Number(prior.lastDevelopmentModelExamples||0)||
+        specialModel.examples>Number(prior.lastDevelopmentSpecialModelExamples||0)||
+        openingModel.examples>Number(prior.lastDevelopmentOpeningModelExamples||0);
+      let promotionPending=false,developmentModelUpdated=false;
+      const updateTrigger=summary.eligibilityReason;
+      if(updateTrigger&&newWeights){
         const existing=await this.ctx.storage.get('promotionCandidate');
-        if(existing?.model?.examples!==model.examples||existing?.specialModel?.examples!==specialModel.examples||existing?.reason!==summary.eligibilityReason){
+        if(existing?.model?.examples!==model.examples||existing?.specialModel?.examples!==specialModel.examples||
+          existing?.openingModel?.examples!==openingModel.examples||existing?.reason!==summary.eligibilityReason){
           await this.ctx.storage.put('promotionCandidate',{
             reason:summary.eligibilityReason,createdAt:new Date().toISOString(),
             completedGames:summary.completedGames,model:{weights:[...model.weights],examples:model.examples},
-            specialModel:{weights:[...specialModel.weights],examples:specialModel.examples}
+            specialModel:{weights:[...specialModel.weights],examples:specialModel.examples},
+            openingModel:{weights:openingModel.weights.map(row=>[...row]),examples:openingModel.examples}
           });
         }
-        promotionPending=true;
-        summary.pendingLiveUpdate={reason:summary.eligibilityReason,modelExamples:model.examples,specialModelExamples:specialModel.examples};
+        // Activate ONLY in the isolated DEVELOPMENT Worker, never the public
+        // game or production authority. The new weights are available for the
+        // next Training game, and the update dialog is shown only after ack.
+        await this.ctx.storage.put('activeCardModel',model.export());
+        await this.ctx.storage.put('activeSpecialModel',specialModel.export());
+        await this.ctx.storage.put('activeOpeningModel',openingModel.export());
+        const nextVersion=Number(prior.developmentModelVersion||0)+1;
+        const acknowledged=recordSuccessfulDevelopmentModelUpdate(summary,nextVersion);
+        summary=Object.assign(acknowledged,{
+          lastDevelopmentModelExamples:model.examples,
+          lastDevelopmentSpecialModelExamples:specialModel.examples,
+          lastDevelopmentOpeningModelExamples:openingModel.examples,
+          pendingLiveUpdate:{reason:updateTrigger,modelExamples:model.examples,
+            specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples}
+        });
+        promotionPending=true;developmentModelUpdated=true;
       }
       await this.ctx.storage.put('model',model.export());
       await this.ctx.storage.put('specialModel',specialModel.export());
+      await this.ctx.storage.put('openingModel',openingModel.export());
       await this.ctx.storage.put(gameKey,completedGame);
       await this.ctx.storage.put('summary',summary);
       return json({ok:true,trained,trainingGames:summary.trainingGames,
         completedGames:summary.completedGames,consecutiveAgreementGames:summary.consecutiveAgreementGames,
-        modelExamples:model.examples,specialModelExamples:specialModel.examples,promotionPending,publishedToLive:false,
-        updateTrigger:promotionPending?summary.eligibilityReason:null});
+        modelExamples:model.examples,specialModelExamples:specialModel.examples,
+        openingModelExamples:openingModel.examples,promotionPending,publishedToLive:false,
+        developmentModelUpdated,developmentModelVersion:developmentModelUpdated?summary.developmentModelVersion:null,
+        updateTrigger:promotionPending?updateTrigger:null});
     }
     return fail('NOT_FOUND',404);
   }
@@ -214,7 +282,7 @@ export default {
       if(!['GET','POST'].includes(method)||headers.some(h=>!['authorization','content-type'].includes(h)))return json({ok:false},403,responseHeaders);
       return new Response(null,{status:204,headers:responseHeaders});
     }
-    const supported=new Set(['/api/training/state','/api/training/history','/api/training/feedback','/api/training/special-feedback','/api/training/complete']);
+    const supported=new Set(['/api/training/state','/api/training/history','/api/training/feedback','/api/training/special-feedback','/api/training/opening-feedback','/api/training/complete']);
     if(!supported.has(url.pathname)||!['GET','POST'].includes(request.method))return json({ok:false,error:'NOT_FOUND'},404,responseHeaders);
     const account=await verifyIdentity(request,env,origin);
     if(!account)return json({ok:false,error:'AUTH_REQUIRED'},401,responseHeaders);
