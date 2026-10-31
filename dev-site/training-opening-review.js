@@ -88,7 +88,12 @@ function createPanel(layer){
  const gameId=globalThis.GoStopTrainingFeedbackDev?.getStatus?.()?.gameId;
  const stage=document.querySelector('main.game-stage');
  if(!stage||!gameId||gameId===reviewedGameId)return;
- const vis=visible(),review=helper.withLearnedWeights(helper.evaluate(vis,deck),downloadedOpeningModel),
+ const vis=visible(),baseReview=helper.evaluate(vis,deck),
+  // The expert must confirm the strategy from the FROZEN Training coach,
+  // not the separate learner's broad list of plausible future goals.
+  // Learned weights do not modify the frozen coach and must not silently
+  // produce a different recommendation in the confirmation dialog.
+  review={...baseReview,suggested:helper.nativeOpeningStrategies(vis,deck)},
   lang=language(),c=COPY[lang],d=DECISION[lang],names=LABELS[lang];
  if(!review.strategies.length)return;
  reviewedGameId=gameId;staged={gameId,vis,review};
