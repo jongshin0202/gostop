@@ -62,3 +62,35 @@ test('model cannot recommend already broken stripe sets or hidden, unseen sets',
  assert.ok(!result.suggested.includes('blue-stripes'),'no blue ribbon is visible in hand or available now');
  assert.ok(result.suggested.includes('singles'));
 });
+
+test('native opening fallback matches frozen Singles advice even with one Bright and scattered ribbons',()=>{
+ const visible={
+  hand:['m1-1','m1-2','m2-2','m4-2','m5-4','m6-4','m7-4'],
+  floor:['m8-1','m8-3'],humanCaptured:[],computerCaptured:[]
+ };
+ const broad=helper.evaluate(visible,deck);
+ assert.ok(broad.suggested.includes('brights'),'broad learner can see a speculative Bright');
+ assert.ok(broad.suggested.includes('red-stripes'),'broad learner can see speculative red ribbons');
+ assert.deepEqual(helper.nativeOpeningStrategies(visible,deck),['singles'],
+  'only one Bright and a single ribbon of each set are not strategic openings');
+ assert.deepEqual(helper.strategiesFromEnglishCoach(
+  'Best strategy: Singles. No Bright, 5-BIRDIES, or 3-Stripe set has at least 2 cards within reach yet, so build Singles.'),['singles']);
+});
+test('native opening recognizes two strong cards from a viable set, not merely any one',()=>{
+ const v={hand:['m1-1','m3-1','m2-2','m3-2'],floor:[],humanCaptured:[],computerCaptured:[]};
+ const picks=helper.nativeOpeningStrategies(v,deck);
+ assert.ok(picks.includes('brights'),'two Brights are strategically viable');
+ assert.ok(picks.includes('red-stripes'),'two red ribbons are strategically viable');
+ assert.ok(!picks.includes('singles'),'Singles fallback only when major routes are not strong');
+});
+test('native opening does not recommend GODORI without an immediately playable or claimable bird',()=>{
+ const noMatch={hand:['m2-3','m4-3'],floor:[],humanCaptured:[],computerCaptured:[]};
+ assert.deepEqual(helper.nativeOpeningStrategies(noMatch,deck),['singles']);
+ const playable={...noMatch,floor:['m2-2']};
+ assert.ok(helper.nativeOpeningStrategies(playable,deck).includes('godori'));
+});
+test('the displayed English heading is authoritative for expert confirmation',()=>{
+ assert.deepEqual(helper.strategiesFromEnglishCoach('Best strategies: Blue Stripes, Brights, and 5-BIRDIES.'),['blue-stripes','brights','godori']);
+ assert.equal(helper.strategiesFromEnglishCoach('Suggested paths are Singles'),null);
+ assert.equal(helper.strategiesFromEnglishCoach('Best strategy: Unknown.'),null);
+});
