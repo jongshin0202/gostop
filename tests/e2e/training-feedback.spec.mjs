@@ -2,8 +2,8 @@ import {test,expect} from '@playwright/test';
 
 function fakeCloud(){
   const items=[];const finished=new Set();
-  let learned=0,specialLearned=0,announceLiveActivation=false;
-  return {items,completedCount:()=>finished.size,confirmNextLiveActivation:()=>{announceLiveActivation=true;},
+  let learned=0,specialLearned=0,announceDevelopmentActivation=false;
+  return {items,completedCount:()=>finished.size,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
       const reply=(status,obj)=>route.fulfill({status,contentType:'application/json',
@@ -23,9 +23,9 @@ function fakeCloud(){
           specialLearned+=items.filter(x=>x.gameId===gameId&&x.context&&x.choice!=='unsure').length;
           finished.add(gameId);
         }
-        const publishedToLive=announceLiveActivation;
-        announceLiveActivation=false;
-        return reply(200,{ok:true,trained:learned+specialLearned,modelExamples:learned,specialModelExamples:specialLearned,publishedToLive});
+        const developmentModelUpdated=announceDevelopmentActivation;
+        announceDevelopmentActivation=false;
+        return reply(200,{ok:true,trained:learned+specialLearned,modelExamples:learned,specialModelExamples:specialLearned,publishedToLive:false,developmentModelUpdated});
       }
       return reply(404,{ok:false});
     }
@@ -145,9 +145,9 @@ test('ordinary completed Training game never shows a false live-update dialog',a
  await expect.poll(()=>server.completedCount()).toBe(1);
  await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
 });
-test('confirmed server activation alone permits update OK dialog',async({page})=>{
+test('acknowledged development-only server activation permits update OK dialog',async({page})=>{
  const server=await setup(page);
- server.confirmNextLiveActivation();
+ server.confirmNextDevelopmentActivation();
  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
  await expect.poll(()=>server.completedCount()).toBe(1);
  const dialog=page.getByRole('dialog',{name:'Training model update'});
