@@ -37,3 +37,28 @@ test('no visible major route falls back to Singles instead of inventing nearby s
  const r=helper.evaluate({hand:['m7-4'],floor:[],humanCaptured:[],computerCaptured:[]},deck);
  assert.deepEqual(r.suggested,['singles']);
 });
+
+test('only acknowledged server-trained weights adjust future visible opening advice',()=>{
+ const v={hand:['m1-1','m4-4','m5-4','m6-4','m7-4','m8-4'],floor:[],humanCaptured:[],computerCaptured:[]};
+ const base=helper.evaluate(v,deck);
+ const weights=Array.from({length:8},()=>Array(12).fill(0));
+ // Expert has rejected Brights in similar positions and favored Singles.
+ weights[0][0]=-3;weights[5][0]=3;
+ const model={examples:2,weights};
+ const selected=helper.withLearnedWeights(base,model);
+ assert.ok(!selected.suggested.includes('brights'));
+ assert.ok(selected.suggested.includes('singles'));
+ assert.equal(selected.modelExamples,2);
+ assert.deepEqual(helper.withLearnedWeights(base,null),base);
+ assert.deepEqual(helper.withLearnedWeights(base,{examples:0,weights}),base);
+});
+test('model cannot recommend already broken stripe sets or hidden, unseen sets',()=>{
+ const v={hand:['m1-1','m2-2'],floor:['m3-2'],humanCaptured:[],computerCaptured:['m1-2']};
+ const base=helper.evaluate(v,deck);
+ const weights=Array.from({length:8},()=>Array(12).fill(0));
+ weights[2][0]=6;weights[3][0]=6;weights[5][0]=1;
+ const result=helper.withLearnedWeights(base,{examples:5,weights});
+ assert.ok(!result.suggested.includes('red-stripes'),'opponent already captured required red ribbon');
+ assert.ok(!result.suggested.includes('blue-stripes'),'no blue ribbon is visible in hand or available now');
+ assert.ok(result.suggested.includes('singles'));
+});
