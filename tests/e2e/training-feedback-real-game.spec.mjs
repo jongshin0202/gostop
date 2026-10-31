@@ -55,7 +55,7 @@ test('real Training gameplay shows feedback after clicking a nonrecommended play
    const counts=new Map();
    for(const el of cards)counts.set(el.dataset.month,(counts.get(el.dataset.month)||0)+1);
    const alternative=cards.find(el=>el!==rec&&!el.classList.contains('armed-bomb-card')&&
-     (counts.get(el.dataset.month)||0)<3);
+     (counts.get(el.dataset.month)||0)<3)||cards.find(el=>el!==rec);
    if(!alternative)return false;
    alternative.click();
    return true;
