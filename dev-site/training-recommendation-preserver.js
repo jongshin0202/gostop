@@ -21,13 +21,21 @@ function reset(){
  document.documentElement.classList.remove(SCOPE);
 }
 function sync(){
- if(!trainingActive||specialIsOpen()){reset();return;}
+ if(!trainingActive){reset();return;}
+ if(specialIsOpen()){
+  if(lock){reset();suppressed=true;}
+  return;
+ }
  const sig=handSignature();
  if(lock&&(!sig||sig!==lock.handSignature||!hand.querySelector('[data-card-id="'+lock.hand+'"]'))){
-  reset();
-  suppressed=false;
+  // The played card has left the hand. Do not immediately re-capture the old
+  // glowing hint while a frozen-game render is still in progress.
+  reset();suppressed=true;
  }
  const recommendation=hand.querySelector('.hand-card.matchable[data-card-id]');
+ // A new turn first clears the old hint, then displays a new one. Require that
+ // clearing transition before taking another initial recommendation snapshot.
+ if(suppressed&&!recommendation)suppressed=false;
  if(!lock&&!suppressed&&recommendation&&!panel.hidden){
   const recommendedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]');
   const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
