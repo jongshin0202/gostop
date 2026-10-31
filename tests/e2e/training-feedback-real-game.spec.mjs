@@ -35,7 +35,7 @@ test('real Training gameplay shows feedback after clicking a nonrecommended play
    const shake=document.querySelector('#shakeDialog[open]'),bomb=document.querySelector('#bombDialog[open]');
    const hint=document.querySelector('#playerHand .hand-card.matchable:not([disabled])');
    return shake||bomb||hint;
-  },{timeout:55000});
+  },null,{timeout:55000});
   const state=await page.evaluate(()=>{
    if(document.querySelector('#shakeDialog[open]'))return 'shake';
    if(document.querySelector('#bombDialog[open]'))return 'bomb';
