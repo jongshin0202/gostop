@@ -56,6 +56,20 @@ jobs:
           node --check dev-site/training-opening-evidence.js
           node --check dev-site/training-opening-review.js
           node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs
+      # Ubuntu 24.04 hosted runners sometimes route apt through an unavailable
+      # Azure mirror, preventing Playwright's --with-deps step from ever running.
+      # Replace only that mirror with the standard Ubuntu archive; preserve all
+      # browser dependencies and the full end-to-end test requirements.
+      - name: Configure resilient Ubuntu apt mirror for browser tests
+        run: |
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$source" ]; then
+              sudo sed -i 's@http://azure.archive.ubuntu.com/ubuntu@https://archive.ubuntu.com/ubuntu@g' "$source"
+            fi
+          done
+          echo 'Acquire::http::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
+          echo 'Acquire::https::Timeout "30";' | sudo tee -a /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
+          echo 'Acquire::Retries "2";' | sudo tee -a /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
       - name: Install browser test runner
         run: |
           npm install --no-save @playwright/test@1.55.0

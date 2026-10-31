@@ -53,6 +53,57 @@ function evaluate(visible,deck){
  ];
  return {suggested,info,evidence,strategies:[...STRATEGIES]};
 }
+// Match the FROZEN Training opening strategy rules (app.js trainingStrategyProfile).
+// A single interesting card is not a strategic opening recommendation.
+// This pure, read-only mirror exists only for the isolated dev reviewer.
+function nativeOpeningStrategies(visible,deck){
+ const all=new Map((deck||[]).map(c=>[c.id,c]));
+ const cards=field=>[...new Set(visible?.[field]||[])].map(id=>all.get(id)).filter(Boolean);
+ const hand=cards('hand'),floor=cards('floor'),mine=cards('humanCaptured'),theirs=cards('computerCaptured');
+ const handMonths=new Set(hand.map(c=>c.month)),floorMonths=new Set(floor.map(c=>c.month));
+ const byMonth=arr=>new Set(arr.map(c=>c.month));
+ const uniqueIds=arr=>new Set(arr.map(c=>c.id));
+ const route=(predicate,identity='month')=>{
+  const held=hand.filter(predicate),captured=mine.filter(predicate),lost=theirs.filter(predicate);
+  const playable=held.filter(c=>floorMonths.has(c.month));
+  const claimable=floor.filter(c=>predicate(c)&&handMonths.has(c.month));
+  const uniq=identity==='id'?uniqueIds:byMonth;
+  const potentialCount=uniq([...captured,...held,...claimable]).size;
+  const controlledCount=uniq([...captured,...playable,...claimable]).size;
+  const immediateCount=uniq([...playable,...claimable]).size;
+  return {lost:lost.length,potentialCount,controlledCount,immediateCount,
+   strong:controlledCount>=2,veryStrong:controlledCount>=3};
+ };
+ const options=[];
+ for(const [family,strategy] of [['red','red-stripes'],['blue','blue-stripes'],['grass','plain-stripes']]){
+  const r=route(c=>c.type==='ribbon'&&c.ribbonSet===family);
+  if(r.lost||r.potentialCount<2)continue;
+  options.push({strategy,label:({red:'Red',blue:'Blue',grass:'Plain'}[family]+' Stripes'),score:300+(r.strong?120:0)+(r.veryStrong?120:0)+r.controlledCount*45+r.immediateCount*30+r.potentialCount*20});
+ }
+ const bright=route(c=>c.type==='bright','id');
+ if(5-bright.lost>=3&&bright.potentialCount>=2)
+  options.push({strategy:'brights',label:'Brights',score:330+(bright.strong?100:0)+(bright.veryStrong?120:0)+bright.controlledCount*45+bright.immediateCount*30+bright.potentialCount*25});
+ const godori=route(c=>c.flags?.includes('godori')&&[2,4,8].includes(c.month));
+ if(godori.lost===0&&godori.potentialCount>=2&&godori.immediateCount>0)
+  options.push({strategy:'godori',label:'5-BIRDIES',score:360+(godori.strong?120:0)+(godori.veryStrong?140:0)+godori.controlledCount*50+godori.immediateCount*35+godori.potentialCount*30});
+ options.sort((a,b)=>b.score-a.score||a.label.localeCompare(b.label));
+ return options.length?options.map(o=>o.strategy):['singles'];
+}
+
+// When the frozen Training coach renders English opening advice, its heading
+// is authoritative. Never train on a second recommendation that disagrees
+// with what the player saw. Other locales retain the exact native route rules.
+function strategiesFromEnglishCoach(text){
+ const match=String(text||'').match(/^\s*Best strateg(?:y|ies):\s*([^.!?]+)[.!?]/i);
+ if(!match)return null;
+ const names={'brights':'brights','5-birdies':'godori','red stripes':'red-stripes',
+  'blue stripes':'blue-stripes','plain stripes':'plain-stripes','singles':'singles'};
+ const labels=match[1].replace(/,?\s+and\s+/gi,',').split(',').map(s=>s.trim().toLowerCase());
+ const options=labels.map(x=>names[x]);
+ if(!options.length||options.some(x=>!x)||new Set(options).size!==options.length)return null;
+ return options;
+}
+
 function withLearnedWeights(review,model){
  // Never recommend an impossible set. Expert weights influence future games
  // ONLY when downloaded from the verified development learning server.
@@ -78,7 +129,7 @@ function withLearnedWeights(review,model){
  // deterministic prior rather than produce an empty or misleading hint.
  return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
 }
-const api=Object.freeze({evaluate,withLearnedWeights,STRATEGIES});
+const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
