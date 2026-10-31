@@ -45,12 +45,12 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   const preserverCss=readFileSync(join(output,'dev-training-recommendation-preserver.css'),'utf8');
   assert.match(preserverCss,/\.dev-training-recommendation-lock/);
   assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-training-recommendation-preserver/);
-  assert.match(html,/dev-training-sake-cup-copy\\.js\\?v=/);
+  assert.match(html,/dev-training-sake-cup-copy\.js\?v=/);
   assert.ok(html.indexOf('dev-training-recommendation-preserver.js')<html.indexOf('dev-training-sake-cup-copy.js'));
   const sakeCopy=readFileSync(join(output,'dev-training-sake-cup-copy.js'),'utf8');
   assert.match(sakeCopy,/The Sake Cup counts as 2 Singles/);
   assert.match(sakeCopy,/gukjinTrainingReason/);
-  assert.doesNotMatch(sakeCopy,/stopPropagation|preventDefault|setGukjinMode|localStorage\\.setItem/);
+  assert.doesNotMatch(sakeCopy,/stopPropagation|preventDefault|setGukjinMode|localStorage\.setItem/);
   assert.doesNotMatch(readFileSync(join(root,'index.html'),'utf8'),/dev-training-sake-cup-copy/);
   assert.doesNotMatch(readFileSync(join(root,'styles.css'),'utf8'),/dev-training-recommendation-lock/);
   const coachCss=readFileSync(join(output,'dev-training-special-advice.css'),'utf8');
