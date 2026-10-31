@@ -347,6 +347,13 @@ function onSpecialDecision(event){
 document.addEventListener('click',event=>{
  const t=event.target;
  if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ else if(t?.closest?.('#playAgainBtn,#newGameYesBtn')&&active){
+  // A Training replay is a NEW completed-game sample with its own opening
+  // strategy review. Never reuse the prior game's feedback/identity.
+  gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;
+  observedRecommendation=null;previousActivation=null;hadDisagreement=false;
+  ensureGame();void checkAccount();
+ }
  else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;gameId=null;hadDisagreement=false;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
