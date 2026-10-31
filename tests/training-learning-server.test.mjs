@@ -131,9 +131,15 @@ test('a disagreement followed by ten clean games stages a versioned candidate wi
   assert.equal(tenth.promotionPending,true);
   assert.equal(tenth.updateTrigger,'10-agreement-games-after-disagreement');
   assert.equal(tenth.publishedToLive,false);
+  assert.equal(tenth.developmentModelUpdated,true);
+  assert.equal(tenth.developmentModelVersion,1);
   const state=await(await t.request('/api/training/state')).json();
   assert.equal(state.completedGames,11);
   assert.equal(state.pendingLiveUpdate.modelExamples,1);
+  assert.equal(state.gamesSinceLiveUpdate,0,'cadence resets after acknowledged dev activation');
+  assert.equal(state.developmentModelVersion,1);
+  assert.equal(t.store.get('activeCardModel').examples,1);
+  assert.equal(t.store.get('activeOpeningModel').examples,0);
   const candidate=t.store.get('promotionCandidate');
   assert.equal(candidate.reason,'10-agreement-games-after-disagreement');
   assert.equal(candidate.model.weights.length,16);
@@ -251,6 +257,7 @@ test('opening expert can select multiple goals, saved on server and trained only
   const before=await(await t.request('/api/training/state')).json();
   assert.equal(before.feedbackCount,1);assert.equal(before.confirmedCount,1);
   assert.equal(before.openingModel.examples,0);
+  assert.equal(before.activeOpeningModel,null,'draft feedback cannot change active opening advice');
   const duplicate=await(await t.request('/api/training/opening-feedback',{method:'POST',body:{
    ...x,feedbackId:'opening-feedback-0002'}})).json();
   assert.equal(duplicate.duplicate,true);
@@ -259,6 +266,7 @@ test('opening expert can select multiple goals, saved on server and trained only
   assert.equal(result.publishedToLive,false);
   const state=await(await t.request('/api/training/state')).json();
   assert.equal(state.openingModel.examples,1);
+  assert.equal(state.activeOpeningModel,null,'learning is draft until 20/10 trigger');
   assert.equal(state.disagreementObservedAfterUpdate,true);
   const history=await(await t.request('/api/training/history')).json();
   assert.equal(history.feedback[0].kind,'opening');
@@ -306,6 +314,13 @@ test('ten agreement games after an opening-strategy correction stage separate op
   const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-10'}})).json();
   assert.equal(result.updateTrigger,'10-agreement-games-after-disagreement');
   assert.equal(result.publishedToLive,false);
+  assert.equal(result.developmentModelUpdated,true);
+  const current=await(await t.request('/api/training/state')).json();
+  assert.equal(current.activeOpeningModel.examples,1);
+  assert.equal(current.gamesSinceLiveUpdate,0);
+  const afterNextGame=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-after-update'}})).json();
+  assert.equal(afterNextGame.developmentModelUpdated,false);
+  assert.equal(afterNextGame.promotionPending,false);
   const candidate=t.store.get('promotionCandidate');
   assert.equal(candidate.openingModel.examples,1);
   assert.equal(candidate.openingModel.weights.length,8);
