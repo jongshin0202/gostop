@@ -140,3 +140,97 @@ test('a disagreement followed by ten clean games stages a versioned candidate wi
   assert.equal(candidate.model.examples,1);
  }finally{t.restore();}
 });
+
+const specialEntry=(gameId='special-game-1',kind='shake',bombReady=false,choice='mine')=>({
+ gameId,feedbackId:'special-feedback-0001',choice,
+ recommendedAction:kind==='shake'?(bombReady?'bomb':'shake'):'bomb',
+ playedAction:kind==='shake'?(bombReady?'shake':'keepForBomb'):'playOne',
+ legalActions:kind==='shake'?(bombReady?['shake','bomb']:['shake','keepForBomb']):['bomb','playOne'],
+ context:{kind,bombReady:kind==='bomb'?true:bombReady,month:11,cardIds:['m11-1','m11-2','m11-3']},
+ visible:{hand:['m11-1','m11-2','m11-3'],floor:['m6-2'],humanCaptured:[],computerCaptured:[]}
+});
+test('confirmed Shake-versus-Keep feedback is stored and trains only at completion',async()=>{
+ const t=fixture();try{
+  const x=specialEntry();
+  assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:x})).status,200);
+  const before=await(await t.request('/api/training/state')).json();
+  assert.equal(before.feedbackCount,1);assert.equal(before.confirmedCount,1);
+  assert.equal(before.specialModel.examples,0);
+  const r=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}})).json();
+  assert.equal(r.trained,1);assert.equal(r.specialModelExamples,1);
+  assert.equal(r.publishedToLive,false);
+  const after=await(await t.request('/api/training/state')).json();
+  assert.equal(after.specialModel.examples,1);
+  const history=await(await t.request('/api/training/history')).json();
+  assert.equal(history.feedback[0].kind,'special');
+  assert.equal(history.feedback[0].recommendedAction,'shake');
+  assert.equal(history.feedback[0].playedAction,'keepForBomb');
+  assert.equal((await(await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}})).json()).duplicate,true);
+ }finally{t.restore();}
+});
+test('Bomb-versus-Shake and Bomb-versus-Play One judgments train separately',async()=>{
+ const t=fixture();try{
+  const shake=specialEntry('special-game-shake','shake',true,'recommended');
+  const bomb=specialEntry('special-game-bomb','bomb',true,'mine');
+  for(const x of [shake,bomb]){
+   const r=await t.request('/api/training/special-feedback',{method:'POST',body:x});
+   assert.equal(r.status,200,await r.text());
+   const done=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}})).json();
+   assert.equal(done.trained,1);
+  }
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.specialModel.examples,2);
+  assert.equal(state.model.examples,0);
+ }finally{t.restore();}
+});
+test('uncertain special feedback counts as disagreement but never trains',async()=>{
+ const t=fixture();try{
+  const x=specialEntry('special-uncertain','shake',true,'unsure');
+  assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:x})).status,200);
+  const done=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}})).json();
+  assert.equal(done.trained,0);assert.equal(done.specialModelExamples,0);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.consecutiveAgreementGames,0);
+  assert.equal(state.disagreementObservedAfterUpdate,true);
+  assert.equal(state.feedbackCount,1);assert.equal(state.confirmedCount,0);
+ }finally{t.restore();}
+});
+test('server validates special action pairs, visible cards and duplicate feedback',async()=>{
+ const t=fixture();try{
+  const good=specialEntry('special-valid');
+  assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:good})).status,200);
+  assert.equal((await(await t.request('/api/training/special-feedback',{method:'POST',body:good})).json()).duplicate,true);
+  const attempts=[
+    {...specialEntry('special-bad-1'),playedAction:'invented'},
+    {...specialEntry('special-bad-2'),legalActions:['shake','playOne']},
+    {...specialEntry('special-bad-3'),context:{...good.context,month:12}},
+    {...specialEntry('special-bad-4'),visible:{...good.visible,hand:[]}},
+    {...specialEntry('special-bad-5'),recommendedAction:'keepForBomb',playedAction:'keepForBomb'},
+    {...specialEntry('special-bad-6'),context:{...good.context,cardIds:['m11-1','m11-1','m11-2']}},
+  ];
+  for(const x of attempts)assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:x})).status,400);
+  assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:specialEntry('special-noauth'),authorization:''})).status,401);
+  await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-valid'}});
+  const late={...good,feedbackId:'special-feedback-late'};
+  assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:late})).status,409);
+ }finally{t.restore();}
+});
+test('special-only learning is included in staged weights after the update threshold',async()=>{
+ const t=fixture();try{
+  const x=specialEntry('special-trigger-game');
+  await t.request('/api/training/special-feedback',{method:'POST',body:x});
+  await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}});
+  for(let n=1;n<10;n++){
+   const r=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-'+n}})).json();
+   assert.equal(r.promotionPending,false);
+  }
+  const last=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-10'}})).json();
+  assert.equal(last.updateTrigger,'10-agreement-games-after-disagreement');
+  assert.equal(last.promotionPending,true);
+  assert.equal(last.publishedToLive,false);
+  const candidate=t.store.get('promotionCandidate');
+  assert.equal(candidate.specialModel.examples,1);
+  assert.equal(candidate.specialModel.weights.length,16);
+  assert.equal(candidate.model.examples,0);
+ }finally{t.restore();}
+});

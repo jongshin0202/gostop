@@ -25,6 +25,7 @@ globalThis.GoStopTrainingCloud=Object.freeze({
  state:()=>call('/api/training/state'),
  history:()=>call('/api/training/history'),
  feedback:payload=>call('/api/training/feedback',{method:'POST',payload}),
+ specialFeedback:payload=>call('/api/training/special-feedback',{method:'POST',payload}),
  complete:(gameId,options={})=>call('/api/training/complete',{method:'POST',payload:{gameId,...options}})
 });
 })();

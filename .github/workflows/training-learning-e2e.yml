@@ -6,6 +6,7 @@ on:
     paths:
       - training-learning/**
       - tests/e2e/training-feedback.spec.mjs
+      - tests/e2e/training-feedback-real-game.spec.mjs
       - .github/workflows/training-learning-e2e.yml
   workflow_dispatch:
 
