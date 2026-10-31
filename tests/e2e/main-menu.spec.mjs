@@ -858,7 +858,16 @@ test('development guest Training Quit confirmation NO stays in game and YES retu
   await expect(menu).toBeHidden();
   await page.locator('#newGameBtn').click();
   await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',true);
-  await page.locator('#quitYesBtn').click();
+  // An independently scheduled native opening Shake choice may become topmost
+  // in this randomized guest round. Resolve that legitimate game decision
+  // before trying to press YES behind it. This is test-only; no game changes.
+  try{await page.locator('#quitYesBtn').click({timeout:3000});}
+  catch(error){
+    const shakeOpen=await page.locator('#shakeDialog').evaluate(dialog=>dialog.open);
+    if(!shakeOpen)throw error;
+    await page.locator('#keepSecretBtn').click({timeout:5000});
+    await page.locator('#quitYesBtn').click({timeout:10000});
+  }
   await expect(page.locator('#quitConfirmDialog')).toHaveJSProperty('open',false);
   await expect(menu).toBeVisible();
   await expect(page.locator('#friendlyGamingBtn')).toBeVisible();
