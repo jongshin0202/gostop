@@ -67,7 +67,9 @@ jobs:
               sudo sed -i 's@http://azure.archive.ubuntu.com/ubuntu@https://archive.ubuntu.com/ubuntu@g' "$source"
             fi
           done
-          printf '%s\\n' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'Acquire::Retries "2";' | sudo tee /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
+          echo 'Acquire::http::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
+          echo 'Acquire::https::Timeout "30";' | sudo tee -a /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
+          echo 'Acquire::Retries "2";' | sudo tee -a /etc/apt/apt.conf.d/90-gostop-ci-mirror >/dev/null
       - name: Install browser test runner
         run: |
           npm install --no-save @playwright/test@1.55.0
