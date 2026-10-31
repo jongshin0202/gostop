@@ -65,7 +65,7 @@ test('model cannot recommend already broken stripe sets or hidden, unseen sets',
 
 test('native opening fallback matches frozen Singles advice even with one Bright and scattered ribbons',()=>{
  const visible={
-  hand:['m1-1','m1-2','m2-2','m4-2','m5-4','m6-4','m7-4'],
+  hand:['m1-1','m1-2','m6-2','m4-2','m5-4','m6-4','m7-4'],
   floor:['m8-1','m8-3'],humanCaptured:[],computerCaptured:[]
  };
  const broad=helper.evaluate(visible,deck);
