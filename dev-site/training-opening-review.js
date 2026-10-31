@@ -88,13 +88,16 @@ function createPanel(layer){
  const gameId=globalThis.GoStopTrainingFeedbackDev?.getStatus?.()?.gameId;
  const stage=document.querySelector('main.game-stage');
  if(!stage||!gameId||gameId===reviewedGameId)return;
- const vis=visible(),baseReview=helper.evaluate(vis,deck),
-  // The expert must confirm the strategy from the FROZEN Training coach,
-  // not the separate learner's broad list of plausible future goals.
-  // Learned weights do not modify the frozen coach and must not silently
-  // produce a different recommendation in the confirmation dialog.
-  review={...baseReview,suggested:helper.nativeOpeningStrategies(vis,deck)},
-  lang=language(),c=COPY[lang],d=DECISION[lang],names=LABELS[lang];
+ const vis=visible(),lang=language(),c=COPY[lang],d=DECISION[lang],names=LABELS[lang],
+  baseReview=helper.evaluate(vis,deck),nativeSuggestions=helper.nativeOpeningStrategies(vis,deck),
+  // For English, use the FROZEN coach's actual displayed heading as the
+  // definitive source of what the expert is confirming. The pure native-rule
+  // mirror supplies the structural selection for all other languages.
+  coachText=$('trainingCoachText')?.textContent||'',
+  displayedSuggestions=lang==='en'?helper.strategiesFromEnglishCoach(coachText):null,
+  review={...baseReview,suggested:displayedSuggestions||nativeSuggestions};
+ // Never apply shadow learner weights to an answer that the frozen game coach
+ // has not actually made; confirmed labels must match the player's screen.
  if(!review.strategies.length)return;
  reviewedGameId=gameId;staged={gameId,vis,review};
  openingLayer=layer;openingLayer.style.pointerEvents='none';
