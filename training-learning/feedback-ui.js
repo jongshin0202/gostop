@@ -225,6 +225,33 @@ function feedbackDialog(data){
 let queue=[];
 function showNext(){if(showing||!queue.length)return;const x=queue.shift();feedbackDialog(x);}
 function enqueue(p){if(!p)return;queue.push(p);showNext();}
+// Preserve the original, visible recommendation for the CURRENT hand. The
+// frozen game removes .matchable when a move begins and may temporarily
+// highlight a different target during a two-target selection. We must compare
+// against the first recommendation, not the interim target-choice advice.
+let observedRecommendation=null,previousActivation=null;
+const handSignature=()=>[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')]
+ .map(el=>el.dataset.cardId).filter(Boolean).sort().join('|');
+function captureRecommendation(){
+ if(!active)return null;
+ const hand=handSignature();
+ const rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
+ if(rec){
+  const original=$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
+  if(!observedRecommendation||observedRecommendation.handSignature!==hand||
+     observedRecommendation.hand!==rec){
+   observedRecommendation={handSignature:hand,hand:rec,target:original};
+  }else if(!observedRecommendation.target&&original){
+   observedRecommendation.target=original;
+  }
+ }
+ return observedRecommendation?.handSignature===hand?observedRecommendation:null;
+}
+const observeCoach=new MutationObserver(()=>captureRecommendation());
+if($('playerHand'))observeCoach.observe($('playerHand'),
+ {subtree:true,childList:true,attributes:true,attributeFilter:['class','data-card-id','disabled']});
+if($('floor'))observeCoach.observe($('floor'),
+ {subtree:true,childList:true,attributes:true,attributeFilter:['class','data-card-id']});
 function snapshot(){
  const handIds=inHand(),floorIds=onTable();
  return {handIds,floorIds,visible:{
@@ -239,32 +266,45 @@ function beginDisagreement(recommended,played,observed){
  hadDisagreement=true;
  enqueue({recommended,played,visible:observed.visible,legalMoves:legal});
 }
-function onHand(event){
- if(!active||!enabled()||modal.open)return;
- const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
+function onHandActivation(cardId,source='click'){
+ if(!active||!enabled()||modal.open||!cardId)return;
+ const el=[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')]
+  .find(node=>node.dataset.cardId===cardId);
  if(!el||el.disabled)return;
- const current=el.dataset.cardId,rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
- if(!rec)return;
- const observe=snapshot(),recFloor=$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
- lastHand={current,rec,recFloor,observe};
- const targets=observe.floorIds.filter(id=>card(id)?.month===card(current)?.month);
- if(targets.length>1)return; // Wait for authoritative floor choice; never block it.
+ // Some mobile input handlers emit gostop-hand-activate and synthesize a click.
+ // Both represent ONE play, never two feedback prompts.
+ const now=Date.now();
+ if(previousActivation?.cardId===cardId&&now-previousActivation.at<250)return;
+ previousActivation={cardId,at:now,source};
+ const observed=snapshot();
+ const recommendation=captureRecommendation();
+ if(!recommendation||!observed.handIds.includes(recommendation.hand))return;
+ const rec=recommendation.hand,recFloor=recommendation.target;
+ const current=cardId;
+ lastHand={current,rec,recFloor,observe:observed};
+ const targets=observed.floorIds.filter(id=>card(id)?.month===card(current)?.month);
+ if(targets.length>1)return; // Wait until one actual table target is selected.
  const actualTarget=targets[0]||null;
- const recTargets=observe.floorIds.filter(id=>card(id)?.month===card(rec)?.month);
- const originalTarget=recFloor||recTargets[0]||null;
- if(current===rec)return;
- window.setTimeout(()=>{if(!active)return;beginDisagreement({hand:rec,target:originalTarget},{hand:current,target:actualTarget},observe);},200);
+ const recTargets=observed.floorIds.filter(id=>card(id)?.month===card(rec)?.month);
+ const originalTarget=recTargets.includes(recFloor)?recFloor:recTargets[0]||null;
+ if(moveId(current,actualTarget)===moveId(rec,originalTarget))return;
+ window.setTimeout(()=>{if(active)beginDisagreement({hand:rec,target:originalTarget},
+  {hand:current,target:actualTarget},observed);},200);
+}
+function onHand(event){
+ const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
+ if(el)onHandActivation(el.dataset.cardId);
 }
 function onTarget(event){
  if(!active||!enabled()||modal.open)return;
  const el=event.target?.closest?.('#floor .target-option[data-card-id]');
  if(!el)return;
  const target=el.dataset.cardId;
- const recFloor=$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
  const prior=lastHand;
  if(!prior)return;
  const chosen={hand:prior.current,target};
- const advised={hand:prior.rec,target:prior.recFloor||recFloor};
+ const recTargets=prior.observe.floorIds.filter(id=>card(id)?.month===card(prior.rec)?.month);
+ const advised={hand:prior.rec,target:recTargets.includes(prior.recFloor)?prior.recFloor:recTargets[0]||null};
  lastHand=null;
  window.setTimeout(()=>{if(active)beginDisagreement(advised,chosen,prior.observe);},200);
 }
@@ -306,11 +346,17 @@ function onSpecialDecision(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;hadDisagreement=false;ensureGame();void checkAccount();}
- else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;gameId=null;hadDisagreement=false;}
+ if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;gameId=null;hadDisagreement=false;}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
  if(t?.closest?.('#shakeDialog,#bombDialog'))onSpecialDecision(event);
+},{capture:true});
+// The game's mobile flick/tap adapter dispatches this custom action instead of
+// always clicking the card. Capture it without preventing the actual game move.
+document.addEventListener('gostop-hand-activate',event=>{
+ const id=String(event.detail?.cardId||'');
+ if(id&&!event.detail?.blank)onHandActivation(id,'gesture');
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
  getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmedCount,
