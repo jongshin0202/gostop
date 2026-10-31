@@ -1,7 +1,7 @@
-/* Optional Training opening review, development only.
- * Appends its feedback panel AFTER the entire game board so neither the hand
- * nor any floor cards are covered. The native opening gate remains authoritative.
- * Only authorized expert confirmations are sent to the isolated learning Worker.
+/* Development-only Training opening expert confirmation.
+ * Present the recommended goals in a real modal before the frozen opening gate.
+ * Accept agreement, corrections or uncertainty, and resume the original game gate
+ * without touching core gameplay, cards, or production sources.
  */
 (()=>{
 'use strict';
@@ -34,6 +34,17 @@ const COPY={
  ja:{title:'開始戦略の確認',intro:'手札と場札を見比べ、可能な目標をすべて選択してください。',suggested:'候補',submit:'専門家の判断を送信',unsure:'判断できない',skip:'保存せず続ける',save:'保存中...',saved:'保存しました。対局終了後に学習します。',error:'保存できません。',auth:'承認済み開発用エキスパートアカウントでログインしてください。',short:n=>'狙える役: '+n+'。下で選択してください。'},
  zh:{title:'起手策略审核',intro:'对照手牌和桌面牌，选择所有可行目标。',suggested:'建议',submit:'提交专家反馈',unsure:'不确定',skip:'不保存继续',save:'正在保存…',saved:'已保存，游戏结束后训练模型。',error:'无法保存。',auth:'请使用授权开发专家账户登录。',short:n=>'可能目标：'+n+'。请在下方选择。'}
 };
+
+const DECISION={
+ en:{question:'Do you agree with these opening strategies?',recommend:'Recommended opening strategies',agree:'Yes, I agree',change:'No, change strategies',edit:'Select every strategy you believe is viable for this hand.',save:'Submit my strategies',back:'Back',none:'Select at least one strategy.'},
+ ko:{question:'추천된 시작 전략에 동의하십니까?',recommend:'추천 시작 전략',agree:'네, 동의합니다',change:'아니요, 전략 수정',edit:'현재 손패에서 가능한 전략을 모두 선택해 주세요.',save:'내 전략 제출',back:'뒤로',none:'전략을 하나 이상 선택해 주세요.'},
+ es:{question:'¿Estás de acuerdo con estas estrategias iniciales?',recommend:'Estrategias recomendadas',agree:'Sí, estoy de acuerdo',change:'No, cambiar estrategias',edit:'Selecciona todas las estrategias viables para esta mano.',save:'Enviar mis estrategias',back:'Volver',none:'Elige al menos una estrategia.'},
+ fr:{question:'Êtes-vous d’accord avec ces stratégies de départ ?',recommend:'Stratégies recommandées',agree:'Oui, je suis d’accord',change:'Non, changer les stratégies',edit:'Sélectionnez toutes les stratégies possibles pour cette main.',save:'Envoyer mes stratégies',back:'Retour',none:'Sélectionnez au moins une stratégie.'},
+ de:{question:'Stimmst du diesen Startstrategien zu?',recommend:'Empfohlene Startstrategien',agree:'Ja, ich stimme zu',change:'Nein, Strategien ändern',edit:'Wähle alle für diese Hand möglichen Strategien.',save:'Meine Strategien senden',back:'Zurück',none:'Wähle mindestens eine Strategie.'},
+ ja:{question:'この開始戦略に同意しますか？',recommend:'おすすめの開始戦略',agree:'はい、同意します',change:'いいえ、戦略を変更',edit:'この手札で可能な戦略をすべて選んでください。',save:'選択した戦略を送信',back:'戻る',none:'戦略を1つ以上選択してください。'},
+ zh:{question:'你同意这些起手策略吗？',recommend:'推荐起手策略',agree:'是的，我同意',change:'不，我要修改',edit:'请选择这手牌所有可行的策略。',save:'提交我的策略',back:'返回',none:'请至少选择一个策略。'}
+};
+
 const reasons={
  en:['Held/captured','Available on table','Captured by computer','In hand','Three matching cards in hand'],
  ko:['손패/획득','바닥에서 획득 가능','상대 획득','손패','같은 종류 세 장 보유'],
@@ -67,7 +78,7 @@ function visible(){return {hand:ids('#playerHand .hand-card[data-card-id]'),
 let active=false,panel=null,reviewedGameId=null,openingLayer=null,busy=false,staged=null,queued=false;
 function clear(){
  if(openingLayer&&openingLayer.isConnected)openingLayer.style.pointerEvents='';
- openingLayer=null;if(panel){panel.remove();panel=null;}staged=null;busy=false;
+ openingLayer=null;if(panel){if(panel.open&&typeof panel.close==='function')panel.close();panel.remove();panel=null;}staged=null;busy=false;
 }
 function continueGame(){
  const layer=openingLayer;
@@ -78,39 +89,62 @@ function createPanel(layer){
  const gameId=globalThis.GoStopTrainingFeedbackDev?.getStatus?.()?.gameId;
  const stage=document.querySelector('main.game-stage');
  if(!stage||!gameId||gameId===reviewedGameId)return;
- const vis=visible(),review=helper.withLearnedWeights(helper.evaluate(vis,deck),downloadedOpeningModel),lang=language(),c=COPY[lang],names=LABELS[lang];
+ const vis=visible(),review=helper.withLearnedWeights(helper.evaluate(vis,deck),downloadedOpeningModel),
+  lang=language(),c=COPY[lang],d=DECISION[lang],names=LABELS[lang];
  if(!review.strategies.length)return;
  reviewedGameId=gameId;staged={gameId,vis,review};
  openingLayer=layer;openingLayer.style.pointerEvents='none';
- panel=document.createElement('section');panel.id='devOpeningReview';
- panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','false');
- panel.setAttribute('aria-label',c.title);panel.className='dev-opening-review';
- const h=document.createElement('h2');h.textContent=c.title;
- const p=document.createElement('p');p.textContent=c.intro;
- const note=document.createElement('p');note.className='dev-opening-review-auth';note.textContent=c.auth;
- const form=document.createElement('form');form.className='dev-opening-review-options';
+ panel=document.createElement('dialog');panel.id='devOpeningReview';
+ panel.setAttribute('aria-modal','true');
+ panel.setAttribute('aria-labelledby','devOpeningReviewTitle');
+ panel.className='dev-opening-review';
+ // The opening gate must advance only after an explicit answer. Esc cannot
+ // silently dismiss the review and leave the game blocked.
+ panel.addEventListener('cancel',event=>event.preventDefault());
+ const h=document.createElement('h2');h.id='devOpeningReviewTitle';h.textContent=c.title;
+ const question=document.createElement('p');question.className='dev-opening-review-question';question.textContent=d.question;
+ const recommended=document.createElement('p');recommended.className='dev-opening-review-recommendation';
+ const recommendedList=review.suggested.map(x=>names[x]).join(', ')||names.singles;
+ recommended.textContent=d.recommend+': '+recommendedList;
+ const prompt=document.createElement('p');prompt.textContent=d.edit;prompt.hidden=true;
+ const note=document.createElement('p');note.className='dev-opening-review-auth';
+ note.textContent=c.auth;note.hidden=true;
+ const form=document.createElement('form');form.className='dev-opening-review-options';form.hidden=true;
  review.strategies.forEach((strategy,index)=>{
   const item=document.createElement('label');item.className='dev-opening-review-option';
   const check=document.createElement('input');check.type='checkbox';check.value=strategy;
   check.checked=review.suggested.includes(strategy);check.name='strategy-'+index;
   const span=document.createElement('span');span.textContent=names[strategy];
   const tag=document.createElement('small');tag.textContent=check.checked?c.suggested:'';
+  check.addEventListener('change',()=>{tag.textContent=check.checked&&review.suggested.includes(strategy)?c.suggested:'';});
   const detail=document.createElement('small');detail.className='dev-opening-review-evidence';
   detail.textContent=evidenceReason(strategy,review.info,lang);
   item.append(check,span,tag,detail);form.append(item);
  });
+ form.addEventListener('submit',event=>event.preventDefault());
  const actionRow=document.createElement('div');actionRow.className='dev-opening-review-actions';
- const submit=document.createElement('button');submit.type='button';submit.textContent=c.submit;submit.className='primary-wide';
+ const agree=document.createElement('button');agree.type='button';agree.textContent=d.agree;agree.className='primary-wide';
+ const change=document.createElement('button');change.type='button';change.textContent=d.change;
+ const back=document.createElement('button');back.type='button';back.textContent=d.back;back.hidden=true;
+ const submit=document.createElement('button');submit.type='button';submit.textContent=d.save;submit.className='primary-wide';submit.hidden=true;
  const unsure=document.createElement('button');unsure.type='button';unsure.textContent=c.unsure;
  const skip=document.createElement('button');skip.type='button';skip.textContent=c.skip;
- const status=document.createElement('p');status.className='dev-opening-review-status';status.setAttribute('role','status');
- async function record(choice){
+ const status=document.createElement('p');status.className='dev-opening-review-status';
+ status.setAttribute('role','status');
+ function setEditing(editing){
+  question.hidden=editing;recommended.hidden=editing;
+  agree.hidden=editing;change.hidden=editing;
+  prompt.hidden=!editing;form.hidden=!editing;
+  submit.hidden=!editing;back.hidden=!editing;
+  status.textContent='';if(editing)form.querySelector('input')?.focus();else agree.focus();
+ }
+ const controls=[agree,change,back,submit,unsure,skip];
+ async function record(choice,selected){
   if(busy||!staged)return;
-  const selected=[...form.querySelectorAll('input:checked')].map(el=>el.value);
-  if(choice==='confirmed'&&!selected.length){status.textContent=c.intro;return;}
+  if(choice==='confirmed'&&!selected.length){status.textContent=d.none;return;}
   const auth=globalThis.GoStopTrainingFeedbackDev?.getStatus?.()?.authorized===true;
-  if(!auth||!cloud?.openingFeedback){status.textContent=c.auth;return;}
-  busy=true;submit.disabled=true;unsure.disabled=true;skip.disabled=true;status.textContent=c.save;
+  if(!auth||!cloud?.openingFeedback){note.hidden=false;status.textContent=c.auth;return;}
+  busy=true;controls.forEach(button=>button.disabled=true);status.textContent=c.save;
   try{
    const data=staged;
    const result=await cloud.openingFeedback({
@@ -118,27 +152,23 @@ function createPanel(layer){
     suggested:data.review.suggested,selected:choice==='confirmed'?selected:[],
     evidence:data.review.evidence,visible:data.vis
    });
-   if(result?.ok){status.textContent=c.saved;continueGame();return;}
+   if(result?.ok){continueGame();return;}
    throw new Error('No acknowledgement');
   }catch(_){status.textContent=c.error;}
-  finally{busy=false;if(panel){submit.disabled=false;unsure.disabled=false;skip.disabled=false;}}
+  finally{busy=false;if(panel)controls.forEach(button=>button.disabled=false);}
  }
- submit.addEventListener('click',()=>void record('confirmed'));
- unsure.addEventListener('click',()=>void record('unsure'));
+ agree.addEventListener('click',()=>void record('confirmed',review.suggested.slice()));
+ change.addEventListener('click',()=>setEditing(true));
+ back.addEventListener('click',()=>setEditing(false));
+ submit.addEventListener('click',()=>void record('confirmed',
+  [...form.querySelectorAll('input:checked')].map(el=>el.value)));
+ unsure.addEventListener('click',()=>void record('unsure',[]));
  skip.addEventListener('click',continueGame);
- actionRow.append(submit,unsure,skip);panel.append(h,p,note,form,actionRow,status);
- stage.after(panel);form.addEventListener('submit',event=>event.preventDefault());
- // Keep ALL actual hand/table cards visible above this normal-flow section.
- const suggested=review.suggested.map(x=>names[x]).join(', ')||names.singles;
- const coach=$('trainingCoachText'),title=$('trainingCoachTitle');
- if(coach&&title){
-  const short=c.short(suggested);
-  const original=coach.textContent;
-  title.textContent=c.title;
-  coach.textContent=short;
-  // Keep the observer from restoring the verbose frozen opening copy.
-  panel.dataset.originalAdviceLength=String(original?.length||0);
- }
+ actionRow.append(agree,change,back,submit,unsure,skip);
+ panel.append(h,question,recommended,prompt,form,note,actionRow,status);
+ document.body.append(panel);
+ try{panel.showModal();}catch(_){panel.setAttribute('open','');}
+ agree.focus();
 }
 function scan(){
  queued=false;
