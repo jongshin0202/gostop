@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 function fakeCloud(){
   const items=[];const finished=new Set();
-  let learned=0,announceLiveActivation=false;
+  let learned=0,specialLearned=0,announceLiveActivation=false;
   return {items,completedCount:()=>finished.size,confirmNextLiveActivation:()=>{announceLiveActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
@@ -11,19 +11,21 @@ function fakeCloud(){
         body:JSON.stringify(obj)});
       if(request.headers()['authorization']!=='Bearer e2e-demo-token')return reply(401,{ok:false,error:'AUTH_REQUIRED'});
       if(path.endsWith('/state'))return reply(200,{ok:true,feedbackCount:items.length,
-        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned}});
-      if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>({gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target}))});
-      if(path.endsWith('/feedback')){
+        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned}});
+      if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:'special',choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
+      if(path.endsWith('/feedback')||path.endsWith('/special-feedback')){
         const x=request.postDataJSON();items.push(x);return reply(200,{ok:true,confirmed:x.choice!=='unsure',feedbackCount:items.length});
       }
       if(path.endsWith('/complete')){
         const gameId=request.postDataJSON().gameId;
         if(!finished.has(gameId)){
-          learned+=items.filter(x=>x.gameId===gameId&&x.choice!=='unsure').length;finished.add(gameId);
+          learned+=items.filter(x=>x.gameId===gameId&&!x.context&&x.choice!=='unsure').length;
+          specialLearned+=items.filter(x=>x.gameId===gameId&&x.context&&x.choice!=='unsure').length;
+          finished.add(gameId);
         }
         const publishedToLive=announceLiveActivation;
         announceLiveActivation=false;
-        return reply(200,{ok:true,trained:learned,modelExamples:learned,publishedToLive});
+        return reply(200,{ok:true,trained:learned+specialLearned,modelExamples:learned,specialModelExamples:specialLearned,publishedToLive});
       }
       return reply(404,{ok:false});
     }
@@ -46,7 +48,10 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
     const cards=[
       {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
       {id:'m6-3',month:6,type:'pi',flags:[]},
-      {id:'m6-4',month:6,type:'pi',flags:['doublePi']}
+      {id:'m6-4',month:6,type:'pi',flags:['doublePi']},
+      {id:'m11-1',month:11,type:'ribbon',flags:[]},
+      {id:'m11-2',month:11,type:'bright',flags:[]},
+      {id:'m11-3',month:11,type:'pi',flags:[]}
     ];
     // Match the real GoStopEngine API: masterDeck is an array, NOT a function.
     globalThis.GoStopEngine={masterDeck:cards};
@@ -110,10 +115,14 @@ test('shared development-account history is visible from a different browser pag
   expect(status.examples).toBe(1);
   await context1.close();await context2.close();
 });
-test('feedback disabled for a different account',async({page})=>{
-  await setup(page,'other@example.com');
+test('other accounts can review a disagreement but cannot submit training data',async({page})=>{
+  const server=await setup(page,'other@example.com');
   await page.locator('#alternate').click();
-  await expect(page.locator('#trainingFeedbackDialog')).not.toBeVisible();
+  const dialog=page.locator('#trainingFeedbackDialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('status')).toContainText('No feedback will be saved');
+  expect(server.items).toHaveLength(0);
+  await dialog.getByRole('button',{name:'OK'}).click();
 });
 test('failed cloud saves do not train or claim success',async({page})=>{
   const server=fakeCloud();
@@ -145,4 +154,107 @@ test('confirmed server activation alone permits update OK dialog',async({page})=
  await expect(dialog).toContainText('Update was made');
  await dialog.getByRole('button',{name:'OK'}).click();
  await expect(dialog).toHaveCount(0);
+});
+
+async function showSpecialChoice(page,{kind='shake',bombReady=false}={}){
+ await page.evaluate(({kind,bombReady})=>{
+  // Build the same DOM affordances the frozen game uses; its actual input
+  // remains independently bound and must not be canceled by feedback.
+  const hand=document.getElementById('playerHand');
+  for(const id of ['m11-1','m11-2','m11-3']){
+    const card=document.createElement('button');card.className='hand-card';
+    card.dataset.cardId=id;card.disabled=true;hand.append(card);
+  }
+  const dialog=document.createElement('dialog');
+  dialog.id=kind==='shake'?'shakeDialog':'bombDialog';
+  const cards='<div class="shake-cards">'+['m11-1','m11-2','m11-3']
+    .map(id=>'<span class="magnified-card" data-card-id="'+id+'"></span>').join('')+'</div>';
+  const actions=kind==='shake'?
+    '<button id="shakeBtn" class="'+(bombReady?'':'training-choice-recommended')+'">Shake</button>'+
+    '<button id="keepSecretBtn" class="'+(bombReady?'training-choice-recommended':'')+'">Bomb/Keep</button>':
+    '<button id="bombBtn" class="training-choice-recommended">Bomb</button>'+
+    '<button id="playOneBtn">Play One</button>';
+  dialog.innerHTML=cards+actions;
+  document.body.append(dialog);dialog.showModal();
+  globalThis.__specialClicks=0;
+  dialog.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{
+    globalThis.__specialClicks++;
+    dialog.close();
+  }));
+ },{kind,bombReady});
+}
+test('Shake recommended, Keep for Bomb chosen: prompts, saves confirmation, trains only after game completion',async({page})=>{
+ const server=await setup(page);
+ await showSpecialChoice(page,{kind:'shake'});
+ await page.locator('#keepSecretBtn').click();
+ const dlg=page.locator('#trainingFeedbackDialog');
+ await expect(dlg).toBeVisible();
+ await expect(dlg).toContainText('Shake (×4)');
+ await expect(dlg).toContainText('Keep for Bomb');
+ expect(await page.evaluate(()=>globalThis.__specialClicks)).toBe(1);
+ await dlg.getByRole('button',{name:'My move was better'}).click();
+ await expect(dlg).not.toBeVisible();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].context).toMatchObject({kind:'shake',month:11,bombReady:false});
+ expect(server.items[0].recommendedAction).toBe('shake');
+ expect(server.items[0].playedAction).toBe('keepForBomb');
+ expect(server.items[0].choice).toBe('mine');
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().specialModelExamples)).toBe(0);
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().specialModelExamples)).toBe(1);
+});
+test('Bomb recommended in Shake dialog but expert chooses Shake: uncertain feedback stays untrained',async({page})=>{
+ const server=await setup(page);
+ await showSpecialChoice(page,{kind:'shake',bombReady:true});
+ await page.locator('#shakeBtn').click();
+ const dlg=page.locator('#trainingFeedbackDialog');
+ await expect(dlg).toBeVisible();
+ await expect(dlg).toContainText('Recommendation: Bomb');
+ await expect(dlg).toContainText('Your move: Shake (×4)');
+ await dlg.getByRole('button',{name:'Not sure / experiment'}).click();
+ await expect(dlg).not.toBeVisible();
+ expect(server.items[0].choice).toBe('unsure');
+ expect(server.items[0].recommendedAction).toBe('bomb');
+ expect(server.items[0].playedAction).toBe('shake');
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await expect.poll(()=>server.completedCount()).toBe(1);
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().specialModelExamples)).toBe(0);
+});
+test('Bomb recommended, Play One selected: review reinforces recommendation and records special decision',async({page})=>{
+ const server=await setup(page);
+ await showSpecialChoice(page,{kind:'bomb',bombReady:true});
+ await page.locator('#playOneBtn').click();
+ const dlg=page.locator('#trainingFeedbackDialog');
+ await expect(dlg).toBeVisible();
+ await expect(dlg).toContainText('Recommendation: Bomb');
+ await expect(dlg).toContainText('Your move: Play One');
+ await dlg.getByRole('button',{name:'Recommendation was better'}).click();
+ await expect(dlg).not.toBeVisible();
+ expect(server.items[0].context.kind).toBe('bomb');
+ expect(server.items[0].choice).toBe('recommended');
+});
+test('following the special recommendation never prompts',async({page})=>{
+ await setup(page);
+ await showSpecialChoice(page,{kind:'shake',bombReady:false});
+ await page.locator('#shakeBtn').click();
+ await page.waitForTimeout(350);
+ await expect(page.locator('#trainingFeedbackDialog')).not.toBeVisible();
+});
+test('guest can see Shake/Bomb comparison without persisting unapproved feedback',async({page})=>{
+ const server=await setup(page,null);
+ await showSpecialChoice(page,{kind:'shake',bombReady:true});
+ await page.locator('#shakeBtn').click();
+ const dlg=page.locator('#trainingFeedbackDialog');
+ await expect(dlg).toBeVisible();
+ await expect(dlg.getByRole('status')).toContainText('No feedback will be saved');
+ await dlg.getByRole('button',{name:'OK'}).click();
+ expect(server.items).toHaveLength(0);
+});
+test('special decision observer does not operate outside Training Mode',async({page})=>{
+ await setup(page);
+ await page.locator('#playSoloBtn').click();
+ await showSpecialChoice(page,{kind:'bomb',bombReady:true});
+ await page.locator('#playOneBtn').click();
+ await page.waitForTimeout(350);
+ await expect(page.locator('#trainingFeedbackDialog')).not.toBeVisible();
 });
