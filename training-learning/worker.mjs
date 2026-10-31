@@ -88,7 +88,7 @@ export class TrainingLearningStore{
       if(!Array.isArray(cardIds)||cardIds.length<3||cardIds.length>4||
         new Set(cardIds).size!==cardIds.length||
         cardIds.some(id=>!validCardId(id)||!visible.hand.includes(id)||
-          Number(/^m(\\d{1,2})-/.exec(id)?.[1])!==month))
+          Number(/^m(\d{1,2})-/.exec(id)?.[1])!==month))
         return fail('INVALID_SPECIAL_CARDS',400);
       const key='special-feedback:'+body.gameId+':'+body.feedbackId;
       if(await this.ctx.storage.get(key))return json({ok:true,duplicate:true});
