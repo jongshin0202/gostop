@@ -1,0 +1,10 @@
+/* Development-only Training recommendation: highlight, never keep a previous
+ * recommendation physically raised when another card is being inspected.
+ * Restrict to explicit dev Training lock. All other game modes retain the
+ * frozen production choreography and hover/flick presentation.
+ */
+.dev-training-recommendation-lock #playerHand .hand-card.matchable,
+.dev-training-recommendation-lock #playerHand .hand-card-slot.is-hovered .hand-card.matchable,
+.dev-training-recommendation-lock #playerHand .hand-card.matchable:hover{
+ transform:none!important;
+}
