@@ -20,3 +20,16 @@ export function recordSuccessfulLiveUpdate(previous={},modelVersion){
     lastLiveUpdateAtGame:count(previous.completedGames),gamesSinceLiveUpdate:0,
     consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false,eligibilityReason:null};
 }
+
+/**
+ * Activate versioned weights on the ISOLATED DEVELOPMENT learning server only.
+ * This is not production publishing and cannot change game source code.
+ * Counters reset only after the Worker actually persists the active weights.
+ */
+export function recordSuccessfulDevelopmentModelUpdate(previous={},version){
+  if(!Number.isSafeInteger(version)||version<1)throw new TypeError('Invalid development model version');
+  if(!previous.eligibilityReason)throw new Error('No validated update trigger');
+  return {...previous,developmentModelVersion:version,lastDevelopmentModelUpdateAt:new Date().toISOString(),
+    lastDevelopmentModelUpdateAtGame:count(previous.completedGames),gamesSinceLiveUpdate:0,
+    consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false,eligibilityReason:null};
+}
