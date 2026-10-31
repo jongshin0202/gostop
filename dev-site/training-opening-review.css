@@ -1,53 +1,64 @@
-/* Only development Training's nonmodal opening review.
- * The panel is inserted AFTER the complete game stage in normal document flow.
- * It never overlays the player's hand or any floor card.
+/* Development-only opening-strategy confirmation, entirely isolated from game UI.
+ * Native <dialog> top layer keeps the review visible on PC and mobile.
  */
-.dev-opening-review{
- position:relative;display:block;z-index:20;
- width:min(1060px,calc(100% - 24px));
- margin:12px auto 28px;padding:16px;
- border:1px solid #bd9457;border-radius:14px;
+dialog.dev-opening-review:not([open]){display:none}
+dialog.dev-opening-review{
+ position:fixed;inset:0;margin:auto;box-sizing:border-box;
+ width:min(670px,calc(100vw - 28px));max-width:670px;
+ max-height:calc(100dvh - 28px);overflow-y:auto;overscroll-behavior:contain;
+ padding:22px;border:2px solid #bd9457;border-radius:16px;
  background:linear-gradient(180deg,#322016,#19100c);
- box-shadow:0 12px 30px #0007;color:#f8e9ce;
+ box-shadow:0 20px 68px #000d;color:#f8e9ce;
+ z-index:2147483646;
 }
-.dev-opening-review h2{margin:0 0 6px;font:800 17px/1.3 system-ui,sans-serif;color:#f5d58a}
-.dev-opening-review p{margin:4px 0 10px;font:500 13px/1.4 system-ui,sans-serif}
-.dev-opening-review .dev-opening-review-auth{font-size:11px;color:#dbc6a1}
+dialog.dev-opening-review::backdrop{background:rgba(0,0,0,.68)}
+.dev-opening-review [hidden]{display:none!important}
+.dev-opening-review h2{
+ margin:0 0 14px;font:800 17px/1.3 system-ui,sans-serif;
+ color:#f5d58a;letter-spacing:.02em;
+}
+.dev-opening-review p{margin:6px 0 12px;font:500 14px/1.5 system-ui,sans-serif}
+.dev-opening-review-question{font-size:19px!important;font-weight:750!important;line-height:1.35!important}
+.dev-opening-review-recommendation{
+ padding:12px 14px;border-radius:9px;background:#392a1c;
+ border:1px solid #a17b42;font-weight:700!important;color:#ffdf94;
+}
+.dev-opening-review .dev-opening-review-auth{font-size:12px;color:#f4c17e}
 .dev-opening-review-options{
- display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;
- margin:12px 0 16px;
+ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;
+ margin:14px 0 18px;
 }
 .dev-opening-review-option{
- display:flex;align-items:center;gap:7px;min-width:0;
- border:1px solid #73583c;border-radius:9px;padding:11px;
+ display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-width:0;
+ border:1px solid #73583c;border-radius:9px;padding:10px;
  background:#241811;font:650 13px/1.3 system-ui,sans-serif;
- cursor:pointer;min-height:48px;
+ cursor:pointer;min-height:55px;
 }
 .dev-opening-review-option:has(input:checked){border-color:#ffd26c;background:#4a3222;}
-.dev-opening-review-option input{flex:0 0 auto;accent-color:#f6c86a;width:18px;height:18px;}
+.dev-opening-review-option input{flex:0 0 auto;accent-color:#f6c86a;width:18px;height:18px}
 .dev-opening-review-option span{min-width:0;overflow-wrap:anywhere}
 .dev-opening-review-option small{margin-left:auto;color:#f5d58a;font-size:10px}
-.dev-opening-review-actions{display:flex;flex-wrap:wrap;gap:9px}
-.dev-opening-review-actions button{
- flex:1 1 175px;cursor:pointer;padding:11px 14px;
- background:#442a1c;border:1px solid #bb9256;border-radius:9px;
- color:#fff0cd;font:700 13px system-ui,sans-serif;
-}
-.dev-opening-review-actions button:first-child{background:#8a3625}
-.dev-opening-review-actions button[disabled]{opacity:.5;cursor:wait}
-.dev-opening-review-status{font-weight:600;color:#ffca7a;min-height:1.4em}
-@media(max-width:800px){.dev-opening-review-options{grid-template-columns:repeat(2,minmax(0,1fr));}}
-@media(max-width:420px){
- .dev-opening-review{padding:11px;margin-bottom:18px;}
- .dev-opening-review-option{padding:8px;font-size:12px}
- .dev-opening-review-options{gap:6px}
- .dev-opening-review h2{font-size:14px}
-}
-
-/* Show the rationale for each candidate without covering playable cards. */
-.dev-opening-review-option{flex-wrap:wrap}
 .dev-opening-review-option .dev-opening-review-evidence{
  display:block;flex:0 0 100%;margin-left:25px;margin-top:2px;
  color:#dfc9a6;font:500 10px/1.4 system-ui,sans-serif;
  text-align:left;overflow-wrap:anywhere;
+}
+.dev-opening-review-actions{display:flex;flex-wrap:wrap;gap:9px}
+.dev-opening-review-actions button{
+ flex:1 1 155px;cursor:pointer;padding:12px 14px;
+ background:#442a1c;border:1px solid #bb9256;border-radius:9px;
+ color:#fff0cd;font:700 13px/1.4 system-ui,sans-serif;
+}
+.dev-opening-review-actions button.primary-wide{background:#8a3625}
+.dev-opening-review-actions button[disabled]{opacity:.5;cursor:wait}
+.dev-opening-review-actions button:focus-visible,
+.dev-opening-review-option:focus-within{outline:2px solid #ffdc91;outline-offset:2px}
+.dev-opening-review-status{font-weight:650!important;color:#ffca7a;min-height:1.4em}
+@media(max-width:560px){
+ dialog.dev-opening-review{width:calc(100vw - 18px);max-height:calc(100dvh - 18px);padding:15px}
+ .dev-opening-review-options{grid-template-columns:1fr;gap:7px}
+ .dev-opening-review-option{min-height:42px;padding:8px}
+ .dev-opening-review h2{font-size:15px}
+ .dev-opening-review-question{font-size:17px!important}
+ .dev-opening-review-actions button{flex:1 1 125px;padding:11px 10px}
 }
