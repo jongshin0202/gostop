@@ -43,7 +43,7 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   assert.ok(html.indexOf('dev-training-context-coach.js')<html.indexOf('dev-training-recommendation-preserver.js'));
   const targetCoach=readFileSync(join(output,'dev-training-context-coach.js'),'utf8');
   assert.match(targetCoach,/target-option/);
-  assert.match(targetCoach,/securedDiscard/);
+  assert.match(targetCoach,/logic\.discardText/);
   const preserver=readFileSync(join(output,'dev-training-recommendation-preserver.js'),'utf8');
   assert.match(preserver,/trainingCoachText/);
   assert.match(preserver,/training-recommended/);
