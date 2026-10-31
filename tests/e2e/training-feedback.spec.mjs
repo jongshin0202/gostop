@@ -46,6 +46,7 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
   </body></html>`);
   await page.evaluate(async e=>{
     const cards=[
+      {id:'m6-1',month:6,type:'bright',flags:[]},
       {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
       {id:'m6-3',month:6,type:'pi',flags:[]},
       {id:'m6-4',month:6,type:'pi',flags:['doublePi']},
@@ -257,4 +258,65 @@ test('special decision observer does not operate outside Training Mode',async({p
  await page.locator('#playOneBtn').click();
  await page.waitForTimeout(350);
  await expect(page.locator('#trainingFeedbackDialog')).not.toBeVisible();
+});
+
+
+test('mobile flick custom hand activation shows feedback for a different recommended card',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gostop-hand-activate',{
+  bubbles:true,detail:{cardId:'m6-4'}
+ })));
+ const modal=page.locator('#trainingFeedbackDialog');
+ await expect(modal).toBeVisible();
+ await expect(modal).toContainText('Rose Double Single');
+ await modal.getByRole('button',{name:'My move was better'}).click();
+ await expect(modal).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].recommended.hand).toBe('m6-3');
+ expect(server.items[0].played.hand).toBe('m6-4');
+});
+test('feedback retains original recommendation when game clears the glowing hint on play',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>{
+  document.dispatchEvent(new CustomEvent('gostop-hand-activate',{bubbles:true,detail:{cardId:'m6-4'}}));
+  document.querySelector('.hand-card.matchable')?.classList.remove('matchable');
+  document.querySelector('.floor-card.training-recommended')?.classList.remove('training-recommended');
+ });
+ const modal=page.locator('#trainingFeedbackDialog');
+ await expect(modal).toBeVisible();
+ await modal.getByRole('button',{name:'Recommendation was better'}).click();
+ await expect(modal).toBeHidden();
+ expect(server.items[0].recommended).toEqual({hand:'m6-3',target:'m6-2'});
+});
+test('different hand card with two table targets waits for the selected target and compares to the ORIGINAL recommendation',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>{
+  const floor=document.getElementById('floor');
+  floor.insertAdjacentHTML('beforeend','<div class="floor-card" data-card-id="m6-1"><img alt="Rose Bright"></div>');
+ });
+ await page.locator('#alternate').click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ await page.evaluate(()=>{
+  // The frozen game can temporarily highlight the currently selected card's
+  // target. It must NOT rewrite the opening recommended move for feedback.
+  document.querySelector('#floor [data-card-id="m6-2"]').classList.remove('training-recommended');
+  document.querySelector('#floor [data-card-id="m6-1"]').classList.add('training-recommended');
+  document.querySelector('#playerHand .matchable')?.classList.remove('matchable');
+  document.querySelectorAll('#floor [data-card-id]').forEach(el=>el.classList.add('target-option'));
+ });
+ await page.locator('#floor [data-card-id="m6-1"]').click();
+ const modal=page.locator('#trainingFeedbackDialog');
+ await expect(modal).toBeVisible();
+ await modal.getByRole('button',{name:'My move was better'}).click();
+ await expect(modal).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].recommended).toEqual({hand:'m6-3',target:'m6-2'});
+ expect(server.items[0].played).toEqual({hand:'m6-4',target:'m6-1'});
+});
+test('following a recommended card does not create a false disagreement',async({page})=>{
+ const server=await setup(page);
+ await page.locator('#playerHand .hand-card.matchable').click();
+ await page.waitForTimeout(330);
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0);
 });
