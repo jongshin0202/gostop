@@ -32,6 +32,18 @@ test('real Training opening shows the dev-only strategy review without obscuring
  const review=page.locator('#devOpeningReview');
  await expect(review).toBeVisible({timeout:10000});
  await expect(review).toContainText('Do you agree with these opening strategies?');
+ // Regression: the game's actual visible opening advice must match exactly
+ // what the expert is being asked to confirm, for whichever hand was dealt.
+ const comparison=await page.evaluate(()=>{
+  const coach=document.getElementById('trainingCoachText')?.textContent||'';
+  const shown=document.querySelector('#devOpeningReview .dev-opening-review-recommendation')?.textContent||'';
+  const native=coach.match(/^Best strateg(?:y|ies):\\s*([^.!?]+)[.!?]/i);
+  return {coach,shown,native:native?.[1]||''};
+ });
+ expect(comparison.native).not.toBe('');
+ const nativeNames=comparison.native.replace(/,?\\s+and\\s+/g,',').split(',').map(x=>x.trim());
+ const displayedNames=comparison.shown.replace(/^Recommended opening strategies:\\s*/,'').split(',').map(x=>x.trim());
+ expect(displayedNames).toEqual(nativeNames);
  await expect(review.getByRole('button',{name:'Yes, I agree'})).toBeVisible();
  await expect(review.getByRole('button',{name:'No, change strategies'})).toBeVisible();
  await expect(review.locator('.dev-opening-review-options')).toBeHidden();
