@@ -138,7 +138,7 @@ function completion(){
   try{
    const result=cloud?await cloud.complete(completeId,{hadDisagreement:completeHadDisagreement}):null;
    await syncStatus();
-   if(result?.publishedToLive===true)showUpdateMade();
+   if(result?.developmentModelUpdated===true)showUpdateMade();
   }
   catch(error){lastError=String(error.message||error);serverReady=false;}
  });
