@@ -46,6 +46,7 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
   </body></html>`);
   await page.evaluate(async e=>{
     const cards=[
+      {id:'m6-1',month:6,type:'bright',flags:[]},
       {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
       {id:'m6-3',month:6,type:'pi',flags:[]},
       {id:'m6-4',month:6,type:'pi',flags:['doublePi']},
@@ -290,7 +291,6 @@ test('feedback retains original recommendation when game clears the glowing hint
 test('different hand card with two table targets waits for the selected target and compares to the ORIGINAL recommendation',async({page})=>{
  const server=await setup(page);
  await page.evaluate(()=>{
-  globalThis.GoStopEngine.masterDeck.push({id:'m6-1',month:6,type:'bright',flags:[]});
   const floor=document.getElementById('floor');
   floor.insertAdjacentHTML('beforeend','<div class="floor-card" data-card-id="m6-1"><img alt="Rose Bright"></div>');
  });
