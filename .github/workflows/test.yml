@@ -51,7 +51,8 @@ jobs:
           node --check training-learning/feedback-ui.js
           node --check training-learning/cloud-client.js
           node --check training-learning/update-cadence.mjs
-          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs
+          node --check training-learning/special-learner.mjs
+          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs
       - name: Install browser test runner
         run: |
           npm install --no-save @playwright/test@1.55.0
