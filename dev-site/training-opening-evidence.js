@@ -53,7 +53,32 @@ function evaluate(visible,deck){
  ];
  return {suggested,info,evidence,strategies:[...STRATEGIES]};
 }
-const api=Object.freeze({evaluate,STRATEGIES});
+function withLearnedWeights(review,model){
+ // Never recommend an impossible set. Expert weights influence future games
+ // ONLY when downloaded from the verified development learning server.
+ if(!model||!Number.isInteger(model.examples)||model.examples<1||
+   !Array.isArray(model.weights)||model.weights.length!==STRATEGIES.length)return review;
+ const rows=model.weights;
+ if(rows.some(row=>!Array.isArray(row)||row.length!==review.evidence.length||
+   row.some(w=>typeof w!=='number'||!Number.isFinite(w))))return review;
+ const allowed=strategy=>{
+  if(strategy==='singles')return true;
+  if(strategy==='pictures')return review.info.pictures.known>0;
+  if(strategy==='shake-bomb')return review.info['shake-bomb'].known>0;
+  const r=review.info[strategy];
+  if(!r||r.known+r.reachable<1)return false;
+  return strategy==='brights'?r.total-r.lost>=3:r.lost===0;
+ };
+ const learned=STRATEGIES.filter((strategy,index)=>{
+  if(!allowed(strategy))return false;
+  const row=rows[index],score=row.reduce((acc,w,i)=>acc+w*review.evidence[i],0);
+  return score>=0;
+ });
+ // A model with too few labels may not yet recognize any route; retain the
+ // deterministic prior rather than produce an empty or misleading hint.
+ return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
+}
+const api=Object.freeze({evaluate,withLearnedWeights,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
