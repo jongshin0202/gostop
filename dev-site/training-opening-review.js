@@ -48,8 +48,8 @@ let downloadedOpeningModel=null;
 function refreshModel(){
  if(!cloud?.state)return;
  void cloud.state().then(result=>{
-  if(result?.openingModel&&Number.isInteger(result.openingModel.examples))
-   downloadedOpeningModel=result.openingModel;
+  if(result?.activeOpeningModel&&Number.isInteger(result.activeOpeningModel.examples))
+   downloadedOpeningModel=result.activeOpeningModel;
  }).catch(()=>{});
 }
 refreshModel();
