@@ -43,3 +43,11 @@
  .dev-opening-review-options{gap:6px}
  .dev-opening-review h2{font-size:14px}
 }
+
+/* Show the rationale for each candidate without covering playable cards. */
+.dev-opening-review-option{flex-wrap:wrap}
+.dev-opening-review-option .dev-opening-review-evidence{
+ display:block;flex:0 0 100%;margin-left:25px;margin-top:2px;
+ color:#dfc9a6;font:500 10px/1.4 system-ui,sans-serif;
+ text-align:left;overflow-wrap:anywhere;
+}
