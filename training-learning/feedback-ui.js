@@ -104,7 +104,7 @@ const shade=document.createElement('style');
 shade.textContent='#trainingFeedbackDialog::backdrop{background:rgba(0,0,0,.62)}#trainingFeedbackDialog button{font:inherit;cursor:pointer;border-radius:9px;padding:10px;border:1px solid #aa7b37;background:#503226;color:#f7dcad}#trainingFeedbackDialog button:focus-visible{outline:3px solid #fbd686;outline-offset:2px}#trainingFeedbackDialog .feedback-actions{display:grid;grid-template-columns:1fr;gap:9px}';
 document.head.appendChild(shade);document.body.appendChild(modal);
 function ensureGame(){if(!gameId){gameId='dev-training-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);alreadyCompleted=false;}}
-// Only an acknowledged LIVE model activation warrants a success message.
+// Only an acknowledged isolated DEVELOPMENT model activation warrants the update dialog.
 const UPDATE_TEXT={
  en:'Update was made',ko:'업데이트가 완료되었습니다',es:'Actualización realizada',
  fr:'Mise à jour effectuée',de:'Aktualisierung abgeschlossen',
