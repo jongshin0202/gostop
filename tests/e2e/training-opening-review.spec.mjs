@@ -38,24 +38,38 @@ async function setup(page,{authorized=true,locale='en'}={}){
  });
  await expect(page.locator('#devOpeningReview')).toBeVisible();
 }
-test('opening review lists all eight strategies and multi-selects Brights + Singles without covering cards',async({page})=>{
+test('opening confirmation asks if the expert agrees before exposing alternatives',async({page})=>{
  await setup(page);
  const review=page.locator('#devOpeningReview');
- await expect(review.locator('input[type=checkbox]')).toHaveCount(8);
- await expect(review.locator('input[value="brights"]')).toBeChecked();
- await expect(review.locator('input[value="singles"]')).toBeChecked();
- await expect(review.locator('input[value="red-stripes"]')).not.toBeChecked();
- const geom=await page.evaluate(()=>{
-  const panel=document.getElementById('devOpeningReview').getBoundingClientRect();
-  const stage=document.querySelector('main.game-stage').getBoundingClientRect();
-  const hand=document.getElementById('playerHand').getBoundingClientRect();
-  return {panelTop:panel.top,stageBottom:stage.bottom,handBottom:hand.bottom};
- });
- expect(geom.panelTop).toBeGreaterThanOrEqual(geom.stageBottom-2);
- expect(geom.panelTop).toBeGreaterThanOrEqual(geom.handBottom-2);
- await review.locator('input[value="blue-stripes"]').check();
- await review.locator('input[value="singles"]').uncheck();
- await review.getByRole('button',{name:'Submit expert feedback'}).click();
+ await expect(review).toHaveAttribute('open','');
+ await expect(review).toContainText('Do you agree with these opening strategies?');
+ await expect(review).toContainText('Recommended opening strategies');
+ await expect(review.getByRole('button',{name:'Yes, I agree'})).toBeVisible();
+ await expect(review.getByRole('button',{name:'No, change strategies'})).toBeVisible();
+ await expect(review.locator('.dev-opening-review-options')).toBeHidden();
+ await page.keyboard.press('Escape');
+ await expect(review).toBeVisible(); // No silent dismissal / skipped feedback.
+ await review.getByRole('button',{name:'Yes, I agree'}).click();
+ await expect(review).toHaveCount(0);
+ const received=await page.evaluate(()=>({sent:window.__sent,continued:window.__continued}));
+ expect(received.sent).toHaveLength(1);
+ expect(received.sent[0].choice).toBe('confirmed');
+ expect(received.sent[0].selected).toEqual(received.sent[0].suggested);
+ expect(received.continued).toBe(1);
+});
+test('choosing No reveals all eight selectable strategies and saves expert corrections',async({page})=>{
+ await setup(page);
+ const review=page.locator('#devOpeningReview');
+ await review.getByRole('button',{name:'No, change strategies'}).click();
+ const options=review.locator('.dev-opening-review-options');
+ await expect(options).toBeVisible();
+ await expect(options.locator('input[type=checkbox]')).toHaveCount(8);
+ await expect(options.locator('input[value="brights"]')).toBeChecked();
+ await expect(options.locator('input[value="singles"]')).toBeChecked();
+ await expect(options.locator('input[value="red-stripes"]')).not.toBeChecked();
+ await options.locator('input[value="blue-stripes"]').check();
+ await options.locator('input[value="singles"]').uncheck();
+ await review.getByRole('button',{name:'Submit my strategies'}).click();
  await expect(review).toHaveCount(0);
  const received=await page.evaluate(()=>({sent:window.__sent,continued:window.__continued}));
  expect(received.sent).toHaveLength(1);
@@ -67,6 +81,26 @@ test('opening review lists all eight strategies and multi-selects Brights + Sing
  expect(received.sent[0].evidence).toHaveLength(12);
  expect(received.continued).toBe(1);
 });
+test('phone opening dialog stays in the visible viewport and lets expert review options',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await setup(page);
+ const review=page.locator('#devOpeningReview');
+ const viewport=await review.evaluate(el=>{
+  const rect=el.getBoundingClientRect();
+  return {top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right,
+   height:rect.height,viewportHeight:innerHeight,viewportWidth:innerWidth};
+ });
+ expect(viewport.top).toBeGreaterThanOrEqual(0);
+ expect(viewport.bottom).toBeLessThanOrEqual(viewport.viewportHeight+1);
+ expect(viewport.left).toBeGreaterThanOrEqual(0);
+ expect(viewport.right).toBeLessThanOrEqual(viewport.viewportWidth+1);
+ await review.getByRole('button',{name:'No, change strategies'}).click();
+ await expect(review.locator('input[type=checkbox]')).toHaveCount(8);
+ await review.getByRole('button',{name:'Back'}).click();
+ await expect(review.locator('.dev-opening-review-options')).toBeHidden();
+ await review.getByRole('button',{name:'Continue without saving'}).click();
+ expect(await page.evaluate(()=>window.__sent.length)).toBe(0);
+});
 test('Not sure is stored as uncertain, never as confirmed labels',async({page})=>{
  await setup(page);
  await page.getByRole('button',{name:'Not sure'}).click();
@@ -77,7 +111,7 @@ test('Not sure is stored as uncertain, never as confirmed labels',async({page})=
 });
 test('Skip continues without network, and an unverified expert cannot silently submit',async({page})=>{
  await setup(page,{authorized:false});
- await page.getByRole('button',{name:'Submit expert feedback'}).click();
+ await page.getByRole('button',{name:'Yes, I agree'}).click();
  await expect(page.locator('#devOpeningReview')).toContainText('authorized development expert account');
  expect(await page.evaluate(()=>window.__sent.length)).toBe(0);
  await page.getByRole('button',{name:'Continue without saving'}).click();
@@ -87,6 +121,8 @@ test('Skip continues without network, and an unverified expert cannot silently s
 });
 test('opening review and strategy feedback stay absent from ordinary Solo',async({page})=>{
  await setup(page);
+ // The modal deliberately blocks the underlying game until an explicit answer.
+ await page.getByRole('button',{name:'Continue without saving'}).click();
  await page.locator('#playSoloBtn').click();
  await expect(page.locator('#devOpeningReview')).toHaveCount(0);
  await page.evaluate(()=>{
@@ -99,6 +135,8 @@ test('opening review and strategy feedback stay absent from ordinary Solo',async
 test('Korean opening guidance and strategy labels are localized without changing card views',async({page})=>{
  await setup(page,{locale:'ko'});
  await expect(page.locator('#devOpeningReview')).toContainText('시작 전략 검토');
+ await expect(page.locator('#devOpeningReview')).toContainText('추천된 시작 전략에 동의하십니까?');
+ await page.getByRole('button',{name:'아니요, 전략 수정'}).click();
  await expect(page.locator('#devOpeningReview')).toContainText('광');
  await expect(page.locator('#devOpeningReview')).toContainText('홍단');
  await expect(page.locator('#playerHand .hand-card')).toHaveCount(5);
