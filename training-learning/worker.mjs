@@ -217,7 +217,7 @@ export class TrainingLearningStore{
          opening.selected.some(x=>!opening.suggested.includes(x)));
       const hadDisagreement=completedGame.decisions.length>0||
         (completedGame.specialDecisions||[]).length>0||openingDisagreement||body.hadDisagreement===true;
-      const summary=recordCompletedTrainingGame(prior,hadDisagreement);
+      let summary=recordCompletedTrainingGame(prior,hadDisagreement);
       if(trained){summary.trainingGames=(prior.trainingGames||0)+1;summary.lastTrainedAt=new Date().toISOString();}
       // Prepare an isolated, versionable candidate; NEVER imply that the
       // production server was updated. A validated production-model publisher
