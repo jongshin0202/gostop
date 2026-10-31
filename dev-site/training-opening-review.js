@@ -34,7 +34,31 @@ const COPY={
  ja:{title:'開始戦略の確認',intro:'手札と場札を見比べ、可能な目標をすべて選択してください。',suggested:'候補',submit:'専門家の判断を送信',unsure:'判断できない',skip:'保存せず続ける',save:'保存中...',saved:'保存しました。対局終了後に学習します。',error:'保存できません。',auth:'承認済み開発用エキスパートアカウントでログインしてください。',short:n=>'狙える役: '+n+'。下で選択してください。'},
  zh:{title:'起手策略审核',intro:'对照手牌和桌面牌，选择所有可行目标。',suggested:'建议',submit:'提交专家反馈',unsure:'不确定',skip:'不保存继续',save:'正在保存…',saved:'已保存，游戏结束后训练模型。',error:'无法保存。',auth:'请使用授权开发专家账户登录。',short:n=>'可能目标：'+n+'。请在下方选择。'}
 };
+const reasons={
+ en:['Held/captured','Available on table','Captured by computer','In hand','Three matching cards in hand'],
+ ko:['손패/획득','바닥에서 획득 가능','상대 획득','손패','같은 종류 세 장 보유'],
+ es:['En mano/capturadas','Disponible en mesa','Capturadas por rival','En mano','Tres cartas iguales en mano'],
+ fr:['En main/capturées','Disponibles sur table','Capturées par adversaire','En main','Trois cartes assorties en main'],
+ de:['Hand/gesammelt','Auf dem Tisch erreichbar','Vom Gegner gesammelt','Auf der Hand','Drei gleiche Karten auf der Hand'],
+ ja:['手札/獲得','場から獲得可能','相手が獲得','手札','同じ月の札三枚あり'],
+ zh:['手牌/已收','桌面可收','对手已收','手牌','手握三张同月牌']
+};
 const languages=new Set(Object.keys(COPY)),language=()=>languages.has(document.documentElement.lang)?document.documentElement.lang:'en';
+let downloadedOpeningModel=null;
+function refreshModel(){
+ if(!cloud?.state)return;
+ void cloud.state().then(result=>{
+  if(result?.openingModel&&Number.isInteger(result.openingModel.examples))
+   downloadedOpeningModel=result.openingModel;
+ }).catch(()=>{});
+}
+refreshModel();
+function evidenceReason(strategy,info,lang){
+ const label=reasons[lang]||reasons.en,r=info[strategy]||{};
+ if(strategy==='shake-bomb')return label[4]+': '+(r.known>=3?'✓':'–');
+ if(strategy==='singles'||strategy==='pictures')return label[3]+': '+(r.known||0);
+ return label[0]+': '+(r.known||0)+' · '+label[1]+': '+(r.reachable||0)+' · '+label[2]+': '+(r.lost||0);
+}
 const ids=selector=>[...document.querySelectorAll(selector)].map(x=>x.dataset.cardId).filter(Boolean);
 function visible(){return {hand:ids('#playerHand .hand-card[data-card-id]'),
  floor:ids('#floor .floor-card[data-card-id]'),
@@ -54,7 +78,7 @@ function createPanel(layer){
  const gameId=globalThis.GoStopTrainingFeedbackDev?.getStatus?.()?.gameId;
  const stage=document.querySelector('main.game-stage');
  if(!stage||!gameId||gameId===reviewedGameId)return;
- const vis=visible(),review=helper.evaluate(vis,deck),lang=language(),c=COPY[lang],names=LABELS[lang];
+ const vis=visible(),review=helper.withLearnedWeights(helper.evaluate(vis,deck),downloadedOpeningModel),lang=language(),c=COPY[lang],names=LABELS[lang];
  if(!review.strategies.length)return;
  reviewedGameId=gameId;staged={gameId,vis,review};
  openingLayer=layer;openingLayer.style.pointerEvents='none';
@@ -71,7 +95,9 @@ function createPanel(layer){
   check.checked=review.suggested.includes(strategy);check.name='strategy-'+index;
   const span=document.createElement('span');span.textContent=names[strategy];
   const tag=document.createElement('small');tag.textContent=check.checked?c.suggested:'';
-  item.append(check,span,tag);form.append(item);
+  const detail=document.createElement('small');detail.className='dev-opening-review-evidence';
+  detail.textContent=evidenceReason(strategy,review.info,lang);
+  item.append(check,span,tag,detail);form.append(item);
  });
  const actionRow=document.createElement('div');actionRow.className='dev-opening-review-actions';
  const submit=document.createElement('button');submit.type='button';submit.textContent=c.submit;submit.className='primary-wide';
@@ -125,11 +151,11 @@ function schedule(){if(queued)return;queued=true;queueMicrotask(scan);}
 const observer=new MutationObserver(schedule);
 observer.observe(document.body,{childList:true,subtree:true});
 document.addEventListener('click',event=>{
- if(event.target?.closest?.('#trainingModeBtn')){active=true;reviewedGameId=null;schedule();}
+ if(event.target?.closest?.('#trainingModeBtn')){active=true;reviewedGameId=null;refreshModel();schedule();}
  else if(event.target?.closest?.('#playSoloBtn,#quitYesBtn,#resultQuitBtn')){active=false;clear();}
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopDevOpeningReview',{configurable:true,value:Object.freeze({
  getStatus:()=>({active,visible:!!panel,gameId:staged?.gameId||null,
-  suggested:staged?.review?.suggested||[]})
+  suggested:staged?.review?.suggested||[],modelExamples:staged?.review?.modelExamples||0})
 })});
 })();
