@@ -31,22 +31,29 @@ test('real Training opening shows the dev-only strategy review without obscuring
  await expect(page.locator('.training-opening-dismiss-layer')).toBeVisible({timeout:40000});
  const review=page.locator('#devOpeningReview');
  await expect(review).toBeVisible({timeout:10000});
- await expect(review.locator('input[type="checkbox"]')).toHaveCount(8);
+ await expect(review).toContainText('Do you agree with these opening strategies?');
+ await expect(review.getByRole('button',{name:'Yes, I agree'})).toBeVisible();
+ await expect(review.getByRole('button',{name:'No, change strategies'})).toBeVisible();
+ await expect(review.locator('.dev-opening-review-options')).toBeHidden();
  await expect(page.locator('#playerHand .hand-card[data-card-id]').first()).toBeVisible();
  await expect(page.locator('#floor .floor-card[data-card-id]').first()).toBeVisible();
- const positions=await page.evaluate(()=>{
-  const box=selector=>document.querySelector(selector).getBoundingClientRect();
-  return {stageBottom:box('main.game-stage').bottom,
-   reviewTop:box('#devOpeningReview').top,
-   handBottom:box('#playerHand').bottom};
+ // A native dialog must be on-screen, instead of an inaccessible form after the board.
+ const rect=await review.evaluate(el=>{
+  const b=el.getBoundingClientRect();
+  return {top:b.top,bottom:b.bottom,left:b.left,right:b.right,
+   viewportHeight:innerHeight,viewportWidth:innerWidth};
  });
- expect(positions.reviewTop).toBeGreaterThanOrEqual(positions.stageBottom-2);
- expect(positions.reviewTop).toBeGreaterThanOrEqual(positions.handBottom-2);
+ expect(rect.top).toBeGreaterThanOrEqual(0);
+ expect(rect.bottom).toBeLessThanOrEqual(rect.viewportHeight+1);
+ expect(rect.left).toBeGreaterThanOrEqual(0);
+ expect(rect.right).toBeLessThanOrEqual(rect.viewportWidth+1);
+ await review.getByRole('button',{name:'No, change strategies'}).click();
+ await expect(review.locator('input[type="checkbox"]')).toHaveCount(8);
  // Multi-selection is explicit: this tests the expert interface, not whether
  // these two categories are optimal for the random hand dealt in this game.
  await review.locator('input[value="brights"]').check();
  await review.locator('input[value="singles"]').check();
- await review.getByRole('button',{name:'Submit expert feedback'}).click();
+ await review.getByRole('button',{name:'Submit my strategies'}).click();
  await expect(review).toHaveCount(0);
  await expect(page.locator('.training-opening-dismiss-layer')).toHaveCount(0);
  const submissions=await page.evaluate(()=>globalThis.__openingSubmissionTest);
