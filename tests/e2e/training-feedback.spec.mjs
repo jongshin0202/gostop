@@ -258,3 +258,59 @@ test('special decision observer does not operate outside Training Mode',async({p
  await page.waitForTimeout(350);
  await expect(page.locator('#trainingFeedbackDialog')).not.toBeVisible();
 });
+
+test('native card-activation event triggers Training review without blocking the original game handler',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>{
+  globalThis.__nativeActions=0;
+  document.addEventListener('gostop-hand-activate',()=>{globalThis.__nativeActions++;});
+  const event=new CustomEvent('gostop-hand-activate',{bubbles:true,cancelable:true,detail:{cardId:'m6-4'}});
+  globalThis.__nativeNotCanceled=document.dispatchEvent(event);
+ });
+ const dialog=page.locator('#trainingFeedbackDialog');
+ await expect(dialog).toBeVisible();
+ expect(await page.evaluate(()=>globalThis.__nativeActions)).toBe(1);
+ expect(await page.evaluate(()=>globalThis.__nativeNotCanceled)).toBe(true);
+ const status=await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus());
+ expect(status.cardObservationCount).toBe(1);
+ expect(status.lastCardObservationSource).toBe('native-activation');
+ expect(server.items).toHaveLength(0);
+ await dialog.getByRole('button',{name:'My move was better'}).click();
+ await expect(dialog).not.toBeVisible();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].played.hand).toBe('m6-4');
+});
+test('native activation followed by a synthetic click yields exactly one disagreement dialog',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gostop-hand-activate',{detail:{cardId:'m6-4'}})));
+ await page.locator('#alternate').click();
+ const dialog=page.locator('#trainingFeedbackDialog');
+ await expect(dialog).toBeVisible();
+ const status=await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus());
+ expect(status.cardObservationCount).toBe(1);
+ await dialog.getByRole('button',{name:'My move was better'}).click();
+ await expect(dialog).not.toBeVisible();
+ await page.waitForTimeout(450);
+ await expect(dialog).not.toBeVisible();
+ expect(server.items).toHaveLength(1);
+});
+test('without a displayed recommendation no native disagreement is invented',async({page})=>{
+ const server=await setup(page);
+ await page.locator('.hand-card.matchable').evaluate(el=>el.classList.remove('matchable'));
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gostop-hand-activate',{detail:{cardId:'m6-4'}})));
+ await page.waitForTimeout(350);
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ const status=await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus());
+ expect(status.cardObservationCount).toBe(0);
+ expect(status.lastCardObserverReason).toBe('recommendation-not-yet-visible');
+ expect(server.items).toHaveLength(0);
+});
+test('native activation is ignored outside Training Mode and for blank Bomb turns',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gostop-hand-activate',{detail:{cardId:'blank-0',blank:true}})));
+ await page.locator('#playSoloBtn').click();
+ await page.evaluate(()=>document.dispatchEvent(new CustomEvent('gostop-hand-activate',{detail:{cardId:'m6-4'}})));
+ await page.waitForTimeout(350);
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0);
+});

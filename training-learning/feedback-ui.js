@@ -239,12 +239,24 @@ function beginDisagreement(recommended,played,observed){
  hadDisagreement=true;
  enqueue({recommended,played,visible:observed.visible,legalMoves:legal});
 }
-function onHand(event){
+// Native card activation (including flicks and precommit input) uses the
+// game's existing gostop-hand-activate event rather than a click. Observe BOTH
+// paths before the game processes the move, without canceling or replaying it.
+let lastCardObservation=null,lastCardObservationTime=0,lastCardObservationSource=null;
+let lastCardRecommendation=null,lastCardObserverReason=null,cardObservationCount=0;
+function onHandCard(current,source='click'){
  if(!active||!enabled()||modal.open)return;
- const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
- if(!el||el.disabled)return;
- const current=el.dataset.cardId,rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
- if(!rec)return;
+ const el=[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')]
+  .find(node=>node.dataset.cardId===current);
+ if(!el||el.disabled){lastCardObserverReason='card-unavailable';return;}
+ const rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
+ if(!rec){lastCardObserverReason='recommendation-not-yet-visible';return;}
+ const now=performance.now();
+ if(lastCardObservation===current&&lastCardRecommendation===rec&&now-lastCardObservationTime<350){
+  lastCardObserverReason='duplicate-activation';return;
+ }
+ lastCardObservation=current;lastCardObservationTime=now;lastCardObservationSource=source;
+ lastCardRecommendation=rec;lastCardObserverReason='captured';cardObservationCount++;
  const observe=snapshot(),recFloor=$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
  lastHand={current,rec,recFloor,observe};
  const targets=observe.floorIds.filter(id=>card(id)?.month===card(current)?.month);
@@ -255,6 +267,17 @@ function onHand(event){
  if(current===rec)return;
  window.setTimeout(()=>{if(!active)return;beginDisagreement({hand:rec,target:originalTarget},{hand:current,target:actualTarget},observe);},200);
 }
+function onHand(event){
+ const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
+ if(el)onHandCard(el.dataset.cardId,'click');
+}
+// The frozen game listens for this same event. This capture-only observer is
+// passive: it NEVER calls preventDefault, stopPropagation, or any game method.
+document.addEventListener('gostop-hand-activate',event=>{
+ const id=String(event.detail?.cardId||'');
+ if(!id||event.detail?.blank===true||id.startsWith('blank-'))return;
+ onHandCard(id,'native-activation');
+},{capture:true});
 function onTarget(event){
  if(!active||!enabled()||modal.open)return;
  const el=event.target?.closest?.('#floor .target-option[data-card-id]');
@@ -315,6 +338,7 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
  getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmedCount,
   examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,serverReady,lastError,
+  cardObservationCount,lastCardObservationSource,lastCardRecommendation,lastCardObserverReason,
   storage:'development-cloudflare',pendingUploads:pendingUploads.size}),
  exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),
  refresh:syncStatus,

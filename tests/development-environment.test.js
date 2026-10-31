@@ -52,6 +52,9 @@ test('explicit Cloudflare dev Worker produces a working runtime config before ga
   assert.match(feedback,/GoStopRanked\?\.getAccount/);
   assert.match(feedback,/trainingModeBtn/);
   assert.match(feedback,/keepSecretBtn/);
+  assert.match(feedback,/gostop-hand-activate/);
+  assert.match(feedback,/onHandCard/);
+  assert.doesNotMatch(readFileSync(join(root,'app.js'),'utf8'),/GoStopTrainingFeedbackDev/);
   assert.match(feedback,/bombBtn/);
   assert.match(cloud,/special-feedback/);
   assert.doesNotMatch(feedback,/\.preventDefault\(\)|\.stopPropagation\(\)/);
