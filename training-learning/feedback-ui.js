@@ -359,7 +359,7 @@ document.addEventListener('gostop-hand-activate',event=>{
  if(id&&!event.detail?.blank)onHandActivation(id,'gesture');
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
- getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),confirmed:confirmedCount,
+ getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),gameId,confirmed:confirmedCount,
   examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,serverReady,lastError,
   storage:'development-cloudflare',pendingUploads:pendingUploads.size}),
  exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),
