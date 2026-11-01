@@ -6,6 +6,9 @@ on:
       - develop
     paths:
       - server/**
+      - dev-site/instrument-lobby-responsiveness.mjs
+      - dev-site/build-dev-lobby-worker.mjs
+      - tests/dev-lobby-responsive.test.mjs
       - wrangler.dev.toml
       - scripts/smoke-dev-worker.mjs
       - package.json
@@ -35,12 +38,16 @@ jobs:
         run: npm install
       - name: Verify regression suite
         run: npm test
+      - name: Build isolated responsive development Worker
+        run: node dev-site/build-dev-lobby-worker.mjs
+      - name: Verify development lobby responsiveness
+        run: node --test tests/dev-lobby-responsive.test.mjs
       - name: Deploy development Worker (separate Durable Object namespaces)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.131.2'
-          command: deploy --config wrangler.dev.toml
+          command: deploy --config wrangler.dev.responsive.toml
       - name: Verify development leaderboards and browser CORS
         run: node scripts/smoke-dev-worker.mjs

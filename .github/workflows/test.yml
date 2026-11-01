@@ -43,6 +43,12 @@ jobs:
           node --check server/ranked-account-store.mjs
           node --check server/room-core.mjs
           node --check server/worker.mjs
+      - name: Build isolated development Worker from frozen authority sources
+        run: node dev-site/build-dev-lobby-worker.mjs
+      - name: Validate generated development lobby and protected original sources
+        run: |
+          node --check dev-site/worker-dist/server/lobby.mjs
+          node --test tests/dev-lobby-responsive.test.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
       - name: Isolated Training learner syntax and cadence tests
@@ -62,10 +68,13 @@ jobs:
           node --check dev-site/instrument-competitive-solo-peer-sync.mjs
           node --check dev-site/friendly-invite-ux.js
           node --check dev-site/instrument-friendly-invite.mjs
+          node --check dev-site/instrument-online-lobby-responsiveness.mjs
+          node --check dev-site/instrument-lobby-responsiveness.mjs
+          node --check dev-site/build-dev-lobby-worker.mjs
           node --check training-learning/opening-learner.mjs
           node --check dev-site/training-opening-evidence.js
           node --check dev-site/training-opening-review.js
-          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs tests/training-model-progress.test.mjs tests/competitive-solo-peer-sync.test.mjs tests/friendly-invite-ux.test.mjs
+          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs tests/training-model-progress.test.mjs tests/competitive-solo-peer-sync.test.mjs tests/friendly-invite-ux.test.mjs tests/online-lobby-responsiveness.test.mjs
       # Ubuntu 24.04 hosted runners sometimes route apt through an unavailable
       # Azure mirror, preventing Playwright's --with-deps step from ever running.
       # Replace only that mirror with the standard Ubuntu archive; preserve all
@@ -84,7 +93,10 @@ jobs:
         run: |
           npm install --no-save @playwright/test@1.55.0
           npx playwright install --with-deps chromium
-      - name: Build isolated development cross-device regression site
-        run: node dev-site/build.mjs
+      - name: Build and syntax-check generated development client
+        run: |
+          node dev-site/build.mjs
+          node --check dev-site/dist/ranked-client.js
+          node --check dev-site/dist/app.js
       - name: Browser end-to-end smoke tests
         run: npx playwright test
