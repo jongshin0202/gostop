@@ -412,3 +412,58 @@ test('a pending request is cancelled if either player enters a two-player game b
   assert.equal(lobby.challenges.has(request.requestId),false);
   assert.ok(me.socket.messages.some(message=>message.type==='challengeCancelled'&&message.requestId===request.requestId));
 });
+
+
+test('manual challenge reaches the other online player without waiting for a stalled leaderboard',async()=>{
+  const lobby=makeLobby(rowsFor([])),me=client('son','SonGoku',1000),other=client('veg','Vegeta',900);
+  add(lobby,me,other);
+  lobby.leaderboardRows=()=>new Promise(()=>{});
+  lobby.directoryProfiles=()=>new Promise(()=>{});
+  const received=lobby.enqueueClientMessage(me,JSON.stringify({type:'challenge',accountId:'veg'}));
+  await Promise.race([received,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Challenge blocked by leaderboard')),150))]);
+  assert.ok(other.socket.messages.some(x=>x.type==='playRequest'&&x.from?.nickname==='SonGoku'));
+  assert.ok(me.socket.messages.some(x=>x.type==='challengeSent'&&x.to?.nickname==='Vegeta'));
+});
+
+test('Cancel Request bypasses a search waiting for account-store results',async()=>{
+  const lobby=makeLobby(rowsFor([]),[]),me=client('son','SonGoku',1000),other=client('veg','Vegeta',900);
+  add(lobby,me,other);
+  await lobby.handle(me,JSON.stringify({type:'challenge',accountId:'veg'}));
+  const sent=me.socket.messages.find(x=>x.type==='challengeSent');
+  assert.ok(sent?.requestId);
+  lobby.directorySearch=()=>new Promise(()=>{});
+  const search=lobby.enqueueClientMessage(me,JSON.stringify({type:'search',query:'Jung'}));
+  await new Promise(resolve=>setImmediate(resolve));
+  const cancel=lobby.enqueueClientMessage(me,JSON.stringify({type:'challengeCancel',requestId:sent.requestId}));
+  await Promise.race([cancel,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Cancel blocked behind search')),150))]);
+  assert.ok(me.socket.messages.some(x=>x.type==='challengeCancelled'&&x.requestId===sent.requestId));
+  assert.ok(other.socket.messages.some(x=>x.type==='challengeCancelled'&&x.requestId===sent.requestId));
+  assert.equal(lobby.challenges.has(sent.requestId),false);
+  void search.catch(()=>{});
+});
+
+test('Auto Match reports a candidate without waiting on a slow stats backend',async()=>{
+  const lobby=makeLobby(rowsFor([])),me=client('son','SonGoku',1000),other=client('veg','Vegeta',900);
+  add(lobby,me,other);
+  lobby.leaderboardRows=()=>new Promise(()=>{});
+  lobby.directoryProfiles=()=>new Promise(()=>{});
+  await Promise.race([
+    lobby.enqueueClientMessage(me,JSON.stringify({type:'autoMatchStart'})),
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('Auto Match backend lookup blocked')),150))
+  ]);
+  const types=me.socket.messages.map(x=>x.type);
+  assert.ok(types.includes('autoMatchStarted'));
+  assert.ok(types.includes('autoMatchCandidate'));
+  assert.equal(lobby.clientByAccountId('veg')?.account.nickname,'Vegeta');
+});
+
+test('Search Player returns an actionable error instead of an endless spinner on a search failure',async()=>{
+  const lobby=makeLobby(rowsFor([])),me=client('son','SonGoku',1000);
+  add(lobby,me);
+  lobby.directorySearch=async()=>{throw new Error('Account store temporarily unavailable');};
+  await lobby.enqueueClientMessage(me,JSON.stringify({type:'search',query:'Jung'}));
+  const types=me.socket.messages.map(x=>x.type);
+  assert.ok(types.includes('searchStarted'));
+  assert.ok(types.includes('searchError'));
+  assert.match(me.socket.messages.find(x=>x.type==='searchError').message,/temporarily unavailable/);
+});
