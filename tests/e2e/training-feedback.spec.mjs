@@ -628,7 +628,7 @@ test('final review describes immediate training and gives exact server-backed 20
  const review=await showFinalReview(page);
  const section=review.locator('#trainingModelProgressPanel');
  await expect(section).toContainText('Training and weight activation');
- await expect(section).toContainText('1 confirmed judgment will train server-side weights when you press Finish');
+ await expect(section).toContainText('1 confirmed judgment from this review will train server-side weights when you press Finish');
  await expect(section).toContainText('20-game path: 1 more game');
  await expect(section.locator('#trainingCleanCountdown')).toContainText('10 more consecutive disagreement-free games');
  await expect(section).toContainText('No production deployment');
@@ -647,7 +647,7 @@ test('clean-game streak countdown shows earliest path without claiming activatio
  const review=await showFinalReview(page);
  await expect(review).toContainText('No disagreements to review');
  const p=review.locator('#trainingModelProgressPanel');
- await expect(p).toContainText('No confirmed judgments are retained');
+ await expect(p).toContainText('No confirmed disagreement judgments remain in this review');
  await expect(p).toContainText('20-game path: 12 more games');
  await expect(p.locator('#trainingCleanCountdown')).toContainText('1 more consecutive disagreement-free game');
  await review.getByRole('button',{name:'Finish'}).click();
@@ -665,7 +665,7 @@ test('removing judgments updates training disclosure but not historical disagree
  await expect(panel).toContainText('1 confirmed judgment');
  await review.locator('.training-final-row').getByRole('button',{name:'Remove'}).click();
  await page.locator('#trainingReviewRemoveConfirm').getByRole('button',{name:'Yes'}).click();
- await expect(panel).toContainText('No confirmed judgments are retained');
+ await expect(panel).toContainText('No confirmed disagreement judgments remain in this review');
  await expect(panel).toContainText('20-game path: 2 more games');
  await expect(panel.locator('#trainingCleanCountdown')).toContainText('10 more consecutive');
 });
@@ -695,7 +695,7 @@ test('acknowledged development activation displays deployment timing and version
 test('unknown server progress never fabricates game countdown',async({page})=>{
  const server=fakeCloud();
  await setup(page);
- await page.route('**/mock-learning/state',route=>route.fulfill({
+ await page.route('**/mock-learning/api/training/state',route=>route.fulfill({
   status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'TEMPORARY_FAILURE'})
  }));
  const review=await showFinalReview(page);
