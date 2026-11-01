@@ -39,7 +39,7 @@ test('real computer-first Training shows native card and text at the three-secon
  // to verify transition from the computer's first turn to player's turn.
  const starter=await page.locator('#openingMessage').textContent();
  expect(starter?.toLowerCase()).toContain('computer');
- expect(await page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().openingSeen)).toBe(true);
+ expect(await page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().active)).toBe(true);
  await page.locator('.training-opening-dismiss-layer').click();
  await expect(page.locator('.training-opening-dismiss-layer')).toHaveCount(0);
  await expect.poll(()=>page.locator('#playerHand .hand-card[data-card-id]:not(:disabled)').count(),
