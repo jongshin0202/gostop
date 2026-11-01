@@ -3,7 +3,7 @@
 export const GO_STOP_ACTIONS=Object.freeze(['go','stop']);
 const valid=(c)=>c&&Number.isInteger(c.playerScore)&&c.playerScore>=0&&c.playerScore<=100&&
  Number.isInteger(c.opponentScore)&&c.opponentScore>=0&&c.opponentScore<=100&&
- Number.isInteger(c.remainingCards)&&c.remainingCards>=1&&c.remainingCards<=10&&
+ Number.isInteger(c.remainingCards)&&c.remainingCards>=0&&c.remainingCards<=10&&
  Number.isInteger(c.goCount)&&c.goCount>=0&&c.goCount<=20&&typeof c.hasMatch==='boolean';
 export const legalGoStopActions=()=>[...GO_STOP_ACTIONS];
 export function goStopFeatures(context,action){
