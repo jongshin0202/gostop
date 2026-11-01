@@ -105,7 +105,7 @@ function createPanel(layer){
  // opening review, preserving the frozen game's authoritative heading and
  // recommendation order. No gameplay or model logic is changed.
  if(lang==='en'&&locationLines.length){
-  const heading=coachText.match(/^\\s*(Best strateg(?:y|ies):\\s*[^.]*\\.)/i)?.[1];
+  const heading=coachText.match(/^\s*(Best strateg(?:y|ies):\s*[^.]*\.)/i)?.[1];
   const coach=$('trainingCoachText');
   if(heading&&coach)coach.textContent=heading+' '+locationLines.join(' ')+
    ' Tap or click anywhere when you are ready to continue.';
