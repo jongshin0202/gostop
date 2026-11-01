@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Lobby} from '../server/lobby.mjs';
+import {Lobby} from '../server/lobby-development.mjs';
 const socket=()=>({messages:[],send(value){this.messages.push(JSON.parse(value));},serializeAttachment(){}});
 const make=(id,nickname,coins=100)=>({clientId:id+'-socket',account:{id,nickname,walletCoins:coins},
  socket:socket(),available:true,twoPlayer:false,foreground:true,
