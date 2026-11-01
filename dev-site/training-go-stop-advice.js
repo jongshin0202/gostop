@@ -36,6 +36,51 @@ const feature=(c,action)=>{
   .forEach((v,i)=>w[i*2+index]=v);
  return w;
 };
+
+// Conservative public-card upper bound. Enumerate every exposed table bundle,
+// as many as two captures during the opponent's next play/draw, and a plausible
+// unseen matching card for each capture. Never inspect opponent hidden cards.
+// An optimistic upper bound below seven proves no visible next-turn finish.
+function opponentNextTurnCeiling({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
+ opponentCapturedIds=[],opponentScore=0,scorePlayer=null}={}){
+ if(!Array.isArray(deck)||!deck.length||typeof scorePlayer!=='function')return null;
+ const byId=new Map(deck.map(c=>[c.id,c]));
+ const floor=floorIds.map(id=>byId.get(id)).filter(Boolean);
+ const captured=opponentCapturedIds.map(id=>byId.get(id)).filter(Boolean);
+ const unseenIds=new Set([...floorIds,...ownHandIds,...ownCapturedIds,...opponentCapturedIds]);
+ const unseen=deck.filter(c=>!unseenIds.has(c.id));
+ const groups=[],seen=new Set();
+ for(const c of floor){
+  if(seen.has(c.month))continue;
+  seen.add(c.month);
+  const cards=floor.filter(x=>x.month===c.month);
+  if(cards.length>2&&cards.length!==3)continue;
+  // Two ordinary matches of the same month are a target choice, not a stack.
+  if(cards.length===2){for(const single of cards)groups.push({cards:[single],month:c.month});}
+  else groups.push({cards,month:c.month});
+ }
+ const before=scorePlayer({captured,gukjinMode:'animal'}).total;
+ if(!Number.isFinite(before))return null;
+ let max=opponentScore;
+ const update=(added)=>{
+  const next=scorePlayer({captured:[...captured,...added],gukjinMode:'animal'}).total;
+  if(Number.isFinite(next))max=Math.max(max,opponentScore+Math.max(0,next-before));
+ };
+ for(let i=0;i<groups.length;i++){
+  const one=groups[i];
+  for(const source of unseen.filter(c=>c.month===one.month)){
+   update([...one.cards,source]);
+   for(let j=i+1;j<groups.length;j++){
+    const two=groups[j];
+    if(one.cards.some(c=>two.cards.some(d=>c.id===d.id)))continue;
+    for(const other of unseen.filter(c=>c.month===two.month&&c.id!==source.id))
+      update([...one.cards,...two.cards,source,other]);
+   }
+  }
+ }
+ return max;
+}
+
 const modelChoice=(model,context)=>{
  if(!model||!Array.isArray(model.weights)||model.weights.length!==16||
     model.examples<3||model.weights.some(v=>!Number.isFinite(v)))return null;
@@ -43,7 +88,7 @@ const modelChoice=(model,context)=>{
  const delta=score('go')-score('stop');
  return Math.abs(delta)>=.45?(delta>0?'go':'stop'):null;
 };
-const api=Object.freeze({evaluate,modelChoice,matches});
+const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling});
 root.GoStopDevGoStopLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(root.location?.hostname||''))return;
@@ -56,6 +101,23 @@ const score=id=>{
  return match?Number(match[0]):null;
 };
 const ids=query=>[...document.querySelectorAll(query)].map(x=>x.dataset.cardId).filter(Boolean);
+
+const previousPublicCards=()=>({
+ ownHandIds:ids('#playerHand .hand-card[data-card-id]'),
+ floorIds:ids('#floor .floor-card[data-card-id]'),
+ ownCapturedIds:ids('#playerCaptured .captured-mini[data-card-id]'),
+ opponentCapturedIds:ids('#aiCaptured .captured-mini[data-card-id]')
+});
+const safeCopy={
+ en:maximum=>'GO. The computer has no table-based path to 7 points on its next turn (optimistic maximum '+maximum+'). You still have a matching capture opportunity. Its next move may change the table.',
+ ko:maximum=>'고를 추천합니다. 상대가 바닥패로 다음 차례에 얻을 수 있는 최대 점수는 '+maximum+'점으로 7점에 못 미칩니다. 내 손패에 먹을 수 있는 패가 남아 있습니다.',
+ es:maximum=>'GO. El rival no puede llegar a 7 puntos en su próximo turno con las cartas visibles (máximo '+maximum+'). Aún puedes capturar una carta.',
+ fr:maximum=>'GO. L’adversaire ne peut pas atteindre 7 points au prochain tour avec les cartes visibles (maximum '+maximum+'). Vous avez encore une capture possible.',
+ de:maximum=>'GO. Mit den sichtbaren Tischkarten erreicht der Gegner in seinem nächsten Zug höchstens '+maximum+' und nicht 7 Punkte. Du hast eine Fangchance.',
+ ja:maximum=>'ゴーを勧めます。相手は次の手番で場札から最大'+maximum+'点しか取れず、7点に届きません。こちらには取れる札があります。',
+ zh:maximum=>'建议继续。对手下一轮通过桌面牌最多达到'+maximum+'分，不足7分。你仍有可收取的匹配牌。'
+};
+
 function adjust(){
  const training=root.GoStopTrainingFeedbackDev?.getStatus?.()?.active;
  const go=$('goBtn'),stop=$('stopBtn');
@@ -73,15 +135,24 @@ function adjust(){
   opponentScore:context.opponentScore,playerScore:context.playerScore,
   remainingCards:context.hand.length,goCount:context.goCount,hasMatch:checked.hasMatch
  });
- const result=checked.lowRisk?'go':
+ const snapshot=previousPublicCards();
+ const engine=root.GoStopEngine;
+ const maximum=engine?.scorePlayer?opponentNextTurnCeiling({
+  deck:engine.masterDeck,...snapshot,opponentScore:context.opponentScore,
+  scorePlayer:engine.scorePlayer
+ }):null;
+ const verifiedSafe=checked.hasMatch&&context.hand.length>0&&
+  Number.isInteger(maximum)&&maximum<7&&context.goCount<=1&&!checked.urgentThreat;
+ const result=verifiedSafe?'go':checked.lowRisk?'go':
    !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original;
  if(result===original)return;
  go.classList.toggle('training-choice-recommended',result==='go');
  stop.classList.toggle('training-choice-recommended',result==='stop');
- if(checked.lowRisk){
+ if(verifiedSafe||checked.lowRisk){
   const locale=document.documentElement.lang;
   const text=$('trainingCoachText');
-  if(text)text.textContent=copy[locale]||copy.en;
+  if(text)text.textContent=verifiedSafe?
+   (safeCopy[locale]||safeCopy.en)(maximum):copy[locale]||copy.en;
  }
 }
 const observer=new MutationObserver(()=>{if(dialog.open)adjust();});
