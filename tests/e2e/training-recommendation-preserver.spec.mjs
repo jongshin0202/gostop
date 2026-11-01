@@ -242,3 +242,44 @@ test('reserved ppeok override never activates during ordinary non-Training game'
  await expect(page.locator('#floor [data-card-id="m10-2"]')).toHaveClass(/training-recommended/);
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().active)).toBe(false);
 });
+
+test('captures publicly revealed opponent Shake card instead of ordinary stripe',async({page})=>{
+ await page.goto('/',{waitUntil:'domcontentloaded'});
+ await page.setContent(`<!doctype html><html lang="en"><body>
+  <button id="trainingModeBtn">Training</button>
+  <aside id="trainingCoachPanel" hidden><strong id="trainingCoachTitle"></strong><p id="trainingCoachText"></p></aside>
+  <div id="playerHand"><button class="hand-card" data-card-id="m4-4" title="Vine Single"></button>
+   <button class="hand-card" data-card-id="m10-3" title="Star Picture"></button></div>
+  <div id="floor"><div class="floor-card" data-card-id="m4-1"></div>
+   <div class="floor-card" data-card-id="m10-2"></div></div>
+  <div id="playerCaptured"></div><div id="aiCaptured"></div>
+  <dialog id="shakeRevealDialog">
+   <div class="magnified-card" data-card-id="m4-1"></div>
+   <div class="magnified-card" data-card-id="m4-2"></div>
+   <div class="magnified-card" data-card-id="m4-3"></div>
+  </dialog><dialog id="shakeDialog"></dialog><dialog id="bombDialog"></dialog>
+  <dialog id="resultDialog"></dialog>
+ </body></html>`);
+ await page.evaluate(()=>{globalThis.GoStopEngine={masterDeck:[
+  {id:'m4-1',month:4,type:'animal',flags:[]},{id:'m4-2',month:4,type:'pi',flags:[]},
+  {id:'m4-3',month:4,type:'pi',flags:[]},{id:'m4-4',month:4,type:'pi',flags:[]},
+  {id:'m10-2',month:10,type:'ribbon',ribbonSet:'blue',flags:[]},
+  {id:'m10-3',month:10,type:'animal',flags:[]}
+ ]};});
+ await page.addScriptTag({path:'dev-site/training-shaken-priority.js'});
+ await page.addScriptTag({path:'dev-site/training-recommendation-preserver.js'});
+ await page.locator('#trainingModeBtn').click();
+ await page.evaluate(()=>document.getElementById('shakeRevealDialog').showModal());
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevShakenPriority.getStatus().revealedMonths)).toEqual([4]);
+ await page.evaluate(()=>document.getElementById('shakeRevealDialog').close());
+ await page.evaluate(()=>{
+  document.getElementById('trainingCoachTitle').textContent='RECOMMENDED MOVE';
+  document.getElementById('trainingCoachText').textContent='Play Star onto Blue Stripe.';
+  document.getElementById('trainingCoachPanel').hidden=false;
+  document.querySelector('#playerHand [data-card-id="m10-3"]').classList.add('matchable');
+  document.querySelector('#floor [data-card-id="m10-2"]').classList.add('training-recommended');
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().hand)).toBe('m4-4');
+ await expect(page.locator('#floor [data-card-id="m4-1"]')).toHaveClass(/training-recommended/);
+ await expect(page.locator('#trainingCoachText')).toContainText('shaken');
+});
