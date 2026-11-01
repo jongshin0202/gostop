@@ -626,3 +626,25 @@ test('GO/STOP feedback still opens when no cards remain after the last scoring p
  await dialog.getByRole('button',{name:'Finish'}).click();
  await expect(dialog).toBeHidden();
 });
+
+test('ppeok disagreement is retained even if the pile capture opens a result immediately',async({page})=>{
+ const server=await setup(page);
+ await showPilePlay(page);
+ await page.evaluate(()=>{
+  document.getElementById('pileHandCard').addEventListener('click',()=>{
+   document.getElementById('resultDialog').showModal();
+  });
+ });
+ await page.locator('#pileHandCard').click();
+ const prompt=page.locator('#trainingFeedbackDialog');
+ await expect(prompt).toBeVisible();
+ await prompt.getByRole('button',{name:'My move was better'}).click();
+ await expect(prompt).toBeHidden();
+ const review=page.locator('#trainingFinalReviewDialog');
+ await expect(review).toBeVisible();
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('Vine');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ expect(server.items).toHaveLength(1);
+});
