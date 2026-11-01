@@ -5,7 +5,7 @@ const cards=[
  ...[2,4,8].map(month=>({id:'m'+month+'-3',month,type:'animal',flags:['godori']})),
  ...[4,5,6,7,8].map(month=>({id:'m'+month+'-4',month,type:'pi',flags:[]}))
 ];
-async function setup(page,{authorized=true,locale='en'}={}){
+async function setup(page,{authorized=true,locale='en',scenario=null}={}){
  await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
  await page.setContent(`<!DOCTYPE html><html lang="${locale}"><body>
  <button id="trainingModeBtn">Training</button><button id="playSoloBtn">Solo</button><button id="quitYesBtn">Quit</button>
@@ -16,7 +16,7 @@ async function setup(page,{authorized=true,locale='en'}={}){
  <section class="hand" id="playerHand"></section>
  <div id="playerCaptured"></div><div id="aiCaptured"></div>
  </main></body></html>`);
- await page.evaluate(({cards,authorized})=>{
+ await page.evaluate(({cards,authorized,scenario})=>{
   window.GoStopEngine={masterDeck:cards};
   window.__sent=[];
   window.GoStopTrainingFeedbackDev={getStatus:()=>({gameId:'dev-opening-test-game',authorized})};
@@ -24,9 +24,11 @@ async function setup(page,{authorized=true,locale='en'}={}){
    window.__sent.push(payload);return {ok:true};
   }};
   const card=(id)=>'<button class="hand-card" data-card-id="'+id+'">'+id+'</button>';
-  document.getElementById('playerHand').innerHTML=['m1-1','m4-4','m5-4','m6-4','m7-4'].map(card).join('');
-  document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="m8-1">Bright floor</div>';
- },{cards,authorized});
+  const deal=scenario||{hand:['m1-1','m4-4','m5-4','m6-4','m7-4'],floor:['m8-1']};
+  document.getElementById('playerHand').innerHTML=deal.hand.map(card).join('');
+  document.getElementById('floor').innerHTML=deal.floor.map(id=>'<div class="floor-card" data-card-id="'+id+'">'+id+'</div>').join('');
+  if(deal.coachText)document.getElementById('trainingCoachText').textContent=deal.coachText;
+ },{cards,authorized,scenario});
  await page.addScriptTag({path:'dev-site/training-opening-evidence.js'});
  await page.addScriptTag({path:'dev-site/training-opening-review.js'});
  await page.addStyleTag({path:'dev-site/training-opening-review.css'});
@@ -176,4 +178,45 @@ test('one Bright in hand plus one reachable Bright on table is never reported as
  await expect(page.locator('#devOpeningReview input[value="brights"]')).toBeChecked();
  await expect(page.locator('#devOpeningReview .dev-opening-review-evidence').first())
   .toContainText('1 in hand');
+});
+
+test('two actual birdies on table capturable from matching hand cards are recommended without claiming birds held',async({page})=>{
+ await setup(page,{scenario:{
+  hand:['m2-2','m4-2'],floor:['m2-3','m4-3'],
+  coachText:'Best strategy: 5-BIRDIES. 2 birdie pictures are in hand.'
+ }});
+ const review=page.locator('#devOpeningReview');
+ await expect(review.locator('.dev-opening-review-recommendation')).toContainText('5-BIRDIES');
+ await expect(review.locator('.dev-opening-review-location-counts'))
+   .toContainText('5-BIRDIES: 0 in hand, 0 captured, 2 reachable on the table.');
+ await expect(review.locator('.dev-opening-review-location-counts'))
+   .toContainText('Both birdie pictures are on the table');
+ await expect(page.locator('#trainingCoachText')).not.toContainText('2 birdie pictures are in hand');
+ await review.getByRole('button',{name:'No, change strategies'}).click();
+ await expect(review.locator('input[value="godori"]')).toBeChecked();
+ await expect(review.locator('.dev-opening-review-evidence').nth(1)).toContainText('0 in hand');
+});
+test('two birdie pictures in hand qualify and coach aligns with expert recommendation',async({page})=>{
+ await setup(page,{scenario:{
+  hand:['m2-3','m4-3'],floor:[],
+  coachText:'Best strategy: Singles. No 5-BIRDIES route is immediately playable.'
+ }});
+ const review=page.locator('#devOpeningReview');
+ await expect(review.locator('.dev-opening-review-recommendation')).toContainText('5-BIRDIES');
+ await expect(review.locator('.dev-opening-review-location-counts'))
+  .toContainText('5-BIRDIES: 2 in hand, 0 captured, 0 reachable on the table.');
+ await expect(page.locator('#trainingCoachText')).toContainText('Best strategy: 5-BIRDIES.');
+ await expect(page.locator('#trainingCoachText')).not.toContainText('Best strategy: Singles');
+ await review.getByRole('button',{name:'Yes, I agree'}).click();
+ const sent=await page.evaluate(()=>window.__sent[0]);
+ expect(sent.suggested).toContain('godori');
+});
+test('two related-family nonbird cards without reachable birdies do not invent 5-BIRDIES',async({page})=>{
+ await setup(page,{scenario:{
+  hand:['m2-2','m4-2'],floor:[],
+  coachText:'Best strategy: Singles. No birdie picture is currently available.'
+ }});
+ const review=page.locator('#devOpeningReview');
+ await expect(review.locator('.dev-opening-review-recommendation')).toContainText('Singles');
+ await expect(review.locator('.dev-opening-review-recommendation')).not.toContainText('5-BIRDIES');
 });

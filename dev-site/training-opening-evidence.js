@@ -56,6 +56,37 @@ function evaluate(visible,deck){
 // Match the FROZEN Training opening strategy rules (app.js trainingStrategyProfile).
 // A single interesting card is not a strategic opening recommendation.
 // This pure, read-only mirror exists only for the isolated dev reviewer.
+// Expert 5-BIRDIES thresholds. Related-month cards support the route but
+// are not actual bird pictures. Two matching floor birdies are an exception.
+function godoriExpertCase(visible,deck){
+ const byId=new Map((deck||[]).map(c=>[c.id,c]));
+ const cards=k=>[...new Set(visible?.[k]||[])].map(id=>byId.get(id)).filter(Boolean);
+ const hand=cards('hand'),floor=cards('floor'),own=cards('humanCaptured'),opponent=cards('computerCaptured');
+ const bird=c=>[2,4,8].includes(c.month)&&c.flags?.includes('godori');
+ const held=hand.filter(bird),captured=own.filter(bird),lost=opponent.filter(bird);
+ const handMonths=new Set(hand.map(c=>c.month)),floorMonths=new Set(floor.map(c=>c.month));
+ const claimable=floor.filter(c=>bird(c)&&handMonths.has(c.month));
+ const playable=held.filter(c=>floorMonths.has(c.month));
+ const birdMonths=new Set([...held,...captured,...claimable].map(c=>c.month));
+ const support=hand.filter(c=>[2,4,8].includes(c.month)&&!bird(c));
+ const supportMonths=new Set(support.map(c=>c.month));
+ const ownBirdCount=new Set([...held,...captured].map(c=>c.month)).size;
+ const immed=new Set([...playable,...claimable].map(c=>c.month));
+ const frozenViable=lost.length===0&&birdMonths.size>=2&&immed.size>0;
+ let reason=null;
+ if(!lost.length){
+  if(new Set(claimable.map(c=>c.month)).size>=2)reason='two-reachable';
+  else if(ownBirdCount>=2)reason='two-actual-birdies';
+  else if(ownBirdCount>=1&&support.length>=2)reason='bird-plus-family';
+  else if(support.length>=3)reason='three-family';
+  else if(frozenViable)reason='native-reachable';
+ }
+ return Object.freeze({viable:!!reason,frozenViable,reason,
+  actualBirdiesInHand:held.length,actualBirdiesCaptured:captured.length,
+  immediatelyClaimable:new Set(claimable.map(c=>c.month)).size,
+  relatedFamilyCardsInHand:support.length,opponentBirdies:lost.length});
+}
+
 function nativeOpeningStrategies(visible,deck){
  const all=new Map((deck||[]).map(c=>[c.id,c]));
  const cards=field=>[...new Set(visible?.[field]||[])].map(id=>all.get(id)).filter(Boolean);
@@ -84,7 +115,7 @@ function nativeOpeningStrategies(visible,deck){
  if(5-bright.lost>=3&&bright.potentialCount>=2)
   options.push({strategy:'brights',label:'Brights',score:330+(bright.strong?100:0)+(bright.veryStrong?120:0)+bright.controlledCount*45+bright.immediateCount*30+bright.potentialCount*25});
  const godori=route(c=>c.flags?.includes('godori')&&[2,4,8].includes(c.month));
- if(godori.lost===0&&godori.potentialCount>=2&&godori.immediateCount>0)
+ if(godoriExpertCase(visible,deck).viable)
   options.push({strategy:'godori',label:'5-BIRDIES',score:360+(godori.strong?120:0)+(godori.veryStrong?140:0)+godori.controlledCount*50+godori.immediateCount*35+godori.potentialCount*30});
  options.sort((a,b)=>b.score-a.score||a.label.localeCompare(b.label));
  return options.length?options.map(o=>o.strategy):['singles'];
@@ -138,12 +169,49 @@ const countPhrases={
  ja:c=>`手札 ${c.hand}枚、獲得済み ${c.captured}枚、場から取れる札 ${c.reachable}枚`,
  zh:c=>`手牌 ${c.hand}张、已获得 ${c.captured}张、桌面可拿 ${c.reachable}张`
 };
+// Expert-verified 5-BIRDIES exception: two different bird pictures are
+// sitting on the floor and matching-month cards in the player's hand can
+// claim BOTH immediately. The player has not been dealt two bird pictures.
+// Never infer this exception from two non-bird cards alone.
+const twoBirdiesOnTableCopy={
+ en:'Both birdie pictures are on the table and can be captured now using your matching hand cards. 5-BIRDIES is viable.',
+ ko:'새 그림패 2장은 손패가 아닌 바닥에 있고, 손패의 같은 월 카드로 모두 바로 잡을 수 있어 고도리를 노릴 수 있습니다.',
+ es:'Las dos cartas de pájaro están en la mesa y puedes capturarlas ahora con tus cartas correspondientes. La estrategia de 5 pájaros es viable.',
+ fr:'Les deux cartes Oiseau sont sur la table et peuvent être prises immédiatement avec vos cartes correspondantes. La stratégie 5 oiseaux est possible.',
+ de:'Beide Vogelkarten liegen auf dem Tisch und können mit passenden Handkarten sofort aufgenommen werden. Die 5-Vögel-Strategie ist möglich.',
+ ja:'鳥札2枚は手札ではなく場にあり、手札の同じ月の札で両方すぐに取れます。五鳥を狙える例外です。',
+ zh:'两张鸟牌在桌面上，不在手牌中，可用手中对应月份的牌立即收取，因此可以考虑五鸟策略。'
+};
+const godoriExpertSupportCopy={
+ en:e=>`5-BIRDIES is viable with ${e.actualBirdiesInHand} actual birdie cards in hand and ${e.relatedFamilyCardsInHand} supporting cards from birdie families. Supporting cards are not birdies.`,
+ ko:e=>`고도리 전략 가능: 손패의 실제 새 그림패 ${e.actualBirdiesInHand}장, 새 그림패와 같은 월의 보조 카드 ${e.relatedFamilyCardsInHand}장입니다. 보조 카드는 새 그림패가 아닙니다.`,
+ es:e=>`5 pájaros es posible con ${e.actualBirdiesInHand} pájaros reales en mano y ${e.relatedFamilyCardsInHand} cartas de apoyo de sus familias. Estas últimas no son pájaros.`,
+ fr:e=>`La stratégie 5 oiseaux est possible avec ${e.actualBirdiesInHand} oiseaux réels en main et ${e.relatedFamilyCardsInHand} cartes de soutien. Ces dernières ne sont pas des oiseaux.`,
+ de:e=>`5 Vögel ist möglich: ${e.actualBirdiesInHand} echte Vogelkarten auf der Hand und ${e.relatedFamilyCardsInHand} unterstützende Familienkarten. Letztere sind keine Vogelkarten.`,
+ ja:e=>`五鳥を狙えます。手札の鳥札は${e.actualBirdiesInHand}枚、関連する月の補助札は${e.relatedFamilyCardsInHand}枚です。補助札は鳥札ではありません。`,
+ zh:e=>`可以考虑五鸟：手牌中实际鸟牌${e.actualBirdiesInHand}张，相关月份的辅助牌${e.relatedFamilyCardsInHand}张。辅助牌不是鸟牌。`
+};
+function hasTwoDirectlyReachableBirdies(visible,deck){
+ const counts=openingRouteLocations(visible,deck,'godori');
+ if(!counts||counts.opponent>0||counts.reachable<2)return false;
+ const byId=new Map((deck||[]).map(c=>[c.id,c]));
+ const months=new Set((visible?.hand||[]).map(id=>byId.get(id)?.month));
+ const reachableMonths=new Set((visible?.floor||[]).map(id=>byId.get(id))
+  .filter(c=>c?.flags?.includes('godori')&&[2,4,8].includes(c.month)&&months.has(c.month))
+  .map(c=>c.month));
+ return reachableMonths.size>=2;
+}
+
 function openingLocationLines(visible,deck,strategies,locale='en'){
  const lang=routeLabels[locale]?locale:'en';
  return (strategies||[]).map(strategy=>{
   const counts=openingRouteLocations(visible,deck,strategy);
   if(!counts)return null;
-  return (routeLabels[lang][strategy]||strategy)+': '+countPhrases[lang](counts)+'.';
+  const expert=strategy==='godori'?godoriExpertCase(visible,deck):null;
+  const extra=expert?.reason==='two-reachable'?
+    ' '+twoBirdiesOnTableCopy[lang]:
+    expert?.viable&&!expert.frozenViable?' '+godoriExpertSupportCopy[lang](expert):'';
+  return (routeLabels[lang][strategy]||strategy)+': '+countPhrases[lang](counts)+'.'+extra;
  }).filter(Boolean);
 }
 
@@ -186,7 +254,7 @@ function withLearnedWeights(review,model){
  // deterministic prior rather than produce an empty or misleading hint.
  return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
 }
-const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,STRATEGIES});
+const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,godoriExpertCase,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,hasTwoDirectlyReachableBirdies,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

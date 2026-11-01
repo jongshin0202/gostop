@@ -95,7 +95,10 @@ function createPanel(layer){
   // mirror supplies the structural selection for all other languages.
   coachText=$('trainingCoachText')?.textContent||'',
   displayedSuggestions=lang==='en'?helper.strategiesFromEnglishCoach(coachText):null,
-  review={...baseReview,suggested:displayedSuggestions||nativeSuggestions};
+  expertBirdies=helper.godoriExpertCase(vis,deck),
+  needsBirdieAddition=expertBirdies.viable&&!expertBirdies.frozenViable,
+  review={...baseReview,suggested:needsBirdieAddition?nativeSuggestions:
+    (displayedSuggestions||nativeSuggestions)};
  // Never apply shadow learner weights to an answer that the frozen game coach
  // has not actually made; confirmed labels must match the player's screen.
  if(!review.strategies.length)return;
@@ -104,11 +107,29 @@ function createPanel(layer){
  // and reachable table cards. Replace that ambiguous sentence ONCE during
  // opening review, preserving the frozen game's authoritative heading and
  // recommendation order. No gameplay or model logic is changed.
- if(lang==='en'&&locationLines.length){
+ const coach=$('trainingCoachText');
+ const continueCopy={
+  en:'Tap or click anywhere when you are ready to continue.',
+  ko:'준비되면 아무 곳이나 누르세요.',
+  es:'Toca o haz clic para continuar.',
+  fr:'Touchez ou cliquez pour continuer.',
+  de:'Tippen oder klicken zum Fortfahren.',
+  ja:'準備ができたら画面をタップしてください。',
+  zh:'准备好后点击屏幕继续。'
+ };
+ if(coach&&needsBirdieAddition){
+  // Keep the recommendation in the real Training coach and the expert
+  // confirmation dialog identical. This adjusts only development text.
+  const selected=review.suggested.map(strategy=>names[strategy]);
+  const heading=lang==='en'?
+   (selected.length===1?'Best strategy: ':'Best strategies: ')+
+     selected.join(', ').replace(/, ([^,]+)$/,', and $1')+'.':
+   d.recommend+': '+selected.join(', ')+'.';
+  coach.textContent=heading+' '+locationLines.join(' ')+' '+continueCopy[lang];
+ }else if(lang==='en'&&locationLines.length){
   const heading=coachText.match(/^\s*(Best strateg(?:y|ies):\s*[^.]*\.)/i)?.[1];
-  const coach=$('trainingCoachText');
   if(heading&&coach)coach.textContent=heading+' '+locationLines.join(' ')+
-   ' Tap or click anywhere when you are ready to continue.';
+   ' '+continueCopy.en;
  }
  reviewedGameId=gameId;staged={gameId,vis,review};
  openingLayer=layer;openingLayer.style.pointerEvents='none';
