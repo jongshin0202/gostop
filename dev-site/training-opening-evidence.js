@@ -56,6 +56,37 @@ function evaluate(visible,deck){
 // Match the FROZEN Training opening strategy rules (app.js trainingStrategyProfile).
 // A single interesting card is not a strategic opening recommendation.
 // This pure, read-only mirror exists only for the isolated dev reviewer.
+// Expert 5-BIRDIES thresholds. Related-month cards support the route but
+// are not actual bird pictures. Two matching floor birdies are an exception.
+function godoriExpertCase(visible,deck){
+ const byId=new Map((deck||[]).map(c=>[c.id,c]));
+ const cards=k=>[...new Set(visible?.[k]||[])].map(id=>byId.get(id)).filter(Boolean);
+ const hand=cards('hand'),floor=cards('floor'),own=cards('humanCaptured'),opponent=cards('computerCaptured');
+ const bird=c=>[2,4,8].includes(c.month)&&c.flags?.includes('godori');
+ const held=hand.filter(bird),captured=own.filter(bird),lost=opponent.filter(bird);
+ const handMonths=new Set(hand.map(c=>c.month)),floorMonths=new Set(floor.map(c=>c.month));
+ const claimable=floor.filter(c=>bird(c)&&handMonths.has(c.month));
+ const playable=held.filter(c=>floorMonths.has(c.month));
+ const birdMonths=new Set([...held,...captured,...claimable].map(c=>c.month));
+ const support=hand.filter(c=>[2,4,8].includes(c.month)&&!bird(c));
+ const supportMonths=new Set(support.map(c=>c.month));
+ const ownBirdCount=new Set([...held,...captured].map(c=>c.month)).size;
+ const immed=new Set([...playable,...claimable].map(c=>c.month));
+ const frozenViable=lost.length===0&&birdMonths.size>=2&&immed.size>0;
+ let reason=null;
+ if(!lost.length){
+  if(new Set(claimable.map(c=>c.month)).size>=2)reason='two-reachable';
+  else if(ownBirdCount>=2)reason='two-actual-birdies';
+  else if(ownBirdCount>=1&&support.length>=2)reason='bird-plus-family';
+  else if(support.length>=3&&supportMonths.size>=2)reason='three-family';
+  else if(frozenViable)reason='native-reachable';
+ }
+ return Object.freeze({viable:!!reason,frozenViable,reason,
+  actualBirdiesInHand:held.length,actualBirdiesCaptured:captured.length,
+  immediatelyClaimable:new Set(claimable.map(c=>c.month)).size,
+  relatedFamilyCardsInHand:support.length,opponentBirdies:lost.length});
+}
+
 function nativeOpeningStrategies(visible,deck){
  const all=new Map((deck||[]).map(c=>[c.id,c]));
  const cards=field=>[...new Set(visible?.[field]||[])].map(id=>all.get(id)).filter(Boolean);
@@ -84,7 +115,7 @@ function nativeOpeningStrategies(visible,deck){
  if(5-bright.lost>=3&&bright.potentialCount>=2)
   options.push({strategy:'brights',label:'Brights',score:330+(bright.strong?100:0)+(bright.veryStrong?120:0)+bright.controlledCount*45+bright.immediateCount*30+bright.potentialCount*25});
  const godori=route(c=>c.flags?.includes('godori')&&[2,4,8].includes(c.month));
- if(godori.lost===0&&godori.potentialCount>=2&&godori.immediateCount>0)
+ if(godoriExpertCase(visible,deck).viable)
   options.push({strategy:'godori',label:'5-BIRDIES',score:360+(godori.strong?120:0)+(godori.veryStrong?140:0)+godori.controlledCount*50+godori.immediateCount*35+godori.potentialCount*30});
  options.sort((a,b)=>b.score-a.score||a.label.localeCompare(b.label));
  return options.length?options.map(o=>o.strategy):['singles'];
@@ -212,7 +243,7 @@ function withLearnedWeights(review,model){
  // deterministic prior rather than produce an empty or misleading hint.
  return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
 }
-const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,hasTwoDirectlyReachableBirdies,STRATEGIES});
+const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,godoriExpertCase,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,hasTwoDirectlyReachableBirdies,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
