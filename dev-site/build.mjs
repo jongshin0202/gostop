@@ -2,6 +2,7 @@
 import {copyFile,mkdir,rm,writeFile,readFile} from 'node:fs/promises';
 import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {instrumentDevCompetitiveSoloPeerSync} from './instrument-competitive-solo-peer-sync.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'..'),output=join(here,'dist');
 const gameFiles=[
@@ -12,6 +13,11 @@ const gameFiles=[
 ];
 await rm(output,{recursive:true,force:true});await mkdir(output,{recursive:true});
 for(const file of gameFiles)await copyFile(join(root,file),join(output,file));
+// Preserve protected source. Only the generated DEVELOPMENT copy receives a
+// narrow reconciliation bridge for peer-controlled ranked Solo decisions.
+const devAppPath=join(output,'app.js');
+await writeFile(devAppPath,instrumentDevCompetitiveSoloPeerSync(await readFile(devAppPath,'utf8')));
+await copyFile(join(root,'dev-site/competitive-solo-peer-sync.js'),join(output,'dev-competitive-solo-peer-sync.js'));
 // Removable, development-only Training feedback; not included in public game builds.
 await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'training-learning-cloud.js'));
 await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
@@ -53,7 +59,8 @@ html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-
 html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029-howto-1');
 const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261101-countdown-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-countdown-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
-html=html.replace('<script src="app.js?v=20261028-7"></script>','<script src="app.js?v=20261028-7"></script>\n  '+feedbackScripts);
+html=html.replace('<script src="app.js?v=20261028-7"></script>',
+  '<script src="dev-competitive-solo-peer-sync.js?v=20261101-peer-1"></script>\n  <script src="app.js?v=20261101-dev-peer-1"></script>\n  '+feedbackScripts);
 html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-training-advice-logic.js?v=20261031-1"></script>\n  <script src="dev-training-context-coach.js?v=20261101-safe-1"></script>\n  <script src="dev-training-opening-evidence.js?v=20261101-birdies-1"></script>\n  <script src="dev-training-opening-review.js?v=20261101-hand-visible-1"></script>\n  <script src="dev-training-reserved-ppeok-priority.js?v=20261101-ppeok-1"></script>\n  <script src="dev-training-shaken-priority.js?v=20261101-shake-1"></script>\n  <script src="dev-training-recommendation-preserver.js?v=20261101-shake-1"></script>\n  <script src="dev-training-immediate-turn-advice.js?v=20261101-safe-1"></script>\n  <script src="dev-training-sake-cup-copy.js?v=20261031-1"></script>\n  <script src="dev-training-go-stop-advice.js?v=20261101-risk-1"></script>\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261030-1"></script>');
 // Preserve the production leaderboard UI exactly. Dev data stays isolated.
 await writeFile(htmlPath,html);
