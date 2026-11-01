@@ -71,7 +71,8 @@ function shakenOverride(currentHandId,currentFloorId){
   handIds:cardIds('#playerHand .hand-card[data-card-id]'),
   floorIds:cardIds('#floor .floor-card[data-card-id]'),
   ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
-  deck,recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+  deck,scorePlayer:globalThis.GoStopEngine?.scorePlayer,
+  recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
  });
  if(!choice)return null;
  const el=hand.querySelector('.hand-card[data-card-id="'+choice.handId+'"]');
