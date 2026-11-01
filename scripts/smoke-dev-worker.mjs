@@ -35,3 +35,37 @@ for(const origin of origins){
   }
   console.log('PASS dev login CORS preflight via '+origin);
 }
+
+
+// Read-only admin gateway smoke: canonical DEV origin, token existence, and invalid-token rejection.
+// This never authenticates as an admin and never reads/writes player records.
+const adminOrigin='https://gostop-admin-dev.vercel.app';
+const adminPreflight=await fetch(base+'/api/admin/health',{
+  method:'OPTIONS',
+  headers:{Origin:adminOrigin,'Access-Control-Request-Method':'POST',
+    'Access-Control-Request-Headers':'content-type,authorization'},
+  signal:AbortSignal.timeout(timeoutMs)
+});
+if(adminPreflight.status!==204||
+  adminPreflight.headers.get('access-control-allow-origin')!==adminOrigin){
+  throw new Error('DEV admin CORS preflight unavailable: status='+adminPreflight.status);
+}
+console.log('PASS isolated DEV admin origin CORS preflight');
+const adminHealth=await fetch(base+'/api/admin/health',{
+  headers:{Origin:adminOrigin,Authorization:'Bearer dev-smoke-invalid-'+crypto.randomUUID()},
+  signal:AbortSignal.timeout(timeoutMs)
+});
+const adminBody=await adminHealth.text();
+if(adminHealth.status===503){
+  throw new Error('Development Worker ADMIN_TOKEN is not configured; set a UNIQUE development admin secret in Cloudflare.');
+}
+if(adminHealth.status!==401||
+  adminHealth.headers.get('access-control-allow-origin')!==adminOrigin){
+  throw new Error('Unexpected dev admin authorization response: status='+adminHealth.status+', body='+adminBody.slice(0,200));
+}
+let adminJson;
+try{adminJson=JSON.parse(adminBody);}catch{throw new Error('Development admin health returned invalid JSON');}
+if(adminJson?.error?.code!=='ADMIN_AUTH_REQUIRED'){
+  throw new Error('Dev admin health did not reject the invalid password as expected');
+}
+console.log('PASS development-only admin gateway rejects invalid token; no production/admin records accessed');
