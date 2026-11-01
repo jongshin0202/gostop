@@ -442,7 +442,7 @@ test('server failure during final Finish retains review and does not claim learn
 
 async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatch=true,
  handCount=1,nativeReason='STOP. Only one scoring turn remains.',withScorer=false}={}){
- await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason})=>{
+ await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason,withScorer})=>{
   if(withScorer)globalThis.GoStopEngine.scorePlayer=player=>({total:player.captured.length});
   const hand=document.getElementById('playerHand');
   hand.innerHTML=(handCount===0?[]:handCount===1?['m6-3']:['m6-3','m6-4'])
