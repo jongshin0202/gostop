@@ -194,7 +194,7 @@ test('two actual birdies on table capturable from matching hand cards are recomm
  await expect(page.locator('#trainingCoachText')).not.toContainText('2 birdie pictures are in hand');
  await review.getByRole('button',{name:'No, change strategies'}).click();
  await expect(review.locator('input[value="godori"]')).toBeChecked();
- await expect(review.locator('.dev-opening-review-evidence')).toContainText('0 in hand');
+ await expect(review.locator('.dev-opening-review-evidence').nth(1)).toContainText('0 in hand');
 });
 test('two birdie pictures in hand qualify and coach aligns with expert recommendation',async({page})=>{
  await setup(page,{scenario:{
