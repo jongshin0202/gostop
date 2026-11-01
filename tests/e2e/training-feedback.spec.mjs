@@ -14,7 +14,7 @@ function fakeCloud(){
       if(path.endsWith('/state'))return reply(200,{ok:true,feedbackCount:items.length,
         confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned},goStopModel:{examples:goStopLearned}});
       if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:kind(x),choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
-      if(path.endsWith('/feedback')||path.endsWith('/special-feedback')){
+      if(path.endsWith('/feedback')||path.endsWith('/special-feedback')||path.endsWith('/go-stop-feedback')){
         const x=request.postDataJSON();items.push(x);return reply(200,{ok:true,confirmed:x.choice!=='unsure',feedbackCount:items.length});
       }
       if(path.endsWith('/review')){
