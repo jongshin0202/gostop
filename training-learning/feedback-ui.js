@@ -526,13 +526,13 @@ function onGoStopDecision(event){
   floor:onTable(),humanCaptured:captured('#playerCaptured'),computerCaptured:captured('#aiCaptured')
  };
  const scoreOf=id=>{
-  const value=String($(id)?.textContent||'').match(/\\d+/)?.[0];
+  const value=String($(id)?.textContent||'').match(/\d+/)?.[0];
   return value===undefined?null:Number(value);
  };
  const playerScore=scoreOf('playerScore'),opponentScore=scoreOf('aiScore');
  if(!Number.isInteger(playerScore)||playerScore<7||!Number.isInteger(opponentScore)||
     visible.hand.length<1||visible.hand.length>10)return;
- const month=id=>Number(/^m(\\d+)-/.exec(id)?.[1]);
+ const month=id=>Number(/^m(\d+)-/.exec(id)?.[1]);
  const hasMatch=visible.hand.some(h=>visible.floor.some(f=>month(h)===month(f)));
  const goCount=scoreOf('goCount')??0;
  const observed={kind:'go-stop',legalActions:['go','stop'],
