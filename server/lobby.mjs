@@ -228,7 +228,7 @@ export class Lobby{
     // Otherwise a slow account-store query prevents the Auto Match response entirely.
     const tried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set(),candidates=this.candidateClients(client).filter(candidate=>!tried.has(candidate.account.id));
     if(!candidates.length){client.autoMatching=true;client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchWaiting'});return false;}
-    const rows=await this.cachedLeaderboardRows();
+    const rows=this.rowsCache||new Map();
     const me=this.profile(client,rows),partner=candidates.map(candidate=>({candidate,profile:this.profile(candidate,rows)})).sort((a,b)=>distance(me,a.profile)-distance(me,b.profile)||b.profile.gamesPlayed-a.profile.gamesPlayed||a.profile.nickname.localeCompare(b.profile.nickname))[0].candidate;
     const toProfile=this.profile(partner,rows);
     client.autoMatching=true;client.autoMatchCandidateId=partner.account.id;
@@ -241,7 +241,7 @@ export class Lobby{
     if(!accountId||accountId===client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
     const target=this.clientByAccountId(accountId,{challengeableOnly:true});
     if(!target){client.autoMatching=true;client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
-    const rows=await this.cachedLeaderboardRows(),toProfile=this.profile(target,rows);
+    const rows=this.rowsCache||new Map(),toProfile=this.profile(target,rows);
     client.autoMatching=true;client.autoMatchCandidateId=null;
     const challenge=this.startChallenge(client,target,rows,{automatic:true,toProfileOverride:toProfile});
     if(!challenge){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);await this.tryAutoMatch(client);return false;}
