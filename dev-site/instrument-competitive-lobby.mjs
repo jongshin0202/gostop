@@ -3,6 +3,7 @@
 export function instrumentDevCompetitiveLobby(source){
  if(typeof source!=='string'||source.length<50000)throw new Error('Expected ranked-client source');
  let out=source;
+ const replaceAllTwo=(from,to)=>{if(out.split(from).length!==3)throw new Error('Unsafe repeated lobby anchor: '+from.slice(0,60));out=out.split(from).join(to);};
  const replace=(from,to)=>{
   if(out.split(from).length!==2)throw new Error('Unsafe lobby instrumentation anchor: '+from.slice(0,60));
   out=out.replace(from,to);
@@ -37,9 +38,9 @@ export function instrumentDevCompetitiveLobby(source){
   "    if(message.type==='searchResults'){if(!lobbySearchActive||autoMatchSearching||message.query!==$('onlineNicknameSearch').value.trim())return;");
  replace("if(!autoMatchSearching)$('lobbyStatus').textContent='';return;}\n    if(message.type==='autoMatchCandidate')",
   "if(!autoMatchSearching)$('lobbyStatus').textContent=message.partial?'Checking all player accounts…':'';return;}\n    if(message.type==='autoMatchCandidate')");
- replace("const optimistic={requestId:null,automatic:false,to:",
+ replaceAllTwo("const optimistic={requestId:null,automatic:false,to:",
   "locallyCancelledChallenge=false;const optimistic={requestId:null,automatic:false,to:");
- replace("showOutgoingRequest(optimistic);$('cancelOutgoingRequest').disabled=true;",
+ replaceAllTwo("showOutgoingRequest(optimistic);$('cancelOutgoingRequest').disabled=true;",
   "showOutgoingRequest(optimistic);$('cancelOutgoingRequest').disabled=false;");
  replace("function showOutgoingRequest(message){","let locallyCancelledChallenge=false;\n  function showOutgoingRequest(message){");
  replace("    if(message.type==='challengeSent'){finishAutoMatchStart();",
