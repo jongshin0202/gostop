@@ -155,16 +155,11 @@ test('one Bright in hand plus one reachable Bright on table is never reported as
   document.getElementById('playerHand').append(eighth);
   document.getElementById('trainingCoachText').textContent=
    'Best strategy: Brights. Brights: 2 Brights are in hand, captured, or directly reachable; 1 can be acted on now. Tap or click anywhere when you are ready to continue.';
-  const layer=document.createElement('div');
-  layer.className='training-opening-dismiss-layer';
-  document.body.appendChild(layer);
-  window.__newOpeningGame='manual-fresh-game';
  });
  // Reset the review only through its ordinary Training entry point.
  await page.locator('#playSoloBtn').click();
  await page.locator('#trainingModeBtn').click();
  await page.evaluate(()=>{
-  document.querySelector('.training-opening-dismiss-layer')?.remove();
   const layer=document.createElement('div');
   layer.className='training-opening-dismiss-layer';
   document.body.appendChild(layer);
