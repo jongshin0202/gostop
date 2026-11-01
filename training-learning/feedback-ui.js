@@ -22,11 +22,14 @@ async function checkAccount(){
 // The only local setting is the UI preference; training data and weights live on Cloudflare.
 const ENABLE_KEY='gostop-training-feedback-enabled';
 const cloud=globalThis.GoStopTrainingCloud;
+const weightProgress=globalThis.GoStopDevTrainingWeightProgress;
 let serverFeedbackCount=0,serverModelExamples=0,serverSpecialExamples=0,serverGoStopExamples=0,lastError=null,serverReady=false;
+let serverWeightState=null;
 async function syncStatus(){
  if(!cloud)return;
  try{
   const state=await cloud.state();
+  serverWeightState=state;
   serverFeedbackCount=state.feedbackCount||0;
   serverModelExamples=state.model?.examples||0;
   serverSpecialExamples=state.specialModel?.examples||0;
@@ -117,17 +120,23 @@ document.head.appendChild(shade);document.body.appendChild(modal);
 function ensureGame(){if(!gameId){gameId='dev-training-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);alreadyCompleted=false;}}
 // Only an acknowledged isolated DEVELOPMENT model activation warrants the update dialog.
 const UPDATE_TEXT={
- en:'Update was made',ko:'업데이트가 완료되었습니다',es:'Actualización realizada',
- fr:'Mise à jour effectuée',de:'Aktualisierung abgeschlossen',
- ja:'更新が完了しました',zh:'更新已完成'
+ en:'Update was made. New Training weights are now active on the DEVELOPMENT learning server for your next Training game. No production deployment occurred.',
+ ko:'업데이트가 완료되었습니다. 새로운 학습 가중치가 개발 서버에 적용되어 다음 훈련 게임부터 사용됩니다. 운영 서버에는 배포되지 않았습니다.',
+ es:'Actualización realizada. Los nuevos pesos están activos en el servidor de desarrollo para la siguiente partida. Producción no cambió.',
+ fr:'Mise à jour effectuée. Les nouveaux poids sont actifs sur le serveur de développement dès la prochaine partie. La production reste inchangée.',
+ de:'Update abgeschlossen. Die neuen Gewichte sind ab dem nächsten Trainingsspiel auf dem Entwicklungsserver aktiv. Produktion ist unverändert.',
+ ja:'更新が完了しました。新しい学習重みは開発サーバーに反映され、次の練習ゲームから有効です。本番環境は変更されません。',
+ zh:'更新完成。新权重已在开发学习服务器启用，将用于下一局训练。生产环境未更改。'
 };
-function showUpdateMade(){
+function showUpdateMade(result={}){
  if(!active)return;
  const dialog=document.createElement('dialog');
  dialog.setAttribute('aria-label','Training model update');
  dialog.style.cssText=modal.style.cssText;
  const message=document.createElement('p');
- message.textContent=UPDATE_TEXT[document.documentElement.lang]||UPDATE_TEXT.en;
+ const version=Number.isInteger(result.developmentModelVersion)?result.developmentModelVersion:null;
+ message.textContent=(UPDATE_TEXT[document.documentElement.lang]||UPDATE_TEXT.en)+
+  (version?' (v'+version+')':'');
  const ok=document.createElement('button');
  ok.type='button';ok.textContent='OK';
  ok.style.cssText='font:inherit;cursor:pointer;border-radius:9px;padding:10px 22px;border:1px solid #aa7b37;background:#503226;color:#f7dcad';
@@ -146,6 +155,53 @@ const REVIEW_COPY={
  ja:{heading:'学習内容の最終確認',intro:'推奨と異なる判断を確認し、誤ったものを削除してから完了を押してください。残りだけ学習します。',recommend:'推奨',played:'自分の手',judgment:'自分の判断',remove:'削除',confirm:'本当に削除しますか？',yes:'はい',no:'いいえ',finish:'完了',empty:'相違はありません。',loading:'読み込み中…',saving:'確定中…',failed:'保存に失敗しました。学習されていません。',retry:'再試行',refresh:'再読み込み',done:'確定しました。',removed:'削除',kept:'残り'},
  zh:{heading:'训练反馈最终审核',intro:'检查所有与推荐不同的选择，删除错误判断后点击完成，仅用剩余反馈训练。',recommend:'推荐',played:'你的出牌',judgment:'你的判断',remove:'移除',confirm:'确定要移除吗？',yes:'是',no:'否',finish:'完成',empty:'没有不同的选择。',loading:'正在加载…',saving:'正在保存…',failed:'保存失败，尚未训练。',retry:'重试',refresh:'重新加载',done:'审核完成。',removed:'已移除',kept:'保留'}
 };
+const WEIGHT_COPY={
+ en:{
+  heading:'Training and weight activation',training:'When training happens',
+  trainNow:n=>n+' confirmed judgment'+(n===1?'':'s')+' will train server-side weights when you press Finish.',
+  trainNone:'No confirmed judgments are retained. This game still counts, but no weights will be trained from it.',
+  activation:'When updated weights become active',
+  activationRule:'On the DEVELOPMENT learning server after 20 completed games, or 10 consecutive disagreement-free games after a previous disagreement. New confirmed weights must exist. No production deployment occurs.',
+  countdown:'Games remaining after you press Finish',
+  twenty:n=>'20-game path: '+n+' more game'+(n===1?'':'s'),
+  clean:n=>'Clean-game path: '+n+' more consecutive disagreement-free game'+(n===1?'':'s'),
+  unavailableClean:'Clean-game path starts after a disagreement has occurred since the previous activation.',
+  due:'Activation threshold reached with this Finish, if new trained weights are available.',
+  waiting:'The threshold alone cannot activate weights without new confirmed training data.',
+  conditional:'Counts assume future games qualify. Any new disagreement resets the clean-game streak.',
+  unavailable:'Current learning-server countdown is unavailable; do not assume an activation date.',
+  saving:'Training confirmed judgments and checking development weight activation…',
+  applying:'Checking the activation threshold and applying eligible development weights…',
+  doneTraining:n=>n+' confirmed judgment'+(n===1?'':'s')+' trained on the development server.',
+  noTraining:'No judgments trained this game.',
+  activated:v=>'Update was made: development weight version '+v+' is now active for your next Training game.',
+  noActivation:'Updated weights were not activated this game.',
+  developmentOnly:'Development-only weights. Main game code and production remain unchanged.'
+ },
+ ko:{
+  heading:'학습 및 가중치 적용',training:'학습 시점',
+  trainNow:n=>'완료를 누르면 확정된 판단 '+n+'건이 개발 서버에서 학습됩니다.',
+  trainNone:'남겨 둔 확정 판단이 없습니다. 게임 횟수에는 포함되지만 이번 게임의 가중치 학습은 없습니다.',
+  activation:'새 가중치가 활성화되는 시점',
+  activationRule:'개발 학습 서버에서 20게임 완료 또는 이전 의견 차이 발생 후 연속 10게임 의견 차이 없음 조건을 충족하고 새 학습 가중치가 있을 때 적용합니다. 운영 서버는 변경되지 않습니다.',
+  countdown:'이번 게임 완료 후 남은 게임 수',
+  twenty:n=>'20게임 조건: '+n+'게임 남음',
+  clean:n=>'연속 일치 조건: '+n+'게임 더 연속 일치 필요',
+  unavailableClean:'이전 가중치 적용 이후 의견 차이가 발생해야 연속 일치 조건이 시작됩니다.',
+  due:'이번 완료로 적용 조건에 도달합니다. 새 가중치가 있어야 활성화됩니다.',
+  waiting:'새로 확정되어 학습된 가중치가 없으면 횟수 조건만으로 활성화되지 않습니다.',
+  conditional:'앞으로 의견 차이가 없다는 가정의 예상치입니다. 의견 차이가 생기면 연속 일치 횟수는 초기화됩니다.',
+  unavailable:'개발 학습 서버의 현재 횟수를 확인할 수 없습니다.',
+  saving:'확정된 판단을 학습하고 개발 가중치 적용 조건을 확인하는 중…',
+  applying:'개발 가중치 적용 조건을 확인하고 적용 중…',
+  doneTraining:n=>'확정 판단 '+n+'건을 개발 서버에서 학습했습니다.',
+  noTraining:'이번 게임에서 학습한 판단이 없습니다.',
+  activated:v=>'업데이트 완료: 개발 가중치 버전 '+v+'이 다음 훈련 게임부터 적용됩니다.',
+  noActivation:'이번 게임에서는 새 가중치가 활성화되지 않았습니다.',
+  developmentOnly:'개발 전용입니다. 메인 게임 코드 및 운영 서버는 변경되지 않았습니다.'
+ }
+};
+const weightCopy=()=>WEIGHT_COPY[document.documentElement.lang]||WEIGHT_COPY.en;
 const reviewCopy=()=>REVIEW_COPY[document.documentElement.lang]||REVIEW_COPY.en;
 const reviewModal=document.createElement('dialog');reviewModal.id='trainingFinalReviewDialog';
 reviewModal.setAttribute('aria-label','Final Training decision review');
@@ -165,6 +221,12 @@ reviewCss.textContent=`#trainingFinalReviewDialog::backdrop,#trainingReviewRemov
 #trainingFinalReviewDialog .training-final-footer{position:sticky;bottom:-20px;background:#1b120e;padding:12px 0 0;display:flex;justify-content:flex-end;gap:12px}
 #trainingFinalReviewDialog .training-final-footer button:last-child{background:#8c3527}
 #trainingFinalReviewDialog .training-final-row small{display:block;color:#c8ad85;font-size:12px}
+#trainingFinalReviewDialog .training-model-progress{border:1px solid #765c41;border-radius:10px;padding:12px 14px;margin:12px 0;background:#2b211a}
+#trainingFinalReviewDialog .training-model-progress h3{font-size:15px;color:#f9d392;margin:0 0 8px}
+#trainingFinalReviewDialog .training-model-progress p{font-size:12px;color:#e6d5b9;line-height:1.5;margin:5px 0}
+#trainingFinalReviewDialog .training-model-progress strong{color:#f7d69d}
+#trainingModelCompletionNotice{border:1px solid #a77a43;background:#302218;color:#f7deb4;border-radius:9px;padding:10px 12px;margin:12px 0;font-size:13px;line-height:1.45}
+#trainingModelCompletionNotice p{margin:4px 0}
 @media(max-width:510px){#trainingFinalReviewDialog .training-final-row{align-items:flex-start}#trainingFinalReviewDialog .training-final-row button{flex:none}}`;
 document.head.appendChild(reviewCss);document.body.append(reviewModal,reviewConfirmation);
 // Don't intercept any browser or gameplay input. If Escape closes the
@@ -178,7 +240,7 @@ reviewModal.addEventListener('close',()=>{
   },0);
  }
 });
-let reviewState=null,removedReviews=new Set(),reviewBusy=false;
+let reviewState=null,removedReviews=new Set(),reviewBusy=false,reviewServerState=null;
 function reviewDetail(entry){
  const text=reviewCopy();
  const cards=id=>String(id||'').split('|').filter(Boolean);
@@ -199,6 +261,72 @@ function reviewJudgment(choice){
  const copy=locale();
  return choice==='mine'?copy[4]:choice==='recommended'?copy[5]:
   choice==='unsure'?copy[6]:choice==='confirmed'?reviewCopy().played:choice;
+}
+function confirmedKeptItems(items){
+ return items.filter(item=>item.choice==='mine'||item.choice==='recommended'||item.choice==='confirmed').length;
+}
+function currentProgress({includeCurrentGame=true}={}){
+ if(!reviewServerState||!weightProgress?.progress)return null;
+ return weightProgress.progress(reviewServerState,{
+  includeCurrentGame,
+  hadDisagreement:!!(reviewState?.items?.length||hadDisagreement)
+ });
+}
+function trainingProgressPanel(items){
+ const t=weightCopy(),section=document.createElement('section');
+ section.id='trainingModelProgressPanel';section.className='training-model-progress';
+ const heading=document.createElement('h3');heading.textContent=t.heading;section.append(heading);
+ const line=(label,value)=>{
+  const p=document.createElement('p');
+  const strong=document.createElement('strong');strong.textContent=label+': ';
+  p.append(strong,document.createTextNode(value));section.append(p);
+ };
+ const confirmed=confirmedKeptItems(items);
+ line(t.training,confirmed?t.trainNow(confirmed):t.trainNone);
+ line(t.activation,t.activationRule);
+ const preview=currentProgress();
+ if(preview){
+  line(t.countdown,t.twenty(preview.remaining20));
+  const clean=document.createElement('p');clean.id='trainingCleanCountdown';
+  clean.textContent=preview.remainingClean===null?
+   t.unavailableClean:t.clean(preview.remainingClean);
+  section.append(clean);
+  if(preview.eligible){
+   const due=document.createElement('p');due.id='trainingActivationDue';
+   due.textContent=t.due;section.append(due);
+  }
+  if(!preview.hasUnactivatedWeights&&!confirmed){
+   const warning=document.createElement('p');warning.textContent=t.waiting;section.append(warning);
+  }
+  const note=document.createElement('p');note.textContent=t.conditional;section.append(note);
+ }else{
+  const warn=document.createElement('p');warn.id='trainingCountdownUnavailable';
+  warn.textContent=t.unavailable;section.append(warn);
+ }
+ return section;
+}
+function showTrainingCompletion(result){
+ const t=weightCopy();
+ const dialog=$('resultDialog');
+ const card=dialog?.querySelector('.dialog-card');
+ if(!card)return;
+ let notice=$('trainingModelCompletionNotice');
+ if(!notice){notice=document.createElement('aside');notice.id='trainingModelCompletionNotice';notice.setAttribute('role','status');card.append(notice);}
+ notice.replaceChildren();
+ const line=value=>{const p=document.createElement('p');p.textContent=value;notice.append(p);};
+ const trained=Number.isSafeInteger(result.trained)?result.trained:0;
+ line(trained>0?t.doneTraining(trained):t.noTraining);
+ if(result.developmentModelUpdated===true){
+  line(t.activated(result.developmentModelVersion||'new'));
+ }else{
+  line(t.noActivation);
+  if(serverWeightState&&weightProgress?.progress){
+   const next=weightProgress.progress(serverWeightState);
+   line(t.twenty(next.remaining20));
+   line(next.remainingClean===null?t.unavailableClean:t.clean(next.remainingClean));
+  }else line(t.unavailable);
+ }
+ line(t.developmentOnly);
 }
 function renderReview(){
  const t=reviewCopy();
@@ -253,7 +381,8 @@ function renderReview(){
  finish.addEventListener('click',async()=>{
   if(reviewBusy||!reviewState||!cloud?.finalize)return;
   reviewBusy=true;finish.disabled=true;refresh.disabled=true;
-  status.textContent=t.saving;
+  const preview=currentProgress();
+  status.textContent=preview?.eligible?weightCopy().applying:weightCopy().saving;
   try{
    const keptFeedbackIds=reviewState.items.filter(item=>!removedReviews.has(item.id))
     .map(item=>item.id);
@@ -262,9 +391,10 @@ function renderReview(){
    });
    if(!result?.ok)throw new Error('Finalization not acknowledged.');
    alreadyCompleted=true;reviewing=false;gameId=null;confirmedCount=0;hadDisagreement=false;
-   reviewModal.close();reviewState=null;removedReviews.clear();
+   reviewModal.close();reviewState=null;removedReviews.clear();reviewServerState=null;
    await syncStatus();
-   if(result.developmentModelUpdated===true)showUpdateMade();
+   showTrainingCompletion(result);
+   if(result.developmentModelUpdated===true)showUpdateMade(result);
   }catch(error){
    lastError=String(error.message||error);serverReady=false;
    status.textContent=t.failed+' '+lastError;
@@ -272,16 +402,19 @@ function renderReview(){
   }finally{reviewBusy=false;}
  });
  footer.append(refresh,finish);
- reviewModal.append(heading,description,list,status,footer);
+ reviewModal.append(heading,description,list,trainingProgressPanel(items),status,footer);
 }
 async function loadReview(){
  if(!cloud?.review||!gameId)throw new Error('Review API is unavailable.');
  const t=reviewCopy();
  reviewBusy=true;
  try{
-  const current=await cloud.review(gameId);
+  const [current,serverState]=await Promise.all([
+   cloud.review(gameId),cloud.state().catch(()=>null)
+  ]);
   if(!current?.ok||current.complete)throw new Error('Game review is unavailable.');
-  reviewState=current;removedReviews=new Set();renderReview();
+  reviewState=current;reviewServerState=serverState?.ok?serverState:null;
+  removedReviews=new Set();renderReview();
  }catch(error){
   lastError=String(error.message||error);serverReady=false;
   reviewModal.replaceChildren();
@@ -559,8 +692,9 @@ function onGoStopDecision(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ if(t?.closest?.('#trainingModeBtn')){$('trainingModelCompletionNotice')?.remove();active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
  else if(t?.closest?.('#playAgainBtn,#newGameYesBtn')&&active){
+  $('trainingModelCompletionNotice')?.remove();
   // A Training replay is a NEW completed-game sample with its own opening
   // strategy review. Never reuse the prior game's feedback/identity.
   gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;
