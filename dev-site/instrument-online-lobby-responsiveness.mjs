@@ -22,6 +22,6 @@ export function instrumentDevResponsiveLobby(source){
         $('lobbyStatus').textContent=rt('searchingOnline');
       return;
     }
-    if(message.type==='connected'`;
+    if(message.type==='connected')`;
  return source.replace(anchor,replacement);
 }
