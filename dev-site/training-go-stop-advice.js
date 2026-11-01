@@ -74,7 +74,7 @@ function adjust(){
   remainingCards:context.hand.length,goCount:context.goCount,hasMatch:checked.hasMatch
  });
  const result=checked.lowRisk?'go':
-   !checked.urgentThreat&&learned?learned:original;
+   !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original;
  if(result===original)return;
  go.classList.toggle('training-choice-recommended',result==='go');
  stop.classList.toggle('training-choice-recommended',result==='stop');
