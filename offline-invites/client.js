@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id);
 const account=()=>globalThis.GoStopRanked?.getAccount?.(),auth=()=>globalThis.GoStopRanked?.getAuthToken?.();
 const requestIdFromUrl=new URLSearchParams(location.search).get('offlineInvite');
 const settingsFromUrl=new URLSearchParams(location.search).has('devInviteSettings');
-let pending=null,interval=null,busy=false,invitationOpened=false,lastAccountId=null,lastFriendsCheck=0,friends=null,prefs=null;
+let pending=null,interval=null,busy=false,invitationOpened=false,lastAccountId=null,lastFriendsCheck=0,friends=null,prefs=null;const eligibilityCache=new Map();
 const style=document.createElement('style');
 style.textContent='#devInvitePreferences{display:grid;gap:9px;padding:11px;margin:8px 0;border:1px solid #b79358;border-radius:9px;background:#25180d;color:#fae5be;font:13px/1.4 system-ui}#devInvitePreferences label{display:flex;gap:8px;align-items:center}#devInvitePreferences button,.devInviteOfflineButton{padding:9px;border:1px solid #be985b;border-radius:8px;color:#fae5be;background:#51351c;cursor:pointer}#devInvitePreferences input{width:18px;height:18px;accent-color:#eaba63}#devInviteDialog{max-width:min(460px,95vw);background:#20150d;color:#fae5be;border:2px solid #be985b;border-radius:13px;padding:18px;font:15px/1.5 system-ui}#devInviteDialog::backdrop{background:rgba(0,0,0,.7)}#devInviteDialog button{padding:9px 20px;border-radius:9px;background:#55371f;border:1px solid #be985b;color:#fff}';
 document.head.appendChild(style);
@@ -83,14 +83,14 @@ $('devInviteDialogCancel').addEventListener('click',async()=>{
  finally{$('devInviteDialogCancel').disabled=false;}
 });
 async function fetchFriends(){
- if(!auth()||!account()||$('socialScreen')?.hidden!==false)return;
+ if(!auth()||!account())return;
  try{
   const response=await fetch('https://gostop-authority-dev.jwshin1.workers.dev/api/social',{
    headers:{authorization:'Bearer '+auth()},cache:'no-store',signal:AbortSignal.timeout(8000)});
   if(!response.ok)return;
   const data=await response.json();
   friends=new Map((data.friends||[]).map(p=>[p.accountId,p]));
-  renderButtons();
+  renderButtons();void renderSearchOfflineButtons();
  }catch(_){}
 }
 function renderButtons(){
@@ -107,6 +107,37 @@ function renderButtons(){
  }
 }
 if($('socialList'))new MutationObserver(renderButtons).observe($('socialList'),{childList:true,subtree:true});
+async function renderSearchOfflineButtons(){
+ const host=$('searchPlayerResults');
+ if(!host||host.hidden||!friends)return;
+ const rows=[...host.querySelectorAll('.online-player-row[data-account-id]')];
+ await Promise.all(rows.map(async row=>{
+  if(!row.isConnected)return;
+  const id=row.dataset.accountId;
+  const friend=friends.get(id);
+  const existing=row.querySelector('.devOfflineSearchRequest');
+  if(!friend||friend.friendState!=='friend'||!row.querySelector('.player-status.offline')){
+   existing?.remove();return;
+  }
+  if(existing)return;
+  let cached=eligibilityCache.get(id);
+  if(!cached||cached.until<Date.now()){
+   try{
+    const data=await api('/eligibility',{targetId:id});
+    cached={allowed:data.canRequest===true,until:Date.now()+12000};
+    eligibilityCache.set(id,cached);
+   }catch(_){cached={allowed:false,until:Date.now()+3000};}
+  }
+  if(!cached.allowed||!row.isConnected||row.querySelector('.devOfflineSearchRequest'))return;
+  const button=document.createElement('button');button.type='button';
+  button.className='devOfflineSearchRequest';button.textContent='Request to Play';
+  button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();void sendOfflineRequest(friend);});
+  row.append(button);
+ }));
+}
+if($('searchPlayerResults'))new MutationObserver(()=>{void renderSearchOfflineButtons();})
+ .observe($('searchPlayerResults'),{childList:true,subtree:true});
+
 const on=$('devInviteEnabled'),notify=$('devInviteAllowAlerts'),status=$('devInvitePreferenceStatus');
 on?.addEventListener('change',async()=>{
  on.disabled=true;
@@ -186,8 +217,8 @@ setInterval(()=>{
  if(settingsFromUrl&&!processedSettings&&$('accountSettingsBtn')){
   processedSettings=true;$('accountSettingsBtn').click();
  }
- if($('socialScreen')?.hidden===false){
-  renderButtons();
+ if($('socialScreen')?.hidden===false||$('searchPlayerResults')?.hidden===false){
+  renderButtons();void renderSearchOfflineButtons();
   if(Date.now()-lastFriendsCheck>5000){lastFriendsCheck=Date.now();void fetchFriends();}
  }
 },1200);
