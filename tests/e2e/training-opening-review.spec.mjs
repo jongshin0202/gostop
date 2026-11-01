@@ -143,3 +143,37 @@ test('Korean opening guidance and strategy labels are localized without changing
  await expect(page.locator('#devOpeningReview')).toContainText('홍단');
  await expect(page.locator('#playerHand .hand-card')).toHaveCount(5);
 });
+
+test('one Bright in hand plus one reachable Bright on table is never reported as two in hand',async({page})=>{
+ await setup(page);
+ // This reproduces the expert screenshot: the native opening strategy
+ // aggregates hand + reachable floor cards into two potential Brights.
+ await page.locator('#devOpeningReview').getByRole('button',{name:'Continue without saving'}).click();
+ await page.evaluate(()=>{
+  const eighth=document.createElement('button');
+  eighth.className='hand-card';eighth.dataset.cardId='m8-4';
+  document.getElementById('playerHand').append(eighth);
+  document.getElementById('trainingCoachText').textContent=
+   'Best strategy: Brights. Brights: 2 Brights are in hand, captured, or directly reachable; 1 can be acted on now. Tap or click anywhere when you are ready to continue.';
+ });
+ // Reset the review only through its ordinary Training entry point.
+ await page.locator('#playSoloBtn').click();
+ await page.locator('#trainingModeBtn').click();
+ await page.evaluate(()=>{
+  const layer=document.createElement('div');
+  layer.className='training-opening-dismiss-layer';
+  document.body.appendChild(layer);
+ });
+ await expect(page.locator('#devOpeningReview')).toBeVisible();
+ await expect(page.locator('#devOpeningReview .dev-opening-review-recommendation')).toContainText('Brights');
+ await expect(page.locator('#devOpeningReview .dev-opening-review-location-counts'))
+  .toContainText('Brights: 1 in hand, 0 captured, 1 reachable on the table.');
+ await expect(page.locator('#trainingCoachText'))
+  .toContainText('Brights: 1 in hand, 0 captured, 1 reachable on the table.');
+ await expect(page.locator('#trainingCoachText'))
+  .not.toContainText('2 Brights are in hand, captured, or directly reachable');
+ await page.locator('#devOpeningReview').getByRole('button',{name:'No, change strategies'}).click();
+ await expect(page.locator('#devOpeningReview input[value="brights"]')).toBeChecked();
+ await expect(page.locator('#devOpeningReview .dev-opening-review-evidence').first())
+  .toContainText('1 in hand');
+});

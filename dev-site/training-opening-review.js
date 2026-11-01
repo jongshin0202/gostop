@@ -99,6 +99,17 @@ function createPanel(layer){
  // Never apply shadow learner weights to an answer that the frozen game coach
  // has not actually made; confirmed labels must match the player's screen.
  if(!review.strategies.length)return;
+ const locationLines=helper.openingLocationLines(vis,deck,review.suggested,lang);
+ // The original English coach aggregates Brights / Stripes from hand, captures
+ // and reachable table cards. Replace that ambiguous sentence ONCE during
+ // opening review, preserving the frozen game's authoritative heading and
+ // recommendation order. No gameplay or model logic is changed.
+ if(lang==='en'&&locationLines.length){
+  const heading=coachText.match(/^\s*(Best strateg(?:y|ies):\s*[^.]*\.)/i)?.[1];
+  const coach=$('trainingCoachText');
+  if(heading&&coach)coach.textContent=heading+' '+locationLines.join(' ')+
+   ' Tap or click anywhere when you are ready to continue.';
+ }
  reviewedGameId=gameId;staged={gameId,vis,review};
  openingLayer=layer;openingLayer.style.pointerEvents='none';
  panel=document.createElement('dialog');panel.id='devOpeningReview';
@@ -113,6 +124,9 @@ function createPanel(layer){
  const recommended=document.createElement('p');recommended.className='dev-opening-review-recommendation';
  const recommendedList=review.suggested.map(x=>names[x]).join(', ')||names.singles;
  recommended.textContent=d.recommend+': '+recommendedList;
+ const precise=document.createElement('p');precise.className='dev-opening-review-location-counts';
+ precise.textContent=locationLines.join(' ');
+ precise.hidden=!locationLines.length;
  const prompt=document.createElement('p');prompt.textContent=d.edit;prompt.hidden=true;
  const note=document.createElement('p');note.className='dev-opening-review-auth';
  note.textContent=c.auth;note.hidden=true;
@@ -125,7 +139,8 @@ function createPanel(layer){
   const tag=document.createElement('small');tag.textContent=check.checked?c.suggested:'';
   check.addEventListener('change',()=>{tag.textContent=check.checked&&review.suggested.includes(strategy)?c.suggested:'';});
   const detail=document.createElement('small');detail.className='dev-opening-review-evidence';
-  detail.textContent=evidenceReason(strategy,review.info,lang);
+  detail.textContent=helper.openingLocationLines(vis,deck,[strategy],lang)[0]||
+   evidenceReason(strategy,review.info,lang);
   item.append(check,span,tag,detail);form.append(item);
  });
  form.addEventListener('submit',event=>event.preventDefault());
@@ -172,7 +187,7 @@ function createPanel(layer){
  unsure.addEventListener('click',()=>void record('unsure',[]));
  skip.addEventListener('click',continueGame);
  actionRow.append(agree,change,back,submit,unsure,skip);
- panel.append(h,question,recommended,prompt,form,note,actionRow,status);
+ panel.append(h,question,recommended,precise,prompt,form,note,actionRow,status);
  document.body.append(panel);
  try{panel.showModal();}catch(_){panel.setAttribute('open','');}
  agree.focus();
