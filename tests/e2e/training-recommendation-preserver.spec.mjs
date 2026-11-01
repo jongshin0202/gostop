@@ -151,3 +151,94 @@ test('new turn can capture a fresh recommendation only after the previous hint c
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().locked)).toBe(true);
  await expect(page.locator('#trainingCoachText')).toHaveText('New turn strategy.');
 });
+
+async function reservedPileFixture(page,{lang='en',opponentHasSingle=true,otherReserved=true,training=true}={}){
+ await page.goto('/',{waitUntil:'domcontentloaded'});
+ await page.setContent(`<!doctype html><html lang="${lang}"><head></head><body>
+ <button id="trainingModeBtn">Training</button>
+ <button id="playSoloBtn">Solo</button><button id="quitYesBtn">Quit</button>
+ <aside id="trainingCoachPanel" hidden><strong id="trainingCoachTitle"></strong><p id="trainingCoachText"></p></aside>
+ <div id="playerHand">
+  <button class="hand-card" data-card-id="m4-4" title="Vine Single">Vine</button>
+  <button class="hand-card" data-card-id="m10-3" title="Star Picture">Star</button>
+ </div>
+ <div id="floor">
+  <div class="floor-slot"><div class="floor-stack-three" data-stack-month="4">
+   <div class="floor-card stacked-floor-card" data-card-id="m4-1">Vine 1</div>
+   <div class="floor-card stacked-floor-card" data-card-id="m4-2">Vine 2</div>
+   <div class="floor-card stacked-floor-card" data-card-id="m4-3">Vine 3</div>
+  </div></div>
+  <div class="floor-slot"><div class="floor-card" data-card-id="m10-2" title="Star Blue Stripe">Blue Stripe</div></div>
+ </div>
+ <div id="playerCaptured">
+  <div class="capture-group" data-capture-type="animal">
+   <img class="captured-mini" data-card-id="m10-1">
+   ${otherReserved?'<img class="captured-mini" data-card-id="m10-4">':''}
+  </div>
+ </div>
+ <div id="aiCaptured">
+  <div class="capture-group" data-capture-type="pi">
+   ${opponentHasSingle?'<img class="captured-mini" data-card-id="m1-4">':''}
+  </div>
+ </div>
+ <dialog id="shakeDialog"></dialog><dialog id="bombDialog"></dialog><dialog id="resultDialog"></dialog>
+ </body></html>`);
+ await page.addScriptTag({path:'dev-site/training-reserved-ppeok-priority.js'});
+ await page.addScriptTag({path:'dev-site/training-recommendation-preserver.js'});
+ if(training)await page.locator('#trainingModeBtn').click();
+ await page.evaluate(()=>{
+  document.getElementById('trainingCoachTitle').textContent='RECOMMENDED MOVE';
+  document.getElementById('trainingCoachText').textContent='Play Star Picture onto Star Blue Stripe.';
+  document.getElementById('trainingCoachPanel').hidden=false;
+  document.querySelector('#playerHand [data-card-id="m10-3"]').classList.add('matchable');
+  document.querySelector('#floor [data-card-id="m10-2"]').classList.add('training-recommended');
+ });
+ if(training)await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().locked)).toBe(true);
+}
+for(const viewport of [
+ {name:'PC',width:1504,height:1020},
+ {name:'Android portrait',width:390,height:844}
+]){
+ test('reserved Vine ppeok pile wins over reserved Star Blue Stripe when computer has Singles on '+viewport.name,async({page})=>{
+  await page.setViewportSize({width:viewport.width,height:viewport.height});
+  await reservedPileFixture(page);
+  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().ppeokOverride)).toBe(true);
+  await expect(page.locator('#playerHand [data-card-id="m4-4"]')).toHaveClass(/matchable/);
+  await expect(page.locator('#floor [data-card-id="m4-3"]')).toHaveClass(/training-recommended/);
+  await expect(page.locator('#playerHand [data-card-id="m10-3"]')).not.toHaveClass(/matchable/);
+  await expect(page.locator('#floor [data-card-id="m10-2"]')).not.toHaveClass(/training-recommended/);
+  await expect(page.locator('#trainingCoachText')).toContainText('all four cards');
+  await expect(page.locator('#trainingCoachText')).toContainText('one Single from the computer');
+  // Previewing the reserved blue stripe must never silently replace expert advice.
+  await page.evaluate(()=>{
+   document.querySelector('#playerHand [data-card-id="m10-3"]').classList.add('matchable');
+   document.querySelector('#floor [data-card-id="m10-2"]').classList.add('training-recommended');
+   document.getElementById('trainingCoachText').textContent='TARGET CHOICE. Hit the blue stripe.';
+  });
+  await expect(page.locator('#playerHand [data-card-id="m4-4"]')).toHaveClass(/matchable/);
+  await expect(page.locator('#floor [data-card-id="m4-3"]')).toHaveClass(/training-recommended/);
+  await expect(page.locator('#trainingCoachText')).toContainText('all four cards');
+ });
+}
+test('without an opponent Single, the existing blue-stripe recommendation remains',async({page})=>{
+ await reservedPileFixture(page,{opponentHasSingle:false});
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().ppeokOverride)).toBe(false);
+ await expect(page.locator('#playerHand [data-card-id="m10-3"]')).toHaveClass(/matchable/);
+ await expect(page.locator('#floor [data-card-id="m10-2"]')).toHaveClass(/training-recommended/);
+ await expect(page.locator('#trainingCoachText')).toHaveText('Play Star Picture onto Star Blue Stripe.');
+});
+test('an unreserved blue-stripe choice is not displaced by the pile rule',async({page})=>{
+ await reservedPileFixture(page,{otherReserved:false});
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().ppeokOverride)).toBe(false);
+ await expect(page.locator('#playerHand [data-card-id="m10-3"]')).toHaveClass(/matchable/);
+});
+test('Korean ppeok recommendation is expressed as a short capture strategy',async({page})=>{
+ await reservedPileFixture(page,{lang:'ko'});
+ await expect(page.locator('#trainingCoachText')).toContainText('상대 피 한 장');
+});
+test('reserved ppeok override never activates during ordinary non-Training game',async({page})=>{
+ await reservedPileFixture(page,{training:false});
+ await expect(page.locator('#playerHand [data-card-id="m10-3"]')).toHaveClass(/matchable/);
+ await expect(page.locator('#floor [data-card-id="m10-2"]')).toHaveClass(/training-recommended/);
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().active)).toBe(false);
+});

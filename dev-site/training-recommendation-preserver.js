@@ -10,12 +10,48 @@ if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(
 const $=id=>document.getElementById(id);
 const panel=$('trainingCoachPanel'),title=$('trainingCoachTitle'),text=$('trainingCoachText');
 const hand=$('playerHand'),floor=$('floor');
+const ppeok=globalThis.GoStopDevReservedPpeokPriority;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
 let trainingActive=false,lock=null,suppressed=false;
 const handSignature=()=>[...hand.querySelectorAll('.hand-card[data-card-id]')].map(node=>node.dataset.cardId)
  .filter(Boolean).sort().join('|');
 const specialIsOpen=()=>!!document.querySelector('#shakeDialog[open],#bombDialog[open],#gukjinDialog[open],#decisionDialog[open],#resultDialog[open]');
+
+const cardIds=selector=>[...document.querySelectorAll(selector)].map(el=>el.dataset.cardId).filter(Boolean);
+const pileText={
+ en:name=>'Play '+name+' onto the three-card pile first. Capture all four cards and take one Single from the computer.',
+ ko:name=>'손에 있는 '+name+'을 세 장이 쌓인 바닥패에 먼저 내세요. 같은 종류의 네 장을 모두 먹고 상대 피 한 장도 가져옵니다.',
+ es:name=>'Juega '+name+' primero sobre la pila de tres cartas. Captura las cuatro cartas y toma un simple al rival.',
+ fr:name=>'Jouez d’abord '+name+' sur la pile de trois cartes. Prenez les quatre cartes et une carte simple à l’adversaire.',
+ de:name=>'Spiele '+name+' zuerst auf den Dreierstapel. Nimm alle vier Karten und eine Einzelkarte vom Gegner.',
+ ja:name=>'まず'+name+'を3枚の山に出してください。同じ月の4枚を取り、相手のカスを1枚もらえます。',
+ zh:name=>'先用'+name+'拿下桌面上的三张叠牌。收齐四张牌，并从对手那里拿走一张散牌。'
+};
+function reservedPileOverride(currentHandId,currentFloorId){
+ if(!ppeok?.select||!currentHandId||!currentFloorId)return null;
+ const stacks=[...floor.querySelectorAll('.floor-stack-three[data-stack-month]')]
+  .map(el=>({cardIds:[...el.querySelectorAll('.floor-card[data-card-id]')]
+   .map(card=>card.dataset.cardId)}));
+ const chosen=ppeok.select({
+  handIds:cardIds('#playerHand .hand-card[data-card-id]'),
+  floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  humanCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  opponentCapturedIds:cardIds('#aiCaptured .captured-mini[data-card-id]'),
+  opponentSingleIds:cardIds('#aiCaptured .capture-group[data-capture-type="pi"] .captured-mini[data-card-id]'),
+  stacks,recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+ });
+ if(!chosen||!hand.querySelector('.hand-card[data-card-id="'+chosen.handId+'"]')||
+    !floor.querySelector('.floor-card[data-card-id="'+chosen.floorId+'"]'))return null;
+ const el=hand.querySelector('.hand-card[data-card-id="'+chosen.handId+'"]');
+ const lang=document.documentElement.lang||'en';
+ const deck=globalThis.GoStopEngine?.masterDeck||[];
+ const card=Array.isArray(deck)?deck.find(item=>item.id===chosen.handId):null;
+ const name=(card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card))||
+  el.title||chosen.handId;
+ return {...chosen,text:(pileText[lang]||pileText.en)(name)};
+}
+
 function reset(){
  lock=null;
  document.documentElement.classList.remove(SCOPE);
@@ -40,8 +76,10 @@ function sync(){
   const recommendedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]');
   const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
   if(originalText){
-   lock={handSignature:sig,hand:recommendation.dataset.cardId,
-    floor:recommendedFloor?.dataset.cardId||null,title:originalTitle,text:originalText};
+   const corrective=reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
+   lock={handSignature:sig,hand:corrective?.handId||recommendation.dataset.cardId,
+    floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -93,6 +131,6 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
   hand:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null}), // diagnostic only, not local persistence
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride}), // diagnostic only, not local persistence
 }),configurable:true});
 })();
