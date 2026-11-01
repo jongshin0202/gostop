@@ -536,7 +536,7 @@ function onGoStopDecision(event){
  const hasMatch=visible.hand.some(h=>visible.floor.some(f=>month(h)===month(f)));
  const goCount=scoreOf('goCount')??0;
  const observed={kind:'go-stop',legalActions:['go','stop'],
-  context:{playerScore,opponentScore,remainingCards:visible.hand.length,goCount,hasMatch},
+  context:{kind:'go-stop',playerScore,opponentScore,remainingCards:visible.hand.length,goCount,hasMatch},
   recommended:{action:action(recommended)},played:{action:action(selected)},visible};
  hadDisagreement=true;
  // Queue immediately, before a STOP result can open its end-of-game review.
