@@ -40,13 +40,18 @@ async function openTraining(page){
  });
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().openingSeen)).toBe(true);
 }
-test('when computer plays first, advice is shown as soon as human cards become playable',async({page})=>{
+test('when computer plays first, native advice appears after three seconds of player turn',async({page})=>{
  await setup(page);
  await openTraining(page);
  await page.evaluate(()=>document.querySelector('.training-opening-dismiss-layer').remove());
  expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
  await page.evaluate(()=>document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.disabled=false));
- await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:1800}).toBe(1);
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().readyForMs),
+  {timeout:1000}).toBeGreaterThan(0);
+ expect(await page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().delayMs)).toBe(3000);
+ await page.waitForTimeout(900);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:4600}).toBe(1);
  await expect(page.locator('#trainingCoachPanel')).toBeVisible();
  await expect(page.locator('#trainingCoachText')).toHaveText('Native game recommendation.');
  await expect(page.locator('#playerHand .hand-card.matchable')).toHaveCount(1);
@@ -68,7 +73,7 @@ test('one original recommendation per hand; the next computer-to-human turn gets
  });
  await page.waitForTimeout(70);
  await page.evaluate(()=>document.querySelector('[data-card-id="m2-2"]').disabled=false);
- await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:1800}).toBe(2);
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:4700}).toBe(2);
  await expect(page.locator('#trainingCoachText')).toHaveText('Native game recommendation.');
 });
 test('non-Training Solo, modal decisions and opening review never invoke hidden hint',async({page})=>{
@@ -103,4 +108,21 @@ test('non-Training Solo, modal decisions and opening review never invoke hidden 
  });
  await page.waitForTimeout(120);
  expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(1);
+});
+
+test('no advice leaks from a canceled player turn into a future turn',async({page})=>{
+ await setup(page);await openTraining(page);
+ await page.evaluate(()=>{
+  document.querySelector('.training-opening-dismiss-layer').remove();
+  document.querySelector('[data-card-id="m2-1"]').disabled=false;
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().readyForMs)).toBeGreaterThan(0);
+ await page.waitForTimeout(750);
+ await page.evaluate(()=>document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.disabled=true));
+ await page.waitForTimeout(2600);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await page.evaluate(()=>document.querySelector('[data-card-id="m2-1"]').disabled=false);
+ await page.waitForTimeout(850);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:3700}).toBe(1);
 });
