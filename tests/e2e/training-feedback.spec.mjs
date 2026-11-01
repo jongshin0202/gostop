@@ -384,7 +384,7 @@ test('endgame Remove requires Yes, No preserves the judgment, Finish trains only
  expect(server.items).toHaveLength(2);
  const dialog=await showFinalReview(page);
  await expect(dialog.locator('.training-final-row')).toHaveCount(2);
- await expect(dialog).toContainText('Recommended');
+ await expect(dialog).toContainText('Recommendation');
  const first=dialog.locator('.training-final-row').first();
  await first.getByRole('button',{name:'Remove'}).click();
  let confirm=page.locator('#trainingReviewRemoveConfirm');
