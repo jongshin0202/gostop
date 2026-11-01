@@ -334,6 +334,8 @@ export class TrainingLearningStore{
           .filter((d,i)=>kept.has('card:'+(d.feedbackId||'legacy-'+i)));
         completedGame.specialDecisions=(completedGame.specialDecisions||[])
           .filter((d,i)=>kept.has('special:'+(d.feedbackId||'legacy-'+i)));
+        completedGame.goStopDecisions=(completedGame.goStopDecisions||[])
+          .filter((d,i)=>kept.has('go-stop:'+(d.feedbackId||'legacy-'+i)));
         if(openingChanged(completedGame.openingFeedback)&&
           !kept.has('opening:'+(completedGame.openingFeedback.feedbackId||'legacy-opening')))
           completedGame.openingFeedback=null;
@@ -350,7 +352,10 @@ export class TrainingLearningStore{
       const openingModel=new OpeningStrategyRanker(await this.ctx.storage.get('openingModel')||null);
       const openingTrained=openingModel.trainGame({id:body.gameId,complete:true,
         openings:completedGame.openingFeedback?[completedGame.openingFeedback]:[]});
-      const trained=cardTrained+specialTrained+openingTrained;
+      const goStopModel=new GoStopDecisionRanker(await this.ctx.storage.get('goStopModel')||null);
+      const goStopTrained=goStopModel.trainGame({id:body.gameId,complete:true,
+        decisions:(completedGame.goStopDecisions||[]).filter(d=>d.chosenAction)});
+      const trained=cardTrained+specialTrained+openingTrained+goStopTrained;
       const prior=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       // A disagreement is an actual differing played/recommended move. An "unsure"
       // judgment still counts as a disagreement, but never trains weights.
@@ -369,18 +374,21 @@ export class TrainingLearningStore{
       // must acknowledge activation before the completion UI can report success.
       const newWeights=model.examples>Number(prior.lastDevelopmentModelExamples||0)||
         specialModel.examples>Number(prior.lastDevelopmentSpecialModelExamples||0)||
-        openingModel.examples>Number(prior.lastDevelopmentOpeningModelExamples||0);
+        openingModel.examples>Number(prior.lastDevelopmentOpeningModelExamples||0)||
+        goStopModel.examples>Number(prior.lastDevelopmentGoStopModelExamples||0);
       let promotionPending=false,developmentModelUpdated=false;
       const updateTrigger=summary.eligibilityReason;
       if(updateTrigger&&newWeights){
         const existing=await this.ctx.storage.get('promotionCandidate');
         if(existing?.model?.examples!==model.examples||existing?.specialModel?.examples!==specialModel.examples||
-          existing?.openingModel?.examples!==openingModel.examples||existing?.reason!==summary.eligibilityReason){
+          existing?.openingModel?.examples!==openingModel.examples||
+          existing?.goStopModel?.examples!==goStopModel.examples||existing?.reason!==summary.eligibilityReason){
           await this.ctx.storage.put('promotionCandidate',{
             reason:summary.eligibilityReason,createdAt:new Date().toISOString(),
             completedGames:summary.completedGames,model:{weights:[...model.weights],examples:model.examples},
             specialModel:{weights:[...specialModel.weights],examples:specialModel.examples},
-            openingModel:{weights:openingModel.weights.map(row=>[...row]),examples:openingModel.examples}
+            openingModel:{weights:openingModel.weights.map(row=>[...row]),examples:openingModel.examples},
+            goStopModel:{weights:[...goStopModel.weights],examples:goStopModel.examples}
           });
         }
         // Activate ONLY in the isolated DEVELOPMENT Worker, never the public
@@ -389,14 +397,17 @@ export class TrainingLearningStore{
         await this.ctx.storage.put('activeCardModel',model.export());
         await this.ctx.storage.put('activeSpecialModel',specialModel.export());
         await this.ctx.storage.put('activeOpeningModel',openingModel.export());
+        await this.ctx.storage.put('activeGoStopModel',goStopModel.export());
         const nextVersion=Number(prior.developmentModelVersion||0)+1;
         const acknowledged=recordSuccessfulDevelopmentModelUpdate(summary,nextVersion);
         summary=Object.assign(acknowledged,{
           lastDevelopmentModelExamples:model.examples,
           lastDevelopmentSpecialModelExamples:specialModel.examples,
           lastDevelopmentOpeningModelExamples:openingModel.examples,
+          lastDevelopmentGoStopModelExamples:goStopModel.examples,
           pendingLiveUpdate:{reason:updateTrigger,modelExamples:model.examples,
-            specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples}
+            specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples,
+            goStopModelExamples:goStopModel.examples}
         });
         promotionPending=true;developmentModelUpdated=true;
       }
@@ -408,7 +419,7 @@ export class TrainingLearningStore{
         const survivors=history.filter(item=>{
           if(item.gameId!==body.gameId)return true;
           const id=(item.kind==='opening'?'opening:':
-            item.kind==='special'?'special:':'card:')+
+            item.kind==='special'?'special:':item.kind==='go-stop'?'go-stop:':'card:')+
               (item.feedbackId||'legacy-opening');
           return !rejected.has(id);
         });
@@ -416,7 +427,7 @@ export class TrainingLearningStore{
         for(const item of removed){
           const suffix=item.id.slice(item.id.indexOf(':')+1);
           const key=item.kind==='opening'?'opening-feedback:'+body.gameId:
-            (item.kind==='special'?'special-feedback:':'feedback:')+
+            (item.kind==='special'?'special-feedback:':item.kind==='go-stop'?'go-stop-feedback:':'feedback:')+
               body.gameId+':'+suffix;
           await this.ctx.storage.delete(key);
         }
@@ -424,12 +435,14 @@ export class TrainingLearningStore{
       await this.ctx.storage.put('model',model.export());
       await this.ctx.storage.put('specialModel',specialModel.export());
       await this.ctx.storage.put('openingModel',openingModel.export());
+      await this.ctx.storage.put('goStopModel',goStopModel.export());
       await this.ctx.storage.put(gameKey,completedGame);
       await this.ctx.storage.put('summary',summary);
       return json({ok:true,trained,trainingGames:summary.trainingGames,
         completedGames:summary.completedGames,consecutiveAgreementGames:summary.consecutiveAgreementGames,
         modelExamples:model.examples,specialModelExamples:specialModel.examples,
-        openingModelExamples:openingModel.examples,promotionPending,publishedToLive:false,
+        openingModelExamples:openingModel.examples,goStopModelExamples:goStopModel.examples,
+        promotionPending,publishedToLive:false,
         developmentModelUpdated,developmentModelVersion:developmentModelUpdated?summary.developmentModelVersion:null,
         updateTrigger:promotionPending?updateTrigger:null,
         reviewFinalized:finalizing,removedFeedbackCount:removed.length,
