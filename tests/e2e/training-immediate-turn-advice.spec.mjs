@@ -1,0 +1,106 @@
+import {test,expect} from '@playwright/test';
+
+// The removable development bridge does not generate its own strategy.
+// It calls the frozen game's already wired #hintBtn only when the human can play.
+async function setup(page){
+ await page.goto('/',{waitUntil:'domcontentloaded'});
+ await page.setContent(`<!doctype html><html><body>
+  <button id="trainingModeBtn">Training</button>
+  <button id="playSoloBtn">Solo</button><button id="quitYesBtn">Quit</button>
+  <button id="playAgainBtn">Again</button><button id="newGameYesBtn">New game</button>
+  <button id="hintBtn">Native hint</button>
+  <aside id="trainingCoachPanel" hidden><strong id="trainingCoachTitle"></strong><p id="trainingCoachText"></p></aside>
+  <div id="playerHand">
+   <button class="hand-card" data-card-id="m2-1" disabled>Card 1</button>
+   <button class="hand-card" data-card-id="m2-2" disabled>Card 2</button>
+  </div>
+  <dialog id="resultDialog"></dialog>
+ </body></html>`);
+ await page.evaluate(()=>{
+  globalThis.__nativeHintCalls=0;
+  document.getElementById('hintBtn').addEventListener('click',()=>{
+   globalThis.__nativeHintCalls++;
+   const hand=document.getElementById('playerHand');
+   const playable=hand.querySelector('.hand-card:not(:disabled)');
+   if(!playable)return;
+   playable.classList.add('matchable');
+   document.getElementById('trainingCoachTitle').textContent='Recommended Move';
+   document.getElementById('trainingCoachText').textContent='Native game recommendation.';
+   document.getElementById('trainingCoachPanel').hidden=false;
+  });
+ });
+ await page.addScriptTag({path:'dev-site/training-immediate-turn-advice.js'});
+}
+async function openTraining(page){
+ await page.locator('#trainingModeBtn').click();
+ await page.evaluate(()=>{
+  const layer=document.createElement('div');
+  layer.className='training-opening-dismiss-layer';
+  document.body.appendChild(layer);
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().openingSeen)).toBe(true);
+}
+test('when computer plays first, advice is shown as soon as human cards become playable',async({page})=>{
+ await setup(page);
+ await openTraining(page);
+ await page.evaluate(()=>document.querySelector('.training-opening-dismiss-layer').remove());
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await page.evaluate(()=>document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.disabled=false));
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:1800}).toBe(1);
+ await expect(page.locator('#trainingCoachPanel')).toBeVisible();
+ await expect(page.locator('#trainingCoachText')).toHaveText('Native game recommendation.');
+ await expect(page.locator('#playerHand .hand-card.matchable')).toHaveCount(1);
+ await page.waitForTimeout(600);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(1);
+});
+test('one original recommendation per hand; the next computer-to-human turn gets another',async({page})=>{
+ await setup(page);await openTraining(page);
+ await page.evaluate(()=>{
+  document.querySelector('.training-opening-dismiss-layer').remove();
+  document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.disabled=false);
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(1);
+ await page.evaluate(()=>{
+  document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.disabled=true);
+  document.querySelector('[data-card-id="m2-1"]').remove();
+  document.getElementById('trainingCoachPanel').hidden=true;
+  document.querySelector('[data-card-id="m2-2"]').classList.remove('matchable');
+ });
+ await page.waitForTimeout(70);
+ await page.evaluate(()=>document.querySelector('[data-card-id="m2-2"]').disabled=false);
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:1800}).toBe(2);
+ await expect(page.locator('#trainingCoachText')).toHaveText('Native game recommendation.');
+});
+test('non-Training Solo, modal decisions and opening review never invoke hidden hint',async({page})=>{
+ await setup(page);
+ await page.locator('#playSoloBtn').click();
+ await page.evaluate(()=>document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.disabled=false));
+ await page.waitForTimeout(100);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await page.locator('#trainingModeBtn').click(); 
+ await page.evaluate(()=>{
+  const layer=document.createElement('div');
+  layer.className='training-opening-dismiss-layer';
+  document.body.appendChild(layer);
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().openingSeen)).toBe(true);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await page.evaluate(()=>{
+  document.querySelector('.training-opening-dismiss-layer').remove();
+  const dialog=document.createElement('dialog');dialog.id='trainingFeedbackDialog';document.body.appendChild(dialog);dialog.showModal();
+ });
+ await page.waitForTimeout(100);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
+ await page.evaluate(()=>document.querySelector('#trainingFeedbackDialog').close());
+ await page.evaluate(()=>{const card=document.querySelector('[data-card-id="m2-1"]');card.disabled=true;card.disabled=false;});
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(1);
+ await page.locator('#quitYesBtn').click();
+ await page.evaluate(()=>{
+  document.getElementById('trainingCoachPanel').hidden=true;
+  document.querySelectorAll('#playerHand .hand-card').forEach(x=>x.classList.remove('matchable'));
+  document.querySelector('[data-card-id="m2-2"]').disabled=true;
+  document.querySelector('[data-card-id="m2-2"]').disabled=false;
+ });
+ await page.waitForTimeout(120);
+ expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(1);
+});
