@@ -219,9 +219,9 @@ export class TrainingLearningStore{
          new Set(body.legalActions).size!==2||
          GO_STOP_ACTIONS.some(a=>!body.legalActions.includes(a)))
         return fail('INVALID_GO_STOP_ACTION',400);
-      const context={playerScore:ctx.playerScore,opponentScore:ctx.opponentScore,
+      const context={kind:'go-stop',playerScore:ctx.playerScore,opponentScore:ctx.opponentScore,
         remainingCards:ctx.remainingCards,goCount:ctx.goCount,hasMatch:ctx.hasMatch};
-      if(!Number.isInteger(context.playerScore)||context.playerScore<7||context.playerScore>100||
+      if(ctx.kind!=='go-stop'||!Number.isInteger(context.playerScore)||context.playerScore<7||context.playerScore>100||
          !Number.isInteger(context.opponentScore)||context.opponentScore<0||context.opponentScore>100||
          !Number.isInteger(context.remainingCards)||context.remainingCards<1||context.remainingCards>10||
          !Number.isInteger(context.goCount)||context.goCount<0||context.goCount>20||
