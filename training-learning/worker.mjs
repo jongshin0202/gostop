@@ -238,13 +238,38 @@ export class TrainingLearningStore{
       await this.ctx.storage.put('history',history.slice(-500));
       return json({ok:true,confirmed:!!chosenId,feedbackCount:summary.feedbackCount});
     }
-    if(request.method==='POST'&&path==='/complete'){
+    if(request.method==='POST'&&(path==='/complete'||path==='/finalize')){
       const body=await readJson(request);
       if(!validId(body?.gameId))return fail('INVALID_GAME_ID',400);
       const gameKey='game:'+body.gameId;
       const game=await this.ctx.storage.get(gameKey);
       if(game?.complete)return json({ok:true,trained:0,duplicate:true,publishedToLive:false});
+      const finalizing=path==='/finalize';
+      if(!finalizing&&game?.reviewRequired)return fail('EXPERT_REVIEW_REQUIRED',409);
       const completedGame=game||{complete:false,decisions:[]};
+      const original=reviewItems(completedGame);
+      let removed=[];
+      if(finalizing){
+        const keep=body?.keptFeedbackIds;
+        if(!Array.isArray(keep)||keep.length>220||
+          keep.some(id=>typeof id!=='string'||id.length>120)||
+          new Set(keep).size!==keep.length)return fail('INVALID_FINAL_SELECTION',400);
+        if(body.reviewVersion!==await reviewVersion(original))
+          return fail('REVIEW_CHANGED',409);
+        const existing=new Set(original.map(item=>item.id));
+        if(keep.some(id=>!existing.has(id)))return fail('INVALID_FINAL_SELECTION',400);
+        const kept=new Set(keep);
+        removed=original.filter(item=>!kept.has(item.id));
+        completedGame.decisions=(completedGame.decisions||[])
+          .filter((d,i)=>kept.has('card:'+(d.feedbackId||'legacy-'+i)));
+        completedGame.specialDecisions=(completedGame.specialDecisions||[])
+          .filter((d,i)=>kept.has('special:'+(d.feedbackId||'legacy-'+i)));
+        if(openingChanged(completedGame.openingFeedback)&&
+          !kept.has('opening:'+(completedGame.openingFeedback.feedbackId||'legacy-opening')))
+          completedGame.openingFeedback=null;
+        completedGame.finalReview={finishedAt:new Date().toISOString(),
+          keptFeedbackIds:keep,removedCount:removed.length};
+      }
       completedGame.complete=true;
       const model=new ExpertRanker(await this.ctx.storage.get('model')||null);
       const cardTrained=model.trainGame({id:body.gameId,complete:true,
@@ -259,13 +284,15 @@ export class TrainingLearningStore{
       const prior=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       // A disagreement is an actual differing played/recommended move. An "unsure"
       // judgment still counts as a disagreement, but never trains weights.
-      const opening=completedGame.openingFeedback;
-      const openingDisagreement=opening?.choice==='confirmed'&&
-        (opening.selected.length!==opening.suggested.length||
-         opening.selected.some(x=>!opening.suggested.includes(x)));
-      const hadDisagreement=completedGame.decisions.length>0||
-        (completedGame.specialDecisions||[]).length>0||openingDisagreement||body.hadDisagreement===true;
+      // Clean-game cadence measures actual differing plays, even if an
+      // incorrect expert label is excluded from model training at the end.
+      const hadDisagreement=original.length>0||body.hadDisagreement===true;
       let summary=recordCompletedTrainingGame(prior,hadDisagreement);
+      if(finalizing&&removed.length){
+        summary.feedbackCount=Math.max(0,(summary.feedbackCount||0)-removed.length);
+        summary.confirmedCount=Math.max(0,(summary.confirmedCount||0)-
+          removed.filter(item=>item.choice!=='unsure').length);
+      }
       if(trained){summary.trainingGames=(prior.trainingGames||0)+1;summary.lastTrainedAt=new Date().toISOString();}
       // Prepare an isolated, versionable candidate; NEVER imply that the
       // production server was updated. A validated production-model publisher
@@ -303,6 +330,27 @@ export class TrainingLearningStore{
         });
         promotionPending=true;developmentModelUpdated=true;
       }
+      if(finalizing&&removed.length){
+        // Excluded judgments must disappear from the durable account history
+        // and their pending storage keys, not just from the UI.
+        const rejected=new Set(removed.map(item=>item.id));
+        const history=await this.ctx.storage.get('history')||[];
+        const survivors=history.filter(item=>{
+          if(item.gameId!==body.gameId)return true;
+          const id=(item.kind==='opening'?'opening:':
+            item.kind==='special'?'special:':'card:')+
+              (item.feedbackId||'legacy-opening');
+          return !rejected.has(id);
+        });
+        await this.ctx.storage.put('history',survivors);
+        for(const item of removed){
+          const suffix=item.id.slice(item.id.indexOf(':')+1);
+          const key=item.kind==='opening'?'opening-feedback:'+body.gameId:
+            (item.kind==='special'?'special-feedback:':'feedback:')+
+              body.gameId+':'+suffix;
+          await this.ctx.storage.delete(key);
+        }
+      }
       await this.ctx.storage.put('model',model.export());
       await this.ctx.storage.put('specialModel',specialModel.export());
       await this.ctx.storage.put('openingModel',openingModel.export());
@@ -313,7 +361,9 @@ export class TrainingLearningStore{
         modelExamples:model.examples,specialModelExamples:specialModel.examples,
         openingModelExamples:openingModel.examples,promotionPending,publishedToLive:false,
         developmentModelUpdated,developmentModelVersion:developmentModelUpdated?summary.developmentModelVersion:null,
-        updateTrigger:promotionPending?updateTrigger:null});
+        updateTrigger:promotionPending?updateTrigger:null,
+        reviewFinalized:finalizing,removedFeedbackCount:removed.length,
+        keptFeedbackCount:finalizing?original.length-removed.length:undefined});
     }
     return fail('NOT_FOUND',404);
   }
@@ -330,13 +380,13 @@ export default {
       if(!['GET','POST'].includes(method)||headers.some(h=>!['authorization','content-type'].includes(h)))return json({ok:false},403,responseHeaders);
       return new Response(null,{status:204,headers:responseHeaders});
     }
-    const supported=new Set(['/api/training/state','/api/training/history','/api/training/feedback','/api/training/special-feedback','/api/training/opening-feedback','/api/training/complete']);
+    const supported=new Set(['/api/training/state','/api/training/history','/api/training/review','/api/training/feedback','/api/training/special-feedback','/api/training/opening-feedback','/api/training/complete','/api/training/finalize']);
     if(!supported.has(url.pathname)||!['GET','POST'].includes(request.method))return json({ok:false,error:'NOT_FOUND'},404,responseHeaders);
     const account=await verifyIdentity(request,env,origin);
     if(!account)return json({ok:false,error:'AUTH_REQUIRED'},401,responseHeaders);
     const id=env.TRAINING_DATA.idFromName(account.accountId);
     const suffix=url.pathname.replace('/api/training','');
-    const internal=new Request('https://training.internal'+suffix,{method:request.method,
+    const internal=new Request('https://training.internal'+suffix+url.search,{method:request.method,
       ...(request.method==='POST'?{headers:{'content-type':'application/json'},body:await request.text()}:{})});
     const response=await env.TRAINING_DATA.get(id).fetch(internal);
     const headers=new Headers(response.headers);Object.entries(responseHeaders).forEach(([k,v])=>headers.set(k,v));
