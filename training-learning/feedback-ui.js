@@ -35,7 +35,7 @@ async function syncStatus(){
   serverSpecialExamples=state.specialModel?.examples||0;
   serverGoStopExamples=state.goStopModel?.examples||0;
   serverReady=true;lastError=null;
- }catch(error){serverReady=false;lastError=String(error.message||error);}
+ }catch(error){serverReady=false;serverWeightState=null;lastError=String(error.message||error);}
 }
 
 const TEXT={
