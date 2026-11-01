@@ -441,8 +441,9 @@ test('server failure during final Finish retains review and does not claim learn
 });
 
 async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatch=true,
- handCount=1,nativeReason='STOP. Only one scoring turn remains.'}={}){
+ handCount=1,nativeReason='STOP. Only one scoring turn remains.',withScorer=false}={}){
  await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason})=>{
+  if(withScorer)globalThis.GoStopEngine.scorePlayer=player=>({total:player.captured.length});
   const hand=document.getElementById('playerHand');
   hand.innerHTML=(handCount===0?[]:handCount===1?['m6-3']:['m6-3','m6-4'])
    .map(id=>'<button class="hand-card" data-card-id="'+id+'">'+id+'</button>').join('');
@@ -465,7 +466,7 @@ async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatc
    window.__decisionClicks++;dialog.close();
    if(button.id==='stopBtn')document.getElementById('resultDialog').showModal();
   }));
- },{recommended,opponentScore,hasMatch,handCount,nativeReason});
+ },{recommended,opponentScore,hasMatch,handCount,nativeReason,withScorer});
  await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
  await page.evaluate(()=>document.getElementById('decisionDialog').show());
  await expect(page.locator('#decisionDialog')).toBeVisible();
@@ -595,4 +596,15 @@ test('playing a 3-card ppeok pile against the original recommendation triggers e
  await expect(review.locator('.training-final-row')).toHaveCount(1);
  await review.getByRole('button',{name:'Finish'}).click();
  await expect(review).toBeHidden();
+});
+
+test('one opponent point with maximum next-turn table capture below seven and a matching hand card recommends GO',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{opponentScore:1,hasMatch:true,handCount:2,withScorer:true});
+ await expect(page.locator('#goBtn')).toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#stopBtn')).not.toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#trainingCoachText')).toContainText('optimistic maximum');
+ await page.locator('#goBtn').click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0);
 });
