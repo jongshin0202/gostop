@@ -421,7 +421,12 @@ function showTrainingCompletion(result){
  const card=dialog?.querySelector('.dialog-card')||dialog;
  if(!card)return;
  let notice=$('trainingModelCompletionNotice');
- if(!notice){notice=document.createElement('aside');notice.id='trainingModelCompletionNotice';notice.setAttribute('role','status');card.append(notice);}
+ if(!notice){
+  notice=document.createElement('aside');notice.id='trainingModelCompletionNotice';
+  notice.setAttribute('role','status');
+  // Keep this acknowledgement above the game-over actions, visible on mobile.
+  card.insertBefore(notice,card.querySelector('#playAgainBtn,#resultQuitBtn'));
+ }
  notice.replaceChildren();
  const line=value=>{const p=document.createElement('p');p.textContent=value;notice.append(p);};
  const trained=Number.isSafeInteger(result.trained)?result.trained:0;
