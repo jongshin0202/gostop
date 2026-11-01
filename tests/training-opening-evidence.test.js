@@ -83,11 +83,13 @@ test('native opening recognizes two strong cards from a viable set, not merely a
  assert.ok(picks.includes('red-stripes'),'two red ribbons are strategically viable');
  assert.ok(!picks.includes('singles'),'Singles fallback only when major routes are not strong');
 });
-test('native opening does not recommend GODORI without an immediately playable or claimable bird',()=>{
- const noMatch={hand:['m2-3','m4-3'],floor:[],humanCaptured:[],computerCaptured:[]};
+test('native opening requires actual birdies or strong family evidence, not just two related cards',()=>{
+ const noMatch={hand:['m2-2','m4-2'],floor:[],humanCaptured:[],computerCaptured:[]};
  assert.deepEqual(helper.nativeOpeningStrategies(noMatch,deck),['singles']);
- const playable={...noMatch,floor:['m2-2']};
- assert.ok(helper.nativeOpeningStrategies(playable,deck).includes('godori'));
+ const oneBirdOnFloor={...noMatch,floor:['m2-3']};
+ assert.ok(!helper.nativeOpeningStrategies(oneBirdOnFloor,deck).includes('godori'));
+ const bothBirds={...noMatch,floor:['m2-3','m4-3']};
+ assert.ok(helper.nativeOpeningStrategies(bothBirds,deck).includes('godori'));
 });
 test('the displayed English heading is authoritative for expert confirmation',()=>{
  assert.deepEqual(helper.strategiesFromEnglishCoach('Best strategies: Blue Stripes, Brights, and 5-BIRDIES.'),['blue-stripes','brights','godori']);
@@ -125,4 +127,66 @@ test('opening count details omit categories that do not use a set card count',()
  const v={hand:['m4-4'],floor:[],humanCaptured:[],computerCaptured:[]};
  assert.equal(helper.openingRouteLocations(v,deck,'singles'),null);
  assert.deepEqual(helper.openingLocationLines(v,deck,['singles','pictures'],'en'),[]);
+});
+
+const realDeck=require('../game-engine.js').masterDeck;
+const realVisible=(hand,floor=[],humanCaptured=[],computerCaptured=[])=>({
+ hand,floor,humanCaptured,computerCaptured
+});
+test('Vine and second bird-family matching cards can immediately claim both birdies on the floor',()=>{
+ // Real deck definitions: two true bird pictures in different birdie families,
+ // with neither picture in hand, and a matching nonbird card for each month.
+ const v=realVisible(['m2-2','m4-2'],['m2-1','m4-1']);
+ const expert=helper.godoriExpertCase(v,realDeck);
+ assert.equal(expert.viable,true);
+ assert.equal(expert.reason,'two-reachable');
+ assert.equal(expert.actualBirdiesInHand,0);
+ assert.equal(expert.immediatelyClaimable,2);
+ assert.equal(helper.hasTwoDirectlyReachableBirdies(v,realDeck),true);
+ const counts=helper.openingRouteLocations(v,realDeck,'godori');
+ assert.deepEqual(counts,{hand:0,captured:0,reachable:2,opponent:0,potential:2});
+ assert.ok(helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
+ const explanation=helper.openingLocationLines(v,realDeck,['godori'],'en')[0];
+ assert.match(explanation,/0 in hand, 0 captured, 2 reachable on the table/);
+ assert.match(explanation,/Both birdie pictures are on the table/);
+ const model=helper.evaluate(v,realDeck);
+ assert.equal(model.info.godori.known,0);
+ assert.equal(model.info.godori.reachable,2);
+ assert.equal(model.evidence[3],0);
+ assert.ok(Math.abs(model.evidence[4]-2/3)<1e-10);
+ for(const lang of ['ko','es','fr','de','ja','zh']){
+  const line=helper.openingLocationLines(v,realDeck,['godori'],lang)[0];
+  assert.ok(line.includes('0')&&line.includes('2'),lang);
+ }
+});
+test('two family cards alone are insufficient, one directly reachable bird is also insufficient',()=>{
+ const base=realVisible(['m2-2','m4-2']);
+ for(const floor of [[],['m2-3','m4-3'],['m2-1']]){
+  const v={...base,floor};
+  assert.equal(helper.godoriExpertCase(v,realDeck).viable,false);
+  assert.ok(!helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
+  assert.equal(helper.hasTwoDirectlyReachableBirdies(v,realDeck),false);
+ }
+});
+test('two held birdie pictures, three family cards, or one birdie plus two support cards qualify separately',()=>{
+ const choices=[
+  [realVisible(['m2-1','m4-1']), 'two-actual-birdies'],
+  [realVisible(['m2-2','m4-2','m8-3']), 'three-family'],
+  [realVisible(['m2-1','m4-2','m8-3']), 'bird-plus-family']
+ ];
+ for(const [v,expectedReason] of choices){
+  const x=helper.godoriExpertCase(v,realDeck);
+  assert.equal(x.viable,true,expectedReason);
+  assert.equal(x.reason,expectedReason);
+  assert.ok(helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
+  const line=helper.openingLocationLines(v,realDeck,['godori'],'en')[0];
+  assert.match(line,/birdie cards in hand/);
+  assert.match(line,/Supporting cards are not birdies/);
+ }
+});
+test('opponent already captured a required birdie blocks the set even if two other birdies are claimable',()=>{
+ const v=realVisible(['m2-2','m4-2'],['m2-1','m4-1'],[],['m8-2']);
+ assert.equal(helper.godoriExpertCase(v,realDeck).viable,false);
+ assert.equal(helper.hasTwoDirectlyReachableBirdies(v,realDeck),false);
+ assert.ok(!helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
 });
