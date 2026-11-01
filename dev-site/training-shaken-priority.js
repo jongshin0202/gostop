@@ -6,7 +6,7 @@
 'use strict';
 const month=id=>Number(/^m(\d{1,2})-[1-4]$/.exec(String(id||''))?.[1]||0);
 function choose({shakenMonths=[],handIds=[],floorIds=[],recommendedHandId,
- recommendedFloorId,deck=[],ownCapturedIds=[]}={}){
+ recommendedFloorId,deck=[],ownCapturedIds=[],scorePlayer=null}={}){
  const revealed=new Set(shakenMonths);
  if(!revealed.size||!recommendedHandId||!recommendedFloorId)return null;
  const cards=new Map(deck.map(c=>[c.id,c])),native=cards.get(recommendedFloorId);
@@ -18,7 +18,17 @@ function choose({shakenMonths=[],handIds=[],floorIds=[],recommendedHandId,
  const birdies=owned.filter(c=>c.flags?.includes('godori')).length;
  const ribbons=owned.filter(c=>c.type==='ribbon');
  const ribbonCount=ribbons.filter(c=>c.ribbonSet===native.ribbonSet).length;
- const mustHave=native.type==='bright'&&(brightCount===2||brightCount===4)||
+ const nativeHand=cards.get(recommendedHandId);
+ let immediateFinish=false;
+ if(typeof scorePlayer==='function'&&nativeHand){
+  try{
+   const before=scorePlayer({captured:owned,gukjinMode:'animal'}).total;
+   const after=scorePlayer({captured:[...owned,nativeHand,native],gukjinMode:'animal'}).total;
+   immediateFinish=Number.isFinite(before)&&Number.isFinite(after)&&before<7&&after>=7;
+  }catch(_){immediateFinish=false;}
+ }
+ const mustHave=immediateFinish||
+  native.type==='bright'&&(brightCount===2||brightCount===4)||
   native.flags?.includes('godori')&&birdies===2||
   native.type==='ribbon'&&native.ribbonSet&&ribbonCount===2;
  if(mustHave)return null;
