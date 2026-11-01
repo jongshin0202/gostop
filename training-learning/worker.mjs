@@ -223,7 +223,7 @@ export class TrainingLearningStore{
         remainingCards:ctx.remainingCards,goCount:ctx.goCount,hasMatch:ctx.hasMatch};
       if(ctx.kind!=='go-stop'||!Number.isInteger(context.playerScore)||context.playerScore<7||context.playerScore>100||
          !Number.isInteger(context.opponentScore)||context.opponentScore<0||context.opponentScore>100||
-         !Number.isInteger(context.remainingCards)||context.remainingCards<1||context.remainingCards>10||
+         !Number.isInteger(context.remainingCards)||context.remainingCards<0||context.remainingCards>10||
          !Number.isInteger(context.goCount)||context.goCount<0||context.goCount>20||
          typeof context.hasMatch!=='boolean')
         return fail('INVALID_GO_STOP_CONTEXT',400);

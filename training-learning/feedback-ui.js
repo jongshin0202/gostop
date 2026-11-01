@@ -87,14 +87,24 @@ const picture=id=>{
  return name||el?.alt||id||'—';
 };
 const moveId=(h,t)=>h+'|'+(t||'-');
-const legalMoves=(handIds,floorIds)=>{
- const targets=floorIds.map(card).filter(Boolean);
- return handIds.flatMap(handId=>{
-  const h=card(handId);if(!h)return[];
-  const matched=targets.filter(t=>t.month===h.month);
-  return (matched.length?matched:[null]).map(t=>({card:h,target:t,moveId:moveId(handId,t?.id)}));
- });
-};
+// A three-card ppeok stack is ONE actionable capture. Its visible three
+// cards must never be treated as three independent targets by the observer.
+function effectiveTargets(handId,floorIds){
+ const h=card(handId);if(!h)return [];
+ const targets=floorIds.map(card).filter(c=>c?.month===h.month);
+ const pile=$('floor')?.querySelector('.floor-stack-three[data-stack-month="'+h.month+'"]');
+ const pileCards=[...(pile?.querySelectorAll('.floor-card[data-card-id]')||[])]
+  .map(el=>el.dataset.cardId).filter(id=>floorIds.includes(id));
+ if(pileCards.length>=3&&targets.filter(c=>pileCards.includes(c.id)).length===pileCards.length){
+  return targets.filter(c=>!pileCards.includes(c.id)).concat(card(pileCards.at(-1))).filter(Boolean);
+ }
+ return targets;
+}
+const legalMoves=(handIds,floorIds)=>handIds.flatMap(handId=>{
+ const h=card(handId);if(!h)return [];
+ const matched=effectiveTargets(handId,floorIds);
+ return (matched.length?matched:[null]).map(t=>({card:h,target:t,moveId:moveId(handId,t?.id)}));
+});
 let active=false,gameId=null,confirmedCount=0,lastHand=null,showing=false,alreadyCompleted=false,hadDisagreement=false,reviewing=false;
 const pendingUploads=new Set();
 const modal=document.createElement('dialog');
@@ -399,11 +409,19 @@ const handSignature=()=>[...document.querySelectorAll('#playerHand .hand-card[da
 function captureRecommendation(){
  if(!active)return null;
  const hand=handSignature();
- const rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
+ // The dev recommendation guard can intentionally correct a native hint
+ // (e.g. pile priority). Its LOCK is what the player actually sees. Never
+ // compare to the hidden, earlier recommendation that was superseded.
+ const guard=globalThis.GoStopTrainingRecommendationDev?.getStatus?.();
+ const locked=guard?.active&&guard?.locked&&guard.hand&&guard.floor&&
+   $('playerHand')?.querySelector('[data-card-id="'+guard.hand+'"]');
+ const rec=locked?guard.hand:
+   $('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
  if(rec){
-  const original=$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
+  const original=locked?guard.floor:
+   $('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
   if(!observedRecommendation||observedRecommendation.handSignature!==hand||
-     observedRecommendation.hand!==rec){
+     observedRecommendation.hand!==rec||locked&&observedRecommendation.target!==original){
    observedRecommendation={handSignature:hand,hand:rec,target:original};
   }else if(!observedRecommendation.target&&original){
    observedRecommendation.target=original;
@@ -446,14 +464,21 @@ function onHandActivation(cardId,source='click'){
  const rec=recommendation.hand,recFloor=recommendation.target;
  const current=cardId;
  lastHand={current,rec,recFloor,observe:observed};
- const targets=observed.floorIds.filter(id=>card(id)?.month===card(current)?.month);
- if(targets.length>1)return; // Wait until one actual table target is selected.
- const actualTarget=targets[0]||null;
- const recTargets=observed.floorIds.filter(id=>card(id)?.month===card(rec)?.month);
+ const targets=effectiveTargets(current,observed.floorIds);
+ if(targets.length>1)return; // Only genuine separate floor targets need a choice.
+ const actualTarget=targets[0]?.id||null;
+ const recTargets=effectiveTargets(rec,observed.floorIds).map(c=>c.id);
  const originalTarget=recTargets.includes(recFloor)?recFloor:recTargets[0]||null;
  if(moveId(current,actualTarget)===moveId(rec,originalTarget))return;
- window.setTimeout(()=>{if(active)beginDisagreement({hand:rec,target:originalTarget},
-  {hand:current,target:actualTarget},observed);},200);
+ // The hand can end immediately after this move. Reserve the disagreement NOW,
+ // before the result observer can open an incorrectly empty final review.
+ if(observed.legalMoves.some(m=>m.moveId===moveId(rec,originalTarget))&&
+    observed.legalMoves.some(m=>m.moveId===moveId(current,actualTarget))){
+  hadDisagreement=true;
+  queue.push({recommended:{hand:rec,target:originalTarget},
+   played:{hand:current,target:actualTarget},visible:observed.visible,legalMoves:observed.legalMoves});
+  window.setTimeout(showNext,180);
+ }
 }
 function onHand(event){
  const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
@@ -467,10 +492,17 @@ function onTarget(event){
  const prior=lastHand;
  if(!prior)return;
  const chosen={hand:prior.current,target};
- const recTargets=prior.observe.floorIds.filter(id=>card(id)?.month===card(prior.rec)?.month);
+ const recTargets=effectiveTargets(prior.rec,prior.observe.floorIds).map(c=>c.id);
  const advised={hand:prior.rec,target:recTargets.includes(prior.recFloor)?prior.recFloor:recTargets[0]||null};
  lastHand=null;
- window.setTimeout(()=>{if(active)beginDisagreement(advised,chosen,prior.observe);},200);
+ if(prior.observe.legalMoves.some(m=>m.moveId===moveId(advised.hand,advised.target))&&
+    prior.observe.legalMoves.some(m=>m.moveId===moveId(chosen.hand,chosen.target))&&
+    moveId(advised.hand,advised.target)!==moveId(chosen.hand,chosen.target)){
+  hadDisagreement=true;
+  queue.push({recommended:advised,played:chosen,visible:prior.observe.visible,
+   legalMoves:prior.observe.legalMoves});
+  window.setTimeout(showNext,180);
+ }
 }
 // Read the frozen game's existing recommendation button classes. Never
 // intercept a Shake/Bomb click or invent a strategic recommendation ourselves.
@@ -531,7 +563,7 @@ function onGoStopDecision(event){
  };
  const playerScore=scoreOf('playerScore'),opponentScore=scoreOf('aiScore');
  if(!Number.isInteger(playerScore)||playerScore<7||!Number.isInteger(opponentScore)||
-    visible.hand.length<1||visible.hand.length>10)return;
+    visible.hand.length>10)return; // zero remaining cards is a real final GO/STOP decision
  const month=id=>Number(/^m(\d+)-/.exec(id)?.[1]);
  const hasMatch=visible.hand.some(h=>visible.floor.some(f=>month(h)===month(f)));
  const goCount=scoreOf('goCount')??0;

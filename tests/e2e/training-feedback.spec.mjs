@@ -95,7 +95,11 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
       {id:'m6-4',month:6,type:'pi',flags:['doublePi']},
       {id:'m11-1',month:11,type:'ribbon',flags:[]},
       {id:'m11-2',month:11,type:'bright',flags:[]},
-      {id:'m11-3',month:11,type:'pi',flags:[]}
+      {id:'m11-3',month:11,type:'pi',flags:[]},
+      {id:'m4-1',month:4,type:'animal',flags:['godori']},
+      {id:'m4-2',month:4,type:'ribbon',ribbonSet:'grass',flags:[]},
+      {id:'m4-3',month:4,type:'pi',flags:[]},
+      {id:'m4-4',month:4,type:'pi',flags:[]}
     ];
     // Match the real GoStopEngine API: masterDeck is an array, NOT a function.
     globalThis.GoStopEngine={masterDeck:cards};
@@ -546,4 +550,101 @@ test('STOP against GO prompts before final review and Finish keeps the judgment'
  expect(server.items).toHaveLength(1);
  expect(server.items[0].recommendedAction).toBe('go');
  expect(server.items[0].playedAction).toBe('stop');
+});
+
+async function showPilePlay(page){
+ await page.evaluate(()=>{
+  const hand=document.getElementById('playerHand');
+  hand.insertAdjacentHTML('beforeend','<button class="hand-card" data-card-id="m4-4" id="pileHandCard">Vine Single</button>');
+  const floor=document.getElementById('floor');
+  floor.insertAdjacentHTML('beforeend',`<div class="floor-stack-three" data-stack-month="4">
+   <div class="floor-card stacked-floor-card" data-card-id="m4-1">Vine Picture</div>
+   <div class="floor-card stacked-floor-card" data-card-id="m4-2">Vine Stripe</div>
+   <div class="floor-card stacked-floor-card" data-card-id="m4-3">Vine Single</div>
+  </div>`);
+  document.getElementById('pileHandCard').addEventListener('click',()=>{window.__actualPlays++});
+ });
+}
+test('three-card ppeok floor stack is ONE target and prompts on an opposing card choice',async({page})=>{
+ const server=await setup(page);
+ await showPilePlay(page);
+ await page.locator('#pileHandCard').click();
+ const dialog=page.locator('#trainingFeedbackDialog');
+ await expect(dialog).toBeVisible();
+ await expect(dialog).toContainText('Recommendation:');
+ await expect(dialog).toContainText('Your move:');
+ await dialog.getByRole('button',{name:'My move was better'}).click();
+ await expect(dialog).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].played).toEqual({hand:'m4-4',target:'m4-3'});
+ expect(server.items[0].legalMoves.filter(m=>m.card.id==='m4-4').map(m=>m.moveId))
+  .toEqual(['m4-4|m4-3']);
+ const review=await showFinalReview(page);
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('m4-4');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+});
+test('feedback compares to final corrected pile recommendation, not superseded blue stripe',async({page})=>{
+ const server=await setup(page);
+ await showPilePlay(page);
+ await page.evaluate(()=>{
+  Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{configurable:true,value:{
+   getStatus:()=>({active:true,locked:true,hand:'m4-4',floor:'m4-3',ppeokOverride:true})
+  }});
+  document.querySelector('#playerHand .matchable').classList.remove('matchable');
+  document.getElementById('pileHandCard').classList.add('matchable');
+  document.querySelector('#floor .training-recommended').classList.remove('training-recommended');
+  document.querySelector('#floor [data-card-id="m4-3"]').classList.add('training-recommended');
+ });
+ await page.locator('#pileHandCard').click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0,'following corrected pile recommendation is agreement');
+ await page.locator('#alternate').click();
+ const dialog=page.locator('#trainingFeedbackDialog');
+ await expect(dialog).toBeVisible();
+ await dialog.getByRole('button',{name:'My move was better'}).click();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].recommended).toEqual({hand:'m4-4',target:'m4-3'});
+ expect(server.items[0].played).toEqual({hand:'m6-4',target:'m6-2'});
+});
+test('GO/STOP feedback still opens when no cards remain after the last scoring play',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{recommended:'stop',opponentScore:1,handCount:1});
+ await page.evaluate(()=>document.getElementById('playerHand').replaceChildren());
+ await page.locator('#goBtn').click();
+ const modal=page.locator('#trainingFeedbackDialog');
+ await expect(modal).toBeVisible();
+ await expect(modal).toContainText('Recommendation: STOP');
+ await expect(modal).toContainText('Your move: GO');
+ await modal.getByRole('button',{name:'My move was better'}).click();
+ await expect(modal).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].context.remainingCards).toBe(0);
+ const dialog=await showFinalReview(page);
+ await expect(dialog).toContainText('GO / STOP');
+ await dialog.getByRole('button',{name:'Finish'}).click();
+ await expect(dialog).toBeHidden();
+});
+
+test('ppeok disagreement is retained even if the pile capture opens a result immediately',async({page})=>{
+ const server=await setup(page);
+ await showPilePlay(page);
+ await page.evaluate(()=>{
+  document.getElementById('pileHandCard').addEventListener('click',()=>{
+   document.getElementById('resultDialog').showModal();
+  });
+ });
+ await page.locator('#pileHandCard').click();
+ const prompt=page.locator('#trainingFeedbackDialog');
+ await expect(prompt).toBeVisible();
+ await prompt.getByRole('button',{name:'My move was better'}).click();
+ await expect(prompt).toBeHidden();
+ const review=page.locator('#trainingFinalReviewDialog');
+ await expect(review).toBeVisible();
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('m4-4');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ expect(server.items).toHaveLength(1);
 });

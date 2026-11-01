@@ -529,3 +529,20 @@ test('GO STOP expert learning enters active DEVELOPMENT model at existing ten-cl
   assert.equal(t.store.get('promotionCandidate').goStopModel.examples,1);
  }finally{t.restore();}
 });
+
+test('last scoring turn with empty hand still records STOP-versus-GO expert disagreement',async()=>{
+ const t=fixture();try{
+  const original=goStopEntry('go-stop-zero-hand','final-go-judgment','mine');
+  const entry={...original,context:{...original.context,remainingCards:0,hasMatch:false},
+   visible:{...original.visible,hand:[]}};
+  const response=await t.request('/api/training/go-stop-feedback',{method:'POST',body:entry});
+  assert.equal(response.status,200,await response.text());
+  const review=await(await t.request('/api/training/review?gameId='+entry.gameId)).json();
+  assert.equal(review.items.length,1);
+  assert.equal(review.items[0].kind,'go-stop');
+  const finish=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId:entry.gameId,reviewVersion:review.reviewVersion,
+   keptFeedbackIds:review.items.map(item=>item.id)}})).json();
+  assert.equal(finish.ok,true);assert.equal(finish.goStopModelExamples,1);
+ }finally{t.restore();}
+});
