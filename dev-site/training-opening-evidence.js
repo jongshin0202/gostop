@@ -90,6 +90,63 @@ function nativeOpeningStrategies(visible,deck){
  return options.length?options.map(o=>o.strategy):['singles'];
 }
 
+// Explain exactly WHERE an opening-set card is, without mistaking a
+// reachable table card for another card in the player's hand. Counts are
+// unique physical card IDs; a floor card is reachable only if the player
+// holds a card from that month. This does not affect strategy selection.
+function openingRouteLocations(visible,deck,strategy){
+ const predicates={
+  brights:c=>c.type==='bright',
+  godori:c=>c.flags?.includes('godori')&&[2,4,8].includes(c.month),
+  'red-stripes':c=>c.type==='ribbon'&&c.ribbonSet==='red',
+  'blue-stripes':c=>c.type==='ribbon'&&c.ribbonSet==='blue',
+  'plain-stripes':c=>c.type==='ribbon'&&c.ribbonSet==='grass'
+ };
+ const predicate=predicates[strategy];
+ if(!predicate)return null;
+ const byId=new Map((deck||[]).map(c=>[c.id,c]));
+ const from=key=>[...new Set(visible?.[key]||[])].map(id=>byId.get(id)).filter(Boolean);
+ const hand=from('hand'),floor=from('floor'),captured=from('humanCaptured'),lost=from('computerCaptured');
+ const handMonths=new Set(hand.map(c=>c.month));
+ const held=hand.filter(predicate),mine=captured.filter(predicate);
+ const reachable=floor.filter(c=>predicate(c)&&handMonths.has(c.month));
+ const opponent=lost.filter(predicate);
+ const uniqueIds=rows=>[...new Set(rows.map(c=>c.id))];
+ return Object.freeze({
+  hand:uniqueIds(held).length,
+  captured:uniqueIds(mine).length,
+  reachable:uniqueIds(reachable).length,
+  opponent:uniqueIds(opponent).length,
+  potential:uniqueIds([...held,...mine,...reachable]).length
+ });
+}
+const routeLabels={
+ en:{brights:'Brights',godori:'5-BIRDIES','red-stripes':'Red Stripes','blue-stripes':'Blue Stripes','plain-stripes':'Plain Stripes'},
+ ko:{brights:'광',godori:'고도리','red-stripes':'홍단','blue-stripes':'청단','plain-stripes':'초단'},
+ es:{brights:'Brillantes',godori:'5 pájaros','red-stripes':'Cintas rojas','blue-stripes':'Cintas azules','plain-stripes':'Cintas simples'},
+ fr:{brights:'Lumineuses',godori:'5 oiseaux','red-stripes':'Rubans rouges','blue-stripes':'Rubans bleus','plain-stripes':'Rubans simples'},
+ de:{brights:'Helle Karten',godori:'5 Vögel','red-stripes':'Rote Bänder','blue-stripes':'Blaue Bänder','plain-stripes':'Einfache Bänder'},
+ ja:{brights:'光',godori:'五鳥','red-stripes':'赤短','blue-stripes':'青短','plain-stripes':'草短'},
+ zh:{brights:'光牌',godori:'五鸟','red-stripes':'红短','blue-stripes':'蓝短','plain-stripes':'草短'}
+};
+const countPhrases={
+ en:c=>`${c.hand} in hand, ${c.captured} captured, ${c.reachable} reachable on the table`,
+ ko:c=>`손패 ${c.hand}장, 획득 ${c.captured}장, 바닥에서 획득 가능 ${c.reachable}장`,
+ es:c=>`${c.hand} en mano, ${c.captured} capturadas, ${c.reachable} alcanzables en la mesa`,
+ fr:c=>`${c.hand} en main, ${c.captured} capturées, ${c.reachable} accessibles sur la table`,
+ de:c=>`${c.hand} auf der Hand, ${c.captured} gesammelt, ${c.reachable} auf dem Tisch erreichbar`,
+ ja:c=>`手札 ${c.hand}枚、獲得済み ${c.captured}枚、場から取れる札 ${c.reachable}枚`,
+ zh:c=>`手牌 ${c.hand}张、已获得 ${c.captured}张、桌面可拿 ${c.reachable}张`
+};
+function openingLocationLines(visible,deck,strategies,locale='en'){
+ const lang=routeLabels[locale]?locale:'en';
+ return (strategies||[]).map(strategy=>{
+  const counts=openingRouteLocations(visible,deck,strategy);
+  if(!counts)return null;
+  return (routeLabels[lang][strategy]||strategy)+': '+countPhrases[lang](counts)+'.';
+ }).filter(Boolean);
+}
+
 // When the frozen Training coach renders English opening advice, its heading
 // is authoritative. Never train on a second recommendation that disagrees
 // with what the player saw. Other locales retain the exact native route rules.
@@ -129,7 +186,7 @@ function withLearnedWeights(review,model){
  // deterministic prior rather than produce an empty or misleading hint.
  return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
 }
-const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,STRATEGIES});
+const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
