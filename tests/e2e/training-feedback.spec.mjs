@@ -1,8 +1,10 @@
 import {test,expect} from '@playwright/test';
 
-function fakeCloud(){
+function fakeCloud(initialProgress={}){
   const items=[];const finished=new Set();
   let learned=0,specialLearned=0,goStopLearned=0,announceDevelopmentActivation=false;
+  const counters={gamesSinceLiveUpdate:0,consecutiveAgreementGames:0,
+   disagreementObservedAfterUpdate:false,developmentModelVersion:0,...initialProgress};
   const kind=x=>x.context?.kind==='go-stop'?'go-stop':x.context?'special':'card';
   return {items,completedCount:()=>finished.size,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
     handle:async route=>{
@@ -11,7 +13,7 @@ function fakeCloud(){
         headers:{'access-control-allow-origin':'http://127.0.0.1:4173','access-control-allow-headers':'authorization,content-type'},
         body:JSON.stringify(obj)});
       if(request.headers()['authorization']!=='Bearer e2e-demo-token')return reply(401,{ok:false,error:'AUTH_REQUIRED'});
-      if(path.endsWith('/state'))return reply(200,{ok:true,feedbackCount:items.length,
+      if(path.endsWith('/state'))return reply(200,{ok:true,...counters,feedbackCount:items.length,
         confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned},goStopModel:{examples:goStopLearned}});
       if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:kind(x),choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
       if(path.endsWith('/feedback')||path.endsWith('/special-feedback')||path.endsWith('/go-stop-feedback')){
@@ -51,12 +53,19 @@ function fakeCloud(){
               items.splice(i,1);
           }
           finished.add(gameId);
+          counters.gamesSinceLiveUpdate++;
+          if(original.length){counters.consecutiveAgreementGames=0;
+           counters.disagreementObservedAfterUpdate=true;}
+          else counters.consecutiveAgreementGames++;
         }
         const update=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
+        if(update){counters.gamesSinceLiveUpdate=0;counters.consecutiveAgreementGames=0;
+         counters.disagreementObservedAfterUpdate=false;counters.developmentModelVersion=2;}
         return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,
           modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,
-          publishedToLive:false,developmentModelUpdated:update});
+          publishedToLive:false,developmentModelUpdated:update,
+          developmentModelVersion:update?counters.developmentModelVersion:null});
       }
       if(path.endsWith('/complete')){
         const gameId=request.postDataJSON().gameId;
@@ -108,6 +117,7 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
     document.getElementById('alternate').addEventListener('click',()=>globalThis.__actualPlays++);
   },email);
   await page.addScriptTag({path:'training-learning/cloud-client.js'});
+  await page.addScriptTag({path:'dev-site/training-model-progress.js'});
   await page.addScriptTag({path:'training-learning/feedback-ui.js'});
   await page.locator('#trainingModeBtn').click();
   await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().authorized)).toBe(email==='expert@example.test');
@@ -607,4 +617,88 @@ test('one opponent point with maximum next-turn table capture below seven and a 
  await page.locator('#goBtn').click();
  await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
  expect(server.items).toHaveLength(0);
+});
+
+test('final review describes immediate training and gives exact server-backed 20-game and clean-streak countdowns',async({page})=>{
+ const server=fakeCloud({gamesSinceLiveUpdate:18,consecutiveAgreementGames:9,
+  disagreementObservedAfterUpdate:true,developmentModelVersion:3});
+ await setup(page,'expert@example.test',server);
+ await page.locator('#alternate').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
+ const review=await showFinalReview(page);
+ const section=review.locator('#trainingModelProgressPanel');
+ await expect(section).toContainText('Training and weight activation');
+ await expect(section).toContainText('1 confirmed judgment will train server-side weights when you press Finish');
+ await expect(section).toContainText('20-game path: 1 more game');
+ await expect(section.locator('#trainingCleanCountdown')).toContainText('10 more consecutive disagreement-free games');
+ await expect(section).toContainText('No production deployment');
+ expect(server.completedCount()).toBe(0,'reviewing does not train weights or complete the game');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ const completion=page.locator('#trainingModelCompletionNotice');
+ await expect(completion).toContainText('confirmed judgment trained on the development server');
+ await expect(completion).toContainText('20-game path: 1 more game');
+ await expect(completion).toContainText('Updated weights were not activated this game');
+});
+test('clean-game streak countdown shows earliest path without claiming activation before threshold',async({page})=>{
+ const server=fakeCloud({gamesSinceLiveUpdate:7,consecutiveAgreementGames:8,
+  disagreementObservedAfterUpdate:true});
+ await setup(page,'expert@example.test',server);
+ const review=await showFinalReview(page);
+ await expect(review).toContainText('No disagreements to review');
+ const p=review.locator('#trainingModelProgressPanel');
+ await expect(p).toContainText('No confirmed judgments are retained');
+ await expect(p).toContainText('20-game path: 12 more games');
+ await expect(p.locator('#trainingCleanCountdown')).toContainText('1 more consecutive disagreement-free game');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ await expect(page.locator('#trainingModelCompletionNotice')).toContainText('No judgments trained this game');
+ await expect(page.locator('#trainingModelCompletionNotice')).toContainText('1 more consecutive disagreement-free game');
+});
+test('removing judgments updates training disclosure but not historical disagreement counters',async({page})=>{
+ const server=fakeCloud({gamesSinceLiveUpdate:17,disagreementObservedAfterUpdate:true});
+ await setup(page,'expert@example.test',server);
+ await page.locator('#alternate').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
+ const review=await showFinalReview(page);
+ const panel=review.locator('#trainingModelProgressPanel');
+ await expect(panel).toContainText('1 confirmed judgment');
+ await review.locator('.training-final-row').getByRole('button',{name:'Remove'}).click();
+ await page.locator('#trainingReviewRemoveConfirm').getByRole('button',{name:'Yes'}).click();
+ await expect(panel).toContainText('No confirmed judgments are retained');
+ await expect(panel).toContainText('20-game path: 2 more games');
+ await expect(panel.locator('#trainingCleanCountdown')).toContainText('10 more consecutive');
+});
+test('acknowledged development activation displays deployment timing and version, never production',async({page})=>{
+ const server=fakeCloud({gamesSinceLiveUpdate:19,consecutiveAgreementGames:0,
+  disagreementObservedAfterUpdate:true});
+ await setup(page,'expert@example.test',server);
+ await page.locator('#alternate').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
+ server.confirmNextDevelopmentActivation();
+ const review=await showFinalReview(page);
+ const panel=review.locator('#trainingModelProgressPanel');
+ await expect(panel).toContainText('20-game path: 0 more games');
+ await expect(panel.locator('#trainingActivationDue')).toContainText('Activation threshold reached with this Finish');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ const notice=page.locator('#trainingModelCompletionNotice');
+ await expect(notice).toContainText('Update was made: development weight version 2');
+ const updated=page.getByRole('dialog',{name:'Training model update'});
+ await expect(updated).toBeVisible();
+ await expect(updated).toContainText('Update was made');
+ await expect(updated).toContainText('(v2)');
+ await expect(updated).toContainText('No production deployment occurred');
+ await updated.getByRole('button',{name:'OK'}).click();
+ await expect(updated).toBeHidden();
+});
+test('unknown server progress never fabricates game countdown',async({page})=>{
+ const server=fakeCloud();
+ await setup(page);
+ await page.route('**/mock-learning/state',route=>route.fulfill({
+  status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'TEMPORARY_FAILURE'})
+ }));
+ const review=await showFinalReview(page);
+ await expect(review.locator('#trainingCountdownUnavailable')).toContainText('countdown is unavailable');
+ await expect(review.locator('#trainingModelProgressPanel')).not.toContainText('20-game path:');
 });
