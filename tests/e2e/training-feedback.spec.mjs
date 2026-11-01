@@ -643,7 +643,7 @@ test('ppeok disagreement is retained even if the pile capture opens a result imm
  const review=page.locator('#trainingFinalReviewDialog');
  await expect(review).toBeVisible();
  await expect(review.locator('.training-final-row')).toHaveCount(1);
- await expect(review).toContainText('Vine');
+ await expect(review).toContainText('m4-4');
  await review.getByRole('button',{name:'Finish'}).click();
  await expect(review).toBeHidden();
  expect(server.items).toHaveLength(1);
