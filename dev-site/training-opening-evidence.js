@@ -138,12 +138,38 @@ const countPhrases={
  ja:c=>`手札 ${c.hand}枚、獲得済み ${c.captured}枚、場から取れる札 ${c.reachable}枚`,
  zh:c=>`手牌 ${c.hand}张、已获得 ${c.captured}张、桌面可拿 ${c.reachable}张`
 };
+// Expert-verified 5-BIRDIES exception: two different bird pictures are
+// sitting on the floor and matching-month cards in the player's hand can
+// claim BOTH immediately. The player has not been dealt two bird pictures.
+// Never infer this exception from two non-bird cards alone.
+const twoBirdiesOnTableCopy={
+ en:'Both birdie pictures are on the table and can be captured now using your matching hand cards. 5-BIRDIES is viable.',
+ ko:'새 그림패 2장은 손패가 아닌 바닥에 있고, 손패의 같은 월 카드로 모두 바로 잡을 수 있어 고도리를 노릴 수 있습니다.',
+ es:'Las dos cartas de pájaro están en la mesa y puedes capturarlas ahora con tus cartas correspondientes. La estrategia de 5 pájaros es viable.',
+ fr:'Les deux cartes Oiseau sont sur la table et peuvent être prises immédiatement avec vos cartes correspondantes. La stratégie 5 oiseaux est possible.',
+ de:'Beide Vogelkarten liegen auf dem Tisch und können mit passenden Handkarten sofort aufgenommen werden. Die 5-Vögel-Strategie ist möglich.',
+ ja:'鳥札2枚は手札ではなく場にあり、手札の同じ月の札で両方すぐに取れます。五鳥を狙える例外です。',
+ zh:'两张鸟牌在桌面上，不在手牌中，可用手中对应月份的牌立即收取，因此可以考虑五鸟策略。'
+};
+function hasTwoDirectlyReachableBirdies(visible,deck){
+ const counts=openingRouteLocations(visible,deck,'godori');
+ if(!counts||counts.opponent>0||counts.reachable<2)return false;
+ const byId=new Map((deck||[]).map(c=>[c.id,c]));
+ const months=new Set((visible?.hand||[]).map(id=>byId.get(id)?.month));
+ const reachableMonths=new Set((visible?.floor||[]).map(id=>byId.get(id))
+  .filter(c=>c?.flags?.includes('godori')&&[2,4,8].includes(c.month)&&months.has(c.month))
+  .map(c=>c.month));
+ return reachableMonths.size>=2;
+}
+
 function openingLocationLines(visible,deck,strategies,locale='en'){
  const lang=routeLabels[locale]?locale:'en';
  return (strategies||[]).map(strategy=>{
   const counts=openingRouteLocations(visible,deck,strategy);
   if(!counts)return null;
-  return (routeLabels[lang][strategy]||strategy)+': '+countPhrases[lang](counts)+'.';
+  const extra=strategy==='godori'&&hasTwoDirectlyReachableBirdies(visible,deck)?
+   ' '+twoBirdiesOnTableCopy[lang]:'';
+  return (routeLabels[lang][strategy]||strategy)+': '+countPhrases[lang](counts)+'.'+extra;
  }).filter(Boolean);
 }
 
@@ -186,7 +212,7 @@ function withLearnedWeights(review,model){
  // deterministic prior rather than produce an empty or misleading hint.
  return {...review,suggested:learned.length?learned:review.suggested,modelExamples:model.examples};
 }
-const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,STRATEGIES});
+const api=Object.freeze({evaluate,withLearnedWeights,nativeOpeningStrategies,strategiesFromEnglishCoach,openingRouteLocations,openingLocationLines,hasTwoDirectlyReachableBirdies,STRATEGIES});
 root.GoStopDevOpeningEvidence=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
