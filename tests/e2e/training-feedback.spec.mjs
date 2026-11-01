@@ -463,7 +463,7 @@ async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatc
   window.__decisionClicks=0;
   dialog.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{
    window.__decisionClicks++;dialog.close();
-   if(button.id==='stopBtn')document.getElementById('resultDialog').setAttribute('open','');
+   if(button.id==='stopBtn')document.getElementById('resultDialog').showModal();
   }));
  },{recommended,opponentScore,hasMatch,handCount,nativeReason});
  await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
