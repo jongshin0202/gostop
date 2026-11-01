@@ -11,6 +11,7 @@ const $=id=>document.getElementById(id);
 const panel=$('trainingCoachPanel'),title=$('trainingCoachTitle'),text=$('trainingCoachText');
 const hand=$('playerHand'),floor=$('floor');
 const ppeok=globalThis.GoStopDevReservedPpeokPriority;
+const shaken=globalThis.GoStopDevShakenPriority;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
 let trainingActive=false,lock=null,suppressed=false;
@@ -52,6 +53,35 @@ function reservedPileOverride(currentHandId,currentFloorId){
  return {...chosen,text:(pileText[lang]||pileText.en)(name)};
 }
 
+
+const shakenCopy={
+ en:name=>'Capture the opponent’s shaken '+name+' card before it can be reclaimed. Secure the revealed family first.',
+ ko:name=>'상대가 흔든 '+name+' 패를 먼저 먹으세요. 상대의 흔든 패를 차단하는 것이 우선입니다.',
+ es:name=>'Captura primero la carta '+name+' de la familia que sacudió el rival.',
+ fr:name=>'Capturez d’abord la carte '+name+' de la famille révélée par l’adversaire.',
+ de:name=>'Nimm zuerst die '+name+'-Karte aus der vom Gegner geschüttelten Familie.',
+ ja:name=>'相手が振った'+name+'の札を優先して取ってください。',
+ zh:name=>'优先收取对手已亮出并摇牌的'+name+'。'
+};
+function shakenOverride(currentHandId,currentFloorId){
+ if(!shaken?.choose||!currentHandId||!currentFloorId)return null;
+ const deck=globalThis.GoStopEngine?.masterDeck||[];
+ if(!Array.isArray(deck))return null;
+ const choice=shaken.choose({
+  handIds:cardIds('#playerHand .hand-card[data-card-id]'),
+  floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  deck,recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+ });
+ if(!choice)return null;
+ const el=hand.querySelector('.hand-card[data-card-id="'+choice.handId+'"]');
+ if(!el||!floor.querySelector('.floor-card[data-card-id="'+choice.floorId+'"]'))return null;
+ const lang=document.documentElement.lang||'en';
+ const card=deck.find(x=>x.id===choice.handId);
+ const name=(card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card))||el.title||choice.handId;
+ return {...choice,text:(shakenCopy[lang]||shakenCopy.en)(name)};
+}
+
 function reset(){
  lock=null;
  document.documentElement.classList.remove(SCOPE);
@@ -76,10 +106,11 @@ function sync(){
   const recommendedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]');
   const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
   if(originalText){
-   const corrective=reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
+   const corrective=reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
+    shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
    lock={handSignature:sig,hand:corrective?.handId||recommendation.dataset.cardId,
     floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective};
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds)};
    document.documentElement.classList.add(SCOPE);
   }
  }
