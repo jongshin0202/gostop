@@ -182,6 +182,15 @@ const twoBirdiesOnTableCopy={
  ja:'鳥札2枚は手札ではなく場にあり、手札の同じ月の札で両方すぐに取れます。五鳥を狙える例外です。',
  zh:'两张鸟牌在桌面上，不在手牌中，可用手中对应月份的牌立即收取，因此可以考虑五鸟策略。'
 };
+const godoriExpertSupportCopy={
+ en:e=>`5-BIRDIES is viable with ${e.actualBirdiesInHand} actual birdie cards in hand and ${e.relatedFamilyCardsInHand} supporting cards from birdie families. Supporting cards are not birdies.`,
+ ko:e=>`고도리 전략 가능: 손패의 실제 새 그림패 ${e.actualBirdiesInHand}장, 새 그림패와 같은 월의 보조 카드 ${e.relatedFamilyCardsInHand}장입니다. 보조 카드는 새 그림패가 아닙니다.`,
+ es:e=>`5 pájaros es posible con ${e.actualBirdiesInHand} pájaros reales en mano y ${e.relatedFamilyCardsInHand} cartas de apoyo de sus familias. Estas últimas no son pájaros.`,
+ fr:e=>`La stratégie 5 oiseaux est possible avec ${e.actualBirdiesInHand} oiseaux réels en main et ${e.relatedFamilyCardsInHand} cartes de soutien. Ces dernières ne sont pas des oiseaux.`,
+ de:e=>`5 Vögel ist möglich: ${e.actualBirdiesInHand} echte Vogelkarten auf der Hand und ${e.relatedFamilyCardsInHand} unterstützende Familienkarten. Letztere sind keine Vogelkarten.`,
+ ja:e=>`五鳥を狙えます。手札の鳥札は${e.actualBirdiesInHand}枚、関連する月の補助札は${e.relatedFamilyCardsInHand}枚です。補助札は鳥札ではありません。`,
+ zh:e=>`可以考虑五鸟：手牌中实际鸟牌${e.actualBirdiesInHand}张，相关月份的辅助牌${e.relatedFamilyCardsInHand}张。辅助牌不是鸟牌。`
+};
 function hasTwoDirectlyReachableBirdies(visible,deck){
  const counts=openingRouteLocations(visible,deck,'godori');
  if(!counts||counts.opponent>0||counts.reachable<2)return false;
@@ -198,8 +207,10 @@ function openingLocationLines(visible,deck,strategies,locale='en'){
  return (strategies||[]).map(strategy=>{
   const counts=openingRouteLocations(visible,deck,strategy);
   if(!counts)return null;
-  const extra=strategy==='godori'&&hasTwoDirectlyReachableBirdies(visible,deck)?
-   ' '+twoBirdiesOnTableCopy[lang]:'';
+  const expert=strategy==='godori'?godoriExpertCase(visible,deck):null;
+  const extra=expert?.reason==='two-reachable'?
+    ' '+twoBirdiesOnTableCopy[lang]:
+    expert?.viable&&!expert.frozenViable?' '+godoriExpertSupportCopy[lang](expert):'';
   return (routeLabels[lang][strategy]||strategy)+': '+countPhrases[lang](counts)+'.'+extra;
  }).filter(Boolean);
 }
