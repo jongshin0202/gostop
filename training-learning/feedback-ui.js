@@ -158,7 +158,7 @@ const REVIEW_COPY={
 const WEIGHT_COPY={
  en:{
   heading:'Training and weight activation',training:'When training happens',
-  trainNow:n=>n+' confirmed judgment'+(n===1?'':'s')+' from this review will train server-side weights when you press Finish. Separately confirmed opening feedback may also train.'
+  trainNow:n=>n+' confirmed judgment'+(n===1?'':'s')+' from this review will train server-side weights when you press Finish. Separately confirmed opening feedback may also train.',
   trainNone:'No confirmed disagreement judgments remain in this review. Other confirmed opening feedback may still train on Finish.',
   activation:'When updated weights become active',
   activationRule:'On the DEVELOPMENT learning server after 20 completed games, or 10 consecutive disagreement-free games after a previous disagreement. New confirmed weights must exist. No production deployment occurs.',
