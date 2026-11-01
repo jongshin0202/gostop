@@ -29,6 +29,7 @@ await copyFile(join(root,'dev-site/training-context-coach.css'),join(output,'dev
 await copyFile(join(root,'dev-site/training-opening-evidence.js'),join(output,'dev-training-opening-evidence.js'));
 await copyFile(join(root,'dev-site/training-opening-review.js'),join(output,'dev-training-opening-review.js'));
 await copyFile(join(root,'dev-site/training-opening-review.css'),join(output,'dev-training-opening-review.css'));
+await copyFile(join(root,'dev-site/training-go-stop-advice.js'),join(output,'dev-training-go-stop-advice.js'));
 
 
 
@@ -47,10 +48,10 @@ if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-conf
 html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
 // Only the development build advances the tutorial asset while production stays frozen.
 html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029-howto-1');
-const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-review-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-review-1"></script>';
+const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-go-stop-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>','<script src="app.js?v=20261028-7"></script>\n  '+feedbackScripts);
-html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-training-advice-logic.js?v=20261031-1"></script>\n  <script src="dev-training-context-coach.js?v=20261101-safe-1"></script>\n  <script src="dev-training-opening-evidence.js?v=20261101-birdies-1"></script>\n  <script src="dev-training-opening-review.js?v=20261101-hand-visible-1"></script>\n  <script src="dev-training-recommendation-preserver.js?v=20261101-safe-1"></script>\n  <script src="dev-training-immediate-turn-advice.js?v=20261101-safe-1"></script>\n  <script src="dev-training-sake-cup-copy.js?v=20261031-1"></script>\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261030-1"></script>');
+html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-training-advice-logic.js?v=20261031-1"></script>\n  <script src="dev-training-context-coach.js?v=20261101-safe-1"></script>\n  <script src="dev-training-opening-evidence.js?v=20261101-birdies-1"></script>\n  <script src="dev-training-opening-review.js?v=20261101-hand-visible-1"></script>\n  <script src="dev-training-recommendation-preserver.js?v=20261101-safe-1"></script>\n  <script src="dev-training-immediate-turn-advice.js?v=20261101-safe-1"></script>\n  <script src="dev-training-sake-cup-copy.js?v=20261031-1"></script>\n  <script src="dev-training-go-stop-advice.js?v=20261101-go-stop-1"></script>\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261030-1"></script>');
 // Preserve the production leaderboard UI exactly. Dev data stays isolated.
 await writeFile(htmlPath,html);
 // A separate frontend is NOT an isolated backend. Fail closed unless an

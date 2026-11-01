@@ -2,7 +2,8 @@ import {test,expect} from '@playwright/test';
 
 function fakeCloud(){
   const items=[];const finished=new Set();
-  let learned=0,specialLearned=0,announceDevelopmentActivation=false;
+  let learned=0,specialLearned=0,goStopLearned=0,announceDevelopmentActivation=false;
+  const kind=x=>x.context?.kind==='go-stop'?'go-stop':x.context?'special':'card';
   return {items,completedCount:()=>finished.size,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
@@ -11,17 +12,17 @@ function fakeCloud(){
         body:JSON.stringify(obj)});
       if(request.headers()['authorization']!=='Bearer e2e-demo-token')return reply(401,{ok:false,error:'AUTH_REQUIRED'});
       if(path.endsWith('/state'))return reply(200,{ok:true,feedbackCount:items.length,
-        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned}});
-      if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:'special',choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
-      if(path.endsWith('/feedback')||path.endsWith('/special-feedback')){
+        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned},goStopModel:{examples:goStopLearned}});
+      if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:kind(x),choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
+      if(path.endsWith('/feedback')||path.endsWith('/special-feedback')||path.endsWith('/go-stop-feedback')){
         const x=request.postDataJSON();items.push(x);return reply(200,{ok:true,confirmed:x.choice!=='unsure',feedbackCount:items.length});
       }
       if(path.endsWith('/review')){
         const gameId=new URL(request.url()).searchParams.get('gameId');
         const rows=items.filter(x=>x.gameId===gameId).map(x=>{
-          const kind=x.context?'special':'card';
-          return {id:kind+':'+x.feedbackId,kind,choice:x.choice,
-            ...(kind==='special'?{recommendedAction:x.recommendedAction,
+          const type=kind(x);
+          return {id:type+':'+x.feedbackId,kind:type,choice:x.choice,
+            ...(type!=='card'?{recommendedAction:x.recommendedAction,
               playedAction:x.playedAction,context:x.context}:{
               recommendedId:x.recommended.hand+'|'+(x.recommended.target||'-'),
               playedId:x.played.hand+'|'+(x.played.target||'-')})};
@@ -34,38 +35,40 @@ function fakeCloud(){
         if(body.reviewVersion!=='fixture-review-version')
           return reply(409,{ok:false,error:'REVIEW_CHANGED'});
         const original=items.filter(x=>x.gameId===gameId);
-        const ids=original.map(x=>(x.context?'special:':'card:')+x.feedbackId);
+        const ids=original.map(x=>kind(x)+':'+x.feedbackId);
         if(!Array.isArray(body.keptFeedbackIds)||
            body.keptFeedbackIds.some(id=>!ids.includes(id)))
           return reply(400,{ok:false,error:'INVALID_FINAL_SELECTION'});
         if(!finished.has(gameId)){
           const kept=new Set(body.keptFeedbackIds);
-          const accepted=original.filter(x=>kept.has((x.context?'special:':'card:')+x.feedbackId));
+          const accepted=original.filter(x=>kept.has(kind(x)+':'+x.feedbackId));
           learned+=accepted.filter(x=>!x.context&&x.choice!=='unsure').length;
-          specialLearned+=accepted.filter(x=>x.context&&x.choice!=='unsure').length;
+          specialLearned+=accepted.filter(x=>kind(x)==='special'&&x.choice!=='unsure').length;
+          goStopLearned+=accepted.filter(x=>kind(x)==='go-stop'&&x.choice!=='unsure').length;
           for(let i=items.length-1;i>=0;i--){
             const item=items[i];
-            if(item.gameId===gameId&&!kept.has((item.context?'special:':'card:')+item.feedbackId))
+            if(item.gameId===gameId&&!kept.has(kind(item)+':'+item.feedbackId))
               items.splice(i,1);
           }
           finished.add(gameId);
         }
         const update=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
-        return reply(200,{ok:true,trained:learned+specialLearned,
-          modelExamples:learned,specialModelExamples:specialLearned,
+        return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,
+          modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,
           publishedToLive:false,developmentModelUpdated:update});
       }
       if(path.endsWith('/complete')){
         const gameId=request.postDataJSON().gameId;
         if(!finished.has(gameId)){
           learned+=items.filter(x=>x.gameId===gameId&&!x.context&&x.choice!=='unsure').length;
-          specialLearned+=items.filter(x=>x.gameId===gameId&&x.context&&x.choice!=='unsure').length;
+          specialLearned+=items.filter(x=>x.gameId===gameId&&kind(x)==='special'&&x.choice!=='unsure').length;
+          goStopLearned+=items.filter(x=>x.gameId===gameId&&kind(x)==='go-stop'&&x.choice!=='unsure').length;
           finished.add(gameId);
         }
         const developmentModelUpdated=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
-        return reply(200,{ok:true,trained:learned+specialLearned,modelExamples:learned,specialModelExamples:specialLearned,publishedToLive:false,developmentModelUpdated});
+        return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,publishedToLive:false,developmentModelUpdated});
       }
       return reply(404,{ok:false});
     }
@@ -435,4 +438,112 @@ test('server failure during final Finish retains review and does not claim learn
  await expect(dialog).toBeVisible();
  await expect(dialog.locator('#trainingFinalReviewStatus')).toContainText('FINALIZE_UNAVAILABLE');
  expect(server.completedCount()).toBe(0);
+});
+
+async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatch=true,
+ handCount=1,nativeReason='STOP. Only one scoring turn remains.'}={}){
+ await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason})=>{
+  const hand=document.getElementById('playerHand');
+  hand.innerHTML=(handCount===1?['m6-3']:['m6-3','m6-4'])
+   .map(id=>'<button class="hand-card" data-card-id="'+id+'">'+id+'</button>').join('');
+  document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="'+
+   (hasMatch?'m6-2':'m11-1')+'"></div>';
+  const info=document.createElement('div');
+  info.innerHTML='<span id="playerScore">8</span><span id="aiScore">'+
+    opponentScore+'</span><span id="goCount">0</span>';
+  document.body.append(info);
+  const coach=document.createElement('p');coach.id='trainingCoachText';coach.textContent=nativeReason;
+  document.getElementById('trainingCoachPanel').append(coach);
+  const dialog=document.createElement('dialog');dialog.id='decisionDialog';
+  dialog.innerHTML='<button id="goBtn" class="'+
+   (recommended==='go'?'training-choice-recommended':'')+'">GO</button>'+
+   '<button id="stopBtn" class="'+
+   (recommended==='stop'?'training-choice-recommended':'')+'">STOP</button>';
+  document.body.append(dialog);
+  window.__decisionClicks=0;
+  dialog.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{
+   window.__decisionClicks++;dialog.close();
+   if(button.id==='stopBtn')document.getElementById('resultDialog').showModal();
+  }));
+ },{recommended,opponentScore,hasMatch,handCount,nativeReason});
+ await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
+ await page.evaluate(()=>document.getElementById('decisionDialog').show());
+ await expect(page.locator('#decisionDialog')).toBeVisible();
+}
+test('GO instead of recommended STOP asks expert and appears in endgame review',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{opponentScore:2,hasMatch:true});
+ await expect(page.locator('#stopBtn')).toHaveClass(/training-choice-recommended/);
+ await page.locator('#goBtn').click();
+ const prompt=page.locator('#trainingFeedbackDialog');
+ await expect(prompt).toBeVisible();
+ await expect(prompt).toContainText('Recommendation: STOP');
+ await expect(prompt).toContainText('Your move: GO');
+ expect(await page.evaluate(()=>window.__decisionClicks)).toBe(1);
+ await prompt.getByRole('button',{name:'My move was better'}).click();
+ await expect(prompt).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].context.kind).toBe('go-stop');
+ expect(server.items[0].context.opponentScore).toBe(2);
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ const review=page.locator('#trainingFinalReviewDialog');
+ await expect(review).toBeVisible();
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('GO / STOP');
+ await expect(review).toContainText('Your move: GO');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().goStopModelExamples)).toBe(1);
+ expect((await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus())).specialModelExamples).toBe(0);
+});
+test('one last matching card and zero-point opponent changes native STOP advice to GO',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{opponentScore:0,hasMatch:true});
+ await expect(page.locator('#goBtn')).toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#stopBtn')).not.toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#trainingCoachText')).toContainText('computer has 0 points');
+ await page.locator('#goBtn').click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0,'following corrected advice is no disagreement');
+ expect(await page.evaluate(()=>window.__decisionClicks)).toBe(1);
+});
+test('GO recommendation is not forced with no match or visible immediate finishing threat',async({page})=>{
+ await setup(page);
+ await showGoStopChoice(page,{opponentScore:0,hasMatch:false});
+ await expect(page.locator('#stopBtn')).toHaveClass(/training-choice-recommended/);
+ await page.evaluate(()=>document.getElementById('decisionDialog').close());
+ await page.locator('#decisionDialog').evaluate(el=>el.remove());
+ await page.locator('#trainingCoachText').evaluate(el=>el.remove());
+ // The urgent warning prevents a simplistic score-zero override.
+ await page.evaluate(()=>{
+  document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="m6-2"></div>';
+  const d=document.createElement('dialog');d.id='decisionDialog';
+  d.innerHTML='<button id="goBtn">GO</button><button id="stopBtn" class="training-choice-recommended">STOP</button>';
+  document.body.append(d);
+  const msg=document.createElement('p');msg.id='trainingCoachText';
+  msg.textContent='STOP. The computer is at 0. If it captures two major sets, enough to reach the finish threshold.';
+  document.getElementById('trainingCoachPanel').append(msg);
+ });
+ // Reload the isolated advisor so it observes this new dialog node.
+ await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
+ await page.evaluate(()=>document.getElementById('decisionDialog').show());
+ await expect(page.locator('#stopBtn')).toHaveClass(/training-choice-recommended/);
+});
+test('STOP against GO prompts before final review and Finish keeps the judgment',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{recommended:'go',opponentScore:4,hasMatch:true});
+ await page.locator('#stopBtn').click();
+ const prompt=page.locator('#trainingFeedbackDialog');
+ await expect(prompt).toBeVisible();
+ await expect(page.locator('#trainingFinalReviewDialog')).toBeHidden();
+ await prompt.getByRole('button',{name:'Recommendation was better'}).click();
+ const review=page.locator('#trainingFinalReviewDialog');
+ await expect(review).toBeVisible();
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('Recommendation: GO');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].recommendedAction).toBe('go');
+ expect(server.items[0].playedAction).toBe('stop');
 });

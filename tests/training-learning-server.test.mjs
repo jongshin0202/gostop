@@ -433,3 +433,99 @@ test('opening and Shake judgments are independently removable at final review',a
   assert.equal(t.store.get('game:'+gameId).specialDecisions.length,0);
  }finally{t.restore();}
 });
+
+const goStopEntry=(gameId='go-stop-review-example',feedbackId='go-stop-judge-1',choice='mine')=>({
+ gameId,feedbackId,choice,reviewRequired:true,
+ recommendedAction:'stop',playedAction:'go',legalActions:['go','stop'],
+ context:{kind:'go-stop',playerScore:8,opponentScore:0,remainingCards:1,goCount:0,hasMatch:true},
+ visible:{hand:['m3-4'],floor:['m3-2'],humanCaptured:[],computerCaptured:[]}
+});
+test('GO against STOP is returned in endgame review and trains only after Finish',async()=>{
+ const t=fixture(),gameId='go-stop-discrepancy-1';try{
+  const entry=goStopEntry(gameId);
+  const response=await t.request('/api/training/go-stop-feedback',{method:'POST',body:entry});
+  assert.equal(response.status,200,await response.text());
+  assert.equal((await(await t.request('/api/training/state')).json()).goStopModel.examples,0);
+  assert.equal((await t.request('/api/training/complete',{method:'POST',body:{gameId}})).status,409);
+  const review=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  assert.equal(review.items.length,1);
+  assert.equal(review.items[0].kind,'go-stop');
+  assert.equal(review.items[0].recommendedAction,'stop');
+  assert.equal(review.items[0].playedAction,'go');
+  const result=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId,reviewVersion:review.reviewVersion,keptFeedbackIds:[review.items[0].id]
+  }})).json();
+  assert.equal(result.ok,true);assert.equal(result.goStopModelExamples,1);
+  assert.equal(result.publishedToLive,false);
+  const history=await(await t.request('/api/training/history')).json();
+  assert.equal(history.feedback[0].kind,'go-stop');
+  assert.equal(history.feedback[0].choice,'mine');
+  const model=await(await t.request('/api/training/state')).json();
+  assert.equal(model.specialModel.examples,0);
+  assert.equal(model.goStopModel.examples,1);
+ }finally{t.restore();}
+});
+test('GO STOP judgment can be removed and Never trains when marked uncertain',async()=>{
+ const t=fixture(),gameId='go-stop-review-remove';try{
+  const first=goStopEntry(gameId,'go-judge-remove','mine');
+  const unsure=goStopEntry(gameId,'go-judge-unsure','unsure');
+  for(const row of [first,unsure])
+   assert.equal((await t.request('/api/training/go-stop-feedback',{method:'POST',body:row})).status,200);
+  const pending=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  assert.equal(pending.items.length,2);
+  const result=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId,reviewVersion:pending.reviewVersion,
+   keptFeedbackIds:['go-stop:go-judge-unsure']
+  }})).json();
+  assert.equal(result.ok,true);assert.equal(result.trained,0);
+  assert.equal(result.removedFeedbackCount,1);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.goStopModel.examples,0);
+  assert.equal(state.feedbackCount,1);
+  assert.equal(state.confirmedCount,0);
+  assert.equal(t.store.has('go-stop-feedback:'+gameId+':go-judge-remove'),false);
+  const history=await(await t.request('/api/training/history')).json();
+  assert.deepEqual(history.feedback.map(x=>x.feedbackId),['go-judge-unsure']);
+ }finally{t.restore();}
+});
+test('GO STOP endpoint rejects fabricated contexts and conflicting card evidence',async()=>{
+ const t=fixture();try{
+  const valid=goStopEntry('go-stop-validate');
+  assert.equal((await t.request('/api/training/go-stop-feedback',{method:'POST',body:valid})).status,200);
+  assert.equal((await(await t.request('/api/training/go-stop-feedback',{method:'POST',body:valid})).json()).duplicate,true);
+  const candidates=[
+   {...goStopEntry('go-stop-invalid-1'),playedAction:'invented'},
+   {...goStopEntry('go-stop-invalid-2'),legalActions:['go','go']},
+   {...goStopEntry('go-stop-invalid-3'),context:{...valid.context,hasMatch:false}},
+   {...goStopEntry('go-stop-invalid-4'),context:{...valid.context,remainingCards:2}},
+   {...goStopEntry('go-stop-invalid-5'),context:{...valid.context,playerScore:0}},
+   {...goStopEntry('go-stop-invalid-6'),visible:{...valid.visible,floor:['m9-1']}},
+   {...goStopEntry('go-stop-invalid-7'),visible:{...valid.visible,floor:['m3-4']}},
+  ];
+  for(const row of candidates)assert.equal(
+   (await t.request('/api/training/go-stop-feedback',{method:'POST',body:row})).status,400);
+  assert.equal((await t.request('/api/training/go-stop-feedback',{
+   method:'POST',body:goStopEntry('go-stop-unapproved'),authorization:''
+  })).status,401);
+ }finally{t.restore();}
+});
+test('GO STOP expert learning enters active DEVELOPMENT model at existing ten-clean-game cadence',async()=>{
+ const t=fixture();try{
+  const first=goStopEntry('go-stop-promotion');
+  await t.request('/api/training/go-stop-feedback',{method:'POST',body:first});
+  const review=await(await t.request('/api/training/review?gameId='+first.gameId)).json();
+  await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId:first.gameId,reviewVersion:review.reviewVersion,
+   keptFeedbackIds:review.items.map(x=>x.id)
+  }});
+  for(let i=1;i<=9;i++)
+   await t.request('/api/training/complete',{method:'POST',body:{gameId:'go-stop-clean-'+i}});
+  const final=await(await t.request('/api/training/complete',{method:'POST',
+   body:{gameId:'go-stop-clean-10'}})).json();
+  assert.equal(final.developmentModelUpdated,true);
+  assert.equal(final.publishedToLive,false);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.activeGoStopModel.examples,1);
+  assert.equal(t.store.get('promotionCandidate').goStopModel.examples,1);
+ }finally{t.restore();}
+});

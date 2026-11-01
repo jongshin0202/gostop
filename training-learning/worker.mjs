@@ -5,6 +5,7 @@
 import learner from './learner.js';
 import {recordCompletedTrainingGame,recordSuccessfulDevelopmentModelUpdate} from './update-cadence.mjs';
 import {SpecialDecisionRanker,legalSpecialActions} from './special-learner.mjs';
+import {GoStopDecisionRanker,GO_STOP_ACTIONS} from './go-stop-learner.mjs';
 import {OpeningStrategyRanker,STRATEGIES,validEvidence,validChoices} from './opening-learner.mjs';
 const {ExpertRanker}=learner;
 const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store',...headers}});
@@ -73,6 +74,12 @@ function reviewItems(game={}){
   choice:entry.choice||(entry.chosenId?'mine':'unsure'),
   recommendedId:entry.recommendedId||'',playedId:entry.playedId||''
  });
+ for(const [index,entry] of (game.goStopDecisions||[]).entries())items.push({
+  id:'go-stop:'+(entry.feedbackId||'legacy-'+index),kind:'go-stop',
+  choice:entry.choice||(entry.chosenAction?'mine':'unsure'),
+  recommendedAction:entry.recommendedAction||'',playedAction:entry.playedAction||'',
+  context:entry.context||{}
+ });
  for(const [index,entry] of (game.specialDecisions||[]).entries())items.push({
   id:'special:'+(entry.feedbackId||'legacy-'+index),kind:'special',
   choice:entry.choice||(entry.chosenAction?'mine':'unsure'),
@@ -96,8 +103,10 @@ export class TrainingLearningStore{
       const model=await this.ctx.storage.get('model')||new ExpertRanker().export();
       const specialModel=await this.ctx.storage.get('specialModel')||new SpecialDecisionRanker().export();
       const openingModel=await this.ctx.storage.get('openingModel')||new OpeningStrategyRanker().export();
+      const goStopModel=await this.ctx.storage.get('goStopModel')||new GoStopDecisionRanker().export();
       const activeOpeningModel=await this.ctx.storage.get('activeOpeningModel')||null;
-      return json({ok:true,...state,model,specialModel,openingModel,activeOpeningModel});
+      const activeGoStopModel=await this.ctx.storage.get('activeGoStopModel')||null;
+      return json({ok:true,...state,model,specialModel,openingModel,goStopModel,activeOpeningModel,activeGoStopModel});
     }
     if(request.method==='GET'&&path==='/history')return json({ok:true,feedback:await this.ctx.storage.get('history')||[]});
     if(request.method==='GET'&&path==='/review'){
@@ -198,6 +207,67 @@ export class TrainingLearningStore{
       await this.ctx.storage.put('history',history.slice(-500));
       return json({ok:true,confirmed:!!chosenAction,feedbackCount:summary.feedbackCount});
     }
+    if(request.method==='POST'&&path==='/go-stop-feedback'){
+      const body=await readJson(request),ctx=body?.context||{};
+      if(!validId(body?.gameId)||!validId(body?.feedbackId)||
+         !['mine','recommended','unsure'].includes(body?.choice))
+        return fail('INVALID_GO_STOP_FEEDBACK',400);
+      if(!GO_STOP_ACTIONS.includes(body?.recommendedAction)||
+         !GO_STOP_ACTIONS.includes(body?.playedAction)||
+         body.recommendedAction===body.playedAction||
+         !Array.isArray(body.legalActions)||body.legalActions.length!==2||
+         new Set(body.legalActions).size!==2||
+         GO_STOP_ACTIONS.some(a=>!body.legalActions.includes(a)))
+        return fail('INVALID_GO_STOP_ACTION',400);
+      const context={kind:'go-stop',playerScore:ctx.playerScore,opponentScore:ctx.opponentScore,
+        remainingCards:ctx.remainingCards,goCount:ctx.goCount,hasMatch:ctx.hasMatch};
+      if(ctx.kind!=='go-stop'||!Number.isInteger(context.playerScore)||context.playerScore<7||context.playerScore>100||
+         !Number.isInteger(context.opponentScore)||context.opponentScore<0||context.opponentScore>100||
+         !Number.isInteger(context.remainingCards)||context.remainingCards<1||context.remainingCards>10||
+         !Number.isInteger(context.goCount)||context.goCount<0||context.goCount>20||
+         typeof context.hasMatch!=='boolean')
+        return fail('INVALID_GO_STOP_CONTEXT',400);
+      const visible={};
+      for(const field of ['hand','floor','humanCaptured','computerCaptured']){
+        const cards=body.visible?.[field];
+        if(!Array.isArray(cards)||cards.length>48||new Set(cards).size!==cards.length||
+           cards.some(id=>!/^m(?:[1-9]|1[0-2])-[1-4]$/.test(id)))
+          return fail('INVALID_VISIBLE_STATE',400);
+        visible[field]=cards;
+      }
+      const month=id=>Number(/^m(\d+)-/.exec(id)?.[1]);
+      const hasMatch=visible.hand.some(h=>visible.floor.some(f=>month(h)===month(f)));
+      const allCards=Object.values(visible).flat();
+      if(context.remainingCards!==visible.hand.length||context.hasMatch!==hasMatch||
+         new Set(allCards).size!==allCards.length)
+        return fail('GO_STOP_EVIDENCE_MISMATCH',400);
+      const key='go-stop-feedback:'+body.gameId+':'+body.feedbackId;
+      if(await this.ctx.storage.get(key))return json({ok:true,duplicate:true});
+      const gameKey='game:'+body.gameId;
+      const game=await this.ctx.storage.get(gameKey)||{complete:false,decisions:[]};
+      if(game.complete)return fail('GAME_ALREADY_COMPLETED',409);
+      game.goStopDecisions||=[];
+      if(game.goStopDecisions.length>=20)return fail('GAME_LIMIT',429);
+      const chosenAction=body.choice==='mine'?body.playedAction:
+        body.choice==='recommended'?body.recommendedAction:null;
+      game.goStopDecisions.push({feedbackId:body.feedbackId,choice:body.choice,
+        recommendedAction:body.recommendedAction,playedAction:body.playedAction,
+        context,chosenAction});
+      game.reviewRequired=true;
+      const summary=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
+      summary.feedbackCount++;if(chosenAction)summary.confirmedCount++;
+      await this.ctx.storage.put(key,{choice:body.choice,
+        recommendedAction:body.recommendedAction,playedAction:body.playedAction,
+        context,at:new Date().toISOString()});
+      await this.ctx.storage.put(gameKey,game);
+      await this.ctx.storage.put('summary',summary);
+      const history=await this.ctx.storage.get('history')||[];
+      history.push({gameId:body.gameId,feedbackId:body.feedbackId,kind:'go-stop',
+        context,recommendedAction:body.recommendedAction,playedAction:body.playedAction,
+        choice:body.choice,at:new Date().toISOString()});
+      await this.ctx.storage.put('history',history.slice(-500));
+      return json({ok:true,confirmed:!!chosenAction,feedbackCount:summary.feedbackCount});
+    }
     if(request.method==='POST'&&path==='/feedback'){
       const body=await readJson(request);
       if(!validId(body?.gameId)||!validId(body?.feedbackId)||!['mine','recommended','unsure'].includes(body?.choice))
@@ -264,6 +334,8 @@ export class TrainingLearningStore{
           .filter((d,i)=>kept.has('card:'+(d.feedbackId||'legacy-'+i)));
         completedGame.specialDecisions=(completedGame.specialDecisions||[])
           .filter((d,i)=>kept.has('special:'+(d.feedbackId||'legacy-'+i)));
+        completedGame.goStopDecisions=(completedGame.goStopDecisions||[])
+          .filter((d,i)=>kept.has('go-stop:'+(d.feedbackId||'legacy-'+i)));
         if(openingChanged(completedGame.openingFeedback)&&
           !kept.has('opening:'+(completedGame.openingFeedback.feedbackId||'legacy-opening')))
           completedGame.openingFeedback=null;
@@ -280,7 +352,10 @@ export class TrainingLearningStore{
       const openingModel=new OpeningStrategyRanker(await this.ctx.storage.get('openingModel')||null);
       const openingTrained=openingModel.trainGame({id:body.gameId,complete:true,
         openings:completedGame.openingFeedback?[completedGame.openingFeedback]:[]});
-      const trained=cardTrained+specialTrained+openingTrained;
+      const goStopModel=new GoStopDecisionRanker(await this.ctx.storage.get('goStopModel')||null);
+      const goStopTrained=goStopModel.trainGame({id:body.gameId,complete:true,
+        decisions:(completedGame.goStopDecisions||[]).filter(d=>d.chosenAction)});
+      const trained=cardTrained+specialTrained+openingTrained+goStopTrained;
       const prior=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       // A disagreement is an actual differing played/recommended move. An "unsure"
       // judgment still counts as a disagreement, but never trains weights.
@@ -299,18 +374,21 @@ export class TrainingLearningStore{
       // must acknowledge activation before the completion UI can report success.
       const newWeights=model.examples>Number(prior.lastDevelopmentModelExamples||0)||
         specialModel.examples>Number(prior.lastDevelopmentSpecialModelExamples||0)||
-        openingModel.examples>Number(prior.lastDevelopmentOpeningModelExamples||0);
+        openingModel.examples>Number(prior.lastDevelopmentOpeningModelExamples||0)||
+        goStopModel.examples>Number(prior.lastDevelopmentGoStopModelExamples||0);
       let promotionPending=false,developmentModelUpdated=false;
       const updateTrigger=summary.eligibilityReason;
       if(updateTrigger&&newWeights){
         const existing=await this.ctx.storage.get('promotionCandidate');
         if(existing?.model?.examples!==model.examples||existing?.specialModel?.examples!==specialModel.examples||
-          existing?.openingModel?.examples!==openingModel.examples||existing?.reason!==summary.eligibilityReason){
+          existing?.openingModel?.examples!==openingModel.examples||
+          existing?.goStopModel?.examples!==goStopModel.examples||existing?.reason!==summary.eligibilityReason){
           await this.ctx.storage.put('promotionCandidate',{
             reason:summary.eligibilityReason,createdAt:new Date().toISOString(),
             completedGames:summary.completedGames,model:{weights:[...model.weights],examples:model.examples},
             specialModel:{weights:[...specialModel.weights],examples:specialModel.examples},
-            openingModel:{weights:openingModel.weights.map(row=>[...row]),examples:openingModel.examples}
+            openingModel:{weights:openingModel.weights.map(row=>[...row]),examples:openingModel.examples},
+            goStopModel:{weights:[...goStopModel.weights],examples:goStopModel.examples}
           });
         }
         // Activate ONLY in the isolated DEVELOPMENT Worker, never the public
@@ -319,14 +397,17 @@ export class TrainingLearningStore{
         await this.ctx.storage.put('activeCardModel',model.export());
         await this.ctx.storage.put('activeSpecialModel',specialModel.export());
         await this.ctx.storage.put('activeOpeningModel',openingModel.export());
+        await this.ctx.storage.put('activeGoStopModel',goStopModel.export());
         const nextVersion=Number(prior.developmentModelVersion||0)+1;
         const acknowledged=recordSuccessfulDevelopmentModelUpdate(summary,nextVersion);
         summary=Object.assign(acknowledged,{
           lastDevelopmentModelExamples:model.examples,
           lastDevelopmentSpecialModelExamples:specialModel.examples,
           lastDevelopmentOpeningModelExamples:openingModel.examples,
+          lastDevelopmentGoStopModelExamples:goStopModel.examples,
           pendingLiveUpdate:{reason:updateTrigger,modelExamples:model.examples,
-            specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples}
+            specialModelExamples:specialModel.examples,openingModelExamples:openingModel.examples,
+            goStopModelExamples:goStopModel.examples}
         });
         promotionPending=true;developmentModelUpdated=true;
       }
@@ -338,7 +419,7 @@ export class TrainingLearningStore{
         const survivors=history.filter(item=>{
           if(item.gameId!==body.gameId)return true;
           const id=(item.kind==='opening'?'opening:':
-            item.kind==='special'?'special:':'card:')+
+            item.kind==='special'?'special:':item.kind==='go-stop'?'go-stop:':'card:')+
               (item.feedbackId||'legacy-opening');
           return !rejected.has(id);
         });
@@ -346,7 +427,7 @@ export class TrainingLearningStore{
         for(const item of removed){
           const suffix=item.id.slice(item.id.indexOf(':')+1);
           const key=item.kind==='opening'?'opening-feedback:'+body.gameId:
-            (item.kind==='special'?'special-feedback:':'feedback:')+
+            (item.kind==='special'?'special-feedback:':item.kind==='go-stop'?'go-stop-feedback:':'feedback:')+
               body.gameId+':'+suffix;
           await this.ctx.storage.delete(key);
         }
@@ -354,12 +435,14 @@ export class TrainingLearningStore{
       await this.ctx.storage.put('model',model.export());
       await this.ctx.storage.put('specialModel',specialModel.export());
       await this.ctx.storage.put('openingModel',openingModel.export());
+      await this.ctx.storage.put('goStopModel',goStopModel.export());
       await this.ctx.storage.put(gameKey,completedGame);
       await this.ctx.storage.put('summary',summary);
       return json({ok:true,trained,trainingGames:summary.trainingGames,
         completedGames:summary.completedGames,consecutiveAgreementGames:summary.consecutiveAgreementGames,
         modelExamples:model.examples,specialModelExamples:specialModel.examples,
-        openingModelExamples:openingModel.examples,promotionPending,publishedToLive:false,
+        openingModelExamples:openingModel.examples,goStopModelExamples:goStopModel.examples,
+        promotionPending,publishedToLive:false,
         developmentModelUpdated,developmentModelVersion:developmentModelUpdated?summary.developmentModelVersion:null,
         updateTrigger:promotionPending?updateTrigger:null,
         reviewFinalized:finalizing,removedFeedbackCount:removed.length,
@@ -380,7 +463,7 @@ export default {
       if(!['GET','POST'].includes(method)||headers.some(h=>!['authorization','content-type'].includes(h)))return json({ok:false},403,responseHeaders);
       return new Response(null,{status:204,headers:responseHeaders});
     }
-    const supported=new Set(['/api/training/state','/api/training/history','/api/training/review','/api/training/feedback','/api/training/special-feedback','/api/training/opening-feedback','/api/training/complete','/api/training/finalize']);
+    const supported=new Set(['/api/training/state','/api/training/history','/api/training/review','/api/training/feedback','/api/training/special-feedback','/api/training/go-stop-feedback','/api/training/opening-feedback','/api/training/complete','/api/training/finalize']);
     if(!supported.has(url.pathname)||!['GET','POST'].includes(request.method))return json({ok:false,error:'NOT_FOUND'},404,responseHeaders);
     const account=await verifyIdentity(request,env,origin);
     if(!account)return json({ok:false,error:'AUTH_REQUIRED'},401,responseHeaders);
