@@ -11,6 +11,7 @@ PAUSE_DURATION_SECONDS = "180"
 EMAIL_VERIFICATION_REQUIRED = "false"
 EMAIL_VERIFY_BASE_URL = "https://gostop-dev.vercel.app"
 ALLOWED_ORIGINS = "https://gostop-dev.vercel.app,https://gostop-dev-jwshin1-5345s-projects.vercel.app"
+ADMIN_ORIGINS = "https://gostop-admin-dev.vercel.app"
 EMAIL_FROM = "GoStop Live Dev <noreply@gostoplive.com>"
 
 [[durable_objects.bindings]]
