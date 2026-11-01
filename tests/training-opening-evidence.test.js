@@ -94,3 +94,34 @@ test('the displayed English heading is authoritative for expert confirmation',()
  assert.equal(helper.strategiesFromEnglishCoach('Suggested paths are Singles'),null);
  assert.equal(helper.strategiesFromEnglishCoach('Best strategy: Unknown.'),null);
 });
+
+test('opening Bright counts separate one held Bright from another reachable on table',()=>{
+ const visible={hand:['m1-1','m8-4'],floor:['m8-1'],humanCaptured:[],computerCaptured:[]};
+ const counts=helper.openingRouteLocations(visible,deck,'brights');
+ assert.deepEqual(counts,{hand:1,captured:0,reachable:1,opponent:0,potential:2});
+ assert.equal(helper.openingLocationLines(visible,deck,['brights'],'en')[0],
+  'Brights: 1 in hand, 0 captured, 1 reachable on the table.');
+});
+test('opening Bright counts never treat unmatchable floor Brights as reachable',()=>{
+ const visible={hand:['m1-1','m4-4'],floor:['m8-1'],humanCaptured:[],computerCaptured:[]};
+ assert.deepEqual(helper.openingRouteLocations(visible,deck,'brights'),{
+  hand:1,captured:0,reachable:0,opponent:0,potential:1
+ });
+});
+test('opening counts distinguish held, already captured and claimable cards without duplication',()=>{
+ const v={hand:['m1-1','m8-4','m4-2'],floor:['m8-1','m5-2'],
+  humanCaptured:['m3-1'],computerCaptured:['m11-1']};
+ const counts=helper.openingRouteLocations(v,deck,'brights');
+ assert.deepEqual(counts,{hand:1,captured:1,reachable:1,opponent:1,potential:3});
+ assert.equal(helper.openingRouteLocations(v,deck,'plain-stripes').hand,1);
+ for(const locale of ['en','ko','es','fr','de','ja','zh']){
+  const lines=helper.openingLocationLines(v,deck,['brights','plain-stripes'],locale);
+  assert.equal(lines.length,2);
+  assert.ok(lines.every(x=>x.includes('1')&&x.includes('0')));
+ }
+});
+test('opening count details omit categories that do not use a set card count',()=>{
+ const v={hand:['m4-4'],floor:[],humanCaptured:[],computerCaptured:[]};
+ assert.equal(helper.openingRouteLocations(v,deck,'singles'),null);
+ assert.deepEqual(helper.openingLocationLines(v,deck,['singles','pictures'],'en'),[]);
+});
