@@ -3,6 +3,7 @@ import {copyFile,mkdir,rm,writeFile,readFile} from 'node:fs/promises';
 import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {instrumentDevCompetitiveSoloPeerSync} from './instrument-competitive-solo-peer-sync.mjs';
+import {instrumentDevFriendlyInvite} from './instrument-friendly-invite.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'..'),output=join(here,'dist');
 const gameFiles=[
@@ -18,6 +19,10 @@ for(const file of gameFiles)await copyFile(join(root,file),join(output,file));
 const devAppPath=join(output,'app.js');
 await writeFile(devAppPath,instrumentDevCompetitiveSoloPeerSync(await readFile(devAppPath,'utf8')));
 await copyFile(join(root,'dev-site/competitive-solo-peer-sync.js'),join(output,'dev-competitive-solo-peer-sync.js'));
+// Development guest-link entry requires a user-gesture fullscreen gate.
+const devRankedPath=join(output,'ranked-client.js');
+await writeFile(devRankedPath,instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8')));
+await copyFile(join(root,'dev-site/friendly-invite-ux.js'),join(output,'dev-friendly-invite-ux.js'));
 // Removable, development-only Training feedback; not included in public game builds.
 await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'training-learning-cloud.js'));
 await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
@@ -57,6 +62,10 @@ if(!html.includes(oldRuntimeConfig))throw new Error('Unexpected dev runtime-conf
 html=html.replace(oldRuntimeConfig,'runtime-config.js?v=20261029-dev-cloudflare-1');
 // Only the development build advances the tutorial asset while production stays frozen.
 html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029-howto-1');
+const rankedDevScript='<script src="ranked-client.js?v=20261008-8"></script>';
+if(!html.includes(rankedDevScript))throw new Error('Missing ranked-client script for isolated Friendly invite patch');
+html=html.replace(rankedDevScript,
+ '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="ranked-client.js?v=20261101-dev-invite-1"></script>');
 const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261101-countdown-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-countdown-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>',
