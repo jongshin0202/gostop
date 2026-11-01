@@ -74,8 +74,13 @@ function visible(){return {hand:ids('#playerHand .hand-card[data-card-id]'),
  floor:ids('#floor .floor-card[data-card-id]'),
  humanCaptured:ids('#playerCaptured .captured-mini[data-card-id]'),
  computerCaptured:ids('#aiCaptured .captured-mini[data-card-id]')};}
-let active=false,panel=null,reviewedGameId=null,openingLayer=null,busy=false,staged=null,queued=false;
+let active=false,panel=null,reviewedGameId=null,openingLayer=null,busy=false,staged=null,queued=false,resizeReview=null;
 function clear(){
+ if(resizeReview){
+  window.removeEventListener('resize',resizeReview);
+  window.visualViewport?.removeEventListener?.('resize',resizeReview);
+  resizeReview=null;
+ }
  if(openingLayer&&openingLayer.isConnected)openingLayer.style.pointerEvents='';
  openingLayer=null;if(panel){if(panel.open&&typeof panel.close==='function')panel.close();panel.remove();panel=null;}staged=null;busy=false;
 }
@@ -211,6 +216,21 @@ function createPanel(layer){
  panel.append(h,question,recommended,precise,prompt,form,note,actionRow,status);
  document.body.append(panel);
  try{panel.showModal();}catch(_){panel.setAttribute('open','');}
+ // Fit the reviewer in the real space ABOVE the player's hand. A scrollable
+ // review is safer than obscuring cards, especially on portrait Android.
+ resizeReview=()=>{
+  if(!panel?.isConnected)return;
+  const viewportHeight=window.visualViewport?.height||window.innerHeight;
+  const top=Math.max(10,Math.min(54,Math.round(viewportHeight*.035)));
+  const handBounds=$('playerHand')?.getBoundingClientRect();
+  const handTop=handBounds&&handBounds.height>0?handBounds.top:viewportHeight;
+  const bottom=Math.min(viewportHeight-10,handTop-12);
+  panel.style.setProperty('--dev-review-top',top+'px');
+  panel.style.setProperty('--dev-review-safe-height',Math.max(100,Math.floor(bottom-top))+'px');
+ };
+ resizeReview();
+ window.addEventListener('resize',resizeReview);
+ window.visualViewport?.addEventListener?.('resize',resizeReview);
  agree.focus();
 }
 function scan(){
