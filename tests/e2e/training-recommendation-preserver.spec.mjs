@@ -200,7 +200,7 @@ for(const viewport of [
  {name:'Android portrait',width:390,height:844}
 ]){
  test('reserved Vine ppeok pile wins over reserved Star Blue Stripe when computer has Singles on '+viewport.name,async({page})=>{
-  await page.setViewportSize(viewport);
+  await page.setViewportSize({width:viewport.width,height:viewport.height});
   await reservedPileFixture(page);
   await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().ppeokOverride)).toBe(true);
   await expect(page.locator('#playerHand [data-card-id="m4-4"]')).toHaveClass(/matchable/);
