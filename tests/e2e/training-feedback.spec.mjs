@@ -441,10 +441,11 @@ test('server failure during final Finish retains review and does not claim learn
 });
 
 async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatch=true,
- handCount=1,nativeReason='STOP. Only one scoring turn remains.'}={}){
- await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason})=>{
+ handCount=1,nativeReason='STOP. Only one scoring turn remains.',withScorer=false}={}){
+ await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason,withScorer})=>{
+  if(withScorer)globalThis.GoStopEngine.scorePlayer=player=>({total:player.captured.length});
   const hand=document.getElementById('playerHand');
-  hand.innerHTML=(handCount===1?['m6-3']:['m6-3','m6-4'])
+  hand.innerHTML=(handCount===0?[]:handCount===1?['m6-3']:['m6-3','m6-4'])
    .map(id=>'<button class="hand-card" data-card-id="'+id+'">'+id+'</button>').join('');
   document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="'+
    (hasMatch?'m6-2':'m11-1')+'"></div>';
@@ -465,7 +466,7 @@ async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatc
    window.__decisionClicks++;dialog.close();
    if(button.id==='stopBtn')document.getElementById('resultDialog').showModal();
   }));
- },{recommended,opponentScore,hasMatch,handCount,nativeReason});
+ },{recommended,opponentScore,hasMatch,handCount,nativeReason,withScorer});
  await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
  await page.evaluate(()=>document.getElementById('decisionDialog').show());
  await expect(page.locator('#decisionDialog')).toBeVisible();
@@ -546,4 +547,64 @@ test('STOP against GO prompts before final review and Finish keeps the judgment'
  expect(server.items).toHaveLength(1);
  expect(server.items[0].recommendedAction).toBe('go');
  expect(server.items[0].playedAction).toBe('stop');
+});
+
+test('zero cards remaining does not drop a valid GO against STOP disagreement',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{recommended:'stop',opponentScore:1,handCount:0});
+ await page.locator('#goBtn').click();
+ const modal=page.locator('#trainingFeedbackDialog');
+ await expect(modal).toBeVisible();
+ await expect(modal).toContainText('Recommendation: STOP');
+ await expect(modal).toContainText('Your move: GO');
+ await modal.getByRole('button',{name:'My move was better'}).click();
+ await expect(modal).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].context.remainingCards).toBe(0);
+ const review=await showFinalReview(page);
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('GO / STOP');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+});
+test('playing a 3-card ppeok pile against the original recommendation triggers expert feedback',async({page})=>{
+ const server=await setup(page);
+ await page.evaluate(()=>{
+  const hand=document.getElementById('playerHand');
+  hand.innerHTML='<button class="hand-card matchable" data-card-id="m11-1" id="otherCapture">Star</button>'+
+   '<button class="hand-card" data-card-id="m6-4" id="pileCapture">Vine</button>';
+  const floor=document.getElementById('floor');
+  floor.innerHTML='<div class="floor-card training-recommended" data-card-id="m11-2">Star</div>'+
+   '<div class="floor-stack-three" data-stack-month="6">'+
+   '<div class="floor-card" data-card-id="m6-1"></div>'+
+   '<div class="floor-card" data-card-id="m6-2"></div>'+
+   '<div class="floor-card" data-card-id="m6-3"></div></div>';
+  document.getElementById('trainingCoachPanel').hidden=false;
+ });
+ await page.waitForTimeout(80);
+ await page.locator('#pileCapture').click();
+ const modal=page.locator('#trainingFeedbackDialog');
+ await expect(modal).toBeVisible();
+ await expect(modal).toContainText('Recommendation');
+ await expect(modal).toContainText('Your move');
+ await modal.getByRole('button',{name:'My move was better'}).click();
+ await expect(modal).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].recommended).toEqual({hand:'m11-1',target:'m11-2'});
+ expect(server.items[0].played).toEqual({hand:'m6-4',target:'m6-3'});
+ const review=await showFinalReview(page);
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+});
+
+test('one opponent point with maximum next-turn table capture below seven and a matching hand card recommends GO',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{opponentScore:1,hasMatch:true,handCount:2,withScorer:true});
+ await expect(page.locator('#goBtn')).toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#stopBtn')).not.toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#trainingCoachText')).toContainText('optimistic maximum');
+ await page.locator('#goBtn').click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0);
 });

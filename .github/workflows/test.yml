@@ -55,11 +55,12 @@ jobs:
           node --check training-learning/go-stop-learner.mjs
           node --check dev-site/training-go-stop-advice.js
           node --check dev-site/training-reserved-ppeok-priority.js
+          node --check dev-site/training-shaken-priority.js
           node --check dev-site/training-recommendation-preserver.js
           node --check training-learning/opening-learner.mjs
           node --check dev-site/training-opening-evidence.js
           node --check dev-site/training-opening-review.js
-          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs
+          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs
       # Ubuntu 24.04 hosted runners sometimes route apt through an unavailable
       # Azure mirror, preventing Playwright's --with-deps step from ever running.
       # Replace only that mirror with the standard Ubuntu archive; preserve all
