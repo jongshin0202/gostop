@@ -32,10 +32,12 @@ root.GoStopDevPeerSyncLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 if(!isDevHost(root.location?.hostname))return;
 
-let lastSnapshot=null;
+let lastSnapshot=null,lastGukjinChange=null;
 function reconcile({snapshot,events=[],room=null,localTargetIds=null,cancelTargetChoice,closeGukjinDialog}={}){
  if(!isRankedSolo(snapshot,room))return {active:false};
- if(lastSnapshot&&!sameMatch(lastSnapshot,snapshot))lastSnapshot=null;
+ if(lastSnapshot&&!sameMatch(lastSnapshot,snapshot)){
+  lastSnapshot=null;lastGukjinChange=null;
+ }
  if(lastSnapshot&&stale(snapshot,lastSnapshot))return {active:true,ignoredStale:true};
  const previous=lastSnapshot;
  lastSnapshot=snapshot;
@@ -49,6 +51,8 @@ function reconcile({snapshot,events=[],room=null,localTargetIds=null,cancelTarge
  const previousMode=previous?.state?.[side]?.gukjinMode;
  const nextMode=snapshot?.state?.[side]?.gukjinMode;
  const changedMode=!!(previousMode&&nextMode&&previousMode!==nextMode);
+ if(gukjinModeEvent(events,snapshot.seatId)||changedMode)
+  lastGukjinChange={matchId:snapshot.matchId,revision:revision(snapshot)};
  if((gukjinModeEvent(events,snapshot.seatId)||changedMode)&&
     typeof closeGukjinDialog==='function'){
   closeGukjinDialog();closedGukjin=true;
@@ -58,9 +62,15 @@ function reconcile({snapshot,events=[],room=null,localTargetIds=null,cancelTarge
 function staleDecision(current,latest,room){
  return isRankedSolo(latest,room)&&stale(current,latest);
 }
+function skipGukjinPrompt(current,latest,room){
+ return isRankedSolo(latest,room)&&sameMatch(current,lastGukjinChange)&&
+  Number.isInteger(lastGukjinChange?.revision)&&
+  lastGukjinChange.revision>revision(current);
+}
 root.GoStopDevPeerSync=Object.freeze({reconcile,staleDecision,
- skipGukjinPrompt:staleDecision,
- getStatus:()=>({matchId:lastSnapshot?.matchId||null,revision:revision(lastSnapshot)})});
+ skipGukjinPrompt,
+ getStatus:()=>({matchId:lastSnapshot?.matchId||null,revision:revision(lastSnapshot),
+  lastGukjinChange:lastGukjinChange?.revision??null})});
 
 // Never regress an in-memory authoritative revision for this one dev-only mode.
 // Network sync replies can arrive after a more recent broadcast snapshot.
