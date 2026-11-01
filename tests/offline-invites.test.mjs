@@ -106,3 +106,21 @@ test('enabled preference preflight supports browser subscription and rejects pro
  const denied=await authority.fetch(new Request(url+'/api/invites/preference',{method:'OPTIONS',headers:{Origin:'https://gostoplive.com'}}),{});
  assert.equal(denied.status,403);
 });
+
+test('offline Search Player request button eligibility follows target push subscriptions and preference',async()=>{
+ const s=fixture();
+ let resp=await s.req('/api/invites/eligibility',{method:'POST',body:{targetId:'acct-receiver-123'}});
+ assert.equal(resp.status,200);
+ assert.equal((await resp.json()).canRequest,false,'default enabled is insufficient without a subscribed device');
+ s.data.set('subscriptions:acct-receiver-123',[{endpoint:'https://fcm.googleapis.com/fcm/send/test'}]);
+ resp=await s.req('/api/invites/eligibility',{method:'POST',body:{targetId:'acct-receiver-123'}});
+ assert.equal((await resp.json()).canRequest,true);
+ s.switchUser('acct-receiver-123');
+ await s.req('/api/invites/preference',{method:'POST',body:{enabled:false}});
+ s.switchUser('acct-sender-123');
+ resp=await s.req('/api/invites/eligibility',{method:'POST',body:{targetId:'acct-receiver-123'}});
+ assert.equal((await resp.json()).canRequest,false);
+ s.setFriend(false);
+ resp=await s.req('/api/invites/eligibility',{method:'POST',body:{targetId:'acct-receiver-123'}});
+ assert.equal(resp.status,403,'only verified friends may read offline invite eligibility');
+});
