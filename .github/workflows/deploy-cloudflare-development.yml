@@ -7,6 +7,8 @@ on:
     paths:
       - server/**
       - dev-site/instrument-lobby-responsiveness.mjs
+      - dev-site/instrument-online-players-worker.mjs
+      - tests/dev-online-players-pages.test.mjs
       - dev-site/build-dev-lobby-worker.mjs
       - tests/dev-lobby-responsive.test.mjs
       - wrangler.dev.toml
@@ -41,7 +43,7 @@ jobs:
       - name: Build isolated responsive development Worker
         run: node dev-site/build-dev-lobby-worker.mjs
       - name: Verify development lobby responsiveness
-        run: node --test tests/dev-lobby-responsive.test.mjs
+        run: node --test tests/dev-lobby-responsive.test.mjs tests/dev-online-players-pages.test.mjs
       - name: Deploy development Worker (separate Durable Object namespaces)
         uses: cloudflare/wrangler-action@v3
         with:
