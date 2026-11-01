@@ -156,8 +156,17 @@ reviewCss.textContent=`#trainingFinalReviewDialog::backdrop,#trainingReviewRemov
 #trainingFinalReviewDialog .training-final-row small{display:block;color:#c8ad85;font-size:12px}
 @media(max-width:510px){#trainingFinalReviewDialog .training-final-row{align-items:flex-start}#trainingFinalReviewDialog .training-final-row button{flex:none}}`;
 document.head.appendChild(reviewCss);document.body.append(reviewModal,reviewConfirmation);
-reviewModal.addEventListener('cancel',e=>e.preventDefault());
-reviewConfirmation.addEventListener('cancel',e=>e.preventDefault());
+// Don't intercept any browser or gameplay input. If Escape closes the
+// mandatory review, reopen it on the next task: only Finish can commit the
+// reviewed labels. Escape on the per-row confirmation behaves like No.
+reviewModal.addEventListener('close',()=>{
+ if(reviewing&&!alreadyCompleted&&active){
+  setTimeout(()=>{
+   if(reviewing&&!alreadyCompleted&&active&&!reviewModal.open)
+    try{reviewModal.showModal();}catch(_){}
+  },0);
+ }
+});
 let reviewState=null,removedReviews=new Set(),reviewBusy=false;
 function reviewDetail(entry){
  const text=reviewCopy();
