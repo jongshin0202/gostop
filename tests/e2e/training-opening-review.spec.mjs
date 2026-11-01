@@ -150,6 +150,9 @@ test('one Bright in hand plus one reachable Bright on table is never reported as
  // aggregates hand + reachable floor cards into two potential Brights.
  await page.locator('#devOpeningReview').getByRole('button',{name:'Continue without saving'}).click();
  await page.evaluate(()=>{
+  const eighth=document.createElement('button');
+  eighth.className='hand-card';eighth.dataset.cardId='m8-4';
+  document.getElementById('playerHand').append(eighth);
   document.getElementById('trainingCoachText').textContent=
    'Best strategy: Brights. Brights: 2 Brights are in hand, captured, or directly reachable; 1 can be acted on now. Tap or click anywhere when you are ready to continue.';
   const layer=document.createElement('div');
