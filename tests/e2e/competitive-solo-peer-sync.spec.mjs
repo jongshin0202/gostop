@@ -11,9 +11,9 @@ const room={roomCode:'ABCDEFGHJK2345',credential:'dev-peer-test-credential',
  playerId:'alice',seatId:'playerA',rankedMode:'solo',ranked:true,
  matchId:'dev-peer-gukjin',status:'ready'};
 function setupAuthority(){
- const authority=createSessionAuthority({crypto:webcrypto,trustedRuntime:true});
- authority.createMatch({matchId:room.matchId,playerIds:['alice','computer'],startingPlayerId:'alice'});
- const record=authority.exportMatch(room.matchId),state=record.state;
+ const seed=createSessionAuthority({crypto:webcrypto,trustedRuntime:true});
+ seed.createMatch({matchId:room.matchId,playerIds:['alice','computer'],startingPlayerId:'alice'});
+ const record=seed.exportMatch(room.matchId),state=record.state;
  const card=id=>structuredClone(engine.masterDeck.find(c=>c.id===id));
  const floor=['m1-2','m9-2','m9-3'].map(card);
  const played=card('m1-1'),drawn=card('m9-1');
@@ -36,6 +36,7 @@ function setupAuthority(){
   played:{card:played,matchIds:['m1-2'],targetId:'m1-2',landingSlot:null,resolved:false},
   drawn:{card:drawn,matchIds:['m9-2','m9-3'],targetId:null,landingSlot:null,resolved:false}
  };
+ const authority=createSessionAuthority({crypto:webcrypto,trustedRuntime:true});
  authority.restoreMatch(record);
  return authority;
 }
