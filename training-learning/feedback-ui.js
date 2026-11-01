@@ -539,8 +539,11 @@ function onGoStopDecision(event){
   context:{kind:'go-stop',playerScore,opponentScore,remainingCards:visible.hand.length,goCount,hasMatch},
   recommended:{action:action(recommended)},played:{action:action(selected)},visible};
  hadDisagreement=true;
- // Queue immediately, before a STOP result can open its end-of-game review.
- enqueue(observed);
+ // Reserve the feedback synchronously so the end-game observer sees a pending
+ // disagreement. Display on the next task, AFTER a STOP result dialog opens,
+ // ensuring expert review is the topmost modal instead of hiding underneath.
+ queue.push(observed);
+ window.setTimeout(showNext,0);
 }
 document.addEventListener('click',event=>{
  const t=event.target;
