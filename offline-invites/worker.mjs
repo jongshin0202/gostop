@@ -142,6 +142,20 @@ export class OfflineInviteStore{
    await this.unsubscribe(actor,x.endpoint);
    return json({ok:true});
   }
+  if(req.method==='POST'&&path==='/eligibility'){
+   const data=await body(req);
+   const ids=Array.isArray(data?.accountIds)?[...new Set(data.accountIds.filter(validId))].slice(0,20):[];
+   const allowed=new Set(Array.isArray(data?.friendVerifiedAccountIds)?data.friendVerifiedAccountIds:[]);
+   const eligible={};
+   for(const id of ids){
+    if(id===actor||!allowed.has(id)){eligible[id]=false;continue;}
+    const [pref,subscriptions]=await Promise.all([
+      this.get('pref:'+id,{enabled:true}),this.get('subscriptions:'+id,[])
+    ]);
+    eligible[id]=pref.enabled!==false&&subscriptions.length>0;
+   }
+   return json({ok:true,eligible});
+  }
   if(req.method==='POST'&&path==='/request'){
    const x=await body(req),targetId=x?.targetId;
    if(!validId(targetId)||targetId===actor||x?.friendVerified!==true)return error('NOT_FRIEND',403);
@@ -204,7 +218,7 @@ export default {
    const method=req.headers.get('access-control-request-method'),h=(req.headers.get('access-control-request-headers')||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
    return new Response(null,{status:method==='GET'||method==='POST'&&h.every(x=>['authorization','content-type'].includes(x))?204:403,headers:cors});
   }
-  const allowedPaths=new Set(['/api/invites/public-key','/api/invites/state','/api/invites/preference','/api/invites/subscribe','/api/invites/unsubscribe','/api/invites/request','/api/invites/status','/api/invites/cancel','/api/invites/accept','/api/invites/room']);
+  const allowedPaths=new Set(['/api/invites/public-key','/api/invites/state','/api/invites/preference','/api/invites/subscribe','/api/invites/unsubscribe','/api/invites/request','/api/invites/eligibility','/api/invites/status','/api/invites/cancel','/api/invites/accept','/api/invites/room']);
   if(!allowedPaths.has(url.pathname))return json({ok:false,error:'NOT_FOUND'},404,cors);
   const store=env.INVITES.get(env.INVITES.idFromName('development-only-invite-state'));
   const suffix=url.pathname.replace('/api/invites','');
@@ -218,6 +232,19 @@ export default {
    if(suffix==='/request'){
     if(!(await isFriend(env,actor.authorization,origin,payload.targetId)))return json({ok:false,error:'NOT_FRIEND'},403,cors);
     payload.friendVerified=true;
+   }
+   if(suffix==='/eligibility'){
+    const ids=Array.isArray(payload.accountIds)?[...new Set(payload.accountIds.filter(validId))].slice(0,20):[];
+    let friends=new Set();
+    try{
+     const r=await env.DEV_AUTH.fetch(new Request('https://gostop-authority-dev.jwshin1.workers.dev/api/social',{
+      headers:{authorization:actor.authorization,Origin:origin}
+     }));
+     if(r.ok){const data=await r.json();friends=new Set((data.friends||[])
+      .filter(p=>p.friendState==='friend').map(p=>String(p.accountId)));}
+    }catch(_){}
+    payload.accountIds=ids;
+    payload.friendVerifiedAccountIds=ids.filter(id=>friends.has(id));
    }
   }
   const forwarded=new Request('https://invite.internal'+suffix+url.search,{method:req.method,
