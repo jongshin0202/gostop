@@ -24,6 +24,7 @@ const similarityPercent=(a,b)=>Math.max(0,Math.min(100,Math.round((1-distance(a,
 export class Lobby{
   constructor(state,env){
     this.state=state;this.env=env;this.crypto=globalThis.crypto;this.clients=new Map();this.challenges=new Map();this.lastRequestAt=new Map();
+    this.rowsCache=null;this.rowsCacheAt=0;this.rowsInflight=null;this.refreshQueued=false;this.refreshRunning=false;
     this.restoreHibernatingClients();
   }
   socketAttachment(socket){try{return socket?.deserializeAttachment?.()||null;}catch(_){return null;}}
@@ -78,6 +79,29 @@ export class Lobby{
   async leaderboardRows(){
     const response=await this.accountStore().fetch(new Request('https://accounts/leaderboards'));if(!response.ok)return new Map();const body=await response.json(),monthly=new Map((body.monthly||[]).map(row=>[String(row.nickname||'').toLowerCase(),row]));
     return new Map((body.global||[]).map(row=>{const key=String(row.nickname||'').toLowerCase(),monthRow=monthly.get(key);return [key,{...row,globalRank:Number.isFinite(Number(row.rank))?Number(row.rank):0,globalProvisional:!!row.provisional,monthlyRank:Number.isFinite(Number(monthRow?.rank))?Number(monthRow.rank):0,monthlyProvisional:!!monthRow?.provisional}];}));
+  }
+  async cachedLeaderboardRows({maxAgeMs=30000}={}){
+    if(this.rowsCache&&Date.now()-this.rowsCacheAt<maxAgeMs)return this.rowsCache;
+    if(this.rowsInflight)return this.rowsInflight;
+    const work=this.leaderboardRows().then(rows=>{
+      this.rowsCache=rows;this.rowsCacheAt=Date.now();return rows;
+    }).finally(()=>{if(this.rowsInflight===work)this.rowsInflight=null;});
+    this.rowsInflight=work;return work;
+  }
+  queueRecommendations(){
+    if(this.refreshQueued)return;
+    this.refreshQueued=true;
+    const task=Promise.resolve().then(async()=>{
+      this.refreshQueued=false;
+      if(this.refreshRunning){this.refreshQueued=true;return;}
+      this.refreshRunning=true;
+      try{await this.broadcastRecommendations();}catch(_){}
+      finally{
+        this.refreshRunning=false;
+        if(this.refreshQueued){this.refreshQueued=false;this.queueRecommendations();}
+      }
+    });
+    this.state?.waitUntil?.(task);
   }
   async directorySearch(query,requesterAccountId=null){const response=await this.accountStore().fetch(new Request('https://accounts/internal/player-search',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,requesterAccountId})}));if(!response.ok)return [];const body=await response.json();return Array.isArray(body.players)?body.players:[];}
   async directoryProfiles(accountIds,requesterAccountId=null){
@@ -140,18 +164,29 @@ export class Lobby{
   candidateClients(client,{activeOnly=false}={}){const unique=new Map();for(const candidate of this.clients.values()){const id=candidate.account.id,presence=this.clientPresence(candidate);if(!this.effectiveClientsForAccount(id).includes(candidate)||candidate===client||id===client.account.id||candidate.twoPlayer||this.accountTwoPlayerBusy(id)||this.activeChallengeFor(id))continue;if(activeOnly?!presence.active:!this.clientCanReceiveChallenge(candidate))continue;const prior=unique.get(id);if(!prior||this.clientPresence(candidate).active&&!this.clientPresence(prior).active||(Number(candidate.lastActivityAt)||0)>(Number(prior.lastActivityAt)||0))unique.set(id,candidate);}return [...unique.values()];}
   rankedProfiles(client,rows,candidates=this.candidateClients(client)){const me=this.profile(client,rows);return candidates.map(candidate=>{const profile=this.profile(candidate,rows);return {...profile,similarity:similarityPercent(me,profile)};}).sort((a,b)=>distance(me,a)-distance(me,b)||b.gamesPlayed-a.gamesPlayed||a.nickname.localeCompare(b.nickname));}
   async recommendations(client,rows=null){
-    rows=rows||await this.leaderboardRows();const ranked=this.rankedProfiles(client,rows).slice(0,MAX_LOBBY_RESULTS),details=await this.directoryProfiles(ranked.map(player=>player.accountId),client.account.id),byId=new Map(details.map(player=>[String(player.accountId),player]));
+    rows=rows||await this.cachedLeaderboardRows();const ranked=this.rankedProfiles(client,rows).slice(0,MAX_LOBBY_RESULTS),details=await this.directoryProfiles(ranked.map(player=>player.accountId),client.account.id),byId=new Map(details.map(player=>[String(player.accountId),player]));
     return ranked.map(player=>{const detail=byId.get(String(player.accountId));return detail?{...player,...detail,...this.presenceForAccount(player.accountId),similarity:player.similarity}:player;});
   }
   async search(client,query,rows=null){
-    rows=rows||await this.leaderboardRows();const me=this.profile(client,rows),directory=await this.directorySearch(query,client.account.id);
+    rows=rows||await this.cachedLeaderboardRows();const me=this.profile(client,rows),directory=await this.directorySearch(query,client.account.id);
     return directory.filter(player=>player.accountId!==client.account.id).map(player=>{
       const presence=this.presenceForAccount(player.accountId),gamesPlayed=finite(player.gamesPlayed),wins=finite(player.wins),globalRank=Number.isFinite(Number(player.globalRank??player.rank))?Number(player.globalRank??player.rank):0,profile={...player,totalCoinsEarned:finite(player.totalCoins),coinsPerGame:Number.isFinite(Number(player.coinsPerGame))?Number(player.coinsPerGame):(gamesPlayed?finite(player.totalCoins)/gamesPlayed:0),score:finite(player.score),gamesPlayed,wins,losses:Number.isFinite(Number(player.losses))?Math.max(0,Number(player.losses)):Math.max(0,gamesPlayed-wins),walletCoins:finite(player.walletCoins),rank:globalRank,globalRank,monthlyRank:Number.isFinite(Number(player.monthlyRank))?Number(player.monthlyRank):0,...presence};
       return {...profile,similarity:similarityPercent(me,profile)};
     }).slice(0,MAX_SEARCH_RESULTS);
   }
   async broadcastRecommendations(){
-    const rows=await this.leaderboardRows();for(const client of this.clients.values()){if(client.available===false||client.twoPlayer)continue;const query=String(client.searchQuery||'').trim(),onlineCount=this.onlineAccountCount(client);this.send(client.socket,{type:'recommendations',players:await this.recommendations(client,rows),onlineCount,autoMatching:!!client.autoMatching});if(query)this.send(client.socket,{type:'searchResults',query,players:await this.search(client,query,rows),onlineCount,autoMatching:!!client.autoMatching});}
+    const clients=[...this.clients.values()].filter(client=>client.available!==false&&!client.twoPlayer);
+    for(const client of clients)this.send(client.socket,{type:'presenceCount',
+      onlineCount:this.onlineAccountCount(client)});
+    const rows=await this.cachedLeaderboardRows();
+    await Promise.all(clients.map(async client=>{
+      if(!this.clients.has(client.socket))return;
+      try{
+        const players=await this.recommendations(client,rows);
+        if(this.clients.has(client.socket))this.send(client.socket,{type:'recommendations',
+          players,onlineCount:this.onlineAccountCount(client),autoMatching:!!client.autoMatching});
+      }catch(_){}
+    }));
   }
   challengeParticipantsAvailable(challenge){const from=this.clientById(challenge.fromClientId),to=challenge.toClientId?this.clientById(challenge.toClientId):null;return !!from&&!from.twoPlayer&&this.clientCanReceiveChallenge(from)&&this.accountAvailable(challenge.to)&&(!to||!to.twoPlayer&&this.clientCanReceiveChallenge(to));}
   clearChallengeTimer(challenge){if(challenge?.expiryTimer){clearTimeout(challenge.expiryTimer);challenge.expiryTimer=null;}}
@@ -193,9 +228,9 @@ export class Lobby{
     // Otherwise a slow account-store query prevents the Auto Match response entirely.
     const tried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set(),candidates=this.candidateClients(client).filter(candidate=>!tried.has(candidate.account.id));
     if(!candidates.length){client.autoMatching=true;client.autoMatchCandidateId=null;this.send(client.socket,{type:'autoMatchWaiting'});return false;}
-    const rows=await this.leaderboardRows();
+    const rows=await this.cachedLeaderboardRows();
     const me=this.profile(client,rows),partner=candidates.map(candidate=>({candidate,profile:this.profile(candidate,rows)})).sort((a,b)=>distance(me,a.profile)-distance(me,b.profile)||b.profile.gamesPlayed-a.profile.gamesPlayed||a.profile.nickname.localeCompare(b.profile.nickname))[0].candidate;
-    const details=await this.directoryProfiles([partner.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(partner,rows),...detail,...this.presenceForAccount(partner.account.id)}:this.profile(partner,rows);
+    const toProfile=this.profile(partner,rows);
     client.autoMatching=true;client.autoMatchCandidateId=partner.account.id;
     this.send(client.socket,{type:'autoMatchCandidate',candidate:toProfile});
     return true;
@@ -206,7 +241,7 @@ export class Lobby{
     if(!accountId||accountId===client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
     const target=this.clientByAccountId(accountId,{challengeableOnly:true});
     if(!target){client.autoMatching=true;client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
-    const rows=await this.leaderboardRows(),details=await this.directoryProfiles([target.account.id],client.account.id),detail=details[0]||null,toProfile=detail?{...this.profile(target,rows),...detail,...this.presenceForAccount(target.account.id)}:this.profile(target,rows);
+    const rows=await this.cachedLeaderboardRows(),toProfile=this.profile(target,rows);
     client.autoMatching=true;client.autoMatchCandidateId=null;
     const challenge=this.startChallenge(client,target,rows,{automatic:true,toProfileOverride:toProfile});
     if(!challenge){client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);await this.tryAutoMatch(client);return false;}
@@ -224,8 +259,8 @@ export class Lobby{
   async pruneChallenges(){const now=Date.now();for(const [id,challenge] of [...this.challenges])if(Number(challenge.expiresAt||0)<=now)await this.expireChallenge(id);}
   async handle(client,data){
     let message;try{message=JSON.parse(data);}catch(_){return this.send(client.socket,{type:'error',code:'MALFORMED_MESSAGE',message:'Lobby message is invalid.'});}
-    await this.pruneChallenges();
-    if(message.type==='recommendations'){client.searchQuery='';const rows=await this.leaderboardRows();this.send(client.socket,{type:'recommendations',players:await this.recommendations(client,rows),onlineCount:this.onlineAccountCount(client),autoMatching:!!client.autoMatching});return;}
+    if(this.challenges.size)this.state?.waitUntil?.(this.pruneChallenges().catch(()=>{}));
+    if(message.type==='recommendations'){client.searchQuery='';this.queueRecommendations();return;}
     if(message.type==='search'){client.searchQuery=String(message.query||'').trim();const rows=await this.leaderboardRows();this.send(client.socket,{type:'searchResults',query:client.searchQuery,players:await this.search(client,client.searchQuery,rows),onlineCount:this.onlineAccountCount(client),autoMatching:!!client.autoMatching});return;}
     if(message.type==='socialProfiles'){
       const ids=Array.isArray(message.accountIds)?[...new Set(message.accountIds.map(String).filter(id=>id&&id!==client.account.id))].slice(0,100):[],rows=await this.leaderboardRows(),me=this.profile(client,rows),details=await this.directoryProfiles(ids,client.account.id);
