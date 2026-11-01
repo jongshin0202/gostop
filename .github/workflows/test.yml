@@ -45,6 +45,7 @@ jobs:
           node --check server/worker.mjs
           node --check server/development-worker.mjs
           node --check server/lobby-development.mjs
+          node --check server/development-account-store.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
       - name: Isolated Training learner syntax and cadence tests
@@ -68,7 +69,7 @@ jobs:
           node --check training-learning/opening-learner.mjs
           node --check dev-site/training-opening-evidence.js
           node --check dev-site/training-opening-review.js
-          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs tests/training-model-progress.test.mjs tests/competitive-solo-peer-sync.test.mjs tests/friendly-invite-ux.test.mjs tests/competitive-lobby-reliability.test.mjs tests/competitive-lobby-client.test.mjs
+          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs tests/training-model-progress.test.mjs tests/competitive-solo-peer-sync.test.mjs tests/friendly-invite-ux.test.mjs tests/competitive-lobby-reliability.test.mjs tests/competitive-lobby-client.test.mjs tests/development-account-search.test.mjs
       # Ubuntu 24.04 hosted runners sometimes route apt through an unavailable
       # Azure mirror, preventing Playwright's --with-deps step from ever running.
       # Replace only that mirror with the standard Ubuntu archive; preserve all
