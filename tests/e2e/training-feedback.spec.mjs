@@ -16,6 +16,46 @@ function fakeCloud(){
       if(path.endsWith('/feedback')||path.endsWith('/special-feedback')){
         const x=request.postDataJSON();items.push(x);return reply(200,{ok:true,confirmed:x.choice!=='unsure',feedbackCount:items.length});
       }
+      if(path.endsWith('/review')){
+        const gameId=new URL(request.url()).searchParams.get('gameId');
+        const rows=items.filter(x=>x.gameId===gameId).map(x=>{
+          const kind=x.context?'special':'card';
+          return {id:kind+':'+x.feedbackId,kind,choice:x.choice,
+            ...(kind==='special'?{recommendedAction:x.recommendedAction,
+              playedAction:x.playedAction,context:x.context}:{
+              recommendedId:x.recommended.hand+'|'+(x.recommended.target||'-'),
+              playedId:x.played.hand+'|'+(x.played.target||'-')})};
+        });
+        return reply(200,{ok:true,gameId,items:rows,
+          complete:finished.has(gameId),reviewVersion:'fixture-review-version'});
+      }
+      if(path.endsWith('/finalize')){
+        const body=request.postDataJSON(),gameId=body.gameId;
+        if(body.reviewVersion!=='fixture-review-version')
+          return reply(409,{ok:false,error:'REVIEW_CHANGED'});
+        const original=items.filter(x=>x.gameId===gameId);
+        const ids=original.map(x=>(x.context?'special:':'card:')+x.feedbackId);
+        if(!Array.isArray(body.keptFeedbackIds)||
+           body.keptFeedbackIds.some(id=>!ids.includes(id)))
+          return reply(400,{ok:false,error:'INVALID_FINAL_SELECTION'});
+        if(!finished.has(gameId)){
+          const kept=new Set(body.keptFeedbackIds);
+          const accepted=original.filter(x=>kept.has((x.context?'special:':'card:')+x.feedbackId));
+          learned+=accepted.filter(x=>!x.context&&x.choice!=='unsure').length;
+          specialLearned+=accepted.filter(x=>x.context&&x.choice!=='unsure').length;
+          for(let i=items.length-1;i>=0;i--){
+            const item=items[i];
+            if(item.gameId===gameId&&!kept.has((item.context?'special:':'card:')+item.feedbackId))
+              items.splice(i,1);
+          }
+          finished.add(gameId);
+        }
+        const update=announceDevelopmentActivation;
+        announceDevelopmentActivation=false;
+        return reply(200,{ok:true,trained:learned+specialLearned,
+          modelExamples:learned,specialModelExamples:specialLearned,
+          publishedToLive:false,developmentModelUpdated:update});
+      }
       if(path.endsWith('/complete')){
         const gameId=request.postDataJSON().gameId;
         if(!finished.has(gameId)){
