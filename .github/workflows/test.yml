@@ -43,6 +43,8 @@ jobs:
           node --check server/ranked-account-store.mjs
           node --check server/room-core.mjs
           node --check server/worker.mjs
+          node --check server/development-worker.mjs
+          node --check server/lobby-development.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
       - name: Isolated Training learner syntax and cadence tests
