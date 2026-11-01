@@ -36,3 +36,9 @@ test('do not skip an essential third Bright, fifth Birdie or finished stripe set
  const stripeDeck=[...cards,c('m10-3',10,'ribbon','blue'),c('m10-4',10,'ribbon','blue')];
  assert.equal(choose({...input,deck:stripeDeck,ownCapturedIds:['m10-3','m10-4']}),null);
 });
+
+test('an immediately finishing native capture must outrank shake denial',()=>{
+ const out=choose({...input,scorePlayer:player=>({total:player.captured.some(c=>c.id==='m10-1')?
+  7:6})});
+ assert.equal(out,null);
+});
