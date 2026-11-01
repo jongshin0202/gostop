@@ -184,9 +184,16 @@ function scan(){
  if(layer&&!panel&&!busy)createPanel(layer);
  if(panel&&!layer){clear();}
 }
-function schedule(){if(queued)return;queued=true;queueMicrotask(scan);}
+function schedule(){
+ if(!active||queued)return;
+ queued=true;
+ // The opening layer and its modal are direct body children. Watching every
+ // descendant card/score mutation throughout a full Training game created
+ // unnecessary high-frequency microtasks long after the opening was reviewed.
+ setTimeout(scan,32);
+}
 const observer=new MutationObserver(schedule);
-observer.observe(document.body,{childList:true,subtree:true});
+observer.observe(document.body,{childList:true,subtree:false});
 document.addEventListener('click',event=>{
  if(event.target?.closest?.('#trainingModeBtn')){active=true;reviewedGameId=null;refreshModel();schedule();}
  else if(event.target?.closest?.('#playSoloBtn,#quitYesBtn,#resultQuitBtn')){active=false;clear();}

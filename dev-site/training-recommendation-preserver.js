@@ -50,7 +50,17 @@ function sync(){
  // replaces it with "Target Choice" text for an alternative card.
  if(panel.hidden)panel.hidden=false;
  if(title.textContent!==lock.title)title.textContent=lock.title;
- if(text.textContent!==lock.text)text.textContent=lock.text;
+ if(text.textContent!==lock.text){
+  // The context coach deliberately shortens inaccurate no-capture advice.
+  // Accept that correction into our preserved snapshot instead of writing
+  // the old text back and causing two observers to fight indefinitely.
+  const corrected=globalThis.GoStopDevTrainingContextCoach?.getStatus?.()?.lastAppliedCopy;
+  if(corrected&&text.textContent===corrected){
+   lock.text=corrected;
+  }else{
+   text.textContent=lock.text;
+  }
+ }
  // Restore ONLY visual classes. Target options remain clickable and retain
  // their distinct target-option outline; nothing about a move is changed.
  hand.querySelectorAll('.hand-card.matchable[data-card-id]').forEach(el=>{

@@ -12,7 +12,7 @@ if(!logic||!Array.isArray(deck))return;
 const $=id=>document.getElementById(id),hand=$('playerHand'),floor=$('floor'),
  coach=$('trainingCoachPanel'),title=$('trainingCoachTitle'),text=$('trainingCoachText');
 if(!hand||!floor||!coach||!title||!text)return;
-let active=false,lastDrawKey='',lockedDrawId=null;
+let active=false,lastDrawKey='',lockedDrawId=null,lastAppliedCopy=null;
 const allowedLanguages=new Set(['en','ko','es','fr','de','ja','zh']);
 const locale=()=>allowedLanguages.has(document.documentElement.lang)?document.documentElement.lang:'en';
 const ids=selector=>[...document.querySelectorAll(selector)].map(el=>el.dataset.cardId).filter(Boolean);
@@ -99,11 +99,22 @@ function updateCopy(){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
  }
- if(next!==source)text.textContent=next;
+ if(next!==source){
+  // Advertise the deliberate copy correction to the presentation preserver.
+  // Otherwise independent MutationObservers can restore and rewrite the
+  // same text indefinitely, freezing Chrome on longer Training sessions.
+  lastAppliedCopy=next;text.textContent=next;
+ }
 }
 let queued=false;
 function update(){queued=false;updateDraw();updateCopy();}
-function schedule(){if(queued)return;queued=true;queueMicrotask(update);}
+function schedule(){
+ if(queued)return;
+ queued=true;
+ // Yield to the event loop: this adapter writes nodes that another Training
+ // helper also watches. A microtask feedback chain can starve rendering.
+ setTimeout(update,32);
+}
 const obs=new MutationObserver(schedule);
 for(const element of [floor,hand,coach,$('playerCaptured'),$('aiCaptured')].filter(Boolean)){
  obs.observe(element,{subtree:true,childList:true,characterData:true,attributes:true,
@@ -115,6 +126,7 @@ document.addEventListener('click',event=>{
 },{capture:true});
 document.addEventListener('gostop-hand-reset',clearDraw);
 Object.defineProperty(globalThis,'GoStopDevTrainingContextCoach',{configurable:true,value:Object.freeze({
- getStatus:()=>({active,drawTarget:lockedDrawId,drawText:drawPanel?.textContent||null})
+ getStatus:()=>({active,drawTarget:lockedDrawId,drawText:drawPanel?.textContent||null,
+  lastAppliedCopy:active?lastAppliedCopy:null})
 })});
 })();
