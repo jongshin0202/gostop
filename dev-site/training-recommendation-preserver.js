@@ -11,6 +11,7 @@ const $=id=>document.getElementById(id);
 const panel=$('trainingCoachPanel'),title=$('trainingCoachTitle'),text=$('trainingCoachText');
 const hand=$('playerHand'),floor=$('floor');
 const ppeok=globalThis.GoStopDevReservedPpeokPriority;
+const shaken=globalThis.GoStopDevOpponentShakeLogic;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
 let trainingActive=false,lock=null,suppressed=false;
@@ -52,6 +53,39 @@ function reservedPileOverride(currentHandId,currentFloorId){
  return {...chosen,text:(pileText[lang]||pileText.en)(name)};
 }
 
+const shakenCopy={
+ en:name=>'Capture the computer’s Shaken '+name+' card now. Deny the revealed Shake family unless another capture completes an immediate winning set.',
+ ko:name=>'상대가 흔들어 공개한 '+name+' 패를 지금 먹으세요. 지금 당장 점수를 확정하는 더 중요한 패가 없다면 우선 가져오는 것이 좋습니다.',
+ es:name=>'Captura ahora la carta '+name+' que el rival reveló al sacudir.',
+ fr:name=>'Capturez maintenant la carte '+name+' révélée par l’adversaire.',
+ de:name=>'Fange jetzt die Karte '+name+' aus dem offenen Shake des Gegners.',
+ ja:name=>'相手が振りで公開した'+name+'を先に取りましょう。',
+ zh:name=>'优先收下对手摇牌时公开的'+name+'，除非另一张能立即完成关键得分。'
+};
+function shakenCaptureOverride(currentHandId,currentFloorId){
+ if(!shaken?.select||!currentHandId||!currentFloorId)return null;
+ const publicShake=globalThis.GoStopDevOpponentShake?.getStatus?.();
+ if(!publicShake?.active||!publicShake.revealedIds?.length)return null;
+ const deck=globalThis.GoStopEngine?.masterDeck,score=globalThis.GoStopEngine?.score;
+ if(!Array.isArray(deck)||typeof score!=='function')return null;
+ const selected=shaken.select({
+  handIds:cardIds('#playerHand .hand-card[data-card-id]'),
+  floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  humanCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  opponentCapturedIds:cardIds('#aiCaptured .captured-mini[data-card-id]'),
+  revealedOpponentIds:publicShake.revealedIds,
+  recommendedHandId:currentHandId,recommendedFloorId:currentFloorId,deck,score
+ });
+ if(!selected||!hand.querySelector('.hand-card[data-card-id="'+selected.handId+'"]')||
+  !floor.querySelector('.floor-card[data-card-id="'+selected.floorId+'"]'))return null;
+ const el=hand.querySelector('.hand-card[data-card-id="'+selected.handId+'"]');
+ const lang=document.documentElement.lang||'en';
+ const card=deck.find(c=>c.id===selected.handId);
+ const name=(card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card))||
+   el.title||selected.handId;
+ return {...selected,text:(shakenCopy[lang]||shakenCopy.en)(name)};
+}
+
 function reset(){
  lock=null;
  document.documentElement.classList.remove(SCOPE);
@@ -76,10 +110,14 @@ function sync(){
   const recommendedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]');
   const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
   if(originalText){
-   const corrective=reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
-   lock={handSignature:sig,hand:corrective?.handId||recommendation.dataset.cardId,
-    floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective};
+   const nativeHand=recommendation.dataset.cardId,nativeFloor=recommendedFloor?.dataset.cardId||null;
+   const pile=reservedPileOverride(nativeHand,nativeFloor);
+   const shake=(!pile&&nativeFloor)?shakenCaptureOverride(nativeHand,nativeFloor):null;
+   const corrective=pile||shake;
+   lock={handSignature:sig,hand:corrective?.handId||nativeHand,
+    floor:corrective?.floorId||nativeFloor,
+    title:originalTitle,text:corrective?.text||originalText,
+    ppeokOverride:!!pile,shakeOverride:!!shake};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -131,6 +169,7 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
   hand:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride}), // diagnostic only, not local persistence
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,
+  shakeOverride:!!lock?.shakeOverride}), // diagnostic only, not local persistence
 }),configurable:true});
 })();
