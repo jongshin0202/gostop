@@ -303,7 +303,7 @@ async function safeRecord(data,label,choice){
    legalActions:data.legalActions,context:data.context,visible:data.visible
   }):
   cloud.feedback({
-   gameId,feedbackId:crypto.randomUUID(),choice,
+   gameId,feedbackId:crypto.randomUUID(),choice,reviewRequired:true,
    recommended:data.recommended,played:data.played,legalMoves:data.legalMoves,visible:data.visible
   });
  pendingUploads.add(upload);
