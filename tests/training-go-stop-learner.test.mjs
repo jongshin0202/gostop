@@ -38,3 +38,28 @@ test('GO STOP ranker learns only confirmed choices at completed-game Finish and 
  assert.equal(restored.examples,1);
  assert.equal(restored.rank(context).action,'go');
 });
+
+test('an already played final card can still trigger a GO/STOP expert comparison',()=>{
+ const c={playerScore:8,opponentScore:1,remainingCards:0,goCount:0,hasMatch:false};
+ assert.equal(goStopFeatures(c,'go').length,16);
+ const ranker=new GoStopDecisionRanker();
+ assert.equal(ranker.trainGame({id:'last-card-zero-hand',complete:true,decisions:[{context:c,chosenAction:'go'}]}),1);
+});
+test('public-card next-turn opponent ceiling is scored from all visible floor combinations',()=>{
+ const card=(id,month,type='pi')=>({id,month,type,flags:[]});
+ const deck=[card('m1-1',1),card('m1-2',1),card('m1-3',1),card('m1-4',1),
+  card('m2-1',2),card('m2-2',2),card('m2-3',2),card('m2-4',2)];
+ const points=player=>player.captured.length;
+ const ceiling=advice.opponentNextTurnCeiling({
+  deck,floorIds:['m1-1','m2-1'],ownHandIds:['m1-4'],
+  ownCapturedIds:[],opponentCapturedIds:[],opponentScore:1,
+  scorePlayer:player=>({total:points(player)})
+ });
+ assert.equal(ceiling,5,'two matched captures add exactly four cards');
+ const none=advice.opponentNextTurnCeiling({
+  deck,floorIds:[],ownHandIds:['m1-4'],
+  ownCapturedIds:[],opponentCapturedIds:[],opponentScore:1,
+  scorePlayer:player=>({total:points(player)})
+ });
+ assert.equal(none,1);
+});
