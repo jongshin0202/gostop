@@ -1,21 +1,35 @@
 import {test,expect} from '@playwright/test';
+async function seedOrdinaryComputerFirstHand(page){
+ // The real game uses secure Web Crypto shuffling. In a test only, a stable
+ // xorshift stream avoids occasional Shake/Bomb/instant-Conquer openings,
+ // which otherwise block a normal human turn for legitimate game reasons.
+ await page.addInitScript(()=>{
+  const original=crypto.getRandomValues.bind(crypto);
+  let first=true,word=28;
+  const next=()=>{
+   word^=word<<13;word^=word>>>17;word^=word<<5;
+   return word>>>0;
+  };
+  crypto.getRandomValues=function(values){
+   if(values instanceof Uint32Array){
+    if(first&&values.length===1){
+     first=false;values[0]=1;return values; // Computer is starting player.
+    }
+    for(let i=0;i<values.length;i++)values[i]=next();
+    return values;
+   }
+   return original(values);
+  };
+ });
+}
+
 
 // Full frozen game, not a fixture: computer takes the opening turn.
 // The dev-only bridge asks the game's own hint exactly 3 seconds into a playable human turn.
 test('real computer-first Training shows native card and text at the three-second turn mark',async({page})=>{
  test.setTimeout(100000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.addInitScript(()=>{
-  const original=crypto.getRandomValues.bind(crypto);
-  let firstRandomUint32=true;
-  crypto.getRandomValues=function(values){
-   // The game's first secureRandomInt(2) chooses the session starter.
-   if(firstRandomUint32&&values instanceof Uint32Array&&values.length===1){
-    firstRandomUint32=false;values[0]=1;return values; // PLAYER_B is computer.
-   }
-   return original(values);
-  };
- });
+ await seedOrdinaryComputerFirstHand(page);
  await page.goto('/',{waitUntil:'domcontentloaded'});
  await page.addScriptTag({path:'dev-site/training-immediate-turn-advice.js'});
  await page.locator('#friendlyGamingBtn').click();
@@ -46,14 +60,7 @@ test('real computer-first Training shows native card and text at the three-secon
 test('three-second Training recommendation survives computer-first opening strategy confirmation',async({page})=>{
  test.setTimeout(100000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.addInitScript(()=>{
-  const original=crypto.getRandomValues.bind(crypto);
-  let first=true;
-  crypto.getRandomValues=function(values){
-   if(first&&values instanceof Uint32Array&&values.length===1){first=false;values[0]=1;return values;}
-   return original(values);
-  };
- });
+ await seedOrdinaryComputerFirstHand(page);
  await page.goto('/',{waitUntil:'domcontentloaded'});
  await page.evaluate(()=>{
   globalThis.GoStopTrainingFeedbackDev={getStatus:()=>({gameId:'first-computer-training',authorized:true})};
