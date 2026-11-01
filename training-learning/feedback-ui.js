@@ -308,7 +308,7 @@ function trainingProgressPanel(items){
 function showTrainingCompletion(result){
  const t=weightCopy();
  const dialog=$('resultDialog');
- const card=dialog?.querySelector('.dialog-card');
+ const card=dialog?.querySelector('.dialog-card')||dialog;
  if(!card)return;
  let notice=$('trainingModelCompletionNotice');
  if(!notice){notice=document.createElement('aside');notice.id='trainingModelCompletionNotice';notice.setAttribute('role','status');card.append(notice);}
