@@ -437,7 +437,7 @@ test('opening and Shake judgments are independently removable at final review',a
 const goStopEntry=(gameId='go-stop-review-example',feedbackId='go-stop-judge-1',choice='mine')=>({
  gameId,feedbackId,choice,reviewRequired:true,
  recommendedAction:'stop',playedAction:'go',legalActions:['go','stop'],
- context:{playerScore:8,opponentScore:0,remainingCards:1,goCount:0,hasMatch:true},
+ context:{kind:'go-stop',playerScore:8,opponentScore:0,remainingCards:1,goCount:0,hasMatch:true},
  visible:{hand:['m3-4'],floor:['m3-2'],humanCaptured:[],computerCaptured:[]}
 });
 test('GO against STOP is returned in endgame review and trains only after Finish',async()=>{
