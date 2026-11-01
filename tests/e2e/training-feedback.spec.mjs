@@ -439,3 +439,111 @@ test('server failure during final Finish retains review and does not claim learn
  await expect(dialog.locator('#trainingFinalReviewStatus')).toContainText('FINALIZE_UNAVAILABLE');
  expect(server.completedCount()).toBe(0);
 });
+
+async function showGoStopChoice(page,{recommended='stop',opponentScore=2,hasMatch=true,
+ handCount=1,nativeReason='STOP. Only one scoring turn remains.'}={}){
+ await page.evaluate(({recommended,opponentScore,hasMatch,handCount,nativeReason})=>{
+  const hand=document.getElementById('playerHand');
+  hand.innerHTML=(handCount===1?['m6-3']:['m6-3','m6-4'])
+   .map(id=>'<button class="hand-card" data-card-id="'+id+'">'+id+'</button>').join('');
+  document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="'+
+   (hasMatch?'m6-2':'m11-1')+'"></div>';
+  const info=document.createElement('div');
+  info.innerHTML='<span id="playerScore">8</span><span id="aiScore">'+
+    opponentScore+'</span><span id="goCount">0</span>';
+  document.body.append(info);
+  const coach=document.createElement('p');coach.id='trainingCoachText';coach.textContent=nativeReason;
+  document.getElementById('trainingCoachPanel').append(coach);
+  const dialog=document.createElement('dialog');dialog.id='decisionDialog';
+  dialog.innerHTML='<button id="goBtn" class="'+
+   (recommended==='go'?'training-choice-recommended':'')+'">GO</button>'+
+   '<button id="stopBtn" class="'+
+   (recommended==='stop'?'training-choice-recommended':'')+'">STOP</button>';
+  document.body.append(dialog);
+  window.__decisionClicks=0;
+  dialog.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>{
+   window.__decisionClicks++;dialog.close();
+   if(button.id==='stopBtn')document.getElementById('resultDialog').setAttribute('open','');
+  }));
+ },{recommended,opponentScore,hasMatch,handCount,nativeReason});
+ await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
+ await page.evaluate(()=>document.getElementById('decisionDialog').show());
+ await expect(page.locator('#decisionDialog')).toBeVisible();
+}
+test('GO instead of recommended STOP asks expert and appears in endgame review',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{opponentScore:2,hasMatch:true});
+ await expect(page.locator('#stopBtn')).toHaveClass(/training-choice-recommended/);
+ await page.locator('#goBtn').click();
+ const prompt=page.locator('#trainingFeedbackDialog');
+ await expect(prompt).toBeVisible();
+ await expect(prompt).toContainText('Recommendation: STOP');
+ await expect(prompt).toContainText('Your move: GO');
+ expect(await page.evaluate(()=>window.__decisionClicks)).toBe(1);
+ await prompt.getByRole('button',{name:'My move was better'}).click();
+ await expect(prompt).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].context.kind).toBe('go-stop');
+ expect(server.items[0].context.opponentScore).toBe(2);
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ const review=page.locator('#trainingFinalReviewDialog');
+ await expect(review).toBeVisible();
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('GO / STOP');
+ await expect(review).toContainText('Your move: GO');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().goStopModelExamples)).toBe(1);
+ expect((await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus())).specialModelExamples).toBe(0);
+});
+test('one last matching card and zero-point opponent changes native STOP advice to GO',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{opponentScore:0,hasMatch:true});
+ await expect(page.locator('#goBtn')).toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#stopBtn')).not.toHaveClass(/training-choice-recommended/);
+ await expect(page.locator('#trainingCoachText')).toContainText('computer has 0 points');
+ await page.locator('#goBtn').click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(0,'following corrected advice is no disagreement');
+ expect(await page.evaluate(()=>window.__decisionClicks)).toBe(1);
+});
+test('GO recommendation is not forced with no match or visible immediate finishing threat',async({page})=>{
+ await setup(page);
+ await showGoStopChoice(page,{opponentScore:0,hasMatch:false});
+ await expect(page.locator('#stopBtn')).toHaveClass(/training-choice-recommended/);
+ await page.evaluate(()=>document.getElementById('decisionDialog').close());
+ await page.locator('#decisionDialog').evaluate(el=>el.remove());
+ await page.locator('#trainingCoachText').evaluate(el=>el.remove());
+ // The urgent warning prevents a simplistic score-zero override.
+ await page.evaluate(()=>{
+  document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="m6-2"></div>';
+  const d=document.createElement('dialog');d.id='decisionDialog';
+  d.innerHTML='<button id="goBtn">GO</button><button id="stopBtn" class="training-choice-recommended">STOP</button>';
+  document.body.append(d);
+  const msg=document.createElement('p');msg.id='trainingCoachText';
+  msg.textContent='STOP. The computer is at 0. If it captures two major sets, enough to reach the finish threshold.';
+  document.getElementById('trainingCoachPanel').append(msg);
+ });
+ // Reload the isolated advisor so it observes this new dialog node.
+ await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
+ await page.evaluate(()=>document.getElementById('decisionDialog').show());
+ await expect(page.locator('#stopBtn')).toHaveClass(/training-choice-recommended/);
+});
+test('STOP against GO prompts before final review and Finish keeps the judgment',async({page})=>{
+ const server=await setup(page);
+ await showGoStopChoice(page,{recommended:'go',opponentScore:4,hasMatch:true});
+ await page.locator('#stopBtn').click();
+ const prompt=page.locator('#trainingFeedbackDialog');
+ await expect(prompt).toBeVisible();
+ await expect(page.locator('#trainingFinalReviewDialog')).toBeHidden();
+ await prompt.getByRole('button',{name:'Recommendation was better'}).click();
+ const review=page.locator('#trainingFinalReviewDialog');
+ await expect(review).toBeVisible();
+ await expect(review.locator('.training-final-row')).toHaveCount(1);
+ await expect(review).toContainText('Recommendation: GO');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].recommendedAction).toBe('go');
+ expect(server.items[0].playedAction).toBe('stop');
+});
