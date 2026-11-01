@@ -78,7 +78,7 @@ function godoriExpertCase(visible,deck){
   if(new Set(claimable.map(c=>c.month)).size>=2)reason='two-reachable';
   else if(ownBirdCount>=2)reason='two-actual-birdies';
   else if(ownBirdCount>=1&&support.length>=2)reason='bird-plus-family';
-  else if(support.length>=3&&supportMonths.size>=2)reason='three-family';
+  else if(support.length>=3)reason='three-family';
   else if(frozenViable)reason='native-reachable';
  }
  return Object.freeze({viable:!!reason,frozenViable,reason,
