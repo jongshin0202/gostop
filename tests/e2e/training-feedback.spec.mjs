@@ -2,7 +2,8 @@ import {test,expect} from '@playwright/test';
 
 function fakeCloud(){
   const items=[];const finished=new Set();
-  let learned=0,specialLearned=0,announceDevelopmentActivation=false;
+  let learned=0,specialLearned=0,goStopLearned=0,announceDevelopmentActivation=false;
+  const kind=x=>x.context?.kind==='go-stop'?'go-stop':x.context?'special':'card';
   return {items,completedCount:()=>finished.size,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
@@ -11,17 +12,17 @@ function fakeCloud(){
         body:JSON.stringify(obj)});
       if(request.headers()['authorization']!=='Bearer e2e-demo-token')return reply(401,{ok:false,error:'AUTH_REQUIRED'});
       if(path.endsWith('/state'))return reply(200,{ok:true,feedbackCount:items.length,
-        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned}});
-      if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:'special',choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
+        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned},goStopModel:{examples:goStopLearned}});
+      if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:kind(x),choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
       if(path.endsWith('/feedback')||path.endsWith('/special-feedback')){
         const x=request.postDataJSON();items.push(x);return reply(200,{ok:true,confirmed:x.choice!=='unsure',feedbackCount:items.length});
       }
       if(path.endsWith('/review')){
         const gameId=new URL(request.url()).searchParams.get('gameId');
         const rows=items.filter(x=>x.gameId===gameId).map(x=>{
-          const kind=x.context?'special':'card';
-          return {id:kind+':'+x.feedbackId,kind,choice:x.choice,
-            ...(kind==='special'?{recommendedAction:x.recommendedAction,
+          const type=kind(x);
+          return {id:type+':'+x.feedbackId,kind:type,choice:x.choice,
+            ...(type!=='card'?{recommendedAction:x.recommendedAction,
               playedAction:x.playedAction,context:x.context}:{
               recommendedId:x.recommended.hand+'|'+(x.recommended.target||'-'),
               playedId:x.played.hand+'|'+(x.played.target||'-')})};
@@ -34,38 +35,40 @@ function fakeCloud(){
         if(body.reviewVersion!=='fixture-review-version')
           return reply(409,{ok:false,error:'REVIEW_CHANGED'});
         const original=items.filter(x=>x.gameId===gameId);
-        const ids=original.map(x=>(x.context?'special:':'card:')+x.feedbackId);
+        const ids=original.map(x=>kind(x)+':'+x.feedbackId);
         if(!Array.isArray(body.keptFeedbackIds)||
            body.keptFeedbackIds.some(id=>!ids.includes(id)))
           return reply(400,{ok:false,error:'INVALID_FINAL_SELECTION'});
         if(!finished.has(gameId)){
           const kept=new Set(body.keptFeedbackIds);
-          const accepted=original.filter(x=>kept.has((x.context?'special:':'card:')+x.feedbackId));
+          const accepted=original.filter(x=>kept.has(kind(x)+':'+x.feedbackId));
           learned+=accepted.filter(x=>!x.context&&x.choice!=='unsure').length;
-          specialLearned+=accepted.filter(x=>x.context&&x.choice!=='unsure').length;
+          specialLearned+=accepted.filter(x=>kind(x)==='special'&&x.choice!=='unsure').length;
+          goStopLearned+=accepted.filter(x=>kind(x)==='go-stop'&&x.choice!=='unsure').length;
           for(let i=items.length-1;i>=0;i--){
             const item=items[i];
-            if(item.gameId===gameId&&!kept.has((item.context?'special:':'card:')+item.feedbackId))
+            if(item.gameId===gameId&&!kept.has(kind(item)+':'+item.feedbackId))
               items.splice(i,1);
           }
           finished.add(gameId);
         }
         const update=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
-        return reply(200,{ok:true,trained:learned+specialLearned,
-          modelExamples:learned,specialModelExamples:specialLearned,
+        return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,
+          modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,
           publishedToLive:false,developmentModelUpdated:update});
       }
       if(path.endsWith('/complete')){
         const gameId=request.postDataJSON().gameId;
         if(!finished.has(gameId)){
           learned+=items.filter(x=>x.gameId===gameId&&!x.context&&x.choice!=='unsure').length;
-          specialLearned+=items.filter(x=>x.gameId===gameId&&x.context&&x.choice!=='unsure').length;
+          specialLearned+=items.filter(x=>x.gameId===gameId&&kind(x)==='special'&&x.choice!=='unsure').length;
+          goStopLearned+=items.filter(x=>x.gameId===gameId&&kind(x)==='go-stop'&&x.choice!=='unsure').length;
           finished.add(gameId);
         }
         const developmentModelUpdated=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
-        return reply(200,{ok:true,trained:learned+specialLearned,modelExamples:learned,specialModelExamples:specialLearned,publishedToLive:false,developmentModelUpdated});
+        return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,publishedToLive:false,developmentModelUpdated});
       }
       return reply(404,{ok:false});
     }
