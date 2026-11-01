@@ -62,8 +62,10 @@ async function prepare(page,{phone=false,connect,errors}={}){
  await page.routeWebSocket('**/api/lobby/**',socket=>socket.onMessage(()=>{}));
  await page.routeWebSocket('**/api/rooms/**/ws',connect);
  await page.goto('/dev-site/dist/',{waitUntil:'domcontentloaded'});
- if(phone&&await page.locator('#gostopBootSplash.gostop-boot-ready').isVisible().catch(()=>false)){
-  await page.locator('#gostopBootSplash').tap();
+ if(phone&&await page.evaluate(()=>navigator.maxTouchPoints>0&&innerWidth<=1000)){
+  const splash=page.locator('#gostopBootSplash.gostop-boot-ready');
+  await expect(splash).toBeVisible({timeout:7000});
+  await splash.tap();
  }
  await page.locator('#competitiveGamingBtn').click();
  await page.locator('#rankedSoloBtn').click();
