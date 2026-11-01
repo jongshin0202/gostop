@@ -142,6 +142,14 @@ export class OfflineInviteStore{
    await this.unsubscribe(actor,x.endpoint);
    return json({ok:true});
   }
+  if(req.method==='POST'&&path==='/eligibility'){
+   const x=await body(req),targetId=String(x?.targetId||'');
+   if(!validId(targetId)||targetId===actor||x?.friendVerified!==true)
+     return error('NOT_FRIEND',403);
+   const prefs=await this.get('pref:'+targetId,{enabled:true});
+   const subs=await this.get('subscriptions:'+targetId,[]);
+   return json({ok:true,targetId,canRequest:prefs.enabled!==false&&subs.length>0});
+  }
   if(req.method==='POST'&&path==='/request'){
    const x=await body(req),targetId=x?.targetId;
    if(!validId(targetId)||targetId===actor||x?.friendVerified!==true)return error('NOT_FRIEND',403);
@@ -204,7 +212,7 @@ export default {
    const method=req.headers.get('access-control-request-method'),h=(req.headers.get('access-control-request-headers')||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
    return new Response(null,{status:method==='GET'||method==='POST'&&h.every(x=>['authorization','content-type'].includes(x))?204:403,headers:cors});
   }
-  const allowedPaths=new Set(['/api/invites/public-key','/api/invites/state','/api/invites/preference','/api/invites/subscribe','/api/invites/unsubscribe','/api/invites/request','/api/invites/status','/api/invites/cancel','/api/invites/accept','/api/invites/room']);
+  const allowedPaths=new Set(['/api/invites/public-key','/api/invites/state','/api/invites/preference','/api/invites/subscribe','/api/invites/unsubscribe','/api/invites/request','/api/invites/eligibility','/api/invites/status','/api/invites/cancel','/api/invites/accept','/api/invites/room']);
   if(!allowedPaths.has(url.pathname))return json({ok:false,error:'NOT_FOUND'},404,cors);
   const store=env.INVITES.get(env.INVITES.idFromName('development-only-invite-state'));
   const suffix=url.pathname.replace('/api/invites','');
@@ -215,7 +223,7 @@ export default {
   if(req.method==='POST'){
    payload=await body(req);
    if(!payload)return json({ok:false,error:'BAD_BODY'},400,cors);
-   if(suffix==='/request'){
+   if(suffix==='/request'||suffix==='/eligibility'){
     if(!(await isFriend(env,actor.authorization,origin,payload.targetId)))return json({ok:false,error:'NOT_FRIEND'},403,cors);
     payload.friendVerified=true;
    }
