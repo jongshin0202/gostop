@@ -6,6 +6,7 @@ import {copyFile,mkdir,readdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {instrumentDevResponsiveLobby} from './instrument-lobby-responsiveness.mjs';
+import {instrumentDevOnlinePlayersWorker} from './instrument-online-players-worker.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const out=join(root,'dev-site','worker-dist'),server=join(out,'server');
 await rm(out,{recursive:true,force:true});
@@ -17,7 +18,7 @@ for(const file of await readdir(join(root,'server'))){
 for(const name of ['game-engine.js','session-authority.js'])
  await copyFile(join(root,name),join(out,name));
 const lobby=await readFile(join(root,'server/lobby.mjs'),'utf8');
-const patched=instrumentDevResponsiveLobby(lobby);
+const patched=instrumentDevOnlinePlayersWorker(instrumentDevResponsiveLobby(lobby));
 if(patched===lobby)throw new Error('Missing dev lobby responsiveness changes');
 await writeFile(join(server,'lobby.mjs'),patched);
 const config=await readFile(join(root,'wrangler.dev.toml'),'utf8');

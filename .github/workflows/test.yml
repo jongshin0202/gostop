@@ -48,7 +48,7 @@ jobs:
       - name: Validate generated development lobby and protected original sources
         run: |
           node --check dev-site/worker-dist/server/lobby.mjs
-          node --test tests/dev-lobby-responsive.test.mjs
+          node --test tests/dev-lobby-responsive.test.mjs tests/dev-online-players-pages.test.mjs
       - name: Regression tests
         run: node --test tests/*.test.js
       - name: Isolated Training learner syntax and cadence tests
@@ -69,6 +69,8 @@ jobs:
           node --check dev-site/friendly-invite-ux.js
           node --check dev-site/instrument-friendly-invite.mjs
           node --check dev-site/instrument-online-lobby-responsiveness.mjs
+          node --check dev-site/instrument-online-players-client.mjs
+          node --check dev-site/instrument-online-players-worker.mjs
           node --check dev-site/instrument-lobby-responsiveness.mjs
           node --check dev-site/build-dev-lobby-worker.mjs
           node --check training-learning/opening-learner.mjs

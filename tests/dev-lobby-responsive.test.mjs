@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {instrumentDevResponsiveLobby} from '../dev-site/instrument-lobby-responsiveness.mjs';
+import {instrumentDevOnlinePlayersWorker} from '../dev-site/instrument-online-players-worker.mjs';
 import {Lobby} from '../dev-site/worker-dist/server/lobby.mjs';
 const socket=()=>({messages:[],send(data){this.messages.push(JSON.parse(data));},close(){}});
 let sequence=0;
@@ -28,7 +29,7 @@ const deadline=(promise,ms=200)=>Promise.race([promise,
 test('frozen lobby remains intact and generated development-only Worker has bounded interactive paths',async()=>{
  const frozen=await readFile(new URL('../server/lobby.mjs',import.meta.url),'utf8');
  const generated=await readFile(new URL('../dev-site/worker-dist/server/lobby.mjs',import.meta.url),'utf8');
- assert.equal(generated,instrumentDevResponsiveLobby(frozen));
+ assert.equal(generated,instrumentDevOnlinePlayersWorker(instrumentDevResponsiveLobby(frozen)));
  assert.notEqual(generated,frozen);
  assert.ok(!frozen.includes('scheduleRecommendations(){'));
  assert.ok(generated.includes('scheduleRecommendations(){'));
