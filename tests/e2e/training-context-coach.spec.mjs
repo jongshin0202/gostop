@@ -95,3 +95,46 @@ test('non-training Solo UI stays unchanged',async({page})=>{
  await page.waitForTimeout(75);
  await expect(page.locator('#trainingCoachText')).toContainText('This uses the higher-value hand card.');
 });
+
+test('context correction and recommendation preservation settle without freezing the browser',async({page})=>{
+ await setup(page);
+ await page.addScriptTag({path:'dev-site/training-recommendation-preserver.js'});
+ // The additional preserver joins an already running Training game.
+ await page.locator('#trainingModeBtn').click();
+ await page.evaluate(()=>{
+  globalThis.__copyMutations=0;
+  const coach=document.getElementById('trainingCoachText');
+  new MutationObserver(records=>globalThis.__copyMutations+=records.length)
+    .observe(coach,{childList:true,characterData:true,subtree:true});
+  document.getElementById('playerHand').innerHTML=
+   '<button class="hand-card" data-card-id="m2-1">Plum Bright</button>'+
+   '<button class="hand-card matchable" data-card-id="m2-2" title="Plum Red Stripe">Plum Red Stripe</button>';
+  document.getElementById('aiCaptured').innerHTML=
+   '<img class="captured-mini" data-card-id="m2-3">'+
+   '<img class="captured-mini" data-card-id="m2-4">';
+  document.getElementById('trainingCoachTitle').textContent='Recommended Move';
+  coach.textContent='Play Plum Red Stripe. No card for capture is available.';
+  document.getElementById('trainingCoachPanel').hidden=false;
+ });
+ const expected='Discard Plum Red Stripe. You hold the only matching card, so you can take it back.';
+ await expect(page.locator('#trainingCoachText')).toHaveText(expected,{timeout:2000});
+ // The original preserve observer and context copy must agree on the same
+ // corrected text even while subsequent renders mutate disabled flags.
+ await page.evaluate(()=>{
+  const hand=document.getElementById('playerHand');
+  for(let i=0;i<90;i++){
+   const el=hand.querySelector('[data-card-id="m2-2"]');
+   el.disabled=i%2===0;
+   el.classList.toggle('preview-only',i%2===0);
+  }
+ });
+ await page.waitForTimeout(280);
+ await expect(page.locator('#trainingCoachText')).toHaveText(expected);
+ expect(await page.evaluate(()=>globalThis.__copyMutations)).toBeLessThan(15);
+ // The browser must still process timers/interaction instead of becoming
+ // unresponsive in a queueMicrotask feedback loop.
+ const responsive=await page.evaluate(()=>new Promise(resolve=>
+  setTimeout(()=>resolve(true),40)));
+ expect(responsive).toBe(true);
+ expect((await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus())).locked).toBe(true);
+});
