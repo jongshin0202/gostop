@@ -114,7 +114,7 @@ function createPanel(layer){
   es:'Toca o haz clic para continuar.',
   fr:'Touchez ou cliquez pour continuer.',
   de:'Tippen oder klicken zum Fortfahren.',
-  ja:'準備ができたら画面을タップしてください。',
+  ja:'準備ができたら画面をタップしてください。',
   zh:'准备好后点击屏幕继续。'
  };
  if(coach&&needsBirdieAddition){
@@ -127,7 +127,7 @@ function createPanel(layer){
    d.recommend+': '+selected.join(', ')+'.';
   coach.textContent=heading+' '+locationLines.join(' ')+' '+continueCopy[lang];
  }else if(lang==='en'&&locationLines.length){
-  const heading=coachText.match(/^\\s*(Best strateg(?:y|ies):\\s*[^.]*\\.)/i)?.[1];
+  const heading=coachText.match(/^\s*(Best strateg(?:y|ies):\s*[^.]*\.)/i)?.[1];
   if(heading&&coach)coach.textContent=heading+' '+locationLines.join(' ')+
    ' '+continueCopy.en;
  }
