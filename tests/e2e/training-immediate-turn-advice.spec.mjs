@@ -38,7 +38,7 @@ async function openTraining(page){
   layer.className='training-opening-dismiss-layer';
   document.body.appendChild(layer);
  });
- await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().openingSeen)).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().blocked)).toBe(true);
 }
 test('when computer plays first, native advice appears after three seconds of player turn',async({page})=>{
  await setup(page);
@@ -88,7 +88,7 @@ test('non-Training Solo, modal decisions and opening review never invoke hidden 
   layer.className='training-opening-dismiss-layer';
   document.body.appendChild(layer);
  });
- await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().openingSeen)).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus().blocked)).toBe(true);
  expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
  await page.evaluate(()=>{
   document.querySelector('.training-opening-dismiss-layer').remove();
@@ -125,4 +125,39 @@ test('no advice leaks from a canceled player turn into a future turn',async({pag
  await page.waitForTimeout(850);
  expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
  await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:3700}).toBe(1);
+});
+
+test('opening transition missed by the observer still yields one hint on the first playable turn',async({page})=>{
+ await setup(page);
+ await page.locator('#trainingModeBtn').click();
+ // An opening layer can be closed by a native handler before a queued scan
+ // observes it. Advice must depend on human playability, not seeing a layer.
+ await page.evaluate(()=>{
+  const layer=document.createElement('div');
+  layer.className='training-opening-dismiss-layer';
+  document.body.append(layer);layer.remove();
+  document.querySelector('[data-card-id="m2-1"]').disabled=false;
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:4600}).toBe(1);
+ await expect(page.locator('#trainingCoachText')).toHaveText('Native game recommendation.');
+});
+test('frequent hand renders do not starve Chrome or call native hint more than once',async({page})=>{
+ await setup(page);await openTraining(page);
+ await page.evaluate(()=>{
+  document.querySelector('.training-opening-dismiss-layer').remove();
+  document.querySelector('[data-card-id="m2-1"]').disabled=false;
+  // Simulates many unrelated game presentation renders. The observer must
+  // run on bounded tasks, rather than an unbounded queueMicrotask chain.
+  for(let i=0;i<250;i++){
+   const el=document.querySelector('[data-card-id="m2-1"]');
+   el.disabled=false;
+   el.classList.toggle('preview-only',i%2===0);
+  }
+ });
+ await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls),{timeout:4700}).toBe(1);
+ const state=await page.evaluate(()=>globalThis.GoStopDevImmediateTrainingAdvice.getStatus());
+ expect(state.scans).toBeLessThan(60);
+ expect(state.requests).toBe(1);
+ await page.evaluate(()=>{globalThis.__eventLoopReturned=true;});
+ expect(await page.evaluate(()=>globalThis.__eventLoopReturned)).toBe(true);
 });
