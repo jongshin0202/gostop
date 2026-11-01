@@ -53,6 +53,40 @@ async function verifyIdentity(req,env,origin){
   if(digest!==EXPERT_HASH)return null;
   return {accountId:account.id};
 }
+// These are draft decisions from the isolated server, not browser-generated
+// training samples. Finalization accepts only IDs returned by this inventory.
+function openingChanged(opening){
+ return !!opening&&opening.choice==='confirmed'&&(
+  opening.selected.length!==opening.suggested.length||
+  opening.selected.some(x=>!opening.suggested.includes(x))
+ );
+}
+function reviewItems(game={}){
+ const items=[];
+ const opening=game.openingFeedback;
+ if(openingChanged(opening))items.push({
+  id:'opening:'+(opening.feedbackId||'legacy-opening'),kind:'opening',
+  choice:opening.choice,suggested:opening.suggested,selected:opening.selected
+ });
+ for(const [index,entry] of (game.decisions||[]).entries())items.push({
+  id:'card:'+(entry.feedbackId||'legacy-'+index),kind:'card',
+  choice:entry.choice||(entry.chosenId?'mine':'unsure'),
+  recommendedId:entry.recommendedId||'',playedId:entry.playedId||''
+ });
+ for(const [index,entry] of (game.specialDecisions||[]).entries())items.push({
+  id:'special:'+(entry.feedbackId||'legacy-'+index),kind:'special',
+  choice:entry.choice||(entry.chosenAction?'mine':'unsure'),
+  recommendedAction:entry.recommendedAction||'',playedAction:entry.playedAction||'',
+  context:entry.context||{}
+ });
+ return items;
+}
+async function reviewVersion(items){
+ const encoded=new TextEncoder().encode(JSON.stringify(items));
+ const digest=await crypto.subtle.digest('SHA-256',encoded);
+ return [...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,'0')).join('');
+}
+
 export class TrainingLearningStore{
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
   async fetch(request){
@@ -66,6 +100,14 @@ export class TrainingLearningStore{
       return json({ok:true,...state,model,specialModel,openingModel,activeOpeningModel});
     }
     if(request.method==='GET'&&path==='/history')return json({ok:true,feedback:await this.ctx.storage.get('history')||[]});
+    if(request.method==='GET'&&path==='/review'){
+      const id=url.searchParams.get('gameId');
+      if(!validId(id))return fail('INVALID_GAME_ID',400);
+      const game=await this.ctx.storage.get('game:'+id)||{};
+      const items=reviewItems(game);
+      return json({ok:true,gameId:id,complete:!!game.complete,
+        items,reviewVersion:await reviewVersion(items)});
+    }
     if(request.method==='POST'&&path==='/opening-feedback'){
       const body=await readJson(request);
       if(!validId(body?.gameId)||!validId(body?.feedbackId)||
@@ -86,8 +128,9 @@ export class TrainingLearningStore{
       const game=await this.ctx.storage.get(gameKey)||{complete:false,decisions:[],specialDecisions:[]};
       if(game.complete)return fail('GAME_ALREADY_COMPLETED',409);
       if(game.openingFeedback)return json({ok:true,duplicate:true});
-      game.openingFeedback={choice:body.choice,suggested:body.suggested,
+      game.openingFeedback={feedbackId:body.feedbackId,choice:body.choice,suggested:body.suggested,
         selected:body.choice==='confirmed'?body.selected:[],evidence:body.evidence,visible};
+      if(body.reviewRequired===true)game.reviewRequired=true;
       const key='opening-feedback:'+body.gameId;
       await this.ctx.storage.put(key,{feedbackId:body.feedbackId,choice:body.choice,
         at:new Date().toISOString()});
@@ -96,7 +139,7 @@ export class TrainingLearningStore{
       summary.feedbackCount++;if(body.choice==='confirmed')summary.confirmedCount++;
       await this.ctx.storage.put('summary',summary);
       const history=await this.ctx.storage.get('history')||[];
-      history.push({gameId:body.gameId,kind:'opening',choice:body.choice,
+      history.push({gameId:body.gameId,feedbackId:body.feedbackId,kind:'opening',choice:body.choice,
         suggested:body.suggested,selected:game.openingFeedback.selected,at:new Date().toISOString()});
       await this.ctx.storage.put('history',history.slice(-500));
       return json({ok:true,confirmed:body.choice==='confirmed',feedbackCount:summary.feedbackCount});
@@ -138,7 +181,10 @@ export class TrainingLearningStore{
       const chosenAction=body.choice==='mine'?body.playedAction:
         body.choice==='recommended'?body.recommendedAction:null;
       const context={kind,bombReady,month};
-      game.specialDecisions.push({context,chosenAction});
+      game.specialDecisions.push({feedbackId:body.feedbackId,choice:body.choice,
+        recommendedAction:body.recommendedAction,playedAction:body.playedAction,
+        context,chosenAction});
+      if(body.reviewRequired===true)game.reviewRequired=true;
       const summary=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       summary.feedbackCount++;if(chosenAction)summary.confirmedCount++;
       await this.ctx.storage.put(key,{choice:body.choice,recommendedAction:body.recommendedAction,
@@ -179,7 +225,9 @@ export class TrainingLearningStore{
       const game=await this.ctx.storage.get(gameKey)||{complete:false,decisions:[]};
       if(game.complete)return fail('GAME_ALREADY_COMPLETED',409);
       if(game.decisions.length>=150)return fail('GAME_LIMIT',429);
-      game.decisions.push({chosenId,legalMoves,visible});
+      game.decisions.push({feedbackId:body.feedbackId,choice:body.choice,
+        recommendedId,playedId,chosenId,legalMoves,visible});
+      if(body.reviewRequired===true)game.reviewRequired=true;
       const summary=await this.ctx.storage.get('summary')||{feedbackCount:0,confirmedCount:0,trainingGames:0};
       summary.feedbackCount++;if(chosenId)summary.confirmedCount++;
       await this.ctx.storage.put(key,{choice:body.choice,recommendedId,playedId,at:new Date().toISOString()});
