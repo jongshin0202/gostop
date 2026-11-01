@@ -94,7 +94,7 @@ const legalMoves=(handIds,floorIds)=>{
   return (matched.length?matched:[null]).map(t=>({card:h,target:t,moveId:moveId(handId,t?.id)}));
  });
 };
-let active=false,gameId=null,confirmedCount=0,lastHand=null,showing=false,alreadyCompleted=false,hadDisagreement=false;
+let active=false,gameId=null,confirmedCount=0,lastHand=null,showing=false,alreadyCompleted=false,hadDisagreement=false,reviewing=false;
 const pendingUploads=new Set();
 const modal=document.createElement('dialog');
 modal.id='trainingFeedbackDialog';
@@ -125,24 +125,180 @@ function showUpdateMade(){
  dialog.append(message,ok);document.body.append(dialog);
  try{dialog.showModal();}catch(_){dialog.remove();}
 }
-function completion(){
- if(!active||!gameId||alreadyCompleted||!$('resultDialog')?.open)return;
- alreadyCompleted=true;
- const completeId=gameId;
- const completeHadDisagreement=hadDisagreement;
- const canSubmit=verifiedAccount();
- gameId=null;confirmedCount=0;hadDisagreement=false;
- if(!canSubmit)return; // Do not send anonymous or unapproved Training data.
- // A completed game may finish before an asynchronous feedback write resolves.
- void Promise.allSettled([...pendingUploads]).then(async()=>{
-  try{
-   const result=cloud?await cloud.complete(completeId,{hadDisagreement:completeHadDisagreement}):null;
-   await syncStatus();
-   if(result?.developmentModelUpdated===true)showUpdateMade();
+
+const REVIEW_COPY={
+ en:{heading:'Review your Training decisions',intro:'Review every disagreement before training. Remove incorrect judgments, then press Finish to keep only the remaining feedback.',recommend:'Recommendation',played:'Your move',judgment:'Your judgment',remove:'Remove',confirm:'Are you sure?',yes:'Yes',no:'No',finish:'Finish',empty:'No disagreements to review.',loading:'Loading saved game feedback…',saving:'Finalizing confirmed judgments…',failed:'Unable to retrieve or finalize feedback. Nothing has been trained.',retry:'Retry',refresh:'Reload review',done:'Feedback finalized.',removed:'removed',kept:'remaining'},
+ ko:{heading:'훈련 판단 최종 검토',intro:'추천과 다른 선택을 모두 검토하세요. 잘못 판단한 항목을 삭제하고 완료를 누르면 남은 피드백만 학습에 사용됩니다.',recommend:'추천',played:'내 선택',judgment:'내 판단',remove:'삭제',confirm:'정말 삭제하시겠습니까?',yes:'예',no:'아니요',finish:'완료',empty:'검토할 차이가 없습니다.',loading:'피드백 불러오는 중…',saving:'최종 피드백 저장 중…',failed:'피드백 저장에 실패했습니다. 학습하지 않았습니다.',retry:'재시도',refresh:'다시 불러오기',done:'최종 피드백 저장 완료.',removed:'삭제됨',kept:'유지됨'},
+ es:{heading:'Revisión final de entrenamiento',intro:'Revise cada desacuerdo, elimine los juicios incorrectos y pulse Finalizar para entrenar solo con los restantes.',recommend:'Recomendación',played:'Tu jugada',judgment:'Tu valoración',remove:'Eliminar',confirm:'¿Estás seguro?',yes:'Sí',no:'No',finish:'Finalizar',empty:'No hay desacuerdos.',loading:'Cargando…',saving:'Guardando revisión…',failed:'Error de guardado. No se ha entrenado.',retry:'Reintentar',refresh:'Volver a cargar',done:'Revisión finalizada.',removed:'eliminados',kept:'restantes'},
+ fr:{heading:'Révision finale',intro:'Examinez les désaccords, retirez les jugements incorrects, puis terminez pour entraîner uniquement avec ceux conservés.',recommend:'Conseil',played:'Votre coup',judgment:'Votre jugement',remove:'Retirer',confirm:'Êtes-vous sûr ?',yes:'Oui',no:'Non',finish:'Terminer',empty:'Aucun désaccord.',loading:'Chargement…',saving:'Enregistrement…',failed:'Échec de l’enregistrement. Aucun entraînement.',retry:'Réessayer',refresh:'Actualiser',done:'Révision terminée.',removed:'retirés',kept:'conservés'},
+ de:{heading:'Abschließende Trainingsprüfung',intro:'Prüfen Sie alle Abweichungen, entfernen Sie falsche Bewertungen und bestätigen Sie nur die verbleibenden mit Fertig.',recommend:'Empfehlung',played:'Dein Zug',judgment:'Dein Urteil',remove:'Entfernen',confirm:'Bist du sicher?',yes:'Ja',no:'Nein',finish:'Fertig',empty:'Keine Abweichungen.',loading:'Lädt…',saving:'Speichert…',failed:'Speichern fehlgeschlagen. Kein Training.',retry:'Erneut versuchen',refresh:'Neu laden',done:'Prüfung abgeschlossen.',removed:'entfernt',kept:'behalten'},
+ ja:{heading:'学習内容の最終確認',intro:'推奨と異なる判断を確認し、誤ったものを削除してから完了を押してください。残りだけ学習します。',recommend:'推奨',played:'自分の手',judgment:'自分の判断',remove:'削除',confirm:'本当に削除しますか？',yes:'はい',no:'いいえ',finish:'完了',empty:'相違はありません。',loading:'読み込み中…',saving:'確定中…',failed:'保存に失敗しました。学習されていません。',retry:'再試行',refresh:'再読み込み',done:'確定しました。',removed:'削除',kept:'残り'},
+ zh:{heading:'训练反馈最终审核',intro:'检查所有与推荐不同的选择，删除错误判断后点击完成，仅用剩余反馈训练。',recommend:'推荐',played:'你的出牌',judgment:'你的判断',remove:'移除',confirm:'确定要移除吗？',yes:'是',no:'否',finish:'完成',empty:'没有不同的选择。',loading:'正在加载…',saving:'正在保存…',failed:'保存失败，尚未训练。',retry:'重试',refresh:'重新加载',done:'审核完成。',removed:'已移除',kept:'保留'}
+};
+const reviewCopy=()=>REVIEW_COPY[document.documentElement.lang]||REVIEW_COPY.en;
+const reviewModal=document.createElement('dialog');reviewModal.id='trainingFinalReviewDialog';
+reviewModal.setAttribute('aria-label','Final Training decision review');
+reviewModal.style.cssText=modal.style.cssText+
+ 'max-width:min(780px,calc(100vw - 24px));max-height:85vh;overflow:auto;z-index:100001;';
+const reviewConfirmation=document.createElement('dialog');reviewConfirmation.id='trainingReviewRemoveConfirm';
+reviewConfirmation.setAttribute('aria-label','Confirm removal of Training feedback');
+reviewConfirmation.style.cssText=modal.style.cssText+
+ 'max-width:min(400px,calc(100vw - 24px));z-index:100002;';
+const reviewCss=document.createElement('style');
+reviewCss.textContent=`#trainingFinalReviewDialog::backdrop,#trainingReviewRemoveConfirm::backdrop{background:rgba(0,0,0,.68)}
+#trainingFinalReviewDialog button,#trainingReviewRemoveConfirm button{font:inherit;border:1px solid #ad823d;background:#503226;color:#ffe6b6;border-radius:8px;padding:9px 15px;cursor:pointer}
+#trainingFinalReviewDialog button:focus-visible,#trainingReviewRemoveConfirm button:focus-visible{outline:3px solid #fbd686}
+#trainingFinalReviewDialog button:disabled{opacity:.55;cursor:default}
+#trainingFinalReviewDialog .training-final-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #775333;border-radius:10px;padding:12px;margin:9px 0}
+#trainingFinalReviewDialog .training-final-row>div{flex:1;min-width:0;overflow-wrap:anywhere}
+#trainingFinalReviewDialog .training-final-footer{position:sticky;bottom:-20px;background:#1b120e;padding:12px 0 0;display:flex;justify-content:flex-end;gap:12px}
+#trainingFinalReviewDialog .training-final-footer button:last-child{background:#8c3527}
+#trainingFinalReviewDialog .training-final-row small{display:block;color:#c8ad85;font-size:12px}
+@media(max-width:510px){#trainingFinalReviewDialog .training-final-row{align-items:flex-start}#trainingFinalReviewDialog .training-final-row button{flex:none}}`;
+document.head.appendChild(reviewCss);document.body.append(reviewModal,reviewConfirmation);
+// Don't intercept any browser or gameplay input. If Escape closes the
+// mandatory review, reopen it on the next task: only Finish can commit the
+// reviewed labels. Escape on the per-row confirmation behaves like No.
+reviewModal.addEventListener('close',()=>{
+ if(reviewing&&!alreadyCompleted&&active){
+  setTimeout(()=>{
+   if(reviewing&&!alreadyCompleted&&active&&!reviewModal.open)
+    try{reviewModal.showModal();}catch(_){}
+  },0);
+ }
+});
+let reviewState=null,removedReviews=new Set(),reviewBusy=false;
+function reviewDetail(entry){
+ const text=reviewCopy();
+ const cards=id=>String(id||'').split('|').filter(Boolean);
+ const move=id=>{const [handId,targetId]=cards(id);
+  return picture(handId)+(targetId&&targetId!=='-'?' → '+picture(targetId):'');};
+ if(entry.kind==='opening')return [
+  text.recommend+': '+(entry.suggested||[]).join(', '),
+  text.played+': '+(entry.selected||[]).join(', ')
+ ];
+ if(entry.kind==='special')return [
+  text.recommend+': '+specialActionLabel(entry.recommendedAction,entry.context),
+  text.played+': '+specialActionLabel(entry.playedAction,entry.context)
+ ];
+ return [text.recommend+': '+move(entry.recommendedId),
+  text.played+': '+move(entry.playedId)];
+}
+function reviewJudgment(choice){
+ const copy=locale();
+ return choice==='mine'?copy[4]:choice==='recommended'?copy[5]:
+  choice==='unsure'?copy[6]:choice==='confirmed'?reviewCopy().played:choice;
+}
+function renderReview(){
+ const t=reviewCopy();
+ reviewModal.replaceChildren();
+ const heading=document.createElement('h2');heading.textContent=t.heading;
+ heading.style.cssText='margin:0 0 8px;font-size:20px';
+ const description=document.createElement('p');description.textContent=t.intro;
+ description.style.cssText='font-size:13px;color:#d8bb8c;line-height:1.5';
+ const list=document.createElement('section');list.setAttribute('aria-label','Disagreements');
+ const items=(reviewState?.items||[]).filter(item=>!removedReviews.has(item.id));
+ for(const [index,item] of items.entries()){
+  const row=document.createElement('div');row.className='training-final-row';
+  row.dataset.reviewId=item.id;
+  const summary=document.createElement('div');
+  const headingText=document.createElement('strong');
+  headingText.textContent='#'+(index+1)+' · '+(item.kind==='opening'?'Opening':item.kind==='special'?'Shake / Bomb':'Move');
+  summary.append(headingText);
+  for(const line of reviewDetail(item)){
+   const x=document.createElement('small');x.textContent=line;summary.append(x);
   }
-  catch(error){lastError=String(error.message||error);serverReady=false;}
+  const judgement=document.createElement('small');
+  judgement.textContent=t.judgment+': '+reviewJudgment(item.choice);summary.append(judgement);
+  const remove=document.createElement('button');remove.type='button';
+  remove.textContent=t.remove;
+  remove.addEventListener('click',()=>{
+   reviewConfirmation.replaceChildren();
+   const prompt=document.createElement('p');prompt.textContent=t.confirm;
+   const actions=document.createElement('div');
+   actions.style.cssText='display:flex;justify-content:flex-end;gap:10px';
+   const yes=document.createElement('button');yes.type='button';yes.textContent=t.yes;
+   const no=document.createElement('button');no.type='button';no.textContent=t.no;
+   yes.addEventListener('click',()=>{
+    removedReviews.add(item.id);reviewConfirmation.close();renderReview();
+   });
+   no.addEventListener('click',()=>reviewConfirmation.close());
+   actions.append(no,yes);reviewConfirmation.append(prompt,actions);
+   reviewConfirmation.showModal();
+  });
+  row.append(summary,remove);list.append(row);
+ }
+ if(!items.length){
+  const empty=document.createElement('p');empty.textContent=t.empty;list.append(empty);
+ }
+ const status=document.createElement('p');status.id='trainingFinalReviewStatus';
+ status.setAttribute('role','status');status.style.cssText='color:#f4cd8c;min-height:22px';
+ status.textContent=items.length+' '+t.kept+' · '+removedReviews.size+' '+t.removed;
+ const footer=document.createElement('div');footer.className='training-final-footer';
+ const refresh=document.createElement('button');refresh.type='button';refresh.textContent=t.refresh;
+ refresh.addEventListener('click',()=>void loadReview());
+ const finish=document.createElement('button');finish.type='button';finish.id='trainingReviewFinish';
+ finish.textContent=t.finish;
+ finish.addEventListener('click',async()=>{
+  if(reviewBusy||!reviewState||!cloud?.finalize)return;
+  reviewBusy=true;finish.disabled=true;refresh.disabled=true;
+  status.textContent=t.saving;
+  try{
+   const keptFeedbackIds=reviewState.items.filter(item=>!removedReviews.has(item.id))
+    .map(item=>item.id);
+   const result=await cloud.finalize(gameId,{
+    reviewVersion:reviewState.reviewVersion,keptFeedbackIds,hadDisagreement
+   });
+   if(!result?.ok)throw new Error('Finalization not acknowledged.');
+   alreadyCompleted=true;reviewing=false;gameId=null;confirmedCount=0;hadDisagreement=false;
+   reviewModal.close();reviewState=null;removedReviews.clear();
+   await syncStatus();
+   if(result.developmentModelUpdated===true)showUpdateMade();
+  }catch(error){
+   lastError=String(error.message||error);serverReady=false;
+   status.textContent=t.failed+' '+lastError;
+   finish.disabled=false;refresh.disabled=false;
+  }finally{reviewBusy=false;}
+ });
+ footer.append(refresh,finish);
+ reviewModal.append(heading,description,list,status,footer);
+}
+async function loadReview(){
+ if(!cloud?.review||!gameId)throw new Error('Review API is unavailable.');
+ const t=reviewCopy();
+ reviewBusy=true;
+ try{
+  const current=await cloud.review(gameId);
+  if(!current?.ok||current.complete)throw new Error('Game review is unavailable.');
+  reviewState=current;removedReviews=new Set();renderReview();
+ }catch(error){
+  lastError=String(error.message||error);serverReady=false;
+  reviewModal.replaceChildren();
+  const status=document.createElement('p');status.setAttribute('role','alert');
+  status.textContent=t.failed+' '+lastError;
+  const retry=document.createElement('button');retry.type='button';retry.textContent=t.retry;
+  retry.addEventListener('click',()=>void loadReview());
+  reviewModal.append(status,retry);
+ }finally{reviewBusy=false;}
+}
+function completion(){
+ if(!active||!gameId||alreadyCompleted||reviewing||!$('resultDialog')?.open)return;
+ if(!verifiedAccount()){alreadyCompleted=true;return;}
+ reviewing=true;
+ // Wait for all currently pending server draft writes before requesting the
+ // authoritative list; only Finish can submit a complete game for training.
+ void (async()=>{
+  await Promise.allSettled([...pendingUploads]);
+  if(showing||queue.length){
+   reviewing=false;setTimeout(completion,100);return;
+  }
+  if(!active||alreadyCompleted)return;
+  reviewModal.showModal();await loadReview();
+ })().catch(error=>{
+  reviewing=false;lastError=String(error.message||error);serverReady=false;
  });
 }
+
 const watchResult=new MutationObserver(completion);
 if($('resultDialog'))watchResult.observe($('resultDialog'),{attributes:true,attributeFilter:['open']});
 async function safeRecord(data,label,choice){
@@ -151,12 +307,12 @@ async function safeRecord(data,label,choice){
  ensureGame();
  const upload=data.kind==='special'?
   cloud.specialFeedback({
-   gameId,feedbackId:crypto.randomUUID(),choice,
+   gameId,feedbackId:crypto.randomUUID(),choice,reviewRequired:true,
    recommendedAction:data.recommended.action,playedAction:data.played.action,
    legalActions:data.legalActions,context:data.context,visible:data.visible
   }):
   cloud.feedback({
-   gameId,feedbackId:crypto.randomUUID(),choice,
+   gameId,feedbackId:crypto.randomUUID(),choice,reviewRequired:true,
    recommended:data.recommended,played:data.played,legalMoves:data.legalMoves,visible:data.visible
   });
  pendingUploads.add(upload);
@@ -346,15 +502,15 @@ function onSpecialDecision(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
  else if(t?.closest?.('#playAgainBtn,#newGameYesBtn')&&active){
   // A Training replay is a NEW completed-game sample with its own opening
   // strategy review. Never reuse the prior game's feedback/identity.
-  gameId=null;confirmedCount=0;alreadyCompleted=false;lastHand=null;
+  gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;
   observedRecommendation=null;previousActivation=null;hadDisagreement=false;
   ensureGame();void checkAccount();
  }
- else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;gameId=null;hadDisagreement=false;}
+ else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;gameId=null;hadDisagreement=false;reviewing=false;reviewState=null;removedReviews.clear();}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
  if(t?.closest?.('#shakeDialog,#bombDialog'))onSpecialDecision(event);
@@ -368,7 +524,7 @@ document.addEventListener('gostop-hand-activate',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
  getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),gameId,confirmed:confirmedCount,
   examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,serverReady,lastError,
-  storage:'development-cloudflare',pendingUploads:pendingUploads.size}),
+  storage:'development-cloudflare',pendingUploads:pendingUploads.size,reviewing,reviewItems:reviewState?.items?.length||0,removedReviews:removedReviews.size}),
  exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),
  refresh:syncStatus,
  disable:()=>localStorage.setItem(ENABLE_KEY,'false'),

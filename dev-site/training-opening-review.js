@@ -170,7 +170,7 @@ function createPanel(layer){
   try{
    const data=staged;
    const result=await cloud.openingFeedback({
-    gameId:data.gameId,feedbackId:crypto.randomUUID(),choice,
+    gameId:data.gameId,feedbackId:crypto.randomUUID(),choice,reviewRequired:true,
     suggested:data.review.suggested,selected:choice==='confirmed'?selected:[],
     evidence:data.review.evidence,visible:data.vis
    });

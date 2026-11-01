@@ -24,6 +24,10 @@ async function call(path,{method='GET',payload}={}){
 globalThis.GoStopTrainingCloud=Object.freeze({
  state:()=>call('/api/training/state'),
  history:()=>call('/api/training/history'),
+ review:gameId=>call('/api/training/review?gameId='+encodeURIComponent(gameId)),
+ finalize:(gameId,{reviewVersion,keptFeedbackIds,hadDisagreement=false})=>
+  call('/api/training/finalize',{method:'POST',
+   payload:{gameId,reviewVersion,keptFeedbackIds,hadDisagreement}}),
  feedback:payload=>call('/api/training/feedback',{method:'POST',payload}),
  specialFeedback:payload=>call('/api/training/special-feedback',{method:'POST',payload}),
  openingFeedback:payload=>call('/api/training/opening-feedback',{method:'POST',payload}),

@@ -17,7 +17,8 @@ function fixture(){
  const store=new Map();
  const storage={
   get:async k=>structuredClone(store.get(k)),
-  put:async(k,v)=>{store.set(k,structuredClone(v));}
+  put:async(k,v)=>{store.set(k,structuredClone(v));},
+  delete:async k=>store.delete(k)
  };
  const durable=new TrainingLearningStore({storage},{});
  let email='jwshin1@gmail.com';
@@ -330,3 +331,105 @@ test('ten agreement games after an opening-strategy correction stage separate op
 });
 
 
+
+test('reviewed disagreements are server-side drafts until Finish, and removed mistakes never train',async()=>{
+ const t=fixture();try{
+  const gameId='final-review-disputes';
+  const bad={...feedback(gameId),feedbackId:'mistaken-judgment'};
+  const good={...feedback(gameId),feedbackId:'corrected-judgment',choice:'recommended'};
+  for(const draft of [bad,good]){
+   draft.reviewRequired=true;
+   assert.equal((await t.request('/api/training/feedback',{method:'POST',body:draft})).status,200);
+  }
+  const pending=await(await t.request('/api/training/state')).json();
+  assert.equal(pending.model.examples,0,'draft labels have not trained anything');
+  assert.equal((await t.request('/api/training/complete',{method:'POST',body:{gameId}})).status,409,
+   'old automatic completion must not bypass expert review');
+  const review=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  assert.equal(review.complete,false);
+  assert.deepEqual(review.items.map(x=>x.id),
+   ['card:mistaken-judgment','card:corrected-judgment']);
+  assert.equal(review.items[0].choice,'mine');
+  const before=t.store.get('history');assert.equal(before.length,2);
+  const finish=await(await t.request('/api/training/finalize',{
+   method:'POST',body:{gameId,reviewVersion:review.reviewVersion,
+    keptFeedbackIds:['card:corrected-judgment'],hadDisagreement:true}
+  })).json();
+  assert.equal(finish.ok,true);assert.equal(finish.trained,1);
+  assert.equal(finish.removedFeedbackCount,1);assert.equal(finish.keptFeedbackCount,1);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.model.examples,1);
+  assert.equal(state.feedbackCount,1);
+  assert.equal(state.confirmedCount,1);
+  const history=await(await t.request('/api/training/history')).json();
+  assert.equal(history.feedback.length,1);
+  assert.equal(history.feedback[0].feedbackId,'corrected-judgment');
+  assert.equal(t.store.has('feedback:'+gameId+':mistaken-judgment'),false);
+  assert.equal(t.store.has('feedback:'+gameId+':corrected-judgment'),true);
+  assert.deepEqual(t.store.get('game:'+gameId).finalReview.keptFeedbackIds,
+    ['card:corrected-judgment']);
+  const again=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId,reviewVersion:review.reviewVersion,keptFeedbackIds:['card:corrected-judgment']
+  }})).json();
+  assert.equal(again.duplicate,true);
+  assert.equal((await(await t.request('/api/training/state')).json()).model.examples,1);
+ }finally{t.restore();}
+});
+test('Finish with no kept judgments records a clean training sample without training any weights',async()=>{
+ const t=fixture();try{
+  const gameId='all-rejected-review';
+  const draft={...feedback(gameId),reviewRequired:true};
+  assert.equal((await t.request('/api/training/feedback',{method:'POST',body:draft})).status,200);
+  const review=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  const result=await(await t.request('/api/training/finalize',{method:'POST',
+   body:{gameId,reviewVersion:review.reviewVersion,keptFeedbackIds:[]}})).json();
+  assert.equal(result.ok,true);assert.equal(result.trained,0);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.model.examples,0);
+  assert.equal(state.feedbackCount,0);assert.equal(state.confirmedCount,0);
+  assert.equal(state.completedGames,1);
+  assert.equal(state.disagreementObservedAfterUpdate,true,
+   'the game still contained a differing move before the mistaken judgment was removed');
+  assert.equal(t.store.get('history').length,0);
+ }finally{t.restore();}
+});
+test('Finish rejects fabricated IDs, duplicates and stale versions, without training',async()=>{
+ const t=fixture();try{
+  const gameId='final-review-race';
+  const first={...feedback(gameId),feedbackId:'original',reviewRequired:true};
+  assert.equal((await t.request('/api/training/feedback',{method:'POST',body:first})).status,200);
+  const snapshot=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  for(const ids of [['card:invented'],['card:original','card:original']]){
+   assert.equal((await t.request('/api/training/finalize',{method:'POST',
+    body:{gameId,reviewVersion:snapshot.reviewVersion,keptFeedbackIds:ids}})).status,400);
+  }
+  assert.equal((await t.request('/api/training/finalize',{method:'POST',
+   body:{gameId,reviewVersion:'invalid',keptFeedbackIds:['card:original']}})).status,409);
+  const second={...feedback(gameId),feedbackId:'late-ack',reviewRequired:true,choice:'recommended'};
+  assert.equal((await t.request('/api/training/feedback',{method:'POST',body:second})).status,200);
+  assert.equal((await t.request('/api/training/finalize',{method:'POST',
+   body:{gameId,reviewVersion:snapshot.reviewVersion,keptFeedbackIds:['card:original']}})).status,409);
+  assert.equal((await(await t.request('/api/training/state')).json()).model.examples,0);
+ }finally{t.restore();}
+});
+test('opening and Shake judgments are independently removable at final review',async()=>{
+ const t=fixture();try{
+  const gameId='final-opening-special';
+  const open={...openingEntry(gameId),reviewRequired:true};
+  const special={...specialEntry(gameId),reviewRequired:true,feedbackId:'special-to-remove'};
+  assert.equal((await t.request('/api/training/opening-feedback',{method:'POST',body:open})).status,200);
+  assert.equal((await t.request('/api/training/special-feedback',{method:'POST',body:special})).status,200);
+  const review=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  assert.deepEqual(review.items.map(x=>x.kind),['opening','special']);
+  const kept=['opening:'+open.feedbackId];
+  const result=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId,reviewVersion:review.reviewVersion,keptFeedbackIds:kept
+  }})).json();
+  assert.equal(result.trained,1);
+  const state=await(await t.request('/api/training/state')).json();
+  assert.equal(state.openingModel.examples,1);
+  assert.equal(state.specialModel.examples,0);
+  assert.equal(t.store.has('special-feedback:'+gameId+':'+special.feedbackId),false);
+  assert.equal(t.store.get('game:'+gameId).specialDecisions.length,0);
+ }finally{t.restore();}
+});
