@@ -62,9 +62,15 @@ function opponentNextTurnCeiling({deck=[],floorIds=[],ownHandIds=[],ownCapturedI
  const before=scorePlayer({captured,gukjinMode:'animal'}).total;
  if(!Number.isFinite(before))return null;
  let max=opponentScore;
+ // Allow up to two opponent Single transfers in this optimistic calculation.
+ // Otherwise a possible steal could make the visible-table bound too low.
+ const singles=ownCapturedIds.map(id=>byId.get(id)).filter(c=>
+  c&&(c.type==='pi'||c.flags?.includes('switchPi'))).slice(0,2);
  const update=(added)=>{
-  const next=scorePlayer({captured:[...captured,...added],gukjinMode:'animal'}).total;
-  if(Number.isFinite(next))max=Math.max(max,opponentScore+Math.max(0,next-before));
+  for(let n=0;n<=singles.length;n++){
+   const next=scorePlayer({captured:[...captured,...added,...singles.slice(0,n)],gukjinMode:'animal'}).total;
+   if(Number.isFinite(next))max=Math.max(max,opponentScore+Math.max(0,next-before));
+  }
  };
  for(let i=0;i<groups.length;i++){
   const one=groups[i];
