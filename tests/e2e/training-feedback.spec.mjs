@@ -111,6 +111,17 @@ async function setup(page,email='expert@example.test',server=fakeCloud()){
   if(email==='expert@example.test')await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().serverReady)).toBe(true);
   return server;
 }
+async function showFinalReview(page){
+ await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ const dialog=page.locator('#trainingFinalReviewDialog');
+ await expect(dialog).toBeVisible({timeout:5000});
+ return dialog;
+}
+async function finishFinalReview(page){
+ const dialog=await showFinalReview(page);
+ await dialog.getByRole('button',{name:'Finish'}).click();
+ await expect(dialog).toBeHidden({timeout:5000});
+}
 test('confirmed disagreement syncs to cloud and trains only after game completion',async({page})=>{
   const server=await setup(page);
   await page.locator('#alternate').click();
@@ -121,7 +132,7 @@ test('confirmed disagreement syncs to cloud and trains only after game completio
   await expect(dialog).not.toBeVisible();
   expect(server.items).toHaveLength(1);
   expect(await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().modelExamples)).toBe(0);
-  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+  await finishFinalReview(page);
   await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().modelExamples)).toBe(1);
 });
 test('mistaken move reinforces recommendation on the server',async({page})=>{
@@ -137,7 +148,7 @@ test('uncertain move is stored remotely but excluded from learning',async({page}
   await page.locator('#alternate').click();
   await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'Not sure / experiment'}).click();
   await expect(page.locator('#trainingFeedbackDialog')).not.toBeVisible();
-  await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+  await finishFinalReview(page);
   expect(server.items[0].choice).toBe('unsure');
   await expect.poll(async()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().modelExamples)).toBe(0);
 });
@@ -181,14 +192,14 @@ test('failed cloud saves do not train or claim success',async({page})=>{
 
 test('ordinary completed Training game never shows a false live-update dialog',async({page})=>{
  const server=await setup(page);
- await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await finishFinalReview(page);
  await expect.poll(()=>server.completedCount()).toBe(1);
  await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
 });
 test('acknowledged development-only server activation permits update OK dialog',async({page})=>{
  const server=await setup(page);
  server.confirmNextDevelopmentActivation();
- await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await finishFinalReview(page);
  await expect.poll(()=>server.completedCount()).toBe(1);
  const dialog=page.getByRole('dialog',{name:'Training model update'});
  await expect(dialog).toBeVisible();
@@ -241,7 +252,7 @@ test('Shake recommended, Keep for Bomb chosen: prompts, saves confirmation, trai
  expect(server.items[0].playedAction).toBe('keepForBomb');
  expect(server.items[0].choice).toBe('mine');
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().specialModelExamples)).toBe(0);
- await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await finishFinalReview(page);
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().specialModelExamples)).toBe(1);
 });
 test('Bomb recommended in Shake dialog but expert chooses Shake: uncertain feedback stays untrained',async({page})=>{
@@ -257,7 +268,7 @@ test('Bomb recommended in Shake dialog but expert chooses Shake: uncertain feedb
  expect(server.items[0].choice).toBe('unsure');
  expect(server.items[0].recommendedAction).toBe('bomb');
  expect(server.items[0].playedAction).toBe('shake');
- await page.evaluate(()=>document.getElementById('resultDialog').setAttribute('open',''));
+ await finishFinalReview(page);
  await expect.poll(()=>server.completedCount()).toBe(1);
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().specialModelExamples)).toBe(0);
 });
@@ -359,4 +370,69 @@ test('following a recommended card does not create a false disagreement',async({
  await page.waitForTimeout(330);
  await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
  expect(server.items).toHaveLength(0);
+});
+
+test('endgame Remove requires Yes, No preserves the judgment, Finish trains only remaining choices',async({page})=>{
+ const server=await setup(page);
+ await page.locator('#alternate').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ await showSpecialChoice(page,{kind:'shake'});
+ await page.locator('#keepSecretBtn').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'Recommendation was better'}).click();
+ await expect(page.locator('#trainingFeedbackDialog')).toBeHidden();
+ expect(server.items).toHaveLength(2);
+ const dialog=await showFinalReview(page);
+ await expect(dialog.locator('.training-final-row')).toHaveCount(2);
+ await expect(dialog).toContainText('Recommended');
+ const first=dialog.locator('.training-final-row').first();
+ await first.getByRole('button',{name:'Remove'}).click();
+ let confirm=page.locator('#trainingReviewRemoveConfirm');
+ await expect(confirm).toBeVisible();
+ await expect(confirm).toContainText('Are you sure?');
+ await confirm.getByRole('button',{name:'No'}).click();
+ await expect(confirm).toBeHidden();
+ await expect(dialog.locator('.training-final-row')).toHaveCount(2);
+ await dialog.locator('.training-final-row').first().getByRole('button',{name:'Remove'}).click();
+ confirm=page.locator('#trainingReviewRemoveConfirm');
+ await confirm.getByRole('button',{name:'Yes'}).click();
+ await expect(confirm).toBeHidden();
+ await expect(dialog.locator('.training-final-row')).toHaveCount(1);
+ expect(server.items).toHaveLength(2,'deletion is staged, not committed before Finish');
+ expect(server.completedCount()).toBe(0);
+ await dialog.getByRole('button',{name:'Finish'}).click();
+ await expect(dialog).toBeHidden();
+ await expect.poll(()=>server.completedCount()).toBe(1);
+ expect(server.items).toHaveLength(1);
+ expect(server.items[0].context.kind).toBe('shake');
+ expect((await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus())).modelExamples).toBe(0);
+ expect((await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus())).specialModelExamples).toBe(1);
+});
+test('removing all incorrect expert labels still allows Finish without training',async({page})=>{
+ const server=await setup(page);
+ await page.locator('#alternate').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
+ const dialog=await showFinalReview(page);
+ await dialog.locator('.training-final-row').getByRole('button',{name:'Remove'}).click();
+ await page.locator('#trainingReviewRemoveConfirm').getByRole('button',{name:'Yes'}).click();
+ await expect(dialog.locator('.training-final-row')).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Finish'}).click();
+ await expect(dialog).toBeHidden();
+ expect(server.items).toHaveLength(0);
+ expect(server.completedCount()).toBe(1);
+ expect((await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus())).modelExamples).toBe(0);
+});
+test('server failure during final Finish retains review and does not claim learning',async({page})=>{
+ const server=fakeCloud(),original=server.handle;
+ server.handle=async route=>new URL(route.request().url()).pathname.endsWith('/finalize')?
+   route.fulfill({status:503,contentType:'application/json',
+     body:JSON.stringify({ok:false,error:'FINALIZE_UNAVAILABLE'})}):original(route);
+ await setup(page,'expert@example.test',server);
+ await page.locator('#alternate').click();
+ await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
+ const dialog=await showFinalReview(page);
+ await dialog.getByRole('button',{name:'Finish'}).click();
+ await expect(dialog).toBeVisible();
+ await expect(dialog.locator('#trainingFinalReviewStatus')).toContainText('FINALIZE_UNAVAILABLE');
+ expect(server.completedCount()).toBe(0);
 });
