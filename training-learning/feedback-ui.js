@@ -87,8 +87,18 @@ const picture=id=>{
  return name||el?.alt||id||'—';
 };
 const moveId=(h,t)=>h+'|'+(t||'-');
+// The native engine treats a three-card floor stack as ONE automatic target.
+// Do not mistake its three visible cards for a two-target choice dialog.
+const effectiveFloorTargets=floorIds=>{
+ const stackTargets=new Map();
+ document.querySelectorAll('#floor .floor-stack-three[data-stack-month]').forEach(el=>{
+  const ids=[...el.querySelectorAll('.floor-card[data-card-id]')].map(x=>x.dataset.cardId).filter(Boolean);
+  if(ids.length===3)stackTargets.set(Number(el.dataset.stackMonth),ids.at(-1));
+ });
+ return floorIds.filter(id=>!stackTargets.has(card(id)?.month)||stackTargets.get(card(id)?.month)===id);
+};
 const legalMoves=(handIds,floorIds)=>{
- const targets=floorIds.map(card).filter(Boolean);
+ const targets=effectiveFloorTargets(floorIds).map(card).filter(Boolean);
  return handIds.flatMap(handId=>{
   const h=card(handId);if(!h)return[];
   const matched=targets.filter(t=>t.month===h.month);
@@ -399,11 +409,13 @@ const handSignature=()=>[...document.querySelectorAll('#playerHand .hand-card[da
 function captureRecommendation(){
  if(!active)return null;
  const hand=handSignature();
- const rec=$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
+ const locked=globalThis.GoStopTrainingRecommendationDev?.getStatus?.();
+ const approved=locked?.locked&&locked?.hand&&locked?.floor&&hand.split('|').includes(locked.hand);
+ const rec=(approved?locked.hand:null)||$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
  if(rec){
-  const original=$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
+  const original=(approved?locked.floor:null)||$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
   if(!observedRecommendation||observedRecommendation.handSignature!==hand||
-     observedRecommendation.hand!==rec){
+     observedRecommendation.hand!==rec||observedRecommendation.target!==original){
    observedRecommendation={handSignature:hand,hand:rec,target:original};
   }else if(!observedRecommendation.target&&original){
    observedRecommendation.target=original;
@@ -446,10 +458,10 @@ function onHandActivation(cardId,source='click'){
  const rec=recommendation.hand,recFloor=recommendation.target;
  const current=cardId;
  lastHand={current,rec,recFloor,observe:observed};
- const targets=observed.floorIds.filter(id=>card(id)?.month===card(current)?.month);
+ const targets=effectiveFloorTargets(observed.floorIds).filter(id=>card(id)?.month===card(current)?.month);
  if(targets.length>1)return; // Wait until one actual table target is selected.
  const actualTarget=targets[0]||null;
- const recTargets=observed.floorIds.filter(id=>card(id)?.month===card(rec)?.month);
+ const recTargets=effectiveFloorTargets(observed.floorIds).filter(id=>card(id)?.month===card(rec)?.month);
  const originalTarget=recTargets.includes(recFloor)?recFloor:recTargets[0]||null;
  if(moveId(current,actualTarget)===moveId(rec,originalTarget))return;
  window.setTimeout(()=>{if(active)beginDisagreement({hand:rec,target:originalTarget},
@@ -467,7 +479,7 @@ function onTarget(event){
  const prior=lastHand;
  if(!prior)return;
  const chosen={hand:prior.current,target};
- const recTargets=prior.observe.floorIds.filter(id=>card(id)?.month===card(prior.rec)?.month);
+ const recTargets=effectiveFloorTargets(prior.observe.floorIds).filter(id=>card(id)?.month===card(prior.rec)?.month);
  const advised={hand:prior.rec,target:recTargets.includes(prior.recFloor)?prior.recFloor:recTargets[0]||null};
  lastHand=null;
  window.setTimeout(()=>{if(active)beginDisagreement(advised,chosen,prior.observe);},200);
@@ -531,7 +543,7 @@ function onGoStopDecision(event){
  };
  const playerScore=scoreOf('playerScore'),opponentScore=scoreOf('aiScore');
  if(!Number.isInteger(playerScore)||playerScore<7||!Number.isInteger(opponentScore)||
-    visible.hand.length<1||visible.hand.length>10)return;
+    visible.hand.length>10)return;
  const month=id=>Number(/^m(\d+)-/.exec(id)?.[1]);
  const hasMatch=visible.hand.some(h=>visible.floor.some(f=>month(h)===month(f)));
  const goCount=scoreOf('goCount')??0;
