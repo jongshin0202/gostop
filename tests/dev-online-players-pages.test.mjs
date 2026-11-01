@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Lobby} from '../dev-site/worker-dist/server/lobby.mjs';
 import {instrumentDevOnlinePlayersClient} from '../dev-site/instrument-online-players-client.mjs';
+import {instrumentDevResponsiveLobby} from '../dev-site/instrument-online-lobby-responsiveness.mjs';
+import {instrumentDevFriendlyInvite} from '../dev-site/instrument-friendly-invite.mjs';
 let n=0;
 function client(id,nickname,{online=true,twoPlayer=false,wallet=1000}={}){
  const now=Date.now();
@@ -66,13 +68,13 @@ test('Online Players sorts by existing skill similarity, not alphabetical order'
  assert.equal(list.players[0].nickname,'Zeta');
  assert.ok(list.players[0].similarity>list.players[1].similarity);
 });
-test('generated Online Players client contains four buttons and paginated controls, protected client remains unchanged',async()=>{
- const protectedSource=await readFile(new URL('../ranked-client.js',import.meta.url),'utf8');
- const base=await readFile(new URL('../dev-site/dist/ranked-client.js',import.meta.url),'utf8');
- const result=instrumentDevOnlinePlayersClient(base.replace(
- '<button id="onlinePlayersBtn" type="button">Online Players</button>','__ALREADY_MODIFIED__'
- ));
- // The previous assertion intentionally must fail if a generated client is instrumented twice.
- assert.ok(result.includes('Online Players'));
- assert.ok(!protectedSource.includes('id="onlinePlayersBtn"'));
+test('generated Online Players client has a fourth button and paging controls without changing protected source',async()=>{
+ const original=await readFile(new URL('../ranked-client.js',import.meta.url),'utf8');
+ const generated=instrumentDevOnlinePlayersClient(instrumentDevResponsiveLobby(instrumentDevFriendlyInvite(original)));
+ assert.ok(generated.includes('id="onlinePlayersBtn"'));
+ assert.ok(generated.includes('id="onlineRosterPrev"'));
+ assert.ok(generated.includes('id="onlineRosterNext"'));
+ assert.ok(generated.includes("message.type==='onlinePlayers'"));
+ assert.equal(original.includes('id="onlinePlayersBtn"'),false);
+ assert.doesNotThrow(()=>new Function(generated),'development ranked client must parse');
 });
