@@ -11,6 +11,7 @@ test('generated development client recognizes immediate Auto Match ack and recov
  assert.match(compiled,/finishAutoMatchStart\(\);autoMatchSearching=true/);
  assert.ok(!source.includes("if(message.type==='autoMatchStarted')"),'never modify protected ranked client');
  assert.notEqual(compiled,source);
+ assert.doesNotThrow(()=>new Function(compiled),'generated browser script must be valid JavaScript');
 });
 test('compiled lobby instrumentation requires exactly one known source anchor',async()=>{
  const source=await readFile(new URL('../ranked-client.js',import.meta.url),'utf8');
