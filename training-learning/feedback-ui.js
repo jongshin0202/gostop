@@ -22,7 +22,7 @@ async function checkAccount(){
 // The only local setting is the UI preference; training data and weights live on Cloudflare.
 const ENABLE_KEY='gostop-training-feedback-enabled';
 const cloud=globalThis.GoStopTrainingCloud;
-let serverFeedbackCount=0,serverModelExamples=0,serverSpecialExamples=0,lastError=null,serverReady=false;
+let serverFeedbackCount=0,serverModelExamples=0,serverSpecialExamples=0,serverGoStopExamples=0,lastError=null,serverReady=false;
 async function syncStatus(){
  if(!cloud)return;
  try{
@@ -30,6 +30,7 @@ async function syncStatus(){
   serverFeedbackCount=state.feedbackCount||0;
   serverModelExamples=state.model?.examples||0;
   serverSpecialExamples=state.specialModel?.examples||0;
+  serverGoStopExamples=state.goStopModel?.examples||0;
   serverReady=true;lastError=null;
  }catch(error){serverReady=false;lastError=String(error.message||error);}
 }
@@ -45,13 +46,13 @@ zh:['复盘出牌','你的出牌与推荐不同。哪一种策略更好？','推
 };
 // Labels are separate from strategy recommendations and never affect gameplay.
 const SPECIAL_ACTION_LABELS={
- en:{shake:'Shake',keepForBomb:'Keep for Bomb',bomb:'Bomb',playOne:'Play One'},
- ko:{shake:'흔들기',keepForBomb:'폭탄 기회 유지',bomb:'폭탄',playOne:'한 장 내기'},
- es:{shake:'Sacudir',keepForBomb:'Guardar para bomba',bomb:'Bomba',playOne:'Jugar una carta'},
- fr:{shake:'Secouer',keepForBomb:'Garder pour une bombe',bomb:'Bombe',playOne:'Jouer une carte'},
- de:{shake:'Schütteln',keepForBomb:'Für Bombe behalten',bomb:'Bombe',playOne:'Eine Karte spielen'},
- ja:{shake:'振り',keepForBomb:'爆弾用に残す',bomb:'爆弾',playOne:'1枚出す'},
- zh:{shake:'摇牌',keepForBomb:'保留炸弹机会',bomb:'炸弹',playOne:'出一张'}
+ en:{shake:'Shake',keepForBomb:'Keep for Bomb',bomb:'Bomb',playOne:'Play One',go:'GO',stop:'STOP'},
+ ko:{shake:'흔들기',keepForBomb:'폭탄 기회 유지',bomb:'폭탄',playOne:'한 장 내기',go:'고',stop:'스톱'},
+ es:{shake:'Sacudir',keepForBomb:'Guardar para bomba',bomb:'Bomba',playOne:'Jugar una carta',go:'Ir',stop:'Parar'},
+ fr:{shake:'Secouer',keepForBomb:'Garder pour une bombe',bomb:'Bombe',playOne:'Jouer une carte',go:'GO',stop:'STOP'},
+ de:{shake:'Schütteln',keepForBomb:'Für Bombe behalten',bomb:'Bombe',playOne:'Eine Karte spielen',go:'GO',stop:'STOP'},
+ ja:{shake:'振り',keepForBomb:'爆弾用に残す',bomb:'爆弾',playOne:'1枚出す',go:'ゴー',stop:'ストップ'},
+ zh:{shake:'摇牌',keepForBomb:'保留炸弹机会',bomb:'炸弹',playOne:'出一张',go:'继续',stop:'停止'}
 };
 const specialActionLabel=(action,context)=>{
  const label=(SPECIAL_ACTION_LABELS[document.documentElement.lang]||SPECIAL_ACTION_LABELS.en)[action]||action;
@@ -177,7 +178,7 @@ function reviewDetail(entry){
   text.recommend+': '+(entry.suggested||[]).join(', '),
   text.played+': '+(entry.selected||[]).join(', ')
  ];
- if(entry.kind==='special')return [
+ if(entry.kind==='go-stop'||entry.kind==='special')return [
   text.recommend+': '+specialActionLabel(entry.recommendedAction,entry.context),
   text.played+': '+specialActionLabel(entry.playedAction,entry.context)
  ];
@@ -203,7 +204,7 @@ function renderReview(){
   row.dataset.reviewId=item.id;
   const summary=document.createElement('div');
   const headingText=document.createElement('strong');
-  headingText.textContent='#'+(index+1)+' · '+(item.kind==='opening'?'Opening':item.kind==='special'?'Shake / Bomb':'Move');
+  headingText.textContent='#'+(index+1)+' · '+(item.kind==='opening'?'Opening':item.kind==='go-stop'?'GO / STOP':item.kind==='special'?'Shake / Bomb':'Move');
   summary.append(headingText);
   for(const line of reviewDetail(item)){
    const x=document.createElement('small');x.textContent=line;summary.append(x);
@@ -305,7 +306,12 @@ async function safeRecord(data,label,choice){
  if(!cloud)throw new Error('Cloud learning is not configured. No feedback was saved.');
  if(!verifiedAccount())throw new Error('Please sign in to the authorized development account.');
  ensureGame();
- const upload=data.kind==='special'?
+ const upload=data.kind==='go-stop'?
+  cloud.goStopFeedback({
+   gameId,feedbackId:crypto.randomUUID(),choice,reviewRequired:true,
+   recommendedAction:data.recommended.action,playedAction:data.played.action,
+   legalActions:data.legalActions,context:data.context,visible:data.visible
+  }):data.kind==='special'?
   cloud.specialFeedback({
    gameId,feedbackId:crypto.randomUUID(),choice,reviewRequired:true,
    recommendedAction:data.recommended.action,playedAction:data.played.action,
@@ -319,7 +325,8 @@ async function safeRecord(data,label,choice){
  try{
   await upload;
   serverFeedbackCount++;
-  if(label&&(data.kind==='special'?data.legalActions.includes(label):data.legalMoves.some(m=>m.moveId===label)))confirmedCount++;
+  if(label&&((data.kind==='special'||data.kind==='go-stop')?
+      data.legalActions.includes(label):data.legalMoves.some(m=>m.moveId===label)))confirmedCount++;
   serverReady=true;lastError=null;
   completion();
  }catch(error){
@@ -337,7 +344,8 @@ function feedbackDialog(data){
  const comparison=document.createElement('div');comparison.style.cssText='display:grid;gap:5px;margin-bottom:16px';
  for(const [label,move] of [[recLabel,data.recommended],[myLabel,data.played]]){
   const line=document.createElement('div');
-  line.textContent=label+': '+(data.kind==='special'?specialActionLabel(move.action,data.context):picture(move.hand)+(move.target?' → '+picture(move.target):''));
+  line.textContent=label+': '+((data.kind==='special'||data.kind==='go-stop')?
+   specialActionLabel(move.action,data.context):picture(move.hand)+(move.target?' → '+picture(move.target):''));
   comparison.appendChild(line);
  }
  const actions=document.createElement('div');actions.className='feedback-actions';
@@ -357,7 +365,7 @@ function feedbackDialog(data){
   // remains restricted to the verified expert; never claim an unsaved choice
   // was recorded, and never store training data on the device.
   if(!canSubmit){errorLine.textContent=(GUEST_COPY[document.documentElement.lang]||GUEST_COPY.en)[1];return;}
-  const chosen=data.kind==='special'?
+  const chosen=(data.kind==='special'||data.kind==='go-stop')?
     (choice==='mine'?data.played.action:choice==='recommended'?data.recommended.action:null):
     (choice==='mine'?moveId(data.played.hand,data.played.target):
       choice==='recommended'?moveId(data.recommended.hand,data.recommended.target):null);
@@ -500,6 +508,40 @@ function onSpecialDecision(event){
  hadDisagreement=true;
  window.setTimeout(()=>{if(active)enqueue(observed);},150);
 }
+// Capture the player's GO / STOP choice BEFORE the frozen game closes its
+// decision dialog. No click is canceled or replayed. This is a separate
+// development-only Training observation, not a gameplay rule change.
+function onGoStopDecision(event){
+ if(!active||!enabled()||modal.open)return;
+ const selected=event.target?.closest?.('#goBtn,#stopBtn');
+ const dialog=selected?.closest?.('#decisionDialog');
+ if(!selected||!dialog?.open)return;
+ const go=dialog.querySelector('#goBtn'),stop=dialog.querySelector('#stopBtn');
+ const recommended=go?.classList.contains('training-choice-recommended')?go:
+  stop?.classList.contains('training-choice-recommended')?stop:null;
+ if(!recommended||recommended===selected)return;
+ const action=b=>b===go?'go':'stop';
+ const visible={
+  hand:[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')].map(el=>el.dataset.cardId),
+  floor:onTable(),humanCaptured:captured('#playerCaptured'),computerCaptured:captured('#aiCaptured')
+ };
+ const scoreOf=id=>{
+  const value=String($(id)?.textContent||'').match(/\\d+/)?.[0];
+  return value===undefined?null:Number(value);
+ };
+ const playerScore=scoreOf('playerScore'),opponentScore=scoreOf('aiScore');
+ if(!Number.isInteger(playerScore)||playerScore<7||!Number.isInteger(opponentScore)||
+    visible.hand.length<1||visible.hand.length>10)return;
+ const month=id=>Number(/^m(\\d+)-/.exec(id)?.[1]);
+ const hasMatch=visible.hand.some(h=>visible.floor.some(f=>month(h)===month(f)));
+ const goCount=scoreOf('goCount')??0;
+ const observed={kind:'go-stop',legalActions:['go','stop'],
+  context:{playerScore,opponentScore,remainingCards:visible.hand.length,goCount,hasMatch},
+  recommended:{action:action(recommended)},played:{action:action(selected)},visible};
+ hadDisagreement=true;
+ // Queue immediately, before a STOP result can open its end-of-game review.
+ enqueue(observed);
+}
 document.addEventListener('click',event=>{
  const t=event.target;
  if(t?.closest?.('#trainingModeBtn')){active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
@@ -514,6 +556,7 @@ document.addEventListener('click',event=>{
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
  if(t?.closest?.('#shakeDialog,#bombDialog'))onSpecialDecision(event);
+ if(t?.closest?.('#decisionDialog'))onGoStopDecision(event);
 },{capture:true});
 // The game's mobile flick/tap adapter dispatches this custom action instead of
 // always clicking the card. Capture it without preventing the actual game move.
@@ -523,7 +566,8 @@ document.addEventListener('gostop-hand-activate',event=>{
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingFeedbackDev',{value:Object.freeze({
  getStatus:()=>({enabled:enabled(),active,authorized:verifiedAccount(),gameId,confirmed:confirmedCount,
-  examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,serverReady,lastError,
+  examples:serverFeedbackCount,modelExamples:serverModelExamples,specialModelExamples:serverSpecialExamples,
+  goStopModelExamples:serverGoStopExamples,serverReady,lastError,
   storage:'development-cloudflare',pendingUploads:pendingUploads.size,reviewing,reviewItems:reviewState?.items?.length||0,removedReviews:removedReviews.size}),
  exportFeedback:async()=>JSON.stringify((await cloud.history()).feedback),
  refresh:syncStatus,
