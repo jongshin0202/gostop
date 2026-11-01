@@ -4,6 +4,7 @@ import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {instrumentDevCompetitiveSoloPeerSync} from './instrument-competitive-solo-peer-sync.mjs';
 import {instrumentDevFriendlyInvite} from './instrument-friendly-invite.mjs';
+import {instrumentDevResponsiveLobby} from './instrument-online-lobby-responsiveness.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'..'),output=join(here,'dist');
 const gameFiles=[
@@ -21,7 +22,7 @@ await writeFile(devAppPath,instrumentDevCompetitiveSoloPeerSync(await readFile(d
 await copyFile(join(root,'dev-site/competitive-solo-peer-sync.js'),join(output,'dev-competitive-solo-peer-sync.js'));
 // Development guest-link entry requires a user-gesture fullscreen gate.
 const devRankedPath=join(output,'ranked-client.js');
-await writeFile(devRankedPath,instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8')));
+await writeFile(devRankedPath,instrumentDevResponsiveLobby(instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8'))));
 await copyFile(join(root,'dev-site/friendly-invite-ux.js'),join(output,'dev-friendly-invite-ux.js'));
 // Removable, development-only Training feedback; not included in public game builds.
 await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'training-learning-cloud.js'));
@@ -65,7 +66,7 @@ html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029
 const rankedDevScript='<script src="ranked-client.js?v=20261008-8"></script>';
 if(!html.includes(rankedDevScript))throw new Error('Missing ranked-client script for isolated Friendly invite patch');
 html=html.replace(rankedDevScript,
- '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="ranked-client.js?v=20261101-dev-invite-1"></script>');
+ '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="ranked-client.js?v=20261101-dev-online-responsive-1"></script>');
 const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261101-countdown-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-countdown-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>',
