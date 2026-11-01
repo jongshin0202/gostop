@@ -92,7 +92,7 @@ test('non-Training Solo, modal decisions and opening review never invoke hidden 
  await page.waitForTimeout(100);
  expect(await page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(0);
  await page.evaluate(()=>document.querySelector('#trainingFeedbackDialog').close());
- await page.evaluate(()=>document.querySelector('[data-card-id="m2-1"]').disabled=false);
+ await page.evaluate(()=>{const card=document.querySelector('[data-card-id="m2-1"]');card.disabled=true;card.disabled=false;});
  await expect.poll(()=>page.evaluate(()=>globalThis.__nativeHintCalls)).toBe(1);
  await page.locator('#quitYesBtn').click();
  await page.evaluate(()=>{
