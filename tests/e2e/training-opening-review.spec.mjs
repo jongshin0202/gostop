@@ -105,6 +105,28 @@ test('phone opening dialog stays in the visible viewport and lets expert review 
  await review.getByRole('button',{name:'Continue without saving'}).click();
  expect(await page.evaluate(()=>window.__sent.length)).toBe(0);
 });
+test('opening review does not cover the hand and leaves the board readable on Android-sized screens',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await setup(page);
+ const bounds=()=>page.evaluate(()=>{
+  const panel=document.getElementById('devOpeningReview');
+  const hand=document.getElementById('playerHand');
+  return {dialog:panel.getBoundingClientRect().toJSON(),hand:hand.getBoundingClientRect().toJSON(),
+   backdrop:getComputedStyle(panel,'::backdrop').backgroundColor};
+ });
+ let result=await bounds();
+ expect(result.dialog.bottom).toBeLessThanOrEqual(result.hand.top-5);
+ expect(result.backdrop).toBe('rgba(0, 0, 0, 0.22)');
+ await page.locator('#devOpeningReview').getByRole('button',{name:'No, change strategies'}).click();
+ await expect(page.locator('#devOpeningReview input[type=checkbox]')).toHaveCount(8);
+ result=await bounds();
+ expect(result.dialog.bottom).toBeLessThanOrEqual(result.hand.top-5);
+ await page.setViewportSize({width:390,height:670});
+ result=await bounds();
+ expect(result.dialog.bottom).toBeLessThanOrEqual(result.hand.top-5);
+ await page.locator('#devOpeningReview').getByRole('button',{name:'Continue without saving'}).click();
+ await expect(page.locator('#devOpeningReview')).toHaveCount(0);
+});
 test('Not sure is stored as uncertain, never as confirmed labels',async({page})=>{
  await setup(page);
  await page.getByRole('button',{name:'Not sure'}).click();

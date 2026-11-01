@@ -3,15 +3,19 @@
  */
 dialog.dev-opening-review:not([open]){display:none}
 dialog.dev-opening-review{
- position:fixed;inset:0;margin:auto;box-sizing:border-box;
+ /* Anchor at the top, not the viewport center: the hand must remain visible. */
+ position:fixed;inset:auto;left:50%;top:var(--dev-review-top,12px);
+ transform:translateX(-50%);margin:0;box-sizing:border-box;
  width:min(670px,calc(100vw - 28px));max-width:670px;
- max-height:calc(100dvh - 28px);overflow-y:auto;overscroll-behavior:contain;
+ max-height:var(--dev-review-safe-height,calc(100dvh - 28px));
+ overflow-y:auto;overscroll-behavior:contain;
  padding:22px;border:2px solid #bd9457;border-radius:16px;
  background:linear-gradient(180deg,#322016,#19100c);
  box-shadow:0 20px 68px #000d;color:#f8e9ce;
  z-index:2147483646;
 }
-dialog.dev-opening-review::backdrop{background:rgba(0,0,0,.68)}
+/* Keep cards, table and scoreboard readable beneath the modal. */
+dialog.dev-opening-review::backdrop{background:rgba(0,0,0,.22)}
 .dev-opening-review [hidden]{display:none!important}
 .dev-opening-review h2{
  margin:0 0 14px;font:800 17px/1.3 system-ui,sans-serif;
@@ -59,7 +63,7 @@ dialog.dev-opening-review::backdrop{background:rgba(0,0,0,.68)}
 .dev-opening-review-option:focus-within{outline:2px solid #ffdc91;outline-offset:2px}
 .dev-opening-review-status{font-weight:650!important;color:#ffca7a;min-height:1.4em}
 @media(max-width:560px){
- dialog.dev-opening-review{width:calc(100vw - 18px);max-height:calc(100dvh - 18px);padding:15px}
+ dialog.dev-opening-review{width:calc(100vw - 18px);max-height:var(--dev-review-safe-height,calc(100dvh - 18px));padding:15px}
  .dev-opening-review-options{grid-template-columns:1fr;gap:7px}
  .dev-opening-review-option{min-height:42px;padding:8px}
  .dev-opening-review h2{font-size:15px}
