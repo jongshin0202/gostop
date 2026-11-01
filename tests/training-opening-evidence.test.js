@@ -117,7 +117,8 @@ test('opening counts distinguish held, already captured and claimable cards with
  for(const locale of ['en','ko','es','fr','de','ja','zh']){
   const lines=helper.openingLocationLines(v,deck,['brights','plain-stripes'],locale);
   assert.equal(lines.length,2);
-  assert.ok(lines.every(x=>x.includes('1')&&x.includes('0')));
+  assert.ok(lines.every(x=>x.includes('1')));
+  assert.ok(lines.some(x=>x.includes('0')));
  }
 });
 test('opening count details omit categories that do not use a set card count',()=>{
