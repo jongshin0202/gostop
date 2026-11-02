@@ -8,6 +8,7 @@ on:
       - server/**
       - wrangler.dev.toml
       - scripts/smoke-dev-worker.mjs
+      - scripts/smoke-dev-friendly-room.mjs
       - package.json
       - package-lock.json
       - .github/workflows/deploy-cloudflare-development.yml
@@ -44,3 +45,5 @@ jobs:
           command: deploy --config wrangler.dev.toml
       - name: Verify development leaderboards and browser CORS
         run: node scripts/smoke-dev-worker.mjs
+      - name: Verify real DEV Friendly room creation, invitation join, and preserved guest seat
+        run: node scripts/smoke-dev-friendly-room.mjs
