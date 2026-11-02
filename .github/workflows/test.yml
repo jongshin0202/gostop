@@ -44,6 +44,8 @@ jobs:
           node --check server/room-core.mjs
           node --check server/worker.mjs
           node --check server/development-worker.mjs
+          node --check server/development-game-room.mjs
+          node --check server/development-friendly-room-core.mjs
           node --check server/lobby-development.mjs
           node --check server/development-account-store.mjs
       - name: Regression tests
@@ -65,11 +67,12 @@ jobs:
           node --check dev-site/instrument-competitive-solo-peer-sync.mjs
           node --check dev-site/friendly-invite-ux.js
           node --check dev-site/instrument-friendly-invite.mjs
+          node --check dev-site/instrument-friendly-resume.mjs
           node --check dev-site/instrument-competitive-lobby.mjs
           node --check training-learning/opening-learner.mjs
           node --check dev-site/training-opening-evidence.js
           node --check dev-site/training-opening-review.js
-          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs tests/training-model-progress.test.mjs tests/competitive-solo-peer-sync.test.mjs tests/friendly-invite-ux.test.mjs tests/competitive-lobby-reliability.test.mjs tests/competitive-lobby-client.test.mjs tests/development-account-search.test.mjs
+          node --test tests/training-learning-server.test.mjs tests/training-learning-offline.test.js tests/training-update-cadence.test.mjs tests/training-special-learner.test.mjs tests/training-opening-learner.test.mjs tests/training-go-stop-learner.test.mjs tests/training-reserved-ppeok-priority.test.mjs tests/training-shaken-priority.test.mjs tests/training-model-progress.test.mjs tests/competitive-solo-peer-sync.test.mjs tests/friendly-invite-ux.test.mjs tests/competitive-lobby-reliability.test.mjs tests/competitive-lobby-client.test.mjs tests/development-account-search.test.mjs tests/development-friendly-room.test.mjs tests/development-friendly-resume.test.mjs
       # Ubuntu 24.04 hosted runners sometimes route apt through an unavailable
       # Azure mirror, preventing Playwright's --with-deps step from ever running.
       # Replace only that mirror with the standard Ubuntu archive; preserve all
