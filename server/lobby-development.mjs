@@ -230,12 +230,13 @@ export class Lobby{
     if(challenge.status==='pending'){
       const creator=this.clientById(challenge.fromClientId),missed={type:'challengeMissed',requestId:challenge.id,automatic:!!challenge.automatic,createdAt:challenge.createdAt,from:challenge.fromProfile||{accountId:challenge.from,nickname:'Player'}};
       this.sendToAccount(challenge.to,missed);this.challenges.delete(challenge.id);
-      if(challenge.automatic&&creator){
-        for(const item of this.clientsForAccount(challenge.to))item.autoMatching=false;creator.autoMatching=true;creator.autoMatchCandidateId=null;
-        await this.tryAutoMatch(creator);
-      }else{
-        this.releaseChallenge(challenge);if(creator)this.send(creator.socket,{type:'challengeNoAnswer',requestId:challenge.id,by:challenge.toProfile||{accountId:challenge.to,nickname:'Player'}});
-      }
+      // Auto Match's candidate is explicitly chosen by pressing Play.
+      // Do NOT silently start searching/retrying when that 30-second request expires;
+      // always finish the exact outgoing request and acknowledge its timeout.
+      this.releaseChallenge(challenge);
+      if(creator)this.send(creator.socket,{type:'challengeNoAnswer',requestId:challenge.id,
+        automatic:!!challenge.automatic,by:challenge.toProfile||{accountId:challenge.to,nickname:'Player'}});
+
       await this.broadcastRecommendations();return true;
     }
     for(const item of this.clientsForAccount(challenge.from))item.available=true;for(const item of this.clientsForAccount(challenge.to))item.available=true;this.releaseChallenge(challenge);this.challenges.delete(challenge.id);
