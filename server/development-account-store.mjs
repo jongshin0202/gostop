@@ -36,7 +36,7 @@ export class AccountStore extends FrozenAccountStore{
     if(!stableZone)return super.awardDaily(account,request);
     const headers=new Headers(request?.headers||{});
     headers.set('x-gostop-timezone',stableZone);
-    return super.awardDaily(account,new Request(request,{headers}));
+    return super.awardDaily(account,{headers});
   }
   // Private Durable Object fetch only, not exposed through the public Worker.
   // An extra stale lobby socket must never make an account with an active
