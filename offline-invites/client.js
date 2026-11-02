@@ -18,7 +18,7 @@ dialog.innerHTML='<h2 id="devInviteDialogTitle">Request in Progress</h2><p id="d
 document.body.appendChild(dialog);
 const prefsHost=$('settingsControlsHost');
 const settings=document.createElement('section');settings.id='devInvitePreferences';
-settings.innerHTML='<label><input id="devInviteEnabled" type="checkbox" checked>Allow offline Competitive game requests from friends</label><button id="devInviteAllowAlerts" type="button">Enable phone notifications</button><p id="devInvitePreferenceStatus">On by default. Turn off to stop friends requesting games while you are offline.</p>';
+settings.innerHTML='<label><input id="devInviteEnabled" type="checkbox" checked>Allow offline Competitive game requests from friends</label><button id="devInviteAllowAlerts" type="button">Enable phone notifications</button><button id="devInviteTestAlert" type="button">Test phone notification</button><p id="devInvitePreferenceStatus">Phone notifications require browser permission and a registered device, even when invitations are enabled.</p>';
 prefsHost?.appendChild(settings);
 function err(message){$('devInviteDialogError').textContent=String(message||'');}
 async function api(path,data){
@@ -27,7 +27,7 @@ async function api(path,data){
   headers:{authorization:'Bearer '+token,...(data===undefined?{}:{'content-type':'application/json'})},
   ...(data===undefined?{}:{body:JSON.stringify(data)}),cache:'no-store',signal:AbortSignal.timeout(9000)});
  const result=await response.json().catch(()=>null);
- if(!response.ok||!result?.ok)throw new Error(result?.error||'Invitation service unavailable');
+ if(!response.ok||!result?.ok)throw new Error(result?.message||result?.error||'Invitation service unavailable');
  return result;
 }
 function closeRequest(){if(interval)clearInterval(interval);interval=null;pending=null;if(dialog.open)dialog.close();}
@@ -65,9 +65,10 @@ async function sendOfflineRequest(friend){
  if(pending)return;
  try{
   const data=await api('/request',{targetId:friend.accountId});
+  if(!(Number(data.deliveredDevices)>0))throw new Error('No device accepted the push. Ask your friend to enable phone notifications in Account Settings.');
   pending=data.invite;
   $('devInviteDialogTitle').textContent='Request in Progress';
-  $('devInviteDialogStatus').textContent='Waiting for '+friend.nickname+' to respond…';
+  $('devInviteDialogStatus').textContent='Phone push accepted by '+data.deliveredDevices+' device(s). Waiting for '+friend.nickname+' to respond…';
   $('devInviteDialogCountdown').textContent='30 seconds remaining';err('');
   if(!dialog.open)dialog.showModal();
   interval=setInterval(()=>void refreshOutgoing(),1200);
@@ -179,11 +180,33 @@ notify?.addEventListener('click',async()=>{
  catch(error){status.textContent=error.message;}
  finally{notify.disabled=false;}
 });
+$('devInviteTestAlert')?.addEventListener('click',async()=>{
+ const button=$('devInviteTestAlert');button.disabled=true;
+ try{
+  if(typeof Notification==='undefined'||Notification.permission!=='granted')
+   throw new Error('First enable notifications in Chrome site settings.');
+  const registration=await navigator.serviceWorker.getRegistration('/dev-invites/');
+  if(!registration?.active)throw new Error('Enable phone notifications before running the test.');
+  await registration.showNotification('GoStop Live! notification test',{
+   body:'If you can see this, Chrome can display GoStop Live! notifications on this phone.',
+   tag:'gostop-dev-notification-test'
+  });
+  status.textContent='Test notification requested. Check Android notification permissions and Do Not Disturb if none appears.';
+ }catch(error){status.textContent='Notification test failed: '+error.message;}
+ finally{button.disabled=false;}
+});
 async function refreshPreference(){
  if(!auth())return;
- try{prefs=await api('/state');if(on)on.checked=prefs.enabled;
-  if(prefs.enabled&&typeof Notification!=='undefined'&&Notification.permission==='granted')void enablePush().catch(()=>{});
- }catch(_){}
+ try{
+  prefs=await api('/state');if(on)on.checked=prefs.enabled;
+  const count=Math.max(0,Number(prefs.subscribedDevices)||0);
+  status.textContent=prefs.enabled?(count
+   ?'Offline requests enabled. '+count+' registered notification device(s). Check Android Chrome site notifications if alerts are not displayed.'
+   :'Offline requests enabled but no phone notification devices registered. Tap Enable phone notifications on your phone.')
+   :'Offline game requests are disabled.';
+  if(prefs.enabled&&typeof Notification!=='undefined'&&Notification.permission==='granted')
+   void enablePush().catch(error=>{status.textContent='Unable to register phone push: '+error.message;});
+ }catch(error){status.textContent='Notification status could not be loaded: '+error.message;}
 }
 async function acceptInvite(id){
  if(invitationOpened)return;invitationOpened=true;
