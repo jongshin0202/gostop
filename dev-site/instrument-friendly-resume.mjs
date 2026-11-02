@@ -25,7 +25,29 @@ export function instrumentDevFriendlyResume(source){
           sessionStorage.removeItem(\`gostop-room-\${code}\`);
           resumed=false;room=await adapter.join(code);
         }
-        await beginOnline(room,{anonymous:true,statusElement:status,adapter,resumeExisting:resumed});
+        const isInvitation=new URL(location.href).searchParams.get('room')===code;
+        let resolveConnected=null,connectedPromise=null;
+        if(isInvitation){
+          connectedPromise=new Promise((resolve,reject)=>{
+            const timeout=setTimeout(()=>reject(new Error('Room joined, but the live game connection did not complete. Retry to rejoin your reserved seat.')),12000);
+            adapter.addEventListener('connected',()=>{
+              clearTimeout(timeout);resolveConnected=null;resolve(true);
+            },{once:true});
+            resolveConnected=()=>{clearTimeout(timeout);};
+          });
+        }
+        try{
+          await beginOnline(room,{anonymous:true,statusElement:status,adapter,resumeExisting:resumed});
+          if(connectedPromise)await connectedPromise;
+        }catch(error){
+          resolveConnected?.();
+          if(isInvitation&&globalThis.goStopOnlineSession===adapter){
+            globalThis.GoStopGameBridge?.returnEndedOnlineSessionToMenu?.();
+            // Preserve the server-issued seat so the user's Retry Join is safe.
+            try{sessionStorage.setItem('gostop-room-'+code,JSON.stringify(room));}catch(_){}
+          }
+          throw error;
+        }
         return room;
       },`;
   return source.replace(before,after);
