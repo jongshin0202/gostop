@@ -144,3 +144,24 @@ test('Auto Match Play expires after 30 seconds and clears the requester instead 
   'timeout must NOT reopen Auto Match silently');
  assert.ok(pc.socket.messages.some(m=>m.type==='challengeMissed'&&m.requestId===invite.requestId));
 });
+
+test('expiration during slow authoritative busy check cannot revive an already expired request',async()=>{
+ const {lobby,clients:[sender,recipient]}=fixture(2);
+ lobby.broadcastRecommendations=async()=>{};
+ await lobby.handle(sender,JSON.stringify({type:'challenge',accountId:recipient.account.id}));
+ const id=sender.socket.messages.find(m=>m.type==='challengeSent')?.requestId;
+ assert.ok(id);
+ await lobby.handle(recipient,JSON.stringify({type:'challengeReceipt',requestId:id}));
+ let resolveCheck;
+ lobby.accountsFreeForCompetitive=()=>new Promise(resolve=>{resolveCheck=resolve;});
+ const accepting=lobby.handle(recipient,JSON.stringify({type:'challengeResponse',requestId:id,accept:true}));
+ assert.equal(typeof resolveCheck,'function');
+ const challenge=lobby.challenges.get(id);challenge.expiresAt=Date.now()-10;
+ await lobby.expireChallenge(id);
+ resolveCheck(true);
+ await accepting;
+ assert.equal(lobby.challenges.has(id),false);
+ assert.equal(sender.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
+ assert.equal(recipient.socket.messages.some(m=>m.type==='challengeAcceptedWaiting'),false);
+ assert.equal(recipient.socket.messages.findLast(m=>m.type==='challengeError')?.code,'REQUEST_EXPIRED');
+});
