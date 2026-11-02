@@ -9,7 +9,10 @@ async function setup(page,{incoming=false}={}){
   await page.route('https://gostop-offline-invites-dev.jwshin1.workers.dev/**',route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
     const body=req.postDataJSON?.()||{};
-    if(path.endsWith('/state'))return json(route,{ok:true,enabled:data.enabled,invites:[],subscribedDevices:0});
+    if(path.endsWith('/state'))return json(route,{ok:true,enabled:data.enabled,invites:[],subscribedDevices:1});
+    // This fixture represents a friend whose phone is registered for Web Push.
+    // A real unregistered phone must NOT expose a request button.
+    if(path.endsWith('/eligibility'))return json(route,{ok:true,targetId:'acct-friend-12345',canRequest:data.enabled});
     if(path.endsWith('/preference')){data.enabled=body.enabled;return json(route,{ok:true,enabled:data.enabled});}
     if(path.endsWith('/request')){
       data.invite={requestId:'invite_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',senderId:'acct-self-12345',
