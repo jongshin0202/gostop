@@ -37,6 +37,21 @@ async function setup(page,{incoming=false,eligible=true}={}){
       joinCompetitiveRoom:async()=>{globalThis.__joinedInviteRoom='ABCDEFGHJKLMNP';return {roomCode:'ABCDEFGHJKLMNP'}; }
     };
   });
+  if(!eligible){
+    await page.evaluate(()=>{
+      window.__eligibilityChecks=0;
+      const nativeFetch=window.fetch.bind(window);
+      window.fetch=(url,options)=>{
+        if(String(url).includes('/eligibility')){
+          window.__eligibilityChecks++;
+          return Promise.resolve(new Response(JSON.stringify({ok:true,canRequest:false}),{
+            status:200,headers:{'content-type':'application/json'}
+          }));
+        }
+        return nativeFetch(url,options);
+      };
+    });
+  }
   await page.addScriptTag({path:'offline-invites/client.js'});
   return data;
 }
@@ -84,6 +99,6 @@ test('notification Play action opens the app and joins the accepted Competitive 
 
 test('offline friend without a push subscription cannot be requested',async({page})=>{
  await setup(page,{eligible:false});
- await page.waitForTimeout(2000);
+ await expect.poll(()=>page.evaluate(()=>window.__eligibilityChecks),{timeout:12000}).toBeGreaterThan(0);
  await expect(page.getByRole('button',{name:'Request Competitive Game'})).toHaveCount(0);
 });
