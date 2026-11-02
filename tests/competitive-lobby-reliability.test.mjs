@@ -106,8 +106,10 @@ test('dev lobby cannot accept a stale or backgrounded invitation without a match
  assert.equal(lobby.challenges.has(requestId),false,'unacknowledged browser must not accept');
  assert.equal(host.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
  await lobby.handle(host,JSON.stringify({type:'challenge',accountId:phone.account.id}));
- const second=host.socket.messages.findLast(m=>m.type==='challengeSent')?.requestId;
- assert.ok(second&&second!==requestId);
+ const sentRequests=host.socket.messages.filter(m=>m.type==='challengeSent');
+ assert.equal(sentRequests.length,2,'a second request must be sent after the previous one was cancelled');
+ const second=sentRequests.at(-1)?.requestId;
+ assert.ok(second); // this fixture uses a fixed crypto byte pattern; ids may repeat across attempts
  await lobby.handle(phone,JSON.stringify({type:'challengeReceipt',requestId:second}));
  phone.foreground=false;
  await lobby.handle(phone,JSON.stringify({type:'challengeResponse',requestId:second,accept:true}));
