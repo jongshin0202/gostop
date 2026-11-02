@@ -346,6 +346,18 @@ export class Lobby{
     }
     if(message.type==='challengeResponse'){
       const challenge=this.challenges.get(message.requestId);if(!challenge||challenge.status!=='pending'||challenge.to!==client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request has expired.'});
+      // A stale/closed Android tab may retain a hibernated WebSocket briefly.
+      // Only an actual foreground device that received this exact challenge
+      // may accept it. Offline requests use the separate push authority.
+      if(message.accept){
+        const receipt=challenge.deliveryReceipts instanceof Set&&challenge.deliveryReceipts.has(client.clientId);
+        const seen=Number(client.lastPresenceAt)||0;
+        const fresh=this.clientPresence(client).heartbeatFresh&&Date.now()-seen<=45000;
+        if(!receipt||!fresh||client.foreground!==true||!this.clients.has(client.socket)){
+          this.cancelPendingChallenge(challenge,'The invited player is no longer actively available to accept.');
+          this.queueRecommendations();return;
+        }
+      }
       challenge.toClientId=client.clientId;this.clearChallengeDeliveryTimer(challenge);
       const challenger=this.clientById(challenge.fromClientId);if(!challenger){this.cancelPendingChallenge(challenge,'The requesting player is no longer online.');this.queueRecommendations();return;}
       if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});this.queueRecommendations();return;}
@@ -357,7 +369,17 @@ export class Lobby{
     if(message.type==='challengeRoomReady'){
       const challenge=this.challenges.get(message.requestId),roomCode=String(message.roomCode||'').trim().toUpperCase();if(!challenge||challenge.status!=='accepted'||challenge.from!==client.account.id||challenge.fromClientId!==client.clientId)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That accepted request is no longer active.'});
       if(!/^[A-Z2-9]{14}$/.test(roomCode))return this.send(client.socket,{type:'challengeError',code:'INVALID_ROOM',message:'The room could not be shared.'});
-      const target=this.clientById(challenge.toClientId);if(!target){for(const item of this.clientsForAccount(challenge.from))item.available=true;for(const item of this.clientsForAccount(challenge.to))item.available=true;this.challenges.delete(challenge.id);this.queueRecommendations();return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'The other player went offline before joining.'});}
+      const target=this.clientById(challenge.toClientId);
+      if(target&&(!this.clients.has(target.socket)||target.foreground!==true||
+          !this.clientPresence(target).heartbeatFresh||Date.now()-(Number(target.lastPresenceAt)||0)>65000)){
+        this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);
+        for(const item of this.clientsForAccount(challenge.from))item.available=true;
+        for(const item of this.clientsForAccount(challenge.to))item.available=true;
+        this.challenges.delete(challenge.id);
+        this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'The opponent disconnected before joining.'});
+        this.queueRecommendations();return;
+      }
+      if(!target){for(const item of this.clientsForAccount(challenge.from))item.available=true;for(const item of this.clientsForAccount(challenge.to))item.available=true;this.challenges.delete(challenge.id);this.queueRecommendations();return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'The other player went offline before joining.'});}
       challenge.status='room-ready';challenge.roomCode=roomCode;challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
       this.send(target.socket,{type:'challengeRoomReady',requestId:challenge.id,roomCode});this.send(client.socket,{type:'challengeRoomCreatedWaiting',requestId:challenge.id,roomCode});return;
     }
