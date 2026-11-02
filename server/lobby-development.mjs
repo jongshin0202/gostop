@@ -230,12 +230,13 @@ export class Lobby{
     if(challenge.status==='pending'){
       const creator=this.clientById(challenge.fromClientId),missed={type:'challengeMissed',requestId:challenge.id,automatic:!!challenge.automatic,createdAt:challenge.createdAt,from:challenge.fromProfile||{accountId:challenge.from,nickname:'Player'}};
       this.sendToAccount(challenge.to,missed);this.challenges.delete(challenge.id);
-      if(challenge.automatic&&creator){
-        for(const item of this.clientsForAccount(challenge.to))item.autoMatching=false;creator.autoMatching=true;creator.autoMatchCandidateId=null;
-        await this.tryAutoMatch(creator);
-      }else{
-        this.releaseChallenge(challenge);if(creator)this.send(creator.socket,{type:'challengeNoAnswer',requestId:challenge.id,by:challenge.toProfile||{accountId:challenge.to,nickname:'Player'}});
-      }
+      // Auto Match's candidate is explicitly chosen by pressing Play.
+      // Do NOT silently start searching/retrying when that 30-second request expires;
+      // always finish the exact outgoing request and acknowledge its timeout.
+      this.releaseChallenge(challenge);
+      if(creator)this.send(creator.socket,{type:'challengeNoAnswer',requestId:challenge.id,
+        automatic:!!challenge.automatic,by:challenge.toProfile||{accountId:challenge.to,nickname:'Player'}});
+
       await this.broadcastRecommendations();return true;
     }
     for(const item of this.clientsForAccount(challenge.from))item.available=true;for(const item of this.clientsForAccount(challenge.to))item.available=true;this.releaseChallenge(challenge);this.challenges.delete(challenge.id);
@@ -389,11 +390,25 @@ export class Lobby{
       challenge.toClientId=client.clientId;this.clearChallengeDeliveryTimer(challenge);
       const challenger=this.clientById(challenge.fromClientId);if(!challenger){this.cancelPendingChallenge(challenge,'The requesting player is no longer online.');this.queueRecommendations();return;}
       if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});this.queueRecommendations();return;}
-      if(!this.challengeParticipantsAvailable(challenge)||!await this.accountsFreeForCompetitive(challenge.from,challenge.to)){
+      const validParticipants=this.challengeParticipantsAvailable(challenge);
+      const bothAccountsFree=validParticipants&&await this.accountsFreeForCompetitive(challenge.from,challenge.to);
+      // A 30-second timer can expire while the authoritative account lookup
+      // is pending. Never transition an already-expired request to accepted.
+      if(this.challenges.get(challenge.id)!==challenge||challenge.status!=='pending'||challenge.expiresAt<=Date.now()){
+        this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That play request has expired.'});
+        return;
+      }
+      if(!bothAccountsFree||!this.challengeParticipantsAvailable(challenge)){
         this.cancelPendingChallenge(challenge,'One of the players is already in a two-player game.');this.queueRecommendations();return;
       }
+      // Never block an already-consented match handoff on leaderboard I/O.
+      // Set status and renew the timer synchronously before broadcasting.
+      const rows=this.rowsCache||new Map();
+      this.releaseChallenge(challenge);
+      for(const item of this.clientsForAccount(challenge.from)){item.available=false;item.autoMatching=false;item.autoMatchTried=new Set();item.autoMatchCandidateId=null;}
+      for(const item of this.clientsForAccount(challenge.to)){item.available=false;item.autoMatching=false;}
+      challenge.status='accepted';challenge.acceptedAt=Date.now();challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
       this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});
-      const rows=await this.leaderboardRows();this.releaseChallenge(challenge);for(const item of this.clientsForAccount(challenge.from)){item.available=false;item.autoMatching=false;item.autoMatchTried=new Set();item.autoMatchCandidateId=null;}for(const item of this.clientsForAccount(challenge.to)){item.available=false;item.autoMatching=false;}challenge.status='accepted';challenge.acceptedAt=Date.now();challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
       this.send(challenger.socket,{type:'challengeAcceptedCreateRoom',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(client,rows)});this.send(client.socket,{type:'challengeAcceptedWaiting',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(challenger,rows)});this.queueRecommendations();return;
     }
     if(message.type==='challengeRoomReady'){

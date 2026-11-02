@@ -116,3 +116,52 @@ test('dev lobby cannot accept a stale or backgrounded invitation without a match
  assert.equal(lobby.challenges.has(second),false,'background browser cannot confirm a match');
  assert.equal(host.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
 });
+
+test('Auto Match Play expires after 30 seconds and clears the requester instead of silently finding another opponent',async()=>{
+ const {lobby,clients:[phone,pc]}=fixture(2);
+ lobby.broadcastRecommendations=async()=>{};
+ await lobby.handle(phone,JSON.stringify({type:'autoMatchStart'}));
+ assert.equal(phone.socket.messages.findLast(m=>m.type==='autoMatchCandidate')?.candidate?.accountId,pc.account.id);
+ await lobby.handle(phone,JSON.stringify({type:'autoMatchAccept',accountId:pc.account.id}));
+ const invite=phone.socket.messages.findLast(m=>m.type==='challengeSent');
+ assert.ok(invite?.requestId);
+ assert.equal(invite.automatic,true);
+ assert.ok(pc.socket.messages.some(m=>m.type==='playRequest'&&m.requestId===invite.requestId));
+ const challenge=lobby.challenges.get(invite.requestId);
+ assert.ok(challenge);
+ challenge.expiresAt=Date.now()-10;
+ assert.equal(await lobby.expireChallenge(invite.requestId),true);
+ assert.equal(lobby.challenges.has(invite.requestId),false);
+ assert.equal(phone.autoMatching,false);
+ assert.equal(phone.autoMatchCandidateId,null);
+ const noAnswer=phone.socket.messages.filter(m=>m.type==='challengeNoAnswer');
+ assert.equal(noAnswer.length,1);
+ assert.equal(noAnswer[0].requestId,invite.requestId);
+ assert.equal(noAnswer[0].automatic,true);
+ assert.equal(phone.socket.messages.filter(m=>m.type==='challengeSent').length,1,
+  'timeout must NOT start another invitation without user authorization');
+ assert.equal(phone.socket.messages.filter(m=>m.type==='autoMatchCandidate').length,1,
+  'timeout must NOT reopen Auto Match silently');
+ assert.ok(pc.socket.messages.some(m=>m.type==='challengeMissed'&&m.requestId===invite.requestId));
+});
+
+test('expiration during slow authoritative busy check cannot revive an already expired request',async()=>{
+ const {lobby,clients:[sender,recipient]}=fixture(2);
+ lobby.broadcastRecommendations=async()=>{};
+ await lobby.handle(sender,JSON.stringify({type:'challenge',accountId:recipient.account.id}));
+ const id=sender.socket.messages.find(m=>m.type==='challengeSent')?.requestId;
+ assert.ok(id);
+ await lobby.handle(recipient,JSON.stringify({type:'challengeReceipt',requestId:id}));
+ let resolveCheck;
+ lobby.accountsFreeForCompetitive=()=>new Promise(resolve=>{resolveCheck=resolve;});
+ const accepting=lobby.handle(recipient,JSON.stringify({type:'challengeResponse',requestId:id,accept:true}));
+ assert.equal(typeof resolveCheck,'function');
+ const challenge=lobby.challenges.get(id);challenge.expiresAt=Date.now()-10;
+ await lobby.expireChallenge(id);
+ resolveCheck(true);
+ await accepting;
+ assert.equal(lobby.challenges.has(id),false);
+ assert.equal(sender.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
+ assert.equal(recipient.socket.messages.some(m=>m.type==='challengeAcceptedWaiting'),false);
+ assert.equal(recipient.socket.messages.findLast(m=>m.type==='challengeError')?.code,'REQUEST_EXPIRED');
+});

@@ -8,6 +8,7 @@ import {instrumentDevFriendlyResume} from './instrument-friendly-resume.mjs';
 import {instrumentDevCompetitiveLobby} from './instrument-competitive-lobby.mjs';
 import {instrumentDevCompetitiveJoinProof} from './instrument-competitive-join-proof.mjs';
 import {instrumentDevOpponentEndedCopy} from './instrument-online-ended-locales.mjs';
+import {instrumentDevCompetitiveInviteLifecycle} from './instrument-competitive-invite-lifecycle.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'..'),output=join(here,'dist');
 const gameFiles=[
@@ -25,7 +26,7 @@ await writeFile(devAppPath,instrumentDevFriendlyResume(instrumentDevCompetitiveS
 await copyFile(join(root,'dev-site/competitive-solo-peer-sync.js'),join(output,'dev-competitive-solo-peer-sync.js'));
 // Development guest-link entry requires a user-gesture fullscreen gate.
 const devRankedPath=join(output,'ranked-client.js');
-await writeFile(devRankedPath,instrumentDevCompetitiveJoinProof(instrumentDevCompetitiveLobby(instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8')))));
+await writeFile(devRankedPath,instrumentDevCompetitiveInviteLifecycle(instrumentDevCompetitiveJoinProof(instrumentDevCompetitiveLobby(instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8'))))));
 await copyFile(join(root,'dev-site/friendly-invite-ux.js'),join(output,'dev-friendly-invite-ux.js'));
 await copyFile(join(root,'dev-site/fullscreen-return-prompt.js'),join(output,'dev-fullscreen-return-prompt.js'));
 await copyFile(join(root,'dev-site/competitive-join-proof.js'),join(output,'dev-competitive-join-proof.js'));
@@ -74,7 +75,7 @@ html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029
 const rankedDevScript='<script src="ranked-client.js?v=20261008-8"></script>';
 if(!html.includes(rankedDevScript))throw new Error('Missing ranked-client script for isolated Friendly invite patch');
 html=html.replace(rankedDevScript,
- '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="dev-competitive-join-proof.js?v=20261102-safe-1"></script>\n  <script src="ranked-client.js?v=20261102-safe-1"></script>');
+ '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="dev-competitive-join-proof.js?v=20261102-safe-1"></script>\n  <script src="ranked-client.js?v=20261102-invite-lifecycle-1"></script>');
 const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261101-countdown-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-countdown-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>',
