@@ -155,6 +155,8 @@ export class OfflineInviteStore{
    if(!validId(targetId)||targetId===actor||x?.friendVerified!==true)return error('NOT_FRIEND',403);
    const pref=await this.get('pref:'+targetId,{enabled:true});
    if(pref.enabled===false)return error('OFFLINE_REQUESTS_DISABLED',403);
+   const registered=await this.get('subscriptions:'+targetId,[]);
+   if(!registered.length)return json({ok:false,error:'PHONE_NOT_SUBSCRIBED',message:'Your friend has not enabled phone push notifications. Ask them to enable phone alerts in development Account Settings.'},409);
    const pending=await this.get('pending',[]);
    for(const id of pending){
     const current=await this.get('invite:'+id);
@@ -168,6 +170,14 @@ export class OfflineInviteStore{
    const existingAlarm=await this.ctx.storage.getAlarm();
    await this.ctx.storage.setAlarm(existingAlarm&&existingAlarm>Date.now()?Math.min(existingAlarm,invite.expiresAt):invite.expiresAt);
    const deliveries=await this.push(targetId,{type:'request',requestId:id,from:actorName,expiresAt:invite.expiresAt});
+   if(!deliveries){
+     // A request with zero accepted Web Push deliveries is NOT a sent invite.
+     // Settle it immediately. Never leave the requester waiting 30 seconds.
+     invite.status='undeliverable';invite.endedAt=Date.now();invite.deliveredDevices=0;
+     await this.put('invite:'+id,invite);
+     return json({ok:false,error:'PUSH_DELIVERY_FAILED',message:'No phone push service accepted the invitation. Ask your friend to open Account Settings and enable phone notifications again.'},503);
+   }
+   invite.deliveredDevices=deliveries;await this.put('invite:'+id,invite);
    return json({ok:true,invite,deliveredDevices:deliveries});
   }
   if(req.method==='GET'&&path==='/status'){
