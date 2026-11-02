@@ -74,9 +74,9 @@ const style=()=>{if(document.getElementById('devInviteStyle'))return;
  `;
  document.head.appendChild(el);
 };
-let entryPending=null;
+let entryPending=null,entryCompleted=false;
 function gateFriendInvite(){
- if(!mobile()||document.fullscreenElement)return Promise.resolve({fullscreen:!!document.fullscreenElement});
+ if(entryCompleted||!mobile()||document.fullscreenElement)return Promise.resolve({fullscreen:!!document.fullscreenElement});
  if(entryPending)return entryPending;
  style();const strings=t(),overlay=document.createElement('section');
  overlay.id='devInviteFullscreenGate';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
@@ -87,7 +87,7 @@ function gateFriendInvite(){
  card.append(h,description,enter,fallback);overlay.append(card);document.body.append(overlay);
  const priorFocus=document.activeElement;
  entryPending=new Promise(resolve=>{
-  const finish=()=>{overlay.remove();entryPending=null;priorFocus?.focus?.();resolve({fullscreen:!!document.fullscreenElement});};
+  const finish=()=>{entryCompleted=true;overlay.remove();entryPending=null;priorFocus?.focus?.();resolve({fullscreen:!!document.fullscreenElement});};
   enter.addEventListener('click',async()=>{
    enter.disabled=true;
    const rootNode=document.documentElement;
@@ -145,6 +145,32 @@ function openShareDialog(url){
  if(typeof dialog.showModal==='function')dialog.showModal();
  else dialog.setAttribute('open','');
 }
+let joinFailureDialog=null;
+function showJoinFailure(error,retry){
+ style();
+ if(joinFailureDialog?.open)joinFailureDialog.close();
+ const dialog=document.createElement('dialog');dialog.id='devFriendJoinFailureDialog';dialog.className='dev-share-dialog';
+ const heading=document.createElement('h2');heading.textContent='Could not join the Friendly game';
+ const detail=document.createElement('p');
+ const reason=String(error?.message||'The game connection failed.').slice(0,260);
+ detail.textContent=reason+' Your invitation link is still available. Retry joining the same room.';
+ const actions=document.createElement('div');actions.className='dev-share-actions';
+ const again=button('Retry Join'),leave=button('Return to Menu','secondary');
+ again.addEventListener('click',()=>{
+  dialog.close();
+  if(typeof retry==='function')void Promise.resolve().then(retry);
+ });
+ leave.addEventListener('click',()=>{
+  dialog.close();
+  const clean=new URL(location.href);
+  clean.searchParams.delete('room');clean.searchParams.delete('mode');clean.searchParams.delete('ref');
+  location.replace(clean.pathname+clean.search+clean.hash);
+ });
+ actions.append(again,leave);dialog.append(heading,detail,actions);
+ dialog.addEventListener('close',()=>{dialog.remove();if(joinFailureDialog===dialog)joinFailureDialog=null;},{once:true});
+ document.body.append(dialog);joinFailureDialog=dialog;
+ if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
+}
 function validFriendlyLink(value){
  try{const url=new URL(value,location.href);
   const code=url.searchParams.get('room')||'';
@@ -162,7 +188,7 @@ document.addEventListener('click',event=>{
   if(status)status.textContent=t().noRoom;
  }
 },{capture:true});
-const api=Object.freeze({gateFriendInvite,validFriendlyLink});
+const api=Object.freeze({gateFriendInvite,validFriendlyLink,showJoinFailure});
 root.GoStopDevFriendlyInvite=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
