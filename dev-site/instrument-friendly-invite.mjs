@@ -6,6 +6,11 @@ export function instrumentDevFriendlyInvite(source){
  const anchor="async function launchInviteRoom(){\n    if(!validRoomParam)return;";
  const occurrences=source.split(anchor).length-1;
  if(occurrences!==1)throw new Error('Refusing unsafe dev invite instrumentation: expected one launch anchor.');
- return source.replace(anchor,
-  "async function launchInviteRoom(){\n    if(!validRoomParam)return;\n    // Mobile invite links bypass the normal main-menu fullscreen gate.\n    // Do not join until an actual tap requests fullscreen on the device.\n    if(inviteMode==='free')await globalThis.GoStopDevFriendlyInvite?.gateFriendInvite?.();");
+ const originalFreeJoin="showMatchHandoff('Joining Friendly Game…');try{await withGameBridge(bridge=>bridge.joinFreeRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);showToast(localizedError(error),6000);revealCurrentMainMenu();}return;";
+ if(source.split(originalFreeJoin).length!==2)throw new Error('Refusing unsafe Friendly invite join instrumentation');
+ let patched=source.replace(anchor,
+  "async function launchInviteRoom(){\n    if(!validRoomParam)return;\n    // Request fullscreen on an actual tap before any room network request.\n    if(inviteMode==='free')await globalThis.GoStopDevFriendlyInvite?.gateFriendInvite?.();");
+ patched=patched.replace(originalFreeJoin,
+  "showMatchHandoff('Joining Friendly Game…');try{await withGameBridge(bridge=>bridge.joinFreeRoom(code));}catch(error){closeRequestDialog(matchHandoffDialog);const ux=globalThis.GoStopDevFriendlyInvite;if(ux?.showJoinFailure)ux.showJoinFailure(error,()=>launchInviteRoom());else{showToast(localizedError(error),6000);revealCurrentMainMenu();}}return;");
+ return patched;
 }
