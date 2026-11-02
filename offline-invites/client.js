@@ -94,11 +94,19 @@ async function fetchFriends(){
   renderButtons();void renderSearchOfflineButtons();
  }catch(_){}
 }
-function renderButtons(){
+async function renderButtons(){
  const host=$('socialList');if(!host||!friends||$('socialScreen')?.hidden!==false)return;
  for(const row of host.querySelectorAll('[data-social-account-id]')){
   const player=friends.get(row.dataset.socialAccountId),button=row.querySelector('.devInviteOfflineButton');
   if(!player||player.friendState!=='friend'||!row.querySelector('.player-status.offline')){button?.remove();continue;}
+  const id=player.accountId;let cached=eligibilityCache.get(id);
+  if(!cached||cached.until<Date.now()){
+   try{const data=await api('/eligibility',{targetId:id});
+    cached={allowed:data.canRequest===true,until:Date.now()+12000};eligibilityCache.set(id,cached);
+   }catch(_){cached={allowed:false,until:Date.now()+3000};}
+  }
+  if(!row.isConnected)return;
+  if(!cached.allowed){button?.remove();continue;}
   if(button)continue;
   const target=row.querySelector('.social-actions');if(!target)continue;
   const b=document.createElement('button');b.type='button';b.className='devInviteOfflineButton';
@@ -107,7 +115,7 @@ function renderButtons(){
   target.prepend(b);
  }
 }
-if($('socialList'))new MutationObserver(renderButtons).observe($('socialList'),{childList:true,subtree:true});
+if($('socialList'))new MutationObserver(()=>{void renderButtons();}).observe($('socialList'),{childList:true,subtree:true});
 async function renderSearchOfflineButtons(){
  const host=$('searchPlayerResults');
  if(!host||host.hidden||!friends)return;
