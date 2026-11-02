@@ -66,6 +66,7 @@ jobs:
           node --check dev-site/competitive-solo-peer-sync.js
           node --check dev-site/instrument-competitive-solo-peer-sync.mjs
           node --check dev-site/friendly-invite-ux.js
+          node --check dev-site/fullscreen-return-prompt.js
           node --check dev-site/instrument-friendly-invite.mjs
           node --check dev-site/instrument-friendly-resume.mjs
           node --check dev-site/instrument-competitive-lobby.mjs
