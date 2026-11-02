@@ -116,3 +116,31 @@ test('dev lobby cannot accept a stale or backgrounded invitation without a match
  assert.equal(lobby.challenges.has(second),false,'background browser cannot confirm a match');
  assert.equal(host.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
 });
+
+test('Auto Match Play expires after 30 seconds and clears the requester instead of silently finding another opponent',async()=>{
+ const {lobby,clients:[phone,pc]}=fixture(2);
+ lobby.broadcastRecommendations=async()=>{};
+ await lobby.handle(phone,JSON.stringify({type:'autoMatchStart'}));
+ assert.equal(phone.socket.messages.findLast(m=>m.type==='autoMatchCandidate')?.candidate?.accountId,pc.account.id);
+ await lobby.handle(phone,JSON.stringify({type:'autoMatchAccept',accountId:pc.account.id}));
+ const invite=phone.socket.messages.findLast(m=>m.type==='challengeSent');
+ assert.ok(invite?.requestId);
+ assert.equal(invite.automatic,true);
+ assert.ok(pc.socket.messages.some(m=>m.type==='playRequest'&&m.requestId===invite.requestId));
+ const challenge=lobby.challenges.get(invite.requestId);
+ assert.ok(challenge);
+ challenge.expiresAt=Date.now()-10;
+ assert.equal(await lobby.expireChallenge(invite.requestId),true);
+ assert.equal(lobby.challenges.has(invite.requestId),false);
+ assert.equal(phone.autoMatching,false);
+ assert.equal(phone.autoMatchCandidateId,null);
+ const noAnswer=phone.socket.messages.filter(m=>m.type==='challengeNoAnswer');
+ assert.equal(noAnswer.length,1);
+ assert.equal(noAnswer[0].requestId,invite.requestId);
+ assert.equal(noAnswer[0].automatic,true);
+ assert.equal(phone.socket.messages.filter(m=>m.type==='challengeSent').length,1,
+  'timeout must NOT start another invitation without user authorization');
+ assert.equal(phone.socket.messages.filter(m=>m.type==='autoMatchCandidate').length,1,
+  'timeout must NOT reopen Auto Match silently');
+ assert.ok(pc.socket.messages.some(m=>m.type==='challengeMissed'&&m.requestId===invite.requestId));
+});
