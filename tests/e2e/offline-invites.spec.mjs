@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 const origin='http://127.0.0.1:4173';
-async function setup(page,{incoming=false}={}){
+async function setup(page,{incoming=false,eligible=true}={}){
   const data={enabled:true,invite:incoming?{requestId:'invite_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',senderId:'acct-friend-12345',targetId:'acct-self-12345',expiresAt:Date.now()+30000,status:'pending'}:null,friendOnline:false};
   const json=(route,obj,status=200)=>route.fulfill({status,contentType:'application/json',
     headers:{'access-control-allow-origin':origin,'access-control-allow-headers':'authorization,content-type'},
@@ -9,7 +9,10 @@ async function setup(page,{incoming=false}={}){
   await page.route('https://gostop-offline-invites-dev.jwshin1.workers.dev/**',route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
     const body=req.postDataJSON?.()||{};
-    if(path.endsWith('/state'))return json(route,{ok:true,enabled:data.enabled,invites:[],subscribedDevices:0});
+    if(path.endsWith('/state'))return json(route,{ok:true,enabled:data.enabled,invites:[],subscribedDevices:1});
+    // This fixture represents a friend whose phone is registered for Web Push.
+    // A real unregistered phone must NOT expose a request button.
+    if(path.endsWith('/eligibility'))return json(route,{ok:true,targetId:'acct-friend-12345',canRequest:eligible&&data.enabled});
     if(path.endsWith('/preference')){data.enabled=body.enabled;return json(route,{ok:true,enabled:data.enabled});}
     if(path.endsWith('/request')){
       data.invite={requestId:'invite_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',senderId:'acct-self-12345',
@@ -34,6 +37,21 @@ async function setup(page,{incoming=false}={}){
       joinCompetitiveRoom:async()=>{globalThis.__joinedInviteRoom='ABCDEFGHJKLMNP';return {roomCode:'ABCDEFGHJKLMNP'}; }
     };
   });
+  if(!eligible){
+    await page.evaluate(()=>{
+      window.__eligibilityChecks=0;
+      const nativeFetch=window.fetch.bind(window);
+      window.fetch=(url,options)=>{
+        if(String(url).includes('/eligibility')){
+          window.__eligibilityChecks++;
+          return Promise.resolve(new Response(JSON.stringify({ok:true,canRequest:false}),{
+            status:200,headers:{'content-type':'application/json'}
+          }));
+        }
+        return nativeFetch(url,options);
+      };
+    });
+  }
   await page.addScriptTag({path:'offline-invites/client.js'});
   return data;
 }
@@ -77,4 +95,10 @@ test('notification Play action opens the app and joins the accepted Competitive 
   data.invite.status='room-ready';data.invite.roomCode='ABCDEFGHJKLMNP';
   await expect.poll(async()=>page.evaluate(()=>globalThis.__joinedInviteRoom),{timeout:12000}).toBe('ABCDEFGHJKLMNP');
   expect(new URL(page.url()).searchParams.has('offlineInvite')).toBe(false);
+});
+
+test('offline friend without a push subscription cannot be requested',async({page})=>{
+ await setup(page,{eligible:false});
+ await expect.poll(()=>page.evaluate(()=>window.__eligibilityChecks),{timeout:12000}).toBeGreaterThan(0);
+ await expect(page.getByRole('button',{name:'Request Competitive Game'})).toHaveCount(0);
 });

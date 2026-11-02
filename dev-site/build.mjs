@@ -6,6 +6,8 @@ import {instrumentDevCompetitiveSoloPeerSync} from './instrument-competitive-sol
 import {instrumentDevFriendlyInvite} from './instrument-friendly-invite.mjs';
 import {instrumentDevFriendlyResume} from './instrument-friendly-resume.mjs';
 import {instrumentDevCompetitiveLobby} from './instrument-competitive-lobby.mjs';
+import {instrumentDevCompetitiveJoinProof} from './instrument-competitive-join-proof.mjs';
+import {instrumentDevOpponentEndedCopy} from './instrument-online-ended-locales.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const root=resolve(here,'..'),output=join(here,'dist');
 const gameFiles=[
@@ -23,9 +25,13 @@ await writeFile(devAppPath,instrumentDevFriendlyResume(instrumentDevCompetitiveS
 await copyFile(join(root,'dev-site/competitive-solo-peer-sync.js'),join(output,'dev-competitive-solo-peer-sync.js'));
 // Development guest-link entry requires a user-gesture fullscreen gate.
 const devRankedPath=join(output,'ranked-client.js');
-await writeFile(devRankedPath,instrumentDevCompetitiveLobby(instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8'))));
+await writeFile(devRankedPath,instrumentDevCompetitiveJoinProof(instrumentDevCompetitiveLobby(instrumentDevFriendlyInvite(await readFile(devRankedPath,'utf8')))));
 await copyFile(join(root,'dev-site/friendly-invite-ux.js'),join(output,'dev-friendly-invite-ux.js'));
 await copyFile(join(root,'dev-site/fullscreen-return-prompt.js'),join(output,'dev-fullscreen-return-prompt.js'));
+await copyFile(join(root,'dev-site/competitive-join-proof.js'),join(output,'dev-competitive-join-proof.js'));
+await copyFile(join(root,'dev-site/competitive-waiting-overlay.js'),join(output,'dev-competitive-waiting-overlay.js'));
+const devI18nPath=join(output,'i18n.js');
+await writeFile(devI18nPath,instrumentDevOpponentEndedCopy(await readFile(devI18nPath,'utf8')));
 // Removable, development-only Training feedback; not included in public game builds.
 await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'training-learning-cloud.js'));
 await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
@@ -68,12 +74,12 @@ html=html.replace('tutorial-video.js?v=20261005-3','tutorial-video.js?v=20261029
 const rankedDevScript='<script src="ranked-client.js?v=20261008-8"></script>';
 if(!html.includes(rankedDevScript))throw new Error('Missing ranked-client script for isolated Friendly invite patch');
 html=html.replace(rankedDevScript,
- '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="ranked-client.js?v=20261101-lobby-fix-1"></script>');
+ '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="dev-competitive-join-proof.js?v=20261102-safe-1"></script>\n  <script src="ranked-client.js?v=20261102-safe-1"></script>');
 const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261101-countdown-1"></script>\n  <script src="training-learning-feedback.js?v=20261101-countdown-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>',
   '<script src="dev-competitive-solo-peer-sync.js?v=20261101-peer-1"></script>\n  <script src="app.js?v=20261101-friend-resume-1"></script>\n  '+feedbackScripts);
-html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-training-advice-logic.js?v=20261031-1"></script>\n  <script src="dev-training-context-coach.js?v=20261101-safe-1"></script>\n  <script src="dev-training-opening-evidence.js?v=20261101-birdies-1"></script>\n  <script src="dev-training-opening-review.js?v=20261101-hand-visible-1"></script>\n  <script src="dev-training-reserved-ppeok-priority.js?v=20261101-ppeok-1"></script>\n  <script src="dev-training-shaken-priority.js?v=20261101-shake-1"></script>\n  <script src="dev-training-recommendation-preserver.js?v=20261101-shake-1"></script>\n  <script src="dev-training-immediate-turn-advice.js?v=20261101-safe-1"></script>\n  <script src="dev-training-sake-cup-copy.js?v=20261031-1"></script>\n  <script src="dev-training-go-stop-advice.js?v=20261101-risk-1"></script>\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261030-1"></script>\n  <script src="dev-fullscreen-return-prompt.js?v=20261101-return-1"></script>');
+html=html.replace('  '+feedbackScripts,'  '+feedbackScripts+'\n  <script src="dev-training-advice-logic.js?v=20261031-1"></script>\n  <script src="dev-training-context-coach.js?v=20261101-safe-1"></script>\n  <script src="dev-training-opening-evidence.js?v=20261101-birdies-1"></script>\n  <script src="dev-training-opening-review.js?v=20261101-hand-visible-1"></script>\n  <script src="dev-training-reserved-ppeok-priority.js?v=20261101-ppeok-1"></script>\n  <script src="dev-training-shaken-priority.js?v=20261101-shake-1"></script>\n  <script src="dev-training-recommendation-preserver.js?v=20261101-shake-1"></script>\n  <script src="dev-training-immediate-turn-advice.js?v=20261101-safe-1"></script>\n  <script src="dev-training-sake-cup-copy.js?v=20261031-1"></script>\n  <script src="dev-training-go-stop-advice.js?v=20261101-risk-1"></script>\n  <script src="dev-main-ui-integrity.js?v=20261030-1"></script>\n  <script src="dev-offline-invites.js?v=20261102-push-1"></script>\n  <script src="dev-fullscreen-return-prompt.js?v=20261101-return-1"></script>\n  <script src="dev-competitive-waiting-overlay.js?v=20261102-safe-1"></script>');
 // Preserve the production leaderboard UI exactly. Dev data stays isolated.
 await writeFile(htmlPath,html);
 // A separate frontend is NOT an isolated backend. Fail closed unless an

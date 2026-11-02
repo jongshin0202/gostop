@@ -27,6 +27,20 @@ function rankAccounts(accounts,getStats){
  return ranks;
 }
 export class AccountStore extends FrozenAccountStore{
+  // Private Durable Object fetch only, not exposed through the public Worker.
+  // An extra stale lobby socket must never make an account with an active
+  // Competitive Online session challengeable.
+  async fetch(request){
+    if(request.method==='POST'&&new URL(request.url).pathname==='/internal/lobby-online-busy'){
+      const body=await request.json().catch(()=>({}));
+      const id=String(body.accountId||'');
+      if(!/^[a-z0-9:_-]{5,130}$/i.test(id))return new Response(JSON.stringify({ok:false,error:'INVALID_ACCOUNT'}),{status:400});
+      const account=await this.accountById(id);
+      return new Response(JSON.stringify({ok:true,busy:account?.activeRanked?.mode==='online'&&!!account.activeRanked.roomCode}),
+       {headers:{'content-type':'application/json','cache-control':'no-store'}});
+    }
+    return super.fetch(request);
+  }
  async playerSearch(request){
   const body=await request.json().catch(()=>({}));
   const needle=String(body?.query||'').trim().toLowerCase().slice(0,80);

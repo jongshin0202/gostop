@@ -81,3 +81,38 @@ test('refresh scheduling does not await leaderboard and coalesces repeated avail
  assert.ok(a.socket.messages.some(m=>m.type==='presenceCount'));
  assert.ok(requests<=2);
 });
+
+test('dev lobby rejects a ghost Online request when account authority says recipient is already playing',async()=>{
+ const {lobby,clients:[host,phone]}=fixture();
+ lobby.env.ACCOUNT_STORE={
+  idFromName:()=> 'global',
+  get:()=>({fetch:async request=>{
+   const {accountId}=await request.json();
+   return new Response(JSON.stringify({ok:true,busy:accountId===phone.account.id}),
+    {headers:{'content-type':'application/json'}});
+  }})
+ };
+ await lobby.handle(host,JSON.stringify({type:'challenge',accountId:phone.account.id}));
+ assert.equal(host.socket.messages.at(-1)?.type,'challengeError');
+ assert.equal(lobby.challenges.size,0,'no ghost play request may be created');
+ assert.equal(phone.socket.messages.some(m=>m.type==='playRequest'),false);
+});
+test('dev lobby cannot accept a stale or backgrounded invitation without a matching current receipt',async()=>{
+ const {lobby,clients:[host,phone]}=fixture();
+ await lobby.handle(host,JSON.stringify({type:'challenge',accountId:phone.account.id}));
+ const requestId=host.socket.messages.find(m=>m.type==='challengeSent')?.requestId;
+ assert.ok(requestId);
+ await lobby.handle(phone,JSON.stringify({type:'challengeResponse',requestId,accept:true}));
+ assert.equal(lobby.challenges.has(requestId),false,'unacknowledged browser must not accept');
+ assert.equal(host.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
+ await lobby.handle(host,JSON.stringify({type:'challenge',accountId:phone.account.id}));
+ const sentRequests=host.socket.messages.filter(m=>m.type==='challengeSent');
+ assert.equal(sentRequests.length,2,'a second request must be sent after the previous one was cancelled');
+ const second=sentRequests.at(-1)?.requestId;
+ assert.ok(second); // this fixture uses a fixed crypto byte pattern; ids may repeat across attempts
+ await lobby.handle(phone,JSON.stringify({type:'challengeReceipt',requestId:second}));
+ phone.foreground=false;
+ await lobby.handle(phone,JSON.stringify({type:'challengeResponse',requestId:second,accept:true}));
+ assert.equal(lobby.challenges.has(second),false,'background browser cannot confirm a match');
+ assert.equal(host.socket.messages.some(m=>m.type==='challengeAcceptedCreateRoom'),false);
+});

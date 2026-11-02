@@ -78,3 +78,28 @@ test('Cloudflare dev binds a separate GameRoom and production source is unchange
  assert.match(prod,/game-room\.mjs/);
  assert.match(frozen,/this\.room\.sessionFlow\.forceEnded=true/);
 });
+
+test('Development Competitive match cannot play until both real game sockets connect',async()=>{
+ const accountStore={fetch:async()=>new Response(JSON.stringify({ok:true,session:{}}),{status:200,headers:{'content-type':'application/json'}})};
+ const core=new DevelopmentFriendlyRoomCore({storage:new Storage(),accountStore,cryptoApi:webcrypto,now:clock});
+ const a=await core.create('COMP2345ABCDEF',{id:'real-host-1',nickname:'SonGoku',walletCoins:300});
+ const b=await core.join(null,{id:'real-guest-1',nickname:'GoStopper',walletCoins:300});
+ const pc=new Socket(),phone=new Socket();
+ await core.connect(a.credential,pc);
+ assert.equal(core.room.devBothConnectedEver,undefined,'room join alone cannot mark both sockets connected');
+ assert.equal(pc.last('snapshot').snapshot.sessionFlow.waitingForOpponentConnection,true);
+ const before=pc.last('snapshot').snapshot.revision;
+ const rejected=await core.handle(pc,JSON.stringify({protocolVersion:1,type:'action',actionId:'ghost-attempt',expectedRevision:before,
+   action:{type:'playCard',cardId:'m1-1'}}));
+ assert.equal(rejected.type,'actionRejected');assert.equal(rejected.error.code,'OPPONENT_NOT_CONNECTED');
+ assert.equal(pc.last('snapshot').snapshot.revision,before,'ghost play cannot advance any cards');
+ await core.connect(b.credential,phone);
+ assert.equal(core.room.devBothConnectedEver,true);
+ assert.equal(pc.last('snapshot').snapshot.sessionFlow.waitingForOpponentConnection,false);
+ const quit=await core.handle(pc,JSON.stringify({protocolVersion:1,type:'action',actionId:'real-quit',expectedRevision:pc.last('snapshot').snapshot.revision,
+   action:{type:'quitGame'}}));
+ assert.equal(quit.type,'actionAccepted');
+ const trail=core.room.devActionAudit||[];
+ assert.equal(trail.at(-1)?.type,'quitGame');assert.equal(trail.at(-1)?.seatId,'playerA');
+ assert.equal(trail.at(-1)?.playerId,a.playerId);
+});

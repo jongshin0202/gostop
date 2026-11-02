@@ -17,6 +17,8 @@ function fixture(){
   getAlarm:async()=>alarm
  };
  const db=new OfflineInviteStore({storage:store},{});
+ // The test simulates push gateway acknowledgment without network I/O.
+ db.push=async target=>data.get('subscriptions:'+target)?.length?1:0;
  const env={
   DEV_AUTH:{fetch:async req=>{
    const path=new URL(req.url).pathname;
@@ -30,7 +32,7 @@ function fixture(){
   const hdr={Origin:from,...(auth?{Authorization:auth}:{}),...(body?{'content-type':'application/json'}:{})};
   return authority.fetch(new Request(url+path,{method,headers:hdr,...(body?{body:JSON.stringify(body)}:{})}),env);
  };
- return {data,db,req,alarm:()=>alarm,switchUser:id=>{current=id},setFriend:value=>{isFriend=value}};
+ return {data,db,req,alarm:()=>alarm,register:()=>data.set('subscriptions:acct-receiver-123',[{endpoint:'https://fcm.googleapis.com/fcm/send/test'}]),switchUser:id=>{current=id},setFriend:value=>{isFriend=value}};
 }
 test('push invitations are isolated from public site and require login',async()=>{
  const s=fixture();
@@ -55,6 +57,7 @@ test('default-on preference and explicit opt-out prevent offline requests',async
 });
 test('only actual friends can invite and sender can cancel',async()=>{
  const s=fixture();s.setFriend(false);
+ s.register();
  assert.equal((await s.req('/api/invites/request',{method:'POST',body:{targetId:'acct-receiver-123'}})).status,403);
  s.setFriend(true);
  const sent=await s.req('/api/invites/request',{method:'POST',body:{targetId:'acct-receiver-123'}});
@@ -71,6 +74,7 @@ test('only actual friends can invite and sender can cancel',async()=>{
 });
 test('accepted invite launches via a server-validated room code, never before acceptance',async()=>{
  const s=fixture();
+ s.register();
  const invitation=(await(await s.req('/api/invites/request',{method:'POST',body:{targetId:'acct-receiver-123'}})).json()).invite;
  const id=invitation.requestId;
  assert.equal((await s.req('/api/invites/room',{method:'POST',body:{requestId:id,roomCode:'ABCDEFGHIJKLMN'}})).status,409);
@@ -87,6 +91,7 @@ test('accepted invite launches via a server-validated room code, never before ac
 });
 test('expired invites cannot be accepted and are expired by alarm',async()=>{
  const s=fixture();
+ s.register();
  const invitation=(await(await s.req('/api/invites/request',{method:'POST',body:{targetId:'acct-receiver-123'}})).json()).invite;
  const entry=s.data.get('invite:'+invitation.requestId);
  entry.expiresAt=Date.now()-1000;
@@ -123,4 +128,18 @@ test('offline Search Player request button eligibility follows target push subsc
  s.setFriend(false);
  resp=await s.req('/api/invites/eligibility',{method:'POST',body:{targetId:'acct-receiver-123'}});
  assert.equal(resp.status,403,'only verified friends may read offline invite eligibility');
+});
+
+test('no phone registration or no accepted Web Push delivery never reports a sent request',async()=>{
+ const s=fixture();
+ let r=await s.req('/api/invites/request',{method:'POST',body:{targetId:'acct-receiver-123'}});
+ assert.equal(r.status,409);
+ assert.equal((await r.json()).error,'PHONE_NOT_SUBSCRIBED');
+ s.register();s.db.push=async()=>0;
+ r=await s.req('/api/invites/request',{method:'POST',body:{targetId:'acct-receiver-123'}});
+ assert.equal(r.status,503);
+ const error=await r.json();assert.equal(error.error,'PUSH_DELIVERY_FAILED');
+ const invites=[...s.data.entries()].filter(([key])=>key.startsWith('invite:')).map(([,item])=>item);
+ assert.equal(invites.length,1);assert.equal(invites[0].status,'undeliverable');
+ assert.equal(invites[0].deliveredDevices,0);
 });
