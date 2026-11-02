@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 const ROOM='ABCDEFGHJK2345';
-const invitation=()=>'/dev-site/dist/?room='+ROOM+'&mode=free';
+const invitation=()=>'/dev-site/dist/?room='+ROOM+'&mode=free&ref='+('a'.repeat(64));
 const account={id:'friend-invite-test',nickname:'Jong',walletCoins:100,
  emailVerified:true,stats:{global:{gamesPlayed:2,wins:1}},activeRanked:null};
 async function harness(page,{guest=false}={}){
