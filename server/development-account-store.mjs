@@ -27,6 +27,17 @@ function rankAccounts(accounts,getStats){
  return ranks;
 }
 export class AccountStore extends FrozenAccountStore{
+  // Development-only idempotence: pin the account's award calendar to the
+  // timezone of its first daily grant. A later browser/tab may supply another
+  // timezone (or omit it), but that cannot earn another 100 Coins on the
+  // same calendar day in the established award timezone.
+  async awardDaily(account,request){
+    const stableZone=String(account?.dailyAwardTimeZone||'').trim();
+    if(!stableZone)return super.awardDaily(account,request);
+    const headers=new Headers(request?.headers||{});
+    headers.set('x-gostop-timezone',stableZone);
+    return super.awardDaily(account,{headers});
+  }
   // Private Durable Object fetch only, not exposed through the public Worker.
   // An extra stale lobby socket must never make an account with an active
   // Competitive Online session challengeable.
