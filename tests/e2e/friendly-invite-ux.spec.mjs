@@ -4,7 +4,7 @@ const invitation=()=>'/dev-site/dist/?room='+ROOM+'&mode=free';
 const account={id:'friend-invite-test',nickname:'Jong',walletCoins:100,
  emailVerified:true,stats:{global:{gamesPlayed:2,wins:1}},activeRanked:null};
 async function harness(page,{guest=false}={}){
- const calls={join:0,errors:[]};
+ const calls={join:0,websockets:0,errors:[]};
  page.on('pageerror',error=>calls.errors.push(error.message));
  await page.route('https://commons.wikimedia.org/**',route=>route.abort());
  await page.route('**/api/**',route=>{
@@ -25,7 +25,14 @@ async function harness(page,{guest=false}={}){
   return route.fulfill({status:200,contentType:'application/json',headers,body:JSON.stringify(data)});
  });
  await page.routeWebSocket('**/api/lobby/**',socket=>socket.onMessage(()=>{}));
- await page.routeWebSocket('**/api/rooms/**/ws',socket=>socket.onMessage(()=>{}));
+ await page.routeWebSocket('**/api/rooms/**/ws',socket=>{
+  calls.websockets++;
+  socket.onMessage(()=>{});
+  setTimeout(()=>socket.send(JSON.stringify({
+   protocolVersion:1,type:'connected',roomCode:ROOM,status:'ready',
+   matchId:'friend-fixture',playerId:'guest',seatId:'playerB'
+  })),40);
+ });
  return calls;
 }
 
@@ -82,6 +89,8 @@ test('Samsung invitation waits for a real tap, requests fullscreen, then joins r
   await gate.getByRole('button',{name:'Enter Fullscreen & Join Game'}).tap();
   await expect(gate).toBeHidden({timeout:10000});
   await expect.poll(()=>calls.join).toBe(1);
+  await expect.poll(()=>calls.websockets).toBe(1);
+  await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:10000});
   expect(await page.evaluate(()=>window.__inviteFullscreenCalls)).toBe(1);
   expect(await page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
   expect(calls.errors).toEqual([]);
@@ -109,6 +118,8 @@ test('blocked in-app browser explains fullscreen limitation, then allows manual 
   await gate.getByRole('button',{name:'Continue without fullscreen'}).tap();
   await expect(gate).toBeHidden();
   await expect.poll(()=>calls.join).toBe(1);
+  await expect.poll(()=>calls.websockets).toBe(1);
+  await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:10000});
   expect(await page.evaluate(()=>window.__inviteFullscreenCalls)).toBe(1);
   expect(calls.errors).toEqual([]);
  }finally{await context.close();}
@@ -117,6 +128,8 @@ test('desktop invitation bypasses mobile fullscreen gate and proceeds to friend 
  const calls=await harness(page,{guest:true});
  await page.goto(invitation(),{waitUntil:'domcontentloaded'});
  await expect.poll(()=>calls.join,{timeout:10000}).toBe(1);
+ await expect.poll(()=>calls.websockets).toBe(1);
+ await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:10000});
  await expect(page.locator('#devInviteFullscreenGate')).toHaveCount(0);
  expect(calls.errors).toEqual([]);
 });
