@@ -4,7 +4,7 @@ const invitation=()=>'/dev-site/dist/?room='+ROOM+'&mode=free&ref='+('a'.repeat(
 const account={id:'friend-invite-test',nickname:'Jong',walletCoins:100,
  emailVerified:true,stats:{global:{gamesPlayed:2,wins:1}},activeRanked:null};
 async function harness(page,{guest=false}={}){
- const calls={join:0,websockets:0,errors:[]};
+ const calls={join:0,joinCredentials:[],websockets:0,errors:[]};
  page.on('pageerror',error=>calls.errors.push(error.message));
  await page.route('https://commons.wikimedia.org/**',route=>route.abort());
  await page.route('**/api/**',route=>{
@@ -17,7 +17,7 @@ async function harness(page,{guest=false}={}){
   else if(path==='/api/leaderboards')data={ok:true,global:[],monthly:[]};
   else if(path==='/api/social')data={ok:true,friends:[],incoming:[],outgoing:[],history:[],recommendations:[]};
   else if(path.includes('/rooms/')&&path.endsWith('/join')){
-   calls.join++;
+   calls.join++;calls.joinCredentials.push(route.request().postDataJSON?.()?.credential||null);
    data={ok:true,room:{roomCode:ROOM,credential:'friend-invite-test',
     playerId:'guest',seatId:'playerB',rankedMode:'free',ranked:false,
     matchId:'friend-fixture',status:'ready'}};
@@ -93,6 +93,29 @@ test('Samsung invitation waits for a real tap, requests fullscreen, then joins r
   await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:10000});
   expect(await page.evaluate(()=>window.__inviteFullscreenCalls)).toBe(1);
   expect(await page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
+  expect(calls.errors).toEqual([]);
+ }finally{await context.close();}
+});
+test('returning Samsung invitation reuses the prior guest seat after background or tab reload',async({browser})=>{
+ const context=await browser.newContext({viewport:{width:412,height:915},hasTouch:true,isMobile:true});
+ const page=await context.newPage();
+ try{
+  await page.addInitScript(room=>{
+   const credential='room_'+('f'.repeat(64));
+   sessionStorage.setItem('gostop-room-'+room,JSON.stringify({roomCode:room,credential,seatId:'playerB'}));
+   let active=null;
+   Object.defineProperty(Document.prototype,'fullscreenElement',{configurable:true,get(){return active;}});
+   Object.defineProperty(Document.prototype,'fullscreenEnabled',{configurable:true,get(){return true;}});
+   Element.prototype.requestFullscreen=function(){active=this;return Promise.resolve();};
+  },ROOM);
+  const calls=await harness(page,{guest:true});
+  await page.goto(invitation(),{waitUntil:'domcontentloaded'});
+  await expect(page.locator('#devInviteFullscreenGate')).toBeVisible({timeout:10000});
+  await page.getByRole('button',{name:'Enter Fullscreen & Join Game'}).tap();
+  await expect.poll(()=>calls.join).toBe(1);
+  expect(calls.joinCredentials).toEqual(['room_'+('f'.repeat(64))]);
+  await expect.poll(()=>calls.websockets).toBe(1);
+  await expect(page.locator('#soloStartOverlay')).toBeHidden({timeout:10000});
   expect(calls.errors).toEqual([]);
  }finally{await context.close();}
 });
