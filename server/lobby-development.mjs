@@ -149,6 +149,25 @@ export class Lobby{
   challengeRequestMessage(challenge){return {type:'playRequest',requestId:challenge.id,automatic:!!challenge.automatic,expiresInSeconds:Math.max(0,Math.round(((Number(challenge.expiresAt)||Date.now())-Date.now())/1000)),createdAt:challenge.createdAt,from:challenge.fromProfile||{accountId:challenge.from,nickname:'Player'}};}
   deliverPendingChallenge(client){const challenge=this.pendingIncomingChallengeFor(client?.account?.id);if(!challenge||challenge.expiresAt<=Date.now())return false;challenge.deliveryReceipts=challenge.deliveryReceipts instanceof Set?challenge.deliveryReceipts:new Set();if(challenge.deliveryReceipts.has(client.clientId))return false;this.send(client.socket,this.challengeRequestMessage(challenge));return true;}
   activeChallengeFor(accountId){for(const challenge of this.challenges.values())if(['pending','accepted','room-ready'].includes(challenge.status)&&(challenge.from===accountId||challenge.to===accountId))return challenge;return null;}
+  async accountsFreeForCompetitive(...ids){
+    // The client-reported twoPlayer flag can be stale after an Android tab closes,
+    // a reconnect, or another browser tab. Check the authoritative dev account.
+    if(!this.env?.ACCOUNT_STORE)return true; // offline unit fixtures
+    const accounts=[...new Set(ids.filter(Boolean))];
+    try{
+      const store=this.accountStore();
+      const verdicts=await Promise.all(accounts.map(async accountId=>{
+        const response=await store.fetch(new Request('https://accounts/internal/lobby-online-busy',{
+          method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({accountId}),signal:AbortSignal.timeout(4500)
+        }));
+        if(!response.ok)return false;
+        const data=await response.json();
+        return data.ok===true&&data.busy===false;
+      }));
+      return verdicts.every(Boolean);
+    }catch(_){return false;} // fail closed if authoritative status unavailable
+  }
   accountTwoPlayerBusy(accountId){return this.effectiveClientsForAccount(accountId).some(client=>!!client.twoPlayer&&this.clientPresence(client).heartbeatFresh);}
   accountAvailable(accountId){return !this.accountTwoPlayerBusy(accountId)&&this.effectiveClientsForAccount(accountId).some(client=>this.clientCanReceiveChallenge(client));}
   onlineAccountCount(client){const ids=new Set();for(const item of this.clients.values()){if(item.account.id===client.account.id)continue;const effective=this.effectiveClientsForAccount(item.account.id);if(effective.some(candidate=>this.clientPresence(candidate).heartbeatFresh))ids.add(item.account.id);}return ids.size;}
@@ -241,6 +260,11 @@ export class Lobby{
     if(!accountId||accountId===client.account.id)return this.send(client.socket,{type:'challengeError',code:'REQUEST_EXPIRED',message:'That Auto Match candidate is no longer available.'});
     const target=this.clientByAccountId(accountId,{challengeableOnly:true});
     if(!target){client.autoMatching=true;client.autoMatchTried=client.autoMatchTried instanceof Set?client.autoMatchTried:new Set();client.autoMatchTried.add(accountId);client.autoMatchCandidateId=null;await this.tryAutoMatch(client);return false;}
+    if(!await this.accountsFreeForCompetitive(client.account.id,target.account.id)){
+      client.autoMatching=false;client.autoMatchCandidateId=null;
+      return this.send(client.socket,{type:'challengeError',code:'PLAYER_IN_GAME',
+        message:'One of the players already has an active Competitive Online match.'});
+    }
     const rows=this.rowsCache||new Map(),toProfile=this.profile(target,rows);
     client.autoMatching=true;client.autoMatchCandidateId=null;
     const challenge=this.startChallenge(client,target,rows,{automatic:true,toProfileOverride:toProfile});
@@ -335,7 +359,11 @@ export class Lobby{
     if(message.type==='challenge'){
       client.autoMatching=false;client.autoMatchCandidateId=null;
       const now=Date.now(),last=this.lastRequestAt.get(client.account.id)||0;if(now-last<REQUEST_COOLDOWN_MS)return this.send(client.socket,{type:'challengeError',code:'REQUEST_COOLDOWN',message:'Please wait a moment before sending another request.'});this.lastRequestAt.set(client.account.id,now);
-      const target=this.clientByAccountId(message.accountId,{challengeableOnly:true}),rows=this.rowsCache||new Map(),challenge=this.startChallenge(client,target,rows,{automatic:false});if(!challenge)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'That player is no longer available.'});
+      const target=this.clientByAccountId(message.accountId,{challengeableOnly:true});
+      if(!target||!await this.accountsFreeForCompetitive(client.account.id,target.account.id)){
+        return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'Player is offline or already in a Competitive Online game.'});
+      }
+      const rows=this.rowsCache||new Map(),challenge=this.startChallenge(client,target,rows,{automatic:false});if(!challenge)return this.send(client.socket,{type:'challengeError',code:'PLAYER_UNAVAILABLE',message:'That player is no longer available.'});
       this.queueRecommendations();return;
     }
     if(message.type==='challengeReceipt'){
@@ -361,7 +389,9 @@ export class Lobby{
       challenge.toClientId=client.clientId;this.clearChallengeDeliveryTimer(challenge);
       const challenger=this.clientById(challenge.fromClientId);if(!challenger){this.cancelPendingChallenge(challenge,'The requesting player is no longer online.');this.queueRecommendations();return;}
       if(!message.accept){this.releaseChallenge(challenge);this.lastRequestAt.delete(challenge.from);this.challenges.delete(challenge.id);this.send(challenger.socket,{type:'challengeDeclined',requestId:challenge.id,by:{accountId:client.account.id,nickname:client.account.nickname}});this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});this.queueRecommendations();return;}
-      if(!this.challengeParticipantsAvailable(challenge)){this.cancelPendingChallenge(challenge,'One of the players is already in a two-player game.');this.queueRecommendations();return;}
+      if(!this.challengeParticipantsAvailable(challenge)||!await this.accountsFreeForCompetitive(challenge.from,challenge.to)){
+        this.cancelPendingChallenge(challenge,'One of the players is already in a two-player game.');this.queueRecommendations();return;
+      }
       this.sendToAccount(challenge.to,{type:'challengeResolved',requestId:challenge.id});
       const rows=await this.leaderboardRows();this.releaseChallenge(challenge);for(const item of this.clientsForAccount(challenge.from)){item.available=false;item.autoMatching=false;item.autoMatchTried=new Set();item.autoMatchCandidateId=null;}for(const item of this.clientsForAccount(challenge.to)){item.available=false;item.autoMatching=false;}challenge.status='accepted';challenge.acceptedAt=Date.now();challenge.expiresAt=Date.now()+ACCEPTED_CHALLENGE_TTL_MS;this.armChallengeExpiry(challenge);
       this.send(challenger.socket,{type:'challengeAcceptedCreateRoom',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(client,rows)});this.send(client.socket,{type:'challengeAcceptedWaiting',requestId:challenge.id,automatic:!!challenge.automatic,opponent:this.profile(challenger,rows)});this.queueRecommendations();return;
