@@ -437,7 +437,7 @@ function showTrainingCompletion(result){
   line(t.noActivation);
   if(serverWeightState&&weightProgress?.progress){
    const next=weightProgress.progress(serverWeightState);
-   line(t.twenty(next.remaining20));
+   line(t.ten(next.remaining10));
    line(next.remainingClean===null?t.unavailableClean:t.clean(next.remainingClean));
   }else line(t.unavailable);
  }
