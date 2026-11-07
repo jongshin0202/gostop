@@ -116,3 +116,81 @@ test('desktop never gets the mobile fullscreen recovery prompt',async({page})=>{
  await page.waitForTimeout(850);
  await expect(page.locator('#devFullscreenReturnPrompt')).toHaveCount(0);
 });
+
+test.describe('Training Mode foreground fullscreen with active expert review',()=>{
+ test.use({viewport:{width:412,height:915},isMobile:true,hasTouch:true,deviceScaleFactor:2});
+
+ test('foreground prompt is above Opening Strategy Review and preserves expert selections',async({page})=>{
+  test.setTimeout(90000);
+  const errors=await setupMobileGame(page);
+  // This is the real Training game launch, not a synthetic dialog fixture.
+  await page.locator('#friendlyGamingBtn').tap();
+  await page.locator('#trainingModeBtn').tap();
+  const review=page.locator('#devOpeningReview');
+  await expect(review).toBeVisible({timeout:40000});
+  await expect(review).toHaveAttribute('open','');
+  const originalReviewText=await review.locator('.dev-opening-review-recommendation').textContent();
+  const originalHand=await page.locator('#playerHand [data-card-id]').evaluateAll(cards=>cards.map(card=>card.dataset.cardId));
+  expect(originalHand.length).toBeGreaterThan(0);
+  await expect(page.locator('#devFullscreenReturnPrompt')).toHaveCount(0);
+
+  // Android drops fullscreen after switching apps, while native review stays open.
+  await page.evaluate(()=>window.__backgroundReturn());
+  const recovery=page.locator('#devFullscreenReturnPrompt');
+  await expect(recovery).toBeVisible({timeout:6000});
+  await expect(recovery).toHaveAttribute('open','');
+  await expect(recovery).toContainText('Tap the button to enter full screen mode.');
+  expect(await page.evaluate(()=>document.getElementById('devFullscreenReturnPrompt').matches(':modal')))
+   .toBe(true);
+  await expect(review).toBeVisible();
+  // A native fullscreen-recovery dialog is topmost and accessible above review.
+  await page.evaluate(()=>window.__denyFullscreen=false);
+  await recovery.getByRole('button',{name:'Full Screen Mode'}).tap();
+  await expect(recovery).toHaveCount(0);
+  expect(await page.evaluate(()=>document.fullscreenElement===document.documentElement)).toBe(true);
+  await expect(review).toBeVisible();
+  expect(await review.locator('.dev-opening-review-recommendation').textContent()).toBe(originalReviewText);
+  expect(await page.locator('#playerHand [data-card-id]').evaluateAll(cards=>cards.map(card=>card.dataset.cardId))).toEqual(originalHand);
+
+  // Verify the expert can still interact with the unchanged strategy review.
+  await review.getByRole('button',{name:'No, change strategies'}).tap();
+  await expect(review.locator('.dev-opening-review-options')).toBeVisible();
+  const first=review.locator('.dev-opening-review-options input[type="checkbox"]').first();
+  const initial=await first.isChecked();
+  if(initial)await first.uncheck();else await first.check();
+
+  // A new background/foreground cycle creates exactly one new recovery prompt.
+  await page.evaluate(()=>window.__backgroundReturn());
+  await expect(recovery).toBeVisible({timeout:6000});
+  await expect(recovery).toHaveCount(1);
+  await recovery.getByRole('button',{name:'Continue Game'}).tap();
+  await expect(recovery).toHaveCount(0);
+  await expect(review).toBeVisible();
+  expect(await first.isChecked()).toBe(!initial);
+  await review.getByRole('button',{name:'Continue without saving'}).tap();
+  await expect(review).toHaveCount(0);
+  expect(errors).toEqual([]);
+ });
+
+ test('foreground fullscreen denial leaves Training review untouched and permits retry',async({page})=>{
+  test.setTimeout(90000);
+  const errors=await setupMobileGame(page);
+  await page.locator('#friendlyGamingBtn').tap();
+  await page.locator('#trainingModeBtn').tap();
+  const review=page.locator('#devOpeningReview');
+  await expect(review).toBeVisible({timeout:40000});
+  await page.evaluate(()=>window.__backgroundReturn());
+  const recovery=page.locator('#devFullscreenReturnPrompt');
+  await expect(recovery).toBeVisible({timeout:6000});
+  await recovery.getByRole('button',{name:'Full Screen Mode'}).tap();
+  await expect(recovery).toContainText('This browser did not allow full screen.');
+  await expect(review).toBeVisible();
+  // Android can grant permission on a subsequent user gesture.
+  await page.evaluate(()=>window.__denyFullscreen=false);
+  await recovery.getByRole('button',{name:'Full Screen Mode'}).tap();
+  await expect(recovery).toHaveCount(0);
+  await expect(review).toBeVisible();
+  await review.getByRole('button',{name:'Continue without saving'}).tap();
+  expect(errors).toEqual([]);
+ });
+});
