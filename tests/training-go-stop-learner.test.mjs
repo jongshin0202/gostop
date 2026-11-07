@@ -63,3 +63,67 @@ test('public-card next-turn opponent ceiling is scored from all visible floor co
  });
  assert.equal(none,1);
 });
+
+test('low-score opponent with no visible path to seven and a reserved match favors GO',()=>{
+ const card=(m,n)=>({id:'m'+m+'-'+n,month:m,type:'pi',flags:[]});
+ const deck=[...Array.from({length:4},(_,i)=>card(1,i+1)),
+  ...Array.from({length:4},(_,i)=>card(2,i+1))];
+ const evidence=advice.publicGoStopRisk({
+  deck,floorIds:['m1-1','m2-1'],ownHandIds:['m1-4'],
+  ownCapturedIds:['m1-2','m1-3'],opponentCapturedIds:[],
+  opponentScore:2,playerScore:7,opponentHandSize:1,
+  scorePlayer:player=>({total:player.captured.length})
+ });
+ assert.ok(evidence);
+ assert.equal(evidence.opponentCeiling<7,true);
+ assert.equal(evidence.captureChance,1,'remaining matching month is fully accounted for');
+ assert.equal(evidence.hasGuaranteedScoringCapture,true);
+ assert.equal(advice.riskDecision(evidence,{opponentScore:2}),'go');
+});
+test('a seven-point path with no own scoring chance recommends STOP',()=>{
+ const card=(m,n)=>({id:'m'+m+'-'+n,month:m,type:'pi',flags:[]});
+ const deck=[1,2,3,4].flatMap(m=>[1,2,3,4].map(n=>card(m,n)));
+ const evidence=advice.publicGoStopRisk({
+  deck,floorIds:['m1-1','m2-1','m3-1'],ownHandIds:['m4-1'],
+  opponentScore:4,playerScore:7,opponentHandSize:3,
+  scorePlayer:player=>({total:player.captured.length})
+ });
+ assert.ok(evidence.opponentCeiling>=7);
+ assert.equal(evidence.ownGainChance,0);
+ assert.ok(evidence.opponentFinishChance>0);
+ assert.equal(advice.riskDecision(evidence,{opponentScore:4}),'stop');
+});
+test('compare a protected +1 route against a less likely opponent seven-point route',()=>{
+ const card=(m,n)=>({id:'m'+m+'-'+n,month:m,type:'pi',flags:[]});
+ const deck=[1,2,3].flatMap(m=>[1,2,3,4].map(n=>card(m,n)));
+ const evidence=advice.publicGoStopRisk({
+  deck,floorIds:['m1-1','m2-1','m3-1'],ownHandIds:['m1-4'],
+  ownCapturedIds:['m1-2','m1-3'],opponentScore:4,playerScore:7,
+  opponentHandSize:1,scorePlayer:player=>({total:player.captured.length})
+ });
+ assert.ok(evidence.opponentCeiling>=7);
+ assert.equal(evidence.ownGainChance,1);
+ assert.ok(evidence.ownGainChance>evidence.opponentFinishChance);
+ assert.equal(advice.riskDecision(evidence,{opponentScore:4}),'go');
+});
+test('real Godori set can lift two-point opponent to seven from a visible floor bird',async()=>{
+ const {createRequire}=await import('node:module');
+ const require=createRequire(import.meta.url);
+ const engine=require('../game-engine.js');
+ const evidence=advice.publicGoStopRisk({
+  deck:engine.masterDeck,floorIds:['m8-2','m6-2'],ownHandIds:['m5-3'],
+  opponentCapturedIds:['m2-1','m4-1','m1-1','m3-1','m12-1'],
+  opponentScore:2,playerScore:7,opponentHandSize:5,
+  scorePlayer:engine.scorePlayer
+ });
+ assert.ok(evidence.opponentCeiling>=7);
+ assert.equal(evidence.ownGainChance,0);
+ assert.equal(advice.riskDecision(evidence,{opponentScore:2}),'stop');
+});
+test('hypergeometric no-match estimates are bounded and do not inspect hidden cards',()=>{
+ assert.equal(advice.probabilityNoMatch(10,0,8),1);
+ assert.equal(advice.probabilityNoMatch(10,10,1),0);
+ assert.equal(advice.probabilityNoMatch(10,2,0),1);
+ assert.ok(advice.probabilityNoMatch(10,2,3)>0);
+ assert.ok(advice.probabilityNoMatch(10,2,3)<1);
+});
