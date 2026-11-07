@@ -34,10 +34,11 @@ const inGame=()=>{
 // dialog itself enters the browser top layer above them.
 const inviteGateOpen=()=>!!document.querySelector('#devInviteFullscreenGate:not([hidden])');
 let textEntryUntil=0;
-const editing=()=>{
- const active=document.activeElement;
- return !!active?.matches?.('input,textarea,select,[contenteditable="true"]')||Date.now()<textEntryUntil;
-};
+// A checked opening-strategy checkbox is not a keyboard/text-entry action.
+// Suppressing the prompt for every input element prevented second recovery.
+const isTextEntry=element=>!!element?.matches?.(
+ 'textarea,select,[contenteditable="true"],input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"])');
+const editing=()=>isTextEntry(document.activeElement)||Date.now()<textEntryUntil;
 let timer=null,prompt=null,dismissed=false;
 function hide(){
  if(!prompt)return;
@@ -129,11 +130,11 @@ document.addEventListener('fullscreenchange',()=>{
  }else if(document.visibilityState!=='hidden')schedule(650);
 });
 document.addEventListener('focusin',event=>{
- if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]'))
+ if(isTextEntry(event.target))
   textEntryUntil=Date.now()+1400;
 },{capture:true,passive:true});
 document.addEventListener('focusout',event=>{
- if(event.target?.matches?.('input,textarea,select,[contenteditable="true"]')){
+ if(isTextEntry(event.target)){
   textEntryUntil=Date.now()+1400;schedule(1600);
  }
 },{capture:true,passive:true});
