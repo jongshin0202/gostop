@@ -127,3 +127,24 @@ test('hypergeometric no-match estimates are bounded and do not inspect hidden ca
  assert.ok(advice.probabilityNoMatch(10,2,3)>0);
  assert.ok(advice.probabilityNoMatch(10,2,3)<1);
 });
+
+test('ordinary two-card table never invents extra stolen Singles in opponent maximum',()=>{
+ const card=(m,n)=>({id:'m'+m+'-'+n,month:m,type:'pi',flags:[]});
+ const deck=[1,2,3,4].flatMap(m=>[1,2,3,4].map(n=>card(m,n)));
+ const maximum=advice.opponentNextTurnCeiling({
+  deck,floorIds:['m1-1','m2-1'],ownHandIds:['m1-4'],
+  ownCapturedIds:['m3-3','m4-3'],opponentCapturedIds:[],opponentScore:2,
+  scorePlayer:player=>({total:player.captured.length})
+ });
+ assert.equal(maximum,6,'the opponent cannot steal free Singles from two unrelated floor cards');
+});
+test('visible three-card stack can legitimately permit a Single transfer',()=>{
+ const card=(m,n)=>({id:'m'+m+'-'+n,month:m,type:'pi',flags:[]});
+ const deck=[1,2].flatMap(m=>[1,2,3,4].map(n=>card(m,n)));
+ const maximum=advice.opponentNextTurnCeiling({
+  deck,floorIds:['m1-1','m1-2','m1-3'],ownHandIds:[],
+  ownCapturedIds:['m2-3'],opponentCapturedIds:[],opponentScore:2,
+  scorePlayer:player=>({total:player.captured.length})
+ });
+ assert.equal(maximum,7,'a real four-card capture may earn one extra opponent Single');
+});
