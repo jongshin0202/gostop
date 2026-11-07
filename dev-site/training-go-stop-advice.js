@@ -165,6 +165,37 @@ function publicGoStopRisk({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
   unseenCount:unseen.length,possibleFinish:possible,
   opponentHandCount});
 }
+// Complete next-turn play/draw candidate enumeration (rather than only
+// captures that are already paired on the floor). Godori, stripe sets,
+// jjok, ttadak, stack, sweep and Bomb are scored against the full set.
+function decideEnumerated(risk,{goCount=0}={}){
+ if(!risk)return null;
+ if(risk.opponentCanFinish){
+  if(goCount<3&&risk.ownCanScore&&
+     (risk.ownProtectedScoring||risk.ownScoreChance>.93)&&
+     risk.ownScoreChance>.75&&risk.ownScoreChance>risk.opponentWinChance+.25)return 'go';
+  return 'stop';
+ }
+ // A mathematically non-winning opponent turn alone does not justify GO:
+ // the player must still have a realistic path to one additional point.
+ return risk.ownCanScore&&risk.ownScoreChance>.035?'go':'stop';
+}
+function enumeratedReason(risk,decision,opponentCapturedIds,deck){
+ const map=new Map(deck.map(card=>[card.id,card]));
+ const birds=opponentCapturedIds.filter(id=>map.get(id)?.flags?.includes('godori')).length;
+ const winsBirds=birds>=2&&(risk.opponentBest?.captureIds||[])
+  .some(id=>map.get(id)?.flags?.includes('godori'));
+ const detail=winsBirds?' including a possible 5-BIRDIES completion':'';
+ if(decision==='stop'&&risk.opponentCanFinish)
+  return 'STOP. The computer could reach '+risk.opponentCeiling+
+   ' points on its next turn'+detail+'. A winning play/draw combination exists, so lock in your score.';
+ if(decision==='stop')return 'STOP. The computer has no modeled immediate route to 7, but your next-turn card combinations do not currently offer a meaningful chance to add one point.';
+ if(risk.opponentCanFinish)
+  return 'GO. The computer has a possible winning route to '+risk.opponentCeiling+
+   ' points'+detail+', but your next scoring opportunity is more likely. This is a risk.';
+ return 'GO. The highest modeled computer score on its next turn is '+risk.opponentCeiling+
+  ' (below 7), and your cards give you a possible extra scoring point. Hidden cards can change this estimate.';
+}
 const riskCopy={
  en:{
   safe:(ceiling)=>'GO. Based on visible table captures, the computer can reach at most '+ceiling+
@@ -215,7 +246,7 @@ const modelChoice=(model,context)=>{
  const delta=score('go')-score('stop');
  return Math.abs(delta)>=.45?(delta>0?'go':'stop'):null;
 };
-const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling,publicGoStopRisk,riskDecision,probabilityNoMatch});
+const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling,publicGoStopRisk,riskDecision,probabilityNoMatch,decideEnumerated,enumeratedReason});
 root.GoStopDevGoStopLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(root.location?.hostname||''))return;
@@ -275,9 +306,18 @@ function adjust(){
   opponentHandSize:$('aiHand')?.querySelectorAll('.mini-back').length||context.hand.length+1,
   scorePlayer:engine.scorePlayer
  }):null;
- lastRisk=evidence;
- const fromRisk=!checked.urgentThreat?
-  riskDecision(evidence,{goCount:context.goCount,opponentScore:context.opponentScore}):null;
+ const enumerated=root.GoStopDevTurnOutcomes?.assessTwoSides?.({
+  deck:engine?.masterDeck||[],...snapshot,scorePlayer:engine?.scorePlayer,
+  opponentScore:context.opponentScore,ownScore:context.playerScore,
+  opponentHandSize:$('aiHand')?.querySelectorAll('.mini-back').length||context.hand.length+1,
+  threshold:7,
+  floorIds:snapshot.floorIds,ownHandIds:snapshot.ownHandIds,
+  ownCapturedIds:snapshot.ownCapturedIds,opponentCapturedIds:snapshot.opponentCapturedIds
+ });
+ lastRisk=enumerated||evidence;
+ const fromEnumerated=decideEnumerated(enumerated,{goCount:context.goCount});
+ const fromRisk=fromEnumerated||(!checked.urgentThreat?
+  riskDecision(evidence,{goCount:context.goCount,opponentScore:context.opponentScore}):null);
  const verifiedSafe=checked.hasMatch&&context.hand.length>0&&
   Number.isInteger(maximum)&&maximum<7&&context.goCount<=1&&!checked.urgentThreat;
  const result=fromRisk||
@@ -290,7 +330,10 @@ function adjust(){
  const coachText=$('trainingCoachText');
  const locale=document.documentElement.lang;
  const riskText=riskCopy[locale]||riskCopy.en;
- if(coachText&&fromRisk&&evidence){
+ if(coachText&&fromEnumerated&&enumerated){
+  const explanation=enumeratedReason(enumerated,fromEnumerated,snapshot.opponentCapturedIds,engine.masterDeck);
+  if(coachText.textContent!==explanation)coachText.textContent=explanation;
+ }else if(coachText&&fromRisk&&evidence){
   const why=result==='go'?(evidence.opponentCeiling<7?
    riskText.safe(evidence.opponentCeiling):riskText.favorable(evidence.opponentCeiling)):
    riskText.caution(evidence.opponentCeiling);
