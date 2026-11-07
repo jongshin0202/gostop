@@ -29,19 +29,29 @@ const inGame=()=>{
  return menu?.hidden===true&&!!document.getElementById('appShell')&&
   !document.documentElement.classList.contains('gostop-boot-pending');
 };
-const otherDialog=()=>!!document.querySelector('dialog[open], #devInviteFullscreenGate, #openingOverlay.show');
+// Training Mode and the rest of the game use native modal dialogs. Their
+// existence must never suppress foreground fullscreen recovery: the recovery
+// dialog itself enters the browser top layer above them.
+const inviteGateOpen=()=>!!document.querySelector('#devInviteFullscreenGate:not([hidden])');
 let textEntryUntil=0;
 const editing=()=>{
  const active=document.activeElement;
  return !!active?.matches?.('input,textarea,select,[contenteditable="true"]')||Date.now()<textEntryUntil;
 };
 let timer=null,prompt=null,dismissed=false;
-function hide(){if(prompt){prompt.remove();prompt=null;}}
+function hide(){
+ if(!prompt)return;
+ const current=prompt;prompt=null;
+ if(current.open&&typeof current.close==='function')current.close();
+ current.remove();
+}
 function style(){
  if(document.getElementById('devFullscreenReturnStyle'))return;
  const element=document.createElement('style');element.id='devFullscreenReturnStyle';
  element.textContent=
-  '#devFullscreenReturnPrompt{position:fixed;inset:0;z-index:2147483500;display:flex;align-items:center;justify-content:center;background:#16110de8;color:#ffebcc;padding:20px;text-align:center;font-family:system-ui,sans-serif}'+
+  '#devFullscreenReturnPrompt:not([open]){display:none!important}'+
+  '#devFullscreenReturnPrompt{position:fixed;inset:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border:0;z-index:2147483500;background:#16110de8;color:#ffebcc;padding:20px;text-align:center;font-family:system-ui,sans-serif}'+
+  '#devFullscreenReturnPrompt::backdrop{background:#16110de8}'+
   '#devFullscreenReturnPrompt .dev-fullscreen-card{box-sizing:border-box;width:100%;max-width:430px;padding:24px 18px;background:#281c16;border:2px solid #ba914c;border-radius:18px;box-shadow:0 8px 48px #000a}'+
   '#devFullscreenReturnPrompt h2{font-size:clamp(21px,5vw,25px);margin:0 0 12px}'+
   '#devFullscreenReturnPrompt p{font-size:15px;line-height:1.55;margin:0 0 20px}'+
@@ -51,10 +61,13 @@ function style(){
  document.head.append(element);
 }
 function show(){
- if(prompt||!eligible()||!inGame()||document.fullscreenElement||otherDialog()||editing()||
+ if(prompt||!eligible()||!inGame()||document.fullscreenElement||inviteGateOpen()||editing()||
     document.visibilityState==='hidden'||dismissed)return;
  style();
- const strings=locale(),layer=document.createElement('section');layer.id=ID;
+ const strings=locale(),layer=document.createElement('dialog');layer.id=ID;
+ // showModal() is required: z-index alone cannot overlay an existing
+ // <dialog> top layer such as the Opening Strategy Review.
+ layer.addEventListener('cancel',event=>event.preventDefault());
  layer.setAttribute('role','dialog');layer.setAttribute('aria-modal','true');
  layer.setAttribute('aria-labelledby',ID+'Title');layer.setAttribute('aria-describedby',ID+'Description');
  const card=document.createElement('div');card.className='dev-fullscreen-card';
@@ -79,13 +92,20 @@ function show(){
  });
  keep.addEventListener('click',()=>{dismissed=true;hide();});
  actions.append(enter,keep);card.append(title,message,actions);layer.append(card);
- document.body.append(layer);prompt=layer;enter.focus({preventScroll:true});
+ document.body.append(layer);prompt=layer;
+ try{
+  layer.showModal();
+  enter.focus({preventScroll:true});
+ }catch(_){
+  // Never leave an inaccessible recovery control behind a native modal.
+  hide();schedule(900);
+ }
 }
 function check(){
  timer=null;
  if(document.fullscreenElement){hide();dismissed=false;return;}
  if(document.visibilityState==='hidden'||!eligible()||!inGame()){hide();return;}
- if(otherDialog())return;
+ if(inviteGateOpen())return;
  if(editing()){
   if(Date.now()<textEntryUntil)schedule(1500);
   return;
