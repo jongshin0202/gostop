@@ -269,7 +269,9 @@ function adjust(){
  }):null;
  const evidence=engine?.scorePlayer?publicGoStopRisk({
   deck:engine.masterDeck,...snapshot,opponentScore:context.opponentScore,
-  playerScore:context.playerScore,opponentHandSize:context.hand.length,
+  playerScore:context.playerScore,
+  // Count visible card backs only. Never inspect opponent card identities.
+  opponentHandSize:$('aiHand')?.querySelectorAll('.mini-back').length||context.hand.length+1,
   scorePlayer:engine.scorePlayer
  }):null;
  lastRisk=evidence;
