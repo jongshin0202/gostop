@@ -31,14 +31,16 @@ function bestWithTransfer({captured,added,stealable,transferCount,scorePlayer,bo
  const combined=[...captured,...added];
  let best=scoreBest(scorePlayer,combined)+bonus;
  if(!transferCount||!stealable.length)return best;
- const eligible=stealable.filter(hasPi);
- // Explore all possible physically distinct Singles, including double Singles.
- function visit(start,remaining,chosen){
-  best=Math.max(best,scoreBest(scorePlayer,[...combined,...chosen])+bonus);
-  if(!remaining)return;
-  for(let i=start;i<eligible.length;i++)visit(i+1,remaining-1,[...chosen,eligible[i]]);
+ // All transfer-eligible Singles contribute only one or two Singles to
+ // scoring. Choosing the highest-value first is exact for this scoring rule
+ // and avoids combinatorial UI freezes on low-end Android devices.
+ const eligible=stealable.filter(hasPi).sort((a,b)=>
+  Number(!!b.flags?.includes('doublePi')||!!b.flags?.includes('switchPi'))-
+  Number(!!a.flags?.includes('doublePi')||!!a.flags?.includes('switchPi'))||
+  a.id.localeCompare(b.id));
+ for(let n=1;n<=Math.min(transferCount,eligible.length);n++){
+  best=Math.max(best,scoreBest(scorePlayer,[...combined,...eligible.slice(0,n)])+bonus);
  }
- visit(0,Math.min(transferCount,eligible.length),[]);
  return best;
 }
 /** Analysis from one actor's own perspective: own hand is known or candidate
