@@ -83,6 +83,28 @@ function onlyCaptureText(handId,floorId,locale='en',handLabel=handId,floorLabel=
  if(!handId||!floorId)return null;
  return (onlyCaptureCopy[locale]||onlyCaptureCopy.en)(handLabel,floorLabel);
 }
+// Bomb blank turns flip a deck card without spending a real hand card.
+// Never invent available turns or infer hidden cards: callers supply only
+// visible hand/floor IDs and the number of enabled blank-turn buttons.
+function recommendBombBlank({hand=[],floor=[],availableBlankTurns=0}={}){
+ if(!Number.isInteger(availableBlankTurns)||availableBlankTurns<1)return false;
+ const real=unique(hand),table=unique(floor);
+ return real.every(id=>{
+  const month=monthOf(id);
+  return Number.isInteger(month)&&month>=1&&month<=12 &&
+   !table.some(f=>monthOf(f)===month);
+ });
+}
+const BOMB_BLANK_COPY=Object.freeze({
+ en:'Use a blank Bomb turn to flip the deck. No hand card can capture now, so keep your real cards.',
+ ko:'폭탄으로 얻은 빈 턴을 사용해 덱에서 패를 뒤집으세요. 지금 먹을 수 있는 손패가 없으므로 실제 손패를 보존하세요.',
+ es:'Usa un turno vacío de Bomba para voltear el mazo. No puedes capturar ahora; conserva tus cartas reales.',
+ fr:'Utilisez un tour vide de Bombe pour retourner le paquet. Aucune prise possible; gardez vos vraies cartes.',
+ de:'Nutze einen leeren Bomben-Zug, um eine Karte vom Stapel aufzudecken. Du kannst jetzt nichts fangen; behalte deine Handkarten.',
+ ja:'爆弾で得た空白ターンを使って山札をめくりましょう。今は取れる手札がないので、手札を残してください。',
+ zh:'先使用炸弹获得的空白回合翻开牌堆。当前手牌无法收牌，应保留真正的手牌。'
+});
+function bombBlankText(locale='en'){return BOMB_BLANK_COPY[locale]||BOMB_BLANK_COPY.en;}
 // Evaluate the score the OPPONENT could get by capturing our discard with
 // one hidden same-month card. This is a conditional public-information risk,
 // never a claim about what is in the opponent's concealed hand.
@@ -230,7 +252,7 @@ function discardText(cardId,visible,deck,locale='en',name=''){
  if(sameHand.length>=2)return fn.paired(label);
  return fn.noMatch(label);
 }
-const api=Object.freeze({monthOf,securedDiscard,drawTargetScore,recommendDrawTarget,stripePotential,onlyCaptureOption,onlyCaptureText,discardDanger,safestDiscard,riskyDiscardCopy,captureComparison,captureComparisonCopy,discardText,T,options,cardsFor});
+const api=Object.freeze({monthOf,securedDiscard,drawTargetScore,recommendDrawTarget,stripePotential,onlyCaptureOption,onlyCaptureText,discardDanger,safestDiscard,riskyDiscardCopy,captureComparison,captureComparisonCopy,discardText,recommendBombBlank,bombBlankText,T,options,cardsFor});
 root.GoStopDevTrainingAdviceLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

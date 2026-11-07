@@ -15,8 +15,10 @@ const shaken=globalThis.GoStopDevShakenPriority;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
 let trainingActive=false,lock=null,suppressed=false;
-const handSignature=()=>[...hand.querySelectorAll('.hand-card[data-card-id]')].map(node=>node.dataset.cardId)
- .filter(Boolean).sort().join('|');
+const handSignature=()=>[
+ ...[...hand.querySelectorAll('.hand-card[data-card-id]')].map(node=>node.dataset.cardId).filter(Boolean),
+ ...[...hand.querySelectorAll('.blank-turn-card')].map((_,i)=>'bomb-blank-'+i)
+].sort().join('|');
 const specialIsOpen=()=>!!document.querySelector('#shakeDialog[open],#bombDialog[open],#gukjinDialog[open],#decisionDialog[open],#resultDialog[open]');
 
 const cardIds=selector=>[...document.querySelectorAll(selector)].map(el=>el.dataset.cardId).filter(Boolean);
@@ -83,6 +85,18 @@ function shakenOverride(currentHandId,currentFloorId){
  return {...choice,text:(shakenCopy[lang]||shakenCopy.en)(name)};
 }
 
+function bombBlankOverride(currentFloorId,originalTitle){
+ if(currentFloorId||!/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(originalTitle))return null;
+ const available=[...hand.querySelectorAll('.blank-turn-card:not(:disabled)')];
+ if(!available.length)return null;
+ const logic=globalThis.GoStopDevTrainingAdviceLogic;
+ if(!logic?.recommendBombBlank?.({
+  hand:cardIds('#playerHand .hand-card[data-card-id]'),
+  floor:cardIds('#floor .floor-card[data-card-id]'),
+  availableBlankTurns:available.length
+ }))return null;
+ return {blankOverride:true,text:logic.bombBlankText(document.documentElement.lang||'en')};
+}
 function saferDiscardOverride(currentHandId,currentFloorId){
  if(currentFloorId||!currentHandId)return null;
  const logic=globalThis.GoStopDevTrainingAdviceLogic,engine=globalThis.GoStopEngine;
@@ -119,7 +133,7 @@ function sync(){
   return;
  }
  const sig=handSignature();
- if(lock&&(!sig||sig!==lock.handSignature||!hand.querySelector('[data-card-id="'+lock.hand+'"]'))){
+ if(lock&&(!sig||sig!==lock.handSignature||!hand.querySelector('[data-card-id="'+lock.hand+'"]')||lock.blankOverride&&!hand.querySelector('.blank-turn-card:not(:disabled)'))){
   // The played card has left the hand. Do not immediately re-capture the old
   // glowing hint while a frozen-game render is still in progress.
   reset();suppressed=true;
@@ -132,12 +146,13 @@ function sync(){
   const recommendedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]');
   const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
   if(originalText){
-   const corrective=reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
+   const corrective=bombBlankOverride(recommendedFloor?.dataset.cardId||null,originalTitle)||
+    reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     saferDiscardOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
    lock={handSignature:sig,hand:corrective?.handId||recommendation.dataset.cardId,
     floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds),riskOverride:!!corrective?.riskOverride};
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -159,10 +174,12 @@ function sync(){
  }
  // Restore ONLY visual classes. Target options remain clickable and retain
  // their distinct target-option outline; nothing about a move is changed.
- hand.querySelectorAll('.hand-card.matchable[data-card-id]').forEach(el=>{
-  if(el.dataset.cardId!==lock.hand)el.classList.remove('matchable');
+ const recommendedHand=lock.blankOverride
+  ?hand.querySelector('.blank-turn-card:not(:disabled)')
+  :hand.querySelector('.hand-card[data-card-id="'+lock.hand+'"]');
+ hand.querySelectorAll('.hand-card.matchable').forEach(el=>{
+  if(el!==recommendedHand)el.classList.remove('matchable');
  });
- const recommendedHand=hand.querySelector('.hand-card[data-card-id="'+lock.hand+'"]');
  if(recommendedHand&&!recommendedHand.classList.contains('matchable'))recommendedHand.classList.add('matchable');
  floor.querySelectorAll('.floor-card.training-recommended[data-card-id]').forEach(el=>{
   if(el.dataset.cardId!==lock.floor)el.classList.remove('training-recommended');
@@ -188,7 +205,7 @@ document.addEventListener('click',event=>{
 },{capture:true});
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
-  hand:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride}), // diagnostic only, not local persistence
+  hand:lock?.blankOverride?null:lock?.hand||null,floor:lock?.floor||null,
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride}), // diagnostic only, not local persistence
 }),configurable:true});
 })();

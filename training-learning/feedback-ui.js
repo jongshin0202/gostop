@@ -658,6 +658,9 @@ function captureRecommendation(){
  if(!active)return null;
  const hand=handSignature();
  const locked=globalThis.GoStopTrainingRecommendationDev?.getStatus?.();
+ // A Bomb blank is a deck-only action, not a physical-card candidate.
+ // Do not cache a stale native real-card hint as a false training choice.
+ if(locked?.bombBlankOverride){observedRecommendation=null;return null;}
  const approved=locked?.locked&&locked?.hand&&locked?.floor&&hand.split('|').includes(locked.hand);
  const rec=(approved?locked.hand:null)||$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
  if(rec){
