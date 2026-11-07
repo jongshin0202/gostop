@@ -84,10 +84,20 @@ const onTable=()=>[...document.querySelectorAll('#floor [data-card-id]')].map(el
 const inHand=()=>[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')].filter(el=>!el.disabled).map(el=>el.dataset.cardId).filter(Boolean);
 const captured=selector=>[...document.querySelectorAll(selector+' [data-card-id]')].map(el=>el.dataset.cardId).filter(Boolean);
 const picture=id=>{
+ if(!id)return '—';
  const c=card(id);
- const name=globalThis.GoStopTrainingLocales?.cardName?.(document.documentElement.lang,c);
- const el=id&&document.querySelector('[data-card-id="'+id+'"] img');
- return name||el?.alt||id||'—';
+ const name=c?globalThis.GoStopTrainingLocales?.cardName?.(document.documentElement.lang,c):null;
+ // The judge dialog must remain understandable even when a locale helper or
+ // card image is unavailable; never show raw m4-4 / m6-2 identifiers.
+ const node=document.querySelector('[data-card-id="'+id+'"]');
+ const visibleName=node?.getAttribute('title')||node?.getAttribute('aria-label')||
+  node?.querySelector('img')?.alt||null;
+ const months=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
+ const type=c?(c.type==='ribbon'?'Stripe':c.type==='bright'?'Bright':
+  c.type==='pi'?(c.flags?.includes('doublePi')?'2x Single':'Single'):
+  c.flags?.includes('godori')?'Bird Picture':'Picture'):'';
+ const fallback=c?months[c.month-1]+' '+type:null;
+ return name||visibleName||fallback||id;
 };
 const moveId=(h,t)=>h+'|'+(t||'-');
 // The native engine treats a three-card floor stack as ONE automatic target.
