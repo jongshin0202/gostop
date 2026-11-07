@@ -83,6 +83,31 @@ function shakenOverride(currentHandId,currentFloorId){
  return {...choice,text:(shakenCopy[lang]||shakenCopy.en)(name)};
 }
 
+function saferDiscardOverride(currentHandId,currentFloorId){
+ if(currentFloorId||!currentHandId)return null;
+ const logic=globalThis.GoStopDevTrainingAdviceLogic,engine=globalThis.GoStopEngine;
+ if(!logic?.safestDiscard||!engine?.scorePlayer)return null;
+ const deck=engine.masterDeck||[];
+ const visible={
+  hand:cardIds('#playerHand .hand-card[data-card-id]'),
+  floor:cardIds('#floor .floor-card[data-card-id]'),
+  humanCaptured:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  computerCaptured:cardIds('#aiCaptured .captured-mini[data-card-id]')
+ };
+ const ranked=logic.safestDiscard(visible,deck,engine.scorePlayer);
+ const best=ranked?.choice,original=logic.discardDanger?.(currentHandId,visible,deck,engine.scorePlayer);
+ if(!best||!original||best.cardId===currentHandId||
+   best.maximumGain>=original.maximumGain)return null;
+ const lang=document.documentElement.lang||'en';
+ const label=id=>{
+  const card=deck.find(c=>c.id===id),element=hand.querySelector('[data-card-id="'+id+'"]');
+  return globalThis.GoStopTrainingLocales?.cardName?.(lang,card)||
+   element?.title||element?.querySelector('img')?.alt||id;
+ };
+ return {handId:best.cardId,floorId:null,riskOverride:true,
+  text:logic.riskyDiscardCopy(label(best.cardId),label(currentHandId),original,lang)};
+}
+
 function reset(){
  lock=null;
  document.documentElement.classList.remove(SCOPE);
@@ -108,10 +133,11 @@ function sync(){
   const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
   if(originalText){
    const corrective=reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
-    shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
+    shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
+    saferDiscardOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
    lock={handSignature:sig,hand:corrective?.handId||recommendation.dataset.cardId,
     floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds)};
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds),riskOverride:!!corrective?.riskOverride};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -163,6 +189,6 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
   hand:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride}), // diagnostic only, not local persistence
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride}), // diagnostic only, not local persistence
 }),configurable:true});
 })();
