@@ -123,10 +123,11 @@ function publicGoStopRisk({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
   ownCapturedIds:ownCaptured,opponentCapturedIds:opponentCaptured,
   opponentScore,scorePlayer});
  if(!Number.isFinite(ceiling))return null;
- let ownGainChance=0,captureChance=0,hasGuaranteedScoringCapture=false;
+ let ownGainChance=0,captureChance=0,hasGuaranteedScoringCapture=false,hasMatchingHandCard=false;
  for(const handId of hand){
   for(const floorId of floor){
    if(month(handId)!==month(floorId))continue;
+   hasMatchingHandCard=true;
    const matchingUnseen=unseen.filter(c=>c.month===month(floorId)).length;
    // Lower bound: neither the opponent's unknown hand nor their next draw
    // has a card of this month. Then the visible capture stays available.
@@ -160,7 +161,7 @@ function publicGoStopRisk({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
  const opponentFinishChance=possible?
   clamp01(singleRouteChance+(1-singleRouteChance)*twoStepAllowance):0;
  return Object.freeze({opponentCeiling:ceiling,opponentFinishChance,
-  ownGainChance,captureChance,hasGuaranteedScoringCapture,
+  ownGainChance,captureChance,hasMatchingHandCard,hasGuaranteedScoringCapture,
   unseenCount:unseen.length,possibleFinish:possible,
   opponentHandCount});
 }
@@ -199,7 +200,7 @@ const riskCopy={
 };
 function riskDecision(evidence,{goCount=0,opponentScore=0}={}){
  if(!evidence||goCount>=3||opponentScore>=7)return null;
- if(evidence.opponentCeiling<7&&evidence.captureChance>=.35)return 'go';
+ if(evidence.opponentCeiling<7&&evidence.hasMatchingHandCard)return 'go';
  if(evidence.opponentCeiling>=7){
   if(evidence.ownGainChance>=.65&&
      evidence.ownGainChance>evidence.opponentFinishChance+.1)return 'go';
