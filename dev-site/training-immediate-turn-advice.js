@@ -23,7 +23,7 @@ function resetHand(){
 }
 function reset(){resetHand();requests=0;}
 function adviceVisible(){
- const rec=hand.querySelector('.hand-card.matchable[data-card-id]');
+ const rec=hand.querySelector('.hand-card.matchable[data-card-id],.blank-turn-card.matchable');
  return !!rec&&!coach.hidden&&!!$('trainingCoachText')?.textContent?.trim()&&
   !/^(?:Opening Strategy|시작 전략)$/i.test(title.textContent.trim());
 }
