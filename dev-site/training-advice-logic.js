@@ -196,13 +196,14 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
 const COMPARE_COPY={
  en:(first,other,result)=>{
   if(result.selected.secured&&result.alternative.secured){
-   if(result.preferNow)return 'Both '+first+' and '+other+' captures are secured. '+first+
-    ' builds your score or Singles sooner; '+other+' remains available afterward.';
-   return 'Both '+first+' and '+other+' are secured captures. '+other+
-    ' remains available later; neither has a demonstrated immediate scoring advantage.';
+   if(result.preferNow)return 'Both '+first+' and '+other+' are secured. Take '+first+
+    ' first to build '+(result.selected.pi>result.alternative.pi?'Singles':'points')+
+    ' sooner; '+other+' remains available.';
+   return 'Both '+first+' and '+other+' are secured. '+other+
+    ' remains available; their immediate scoring value is similar.';
   }
-  if(result.preferNow)return first+' gives you more immediate scoring progress than '+other+'.';
-  return other+' is another possible capture; the visible scoring comparison does not prove that '+first+' is stronger.';
+  if(result.preferNow)return 'Take '+first+' now; it advances your score more than '+other+'.';
+  return other+' is also possible, with no demonstrated immediate scoring advantage for '+first+'.';
  },
  ko:(a,b,r)=>r.selected.secured&&r.alternative.secured?
   '두 패 모두 확보 가능한 수입니다. '+a+'을 먼저 먹고 '+b+'은 다음에 먹을 수 있습니다.':
