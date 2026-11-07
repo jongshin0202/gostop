@@ -94,6 +94,9 @@ function updateCopy(){
  const handId=rec.hand||hand.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
  const current=deck.find(c=>c.id===handId);
  const v=visible(),floorMatch=!!current&&v.floor.some(id=>logic.monthOf(id)===current.month);
+ // The dev recommendation guard can replace a dangerous discard. Preserve
+ // that safer selected card and its explanatory reason across render cycles.
+ if(rec.riskOverride&&rec.text)next=rec.text;
  const normalMove=/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim());
  const forced=logic.onlyCaptureOption?.(v);
  if(normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
@@ -103,9 +106,20 @@ function updateCopy(){
    cardName(forced.handId),cardName(forced.floorId));
  }
 
- if(handId&&!floorMatch&&rec.floor==null&&normalMove){
+ if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
+ }
+ if(normalMove&&!rec.riskOverride&&handId&&rec.floor&&floorMatch&&
+    logic.captureComparison&&logic.captureComparisonCopy){
+  const result=logic.captureComparison(v,handId,rec.floor,deck,globalThis.GoStopEngine?.scorePlayer);
+  if(result){
+   const other=result.alternative,more=logic.captureComparisonCopy(
+    cardName(handId)+' onto '+cardName(rec.floor),
+    cardName(other.h)+' onto '+cardName(other.f),result,locale());
+   // Appending the same sentence repeatedly would create an observer loop.
+   if(more&&!next.includes(more))next=(next+' '+more).trim();
+  }
  }
  if(next!==source){
   // Advertise the deliberate copy correction to the presentation preserver.
