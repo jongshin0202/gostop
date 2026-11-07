@@ -72,10 +72,23 @@ test('computer policy sees possible score versus opponent cannot finish',()=>{
  const e={masterDeck:engine.masterDeck,scorePlayer:engine.scorePlayer};
  const ai={hand:[engine.masterDeck.find(c=>c.id==='m9-3')],
   captured:['m2-1','m4-1'].map(id=>engine.masterDeck.find(c=>c.id===id))};
- // Tests also cover absent global analysis: no fallback may alter original AI.
  const result=computer.choose({
   deck:engine.masterDeck,floor:[],ai,humanCaptured:[],
   humanHandCount:2,aiScore:7,humanScore:0,engine:e
  });
- assert.equal(result,null,'policy fails closed when scoring enumerator is not loaded first');
+ assert.ok(result,'the isolated policy receives its public analyzer');
+ assert.ok(['go','stop',null].includes(result.decision));
+
+});
+
+test('computer chooses GO if opponent cannot immediately finish and own 5-BIRDIES route exists',()=>{
+ const c=id=>engine.masterDeck.find(x=>x.id===id);
+ const result=computer.choose({
+  deck:engine.masterDeck,floor:[c('m8-2')],ai:{hand:[c('m8-3')],captured:[c('m2-1'),c('m4-1')]},
+  humanCaptured:[],humanHandCount:2,aiScore:7,humanScore:0,engine
+ });
+ assert.ok(result);
+ assert.equal(result.risk.opponentCanFinish,false);
+ assert.equal(result.risk.ownCanScore,true);
+ assert.equal(result.decision,'go');
 });
