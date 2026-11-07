@@ -62,12 +62,13 @@ function opponentNextTurnCeiling({deck=[],floorIds=[],ownHandIds=[],ownCapturedI
  const before=scorePlayer({captured,gukjinMode:'animal'}).total;
  if(!Number.isFinite(before))return null;
  let max=opponentScore;
- // Allow up to two opponent Single transfers in this optimistic calculation.
- // Otherwise a possible steal could make the visible-table bound too low.
+ // An extra Single transfer is only possible when a visible three-card
+ // family stack is completed. Never grant imaginary steals for an ordinary
+ // one- or two-card table match: this previously inflated the STOP risk.
  const singles=ownCapturedIds.map(id=>byId.get(id)).filter(c=>
   c&&(c.type==='pi'||c.flags?.includes('switchPi'))).slice(0,2);
- const update=(added)=>{
-  for(let n=0;n<=singles.length;n++){
+ const update=(added,stackCaptures=0)=>{
+  for(let n=0;n<=Math.min(stackCaptures,singles.length);n++){
    const next=scorePlayer({captured:[...captured,...added,...singles.slice(0,n)],gukjinMode:'animal'}).total;
    if(Number.isFinite(next))max=Math.max(max,opponentScore+Math.max(0,next-before));
   }
@@ -75,12 +76,13 @@ function opponentNextTurnCeiling({deck=[],floorIds=[],ownHandIds=[],ownCapturedI
  for(let i=0;i<groups.length;i++){
   const one=groups[i];
   for(const source of unseen.filter(c=>c.month===one.month)){
-   update([...one.cards,source]);
+   update([...one.cards,source],one.cards.length===3?1:0);
    for(let j=i+1;j<groups.length;j++){
     const two=groups[j];
     if(one.cards.some(c=>two.cards.some(d=>c.id===d.id)))continue;
     for(const other of unseen.filter(c=>c.month===two.month&&c.id!==source.id))
-      update([...one.cards,...two.cards,source,other]);
+      update([...one.cards,...two.cards,source,other],
+       (one.cards.length===3?1:0)+(two.cards.length===3?1:0));
    }
   }
  }
