@@ -38,7 +38,8 @@ test('unseen play and drawn card can form a Jjok capture even with an empty floo
 });
 test('visible three-card stack and Bomb are modeled without guessing hidden identity',()=>{
  const out=turn.enumerateTurn({deck:engine.masterDeck,floorIds:['m3-1'],
-  actingCapturedIds:[],otherCapturedIds:[],actingHandSize:3,
+  actingCapturedIds:['m1-3','m2-3','m4-3','m5-3','m6-3','m7-3','m8-3','m9-3','m10-3'],
+  otherCapturedIds:[],actingHandSize:3,
   currentScore:0,scorePlayer:engine.scorePlayer});
  assert.ok(out.scenarios>0);
  assert.ok(out.best);
