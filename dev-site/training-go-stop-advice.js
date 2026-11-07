@@ -171,8 +171,9 @@ function publicGoStopRisk({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
 function decideEnumerated(risk,{goCount=0}={}){
  if(!risk)return null;
  if(risk.opponentCanFinish){
-  if(goCount<3&&risk.ownCanScore&&risk.ownScoreChance>.75&&
-     risk.ownScoreChance>risk.opponentWinChance+.25)return 'go';
+  if(goCount<3&&risk.ownCanScore&&
+     (risk.ownProtectedScoring||risk.ownScoreChance>.93)&&
+     risk.ownScoreChance>.75&&risk.ownScoreChance>risk.opponentWinChance+.25)return 'go';
   return 'stop';
  }
  // A mathematically non-winning opponent turn alone does not justify GO:
