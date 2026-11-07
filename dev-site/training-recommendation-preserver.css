@@ -8,3 +8,11 @@
 .dev-training-recommendation-lock #playerHand .hand-card.matchable:hover{
  transform:none!important;
 }
+
+/* The blank card's native !important shadow must not conceal the Training ring. */
+.dev-training-recommendation-lock #playerHand .blank-turn-card.matchable{
+ outline:3px solid #f1c75a!important;
+ outline-offset:3px!important;
+ box-shadow:0 0 0 6px rgba(241,199,90,.20),0 0 22px rgba(241,199,90,.70)!important;
+ transform:none!important;
+}
