@@ -94,7 +94,7 @@ test('preflight permits development origin without allowing other origins',async
 
 test('every completed Training game counts exactly once even without feedback',async()=>{
  const t=fixture();try{
-  for(let n=1;n<=20;n++){
+  for(let n=1;n<=10;n++){
    const response=await(await t.request('/api/training/complete',{
      method:'POST',body:{gameId:'clean-game-'+n,hadDisagreement:false}
    })).json();
@@ -103,46 +103,46 @@ test('every completed Training game counts exactly once even without feedback',a
    assert.equal(response.completedGames,n);
   }
   const summary=await(await t.request('/api/training/state')).json();
-  assert.equal(summary.completedGames,20);
-  assert.equal(summary.eligibilityReason,'20-completed-games');
+  assert.equal(summary.completedGames,10);
+  assert.equal(summary.eligibilityReason,'10-completed-games');
   assert.equal(summary.pendingLiveUpdate,undefined,'No weights changed, so no candidate is published');
   const duplicate=await(await t.request('/api/training/complete',{
-   method:'POST',body:{gameId:'clean-game-20',hadDisagreement:false}
+   method:'POST',body:{gameId:'clean-game-10',hadDisagreement:false}
   })).json();
   assert.equal(duplicate.duplicate,true);
-  assert.equal((await(await t.request('/api/training/state')).json()).completedGames,20);
+  assert.equal((await(await t.request('/api/training/state')).json()).completedGames,10);
  }finally{t.restore();}
 });
-test('a disagreement followed by ten clean games stages a versioned candidate without claiming live deployment',async()=>{
+test('a disagreement followed by five clean games stages a versioned candidate without claiming live deployment',async()=>{
  const t=fixture();try{
   await t.request('/api/training/feedback',{method:'POST',body:feedback('dispute-game-1')});
   const first=await(await t.request('/api/training/complete',{
    method:'POST',body:{gameId:'dispute-game-1',hadDisagreement:true}
   })).json();
   assert.equal(first.trained,1);
-  for(let n=1;n<=9;n++){
+  for(let n=1;n<=4;n++){
    const r=await(await t.request('/api/training/complete',{
      method:'POST',body:{gameId:'agreement-'+n,hadDisagreement:false}
    })).json();
    assert.equal(r.promotionPending,false);
   }
-  const tenth=await(await t.request('/api/training/complete',{
-    method:'POST',body:{gameId:'agreement-10',hadDisagreement:false}
+  const fifth=await(await t.request('/api/training/complete',{
+    method:'POST',body:{gameId:'agreement-5',hadDisagreement:false}
   })).json();
-  assert.equal(tenth.promotionPending,true);
-  assert.equal(tenth.updateTrigger,'10-agreement-games-after-disagreement');
-  assert.equal(tenth.publishedToLive,false);
-  assert.equal(tenth.developmentModelUpdated,true);
-  assert.equal(tenth.developmentModelVersion,1);
+  assert.equal(fifth.promotionPending,true);
+  assert.equal(fifth.updateTrigger,'5-agreement-games-after-disagreement');
+  assert.equal(fifth.publishedToLive,false);
+  assert.equal(fifth.developmentModelUpdated,true);
+  assert.equal(fifth.developmentModelVersion,1);
   const state=await(await t.request('/api/training/state')).json();
-  assert.equal(state.completedGames,11);
+  assert.equal(state.completedGames,6);
   assert.equal(state.pendingLiveUpdate.modelExamples,1);
   assert.equal(state.gamesSinceLiveUpdate,0,'cadence resets after acknowledged dev activation');
   assert.equal(state.developmentModelVersion,1);
   assert.equal(t.store.get('activeCardModel').examples,1);
   assert.equal(t.store.get('activeOpeningModel').examples,0);
   const candidate=t.store.get('promotionCandidate');
-  assert.equal(candidate.reason,'10-agreement-games-after-disagreement');
+  assert.equal(candidate.reason,'5-agreement-games-after-disagreement');
   assert.equal(candidate.model.weights.length,16);
   assert.equal(candidate.model.examples,1);
  }finally{t.restore();}
@@ -227,12 +227,12 @@ test('special-only learning is included in staged weights after the update thres
   const x=specialEntry('special-trigger-game');
   await t.request('/api/training/special-feedback',{method:'POST',body:x});
   await t.request('/api/training/complete',{method:'POST',body:{gameId:x.gameId}});
-  for(let n=1;n<10;n++){
+  for(let n=1;n<5;n++){
    const r=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-'+n}})).json();
    assert.equal(r.promotionPending,false);
   }
-  const last=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-10'}})).json();
-  assert.equal(last.updateTrigger,'10-agreement-games-after-disagreement');
+  const last=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-5'}})).json();
+  assert.equal(last.updateTrigger,'5-agreement-games-after-disagreement');
   assert.equal(last.promotionPending,true);
   assert.equal(last.publishedToLive,false);
   const candidate=t.store.get('promotionCandidate');
@@ -302,18 +302,18 @@ test('opening endpoint refuses unknown goals, invalid features, blank selections
   assert.equal((await t.request('/api/training/opening-feedback',{method:'POST',body:openingEntry('opening-finished')})).status,409);
  }finally{t.restore();}
 });
-test('ten agreement games after an opening-strategy correction stage separate opening weights only',async()=>{
+test('five agreement games after an opening-strategy correction stage separate opening weights only',async()=>{
  const t=fixture();try{
   const first=openingEntry('opening-threshold-1');
   await t.request('/api/training/opening-feedback',{method:'POST',body:first});
   const a=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:first.gameId}})).json();
   assert.equal(a.openingModelExamples,1);
-  for(let n=1;n<=9;n++){
+  for(let n=1;n<=4;n++){
    const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-'+n}})).json();
    assert.equal(result.promotionPending,false);
   }
-  const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-10'}})).json();
-  assert.equal(result.updateTrigger,'10-agreement-games-after-disagreement');
+  const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-5'}})).json();
+  assert.equal(result.updateTrigger,'5-agreement-games-after-disagreement');
   assert.equal(result.publishedToLive,false);
   assert.equal(result.developmentModelUpdated,true);
   const current=await(await t.request('/api/training/state')).json();
@@ -509,7 +509,7 @@ test('GO STOP endpoint rejects fabricated contexts and conflicting card evidence
   })).status,401);
  }finally{t.restore();}
 });
-test('GO STOP expert learning enters active DEVELOPMENT model at existing ten-clean-game cadence',async()=>{
+test('GO STOP expert learning enters active DEVELOPMENT model after five clean games',async()=>{
  const t=fixture();try{
   const first=goStopEntry('go-stop-promotion');
   await t.request('/api/training/go-stop-feedback',{method:'POST',body:first});
@@ -518,10 +518,10 @@ test('GO STOP expert learning enters active DEVELOPMENT model at existing ten-cl
    gameId:first.gameId,reviewVersion:review.reviewVersion,
    keptFeedbackIds:review.items.map(x=>x.id)
   }});
-  for(let i=1;i<=9;i++)
+  for(let i=1;i<=4;i++)
    await t.request('/api/training/complete',{method:'POST',body:{gameId:'go-stop-clean-'+i}});
   const final=await(await t.request('/api/training/complete',{method:'POST',
-   body:{gameId:'go-stop-clean-10'}})).json();
+   body:{gameId:'go-stop-clean-5'}})).json();
   assert.equal(final.developmentModelUpdated,true);
   assert.equal(final.publishedToLive,false);
   const state=await(await t.request('/api/training/state')).json();

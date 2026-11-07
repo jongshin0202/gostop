@@ -58,6 +58,31 @@ const T={
  ja:{draw:n=>n+'を選びましょう。',safe:n=>n+'を捨てます。対になる札は手元にあり、あとで回収できます。',paired:n=>n+'を捨てて、価値の高い同じ組の札を残しましょう。',noMatch:n=>n+'を捨てます。取れる札はありません。'},
  zh:{draw:n=>'选择'+n+'。',safe:n=>'打出'+n+'。唯一匹配的牌还在手中，可再收回。',paired:n=>'打出'+n+'，保留同组价值更高的牌。',noMatch:n=>'打出'+n+'。目前无牌可收。'}
 };
+// Only claim a forced capture if there is exactly ONE legal hand-card/table
+// target pair. A single matching hand card with two table targets is a choice,
+// not a forced capture. No unseen cards or future draw assumptions.
+function onlyCaptureOption({hand=[],floor=[]}={}){
+ const options=[];
+ for(const h of unique(hand)){
+  const hm=monthOf(h);
+  if(!Number.isInteger(hm)||hm<1||hm>12)continue;
+  for(const f of unique(floor))if(monthOf(f)===hm)options.push({handId:h,floorId:f});
+ }
+ return options.length===1?options[0]:null;
+}
+const onlyCaptureCopy={
+ en:(h,f)=>'Play '+h+' onto '+f+'. This is the only available capture.',
+ ko:(h,f)=>h+'을 '+f+'에 내세요. 지금 먹을 수 있는 유일한 선택입니다.',
+ es:(h,f)=>'Juega '+h+' sobre '+f+'. Es la única captura disponible.',
+ fr:(h,f)=>'Jouez '+h+' sur '+f+'. C’est la seule prise possible.',
+ de:(h,f)=>'Spiele '+h+' auf '+f+'. Das ist der einzige mögliche Fangzug.',
+ ja:(h,f)=>h+'を'+f+'に出しましょう。今取れる唯一の組み合わせです。',
+ zh:(h,f)=>'打出'+h+'匹配'+f+'。这是目前唯一能收牌的组合。'
+};
+function onlyCaptureText(handId,floorId,locale='en',handLabel=handId,floorLabel=floorId){
+ if(!handId||!floorId)return null;
+ return (onlyCaptureCopy[locale]||onlyCaptureCopy.en)(handLabel,floorLabel);
+}
 function discardText(cardId,visible,deck,locale='en',name=''){
  const fn=T[locale]||T.en;
  const card=deck?.find(c=>c.id===cardId);
@@ -70,7 +95,7 @@ function discardText(cardId,visible,deck,locale='en',name=''){
  if(sameHand.length>=2)return fn.paired(label);
  return fn.noMatch(label);
 }
-const api=Object.freeze({monthOf,securedDiscard,drawTargetScore,recommendDrawTarget,stripePotential,discardText,T,options,cardsFor});
+const api=Object.freeze({monthOf,securedDiscard,drawTargetScore,recommendDrawTarget,stripePotential,onlyCaptureOption,onlyCaptureText,discardText,T,options,cardsFor});
 root.GoStopDevTrainingAdviceLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

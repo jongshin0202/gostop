@@ -62,12 +62,13 @@ function opponentNextTurnCeiling({deck=[],floorIds=[],ownHandIds=[],ownCapturedI
  const before=scorePlayer({captured,gukjinMode:'animal'}).total;
  if(!Number.isFinite(before))return null;
  let max=opponentScore;
- // Allow up to two opponent Single transfers in this optimistic calculation.
- // Otherwise a possible steal could make the visible-table bound too low.
+ // An extra Single transfer is only possible when a visible three-card
+ // family stack is completed. Never grant imaginary steals for an ordinary
+ // one- or two-card table match: this previously inflated the STOP risk.
  const singles=ownCapturedIds.map(id=>byId.get(id)).filter(c=>
   c&&(c.type==='pi'||c.flags?.includes('switchPi'))).slice(0,2);
- const update=(added)=>{
-  for(let n=0;n<=singles.length;n++){
+ const update=(added,stackCaptures=0)=>{
+  for(let n=0;n<=Math.min(stackCaptures,singles.length);n++){
    const next=scorePlayer({captured:[...captured,...added,...singles.slice(0,n)],gukjinMode:'animal'}).total;
    if(Number.isFinite(next))max=Math.max(max,opponentScore+Math.max(0,next-before));
   }
@@ -75,18 +76,138 @@ function opponentNextTurnCeiling({deck=[],floorIds=[],ownHandIds=[],ownCapturedI
  for(let i=0;i<groups.length;i++){
   const one=groups[i];
   for(const source of unseen.filter(c=>c.month===one.month)){
-   update([...one.cards,source]);
+   update([...one.cards,source],one.cards.length===3?1:0);
    for(let j=i+1;j<groups.length;j++){
     const two=groups[j];
     if(one.cards.some(c=>two.cards.some(d=>c.id===d.id)))continue;
     for(const other of unseen.filter(c=>c.month===two.month&&c.id!==source.id))
-      update([...one.cards,...two.cards,source,other]);
+      update([...one.cards,...two.cards,source,other],
+       (one.cards.length===3?1:0)+(two.cards.length===3?1:0));
    }
   }
  }
  return max;
 }
 
+// Conservative, explainable public-card estimates. Never inspect the
+// computer's concealed hand or draw order. The ceiling describes only the
+// exposed table routes; it is NOT an omniscient maximum for all special rules.
+const clamp01=n=>Math.max(0,Math.min(1,n));
+const probabilityNoMatch=(poolSize,matching,draws)=>{
+ const n=Math.max(0,Math.trunc(poolSize)),k=Math.max(0,Math.min(n,Math.trunc(matching))),
+  d=Math.max(0,Math.min(n,Math.trunc(draws)));
+ if(!d||!k)return 1;
+ if(n-k<d)return 0;
+ let p=1;
+ for(let i=0;i<d;i++)p*=(n-k-i)/(n-i);
+ return clamp01(p);
+};
+function publicGoStopRisk({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
+ opponentCapturedIds=[],opponentScore=0,playerScore=7,
+ opponentHandSize=null,scorePlayer=null}={}){
+ if(!Array.isArray(deck)||!deck.length||typeof scorePlayer!=='function')return null;
+ const byId=new Map(deck.map(c=>[c.id,c]));
+ const uniqueIds=a=>[...new Set(a.filter(id=>byId.has(id)))];
+ const hand=uniqueIds(ownHandIds),floor=uniqueIds(floorIds),
+  ownCaptured=uniqueIds(ownCapturedIds),opponentCaptured=uniqueIds(opponentCapturedIds);
+ const allocated=new Set([...hand,...floor,...ownCaptured,...opponentCaptured]);
+ const unseen=deck.filter(c=>!allocated.has(c.id));
+ const opponentHandCount=Number.isInteger(opponentHandSize)&&opponentHandSize>=1?
+  opponentHandSize:hand.length;
+ const drawSlots=Math.min(unseen.length,opponentHandCount+1);
+ const cards=ids=>ids.map(id=>byId.get(id)).filter(Boolean);
+ const scored=ids=>scorePlayer({captured:cards(ids),gukjinMode:'animal'})?.total;
+ const ownBase=scored(ownCaptured),oppBase=scored(opponentCaptured);
+ if(!Number.isFinite(ownBase)||!Number.isFinite(oppBase))return null;
+ const ceiling=opponentNextTurnCeiling({deck,floorIds:floor,ownHandIds:hand,
+  ownCapturedIds:ownCaptured,opponentCapturedIds:opponentCaptured,
+  opponentScore,scorePlayer});
+ if(!Number.isFinite(ceiling))return null;
+ let ownGainChance=0,captureChance=0,hasGuaranteedScoringCapture=false,hasMatchingHandCard=false;
+ for(const handId of hand){
+  for(const floorId of floor){
+   if(month(handId)!==month(floorId))continue;
+   hasMatchingHandCard=true;
+   const matchingUnseen=unseen.filter(c=>c.month===month(floorId)).length;
+   // Lower bound: neither the opponent's unknown hand nor their next draw
+   // has a card of this month. Then the visible capture stays available.
+   const survival=probabilityNoMatch(unseen.length,matchingUnseen,drawSlots);
+   captureChance=Math.max(captureChance,survival);
+   const after=scored([...ownCaptured,handId,floorId]);
+   if(Number.isFinite(after)&&after>ownBase){
+    ownGainChance=Math.max(ownGainChance,survival);
+    if(matchingUnseen===0)hasGuaranteedScoringCapture=true;
+   }
+  }
+ }
+ // One opponent hand play and deck draw can together add at most two
+ // ordinary floor captures. Estimate danger from possible scoring sources,
+ // with a conservative allowance for two-step/combo routes.
+ const dangerous=new Set();
+ for(const floorId of floor){
+  for(const source of unseen){
+   if(source.month!==month(floorId))continue;
+   const after=scored([...opponentCaptured,floorId,source.id]);
+   if(Number.isFinite(after)&&opponentScore+Math.max(0,after-oppBase)>=7)
+    dangerous.add(source.id);
+  }
+ }
+ const singleRouteChance=1-probabilityNoMatch(unseen.length,dangerous.size,drawSlots);
+ const possible=ceiling>=7;
+ // Multi-capture routes may reach seven even when neither individual pair
+ // does. They are rarer, but cannot be treated as impossible.
+ const twoStepAllowance=possible&&dangerous.size===0?
+  clamp01((floor.length>=2?0.13:0.05)*(drawSlots/Math.max(1,unseen.length))):0;
+ const opponentFinishChance=possible?
+  clamp01(singleRouteChance+(1-singleRouteChance)*twoStepAllowance):0;
+ return Object.freeze({opponentCeiling:ceiling,opponentFinishChance,
+  ownGainChance,captureChance,hasMatchingHandCard,hasGuaranteedScoringCapture,
+  unseenCount:unseen.length,possibleFinish:possible,
+  opponentHandCount});
+}
+const riskCopy={
+ en:{
+  safe:(ceiling)=>'GO. Based on visible table captures, the computer can reach at most '+ceiling+
+   ' points on its next turn, below 7. You still have a matching capture opportunity.',
+  favorable:(ceiling)=>'GO. The computer could reach '+ceiling+
+   ' points from the visible table, but your protected scoring match is more likely to earn another point first.',
+  caution:(ceiling)=>'STOP. The computer could reach '+ceiling+
+   ' points next turn, and your chance of gaining another point appears lower.'
+ },
+ ko:{
+  safe:c=>'고를 추천합니다. 보이는 바닥패로 상대가 다음 차례에 얻을 수 있는 점수는 최대 '+c+
+   '점으로 7점 미만입니다. 내 손에 맞는 패가 남아 있습니다.',
+  favorable:c=>'고를 추천합니다. 상대가 바닥패로 최대 '+c+
+   '점까지 갈 수 있지만, 내 손의 확실한 맞춤 패로 다음 점수를 얻을 가능성이 더 높습니다.',
+  caution:c=>'스톱을 추천합니다. 상대가 다음 차례에 최대 '+c+
+   '점까지 갈 수 있고, 내가 추가 점수를 얻을 가능성은 더 낮습니다.'
+ },
+ es:{safe:c=>'GO. Con las capturas visibles, el rival alcanza como máximo '+c+' puntos en su próximo turno, menos de 7. Aún tienes una captura posible.',
+  favorable:c=>'GO. Aunque el rival podría alcanzar '+c+' puntos, tu captura protegida tiene mayor probabilidad de sumar otro punto.',
+  caution:c=>'STOP. El rival podría alcanzar '+c+' puntos y tu oportunidad de sumar otro punto es menor.'},
+ fr:{safe:c=>'GO. Les prises visibles permettraient au plus '+c+' points à l’adversaire au prochain tour, soit moins de 7. Vous avez encore une prise.',
+  favorable:c=>'GO. Même si l’adversaire pourrait atteindre '+c+' points, votre prise protégée offre de meilleures chances de marquer.',
+  caution:c=>'STOP. L’adversaire pourrait atteindre '+c+' points et vos chances de marquer sont moindres.'},
+ de:{safe:c=>'GO. Durch sichtbare Tischkarten kann der Gegner im nächsten Zug höchstens '+c+' Punkte erreichen, weniger als 7. Du hast eine Fangchance.',
+  favorable:c=>'GO. Der Gegner könnte '+c+' Punkte erreichen, doch dein geschützter Fangzug hat die bessere Aussicht auf einen weiteren Punkt.',
+  caution:c=>'STOP. Der Gegner könnte '+c+' Punkte erreichen; deine Chance auf einen weiteren Punkt ist geringer.'},
+ ja:{safe:c=>'ゴー。見えている場札から相手が次の手番で到達できるのは最大'+c+'点で、7点未満です。こちらには取れる札があります。',
+  favorable:c=>'ゴー。相手も最大'+c+'点まで届く可能性がありますが、こちらの守られた組み合わせの方が得点の見込みがあります。',
+  caution:c=>'ストップ。相手は次の手番で最大'+c+'点に届く可能性があり、こちらの追加得点はそれほど見込めません。'},
+ zh:{safe:c=>'建议继续。根据可见桌牌，对手下一轮最多可到'+c+'分，低于7分。你仍有可收的牌。',
+  favorable:c=>'建议继续。虽然对手可能达到'+c+'分，但你的受保护匹配牌更有希望获得下一分。',
+  caution:c=>'建议停止。对手可能达到'+c+'分，而你再得一分的机会较小。'}
+};
+function riskDecision(evidence,{goCount=0,opponentScore=0}={}){
+ if(!evidence||goCount>=3||opponentScore>=7)return null;
+ if(evidence.opponentCeiling<7&&evidence.hasMatchingHandCard)return 'go';
+ if(evidence.opponentCeiling>=7){
+  if(evidence.ownGainChance>=.65&&
+     evidence.ownGainChance>evidence.opponentFinishChance+.1)return 'go';
+  if(evidence.opponentFinishChance>=evidence.ownGainChance)return 'stop';
+ }
+ return null;
+}
 const modelChoice=(model,context)=>{
  if(!model||!Array.isArray(model.weights)||model.weights.length!==16||
     model.examples<3||model.weights.some(v=>!Number.isFinite(v)))return null;
@@ -94,14 +215,14 @@ const modelChoice=(model,context)=>{
  const delta=score('go')-score('stop');
  return Math.abs(delta)>=.45?(delta>0?'go':'stop'):null;
 };
-const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling});
+const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling,publicGoStopRisk,riskDecision,probabilityNoMatch});
 root.GoStopDevGoStopLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(root.location?.hostname||''))return;
 const $=id=>document.getElementById(id);
 const dialog=$('decisionDialog');
 if(!dialog)return;
-let activeModel=null;
+let activeModel=null,lastRisk=null;
 const score=id=>{
  const match=String($(id)?.textContent||'').match(/\d+/);
  return match?Number(match[0]):null;
@@ -147,17 +268,35 @@ function adjust(){
   deck:engine.masterDeck,...snapshot,opponentScore:context.opponentScore,
   scorePlayer:engine.scorePlayer
  }):null;
+ const evidence=engine?.scorePlayer?publicGoStopRisk({
+  deck:engine.masterDeck,...snapshot,opponentScore:context.opponentScore,
+  playerScore:context.playerScore,
+  // Count visible card backs only. Never inspect opponent card identities.
+  opponentHandSize:$('aiHand')?.querySelectorAll('.mini-back').length||context.hand.length+1,
+  scorePlayer:engine.scorePlayer
+ }):null;
+ lastRisk=evidence;
+ const fromRisk=!checked.urgentThreat?
+  riskDecision(evidence,{goCount:context.goCount,opponentScore:context.opponentScore}):null;
  const verifiedSafe=checked.hasMatch&&context.hand.length>0&&
   Number.isInteger(maximum)&&maximum<7&&context.goCount<=1&&!checked.urgentThreat;
- const result=verifiedSafe?'go':checked.lowRisk?'go':
-   !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original;
- if(result===original)return;
- go.classList.toggle('training-choice-recommended',result==='go');
- stop.classList.toggle('training-choice-recommended',result==='stop');
- if(verifiedSafe||checked.lowRisk){
-  const locale=document.documentElement.lang;
-  const text=$('trainingCoachText');
-  if(text)text.textContent=verifiedSafe?
+ const result=fromRisk||
+  (evidence?original:verifiedSafe?'go':checked.lowRisk?'go':
+   !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original);
+ if(result!==original){
+  go.classList.toggle('training-choice-recommended',result==='go');
+  stop.classList.toggle('training-choice-recommended',result==='stop');
+ }
+ const coachText=$('trainingCoachText');
+ const locale=document.documentElement.lang;
+ const riskText=riskCopy[locale]||riskCopy.en;
+ if(coachText&&fromRisk&&evidence){
+  const why=result==='go'?(evidence.opponentCeiling<7?
+   riskText.safe(evidence.opponentCeiling):riskText.favorable(evidence.opponentCeiling)):
+   riskText.caution(evidence.opponentCeiling);
+  if(coachText.textContent!==why)coachText.textContent=why;
+ }else if(result!==original&&(verifiedSafe||checked.lowRisk)&&coachText){
+  coachText.textContent=verifiedSafe?
    (safeCopy[locale]||safeCopy.en)(maximum):copy[locale]||copy.en;
  }
 }
@@ -170,5 +309,5 @@ document.addEventListener('click',event=>{
   activeModel=state?.activeGoStopModel||null;
  }).catch(()=>{activeModel=null;});
 },{capture:true});
-root.GoStopDevGoStopAdvice=Object.freeze({getStatus:()=>({activeModelExamples:activeModel?.examples||0})});
+root.GoStopDevGoStopAdvice=Object.freeze({getStatus:()=>({activeModelExamples:activeModel?.examples||0,lastRisk})});
 })(typeof globalThis!=='undefined'?globalThis:this);

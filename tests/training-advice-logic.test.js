@@ -51,3 +51,23 @@ test('all seven language labels are concise, and exact card totals are never inv
   assert.doesNotMatch(txt,/[3-9] Single value|3-BIRDIES/);
  }
 });
+
+test('one legal capture pair uses only-capture reason instead of unrelated Stripe strategy',()=>{
+ const visible={hand:['m2-4','m4-4'],floor:['m2-2','m1-1'],humanCaptured:[],computerCaptured:[]};
+ assert.deepEqual(logic.onlyCaptureOption(visible),{handId:'m2-4',floorId:'m2-2'});
+ assert.equal(logic.onlyCaptureText('m2-4','m2-2','en','Plum Single','Plum Red Stripe'),
+  'Play Plum Single onto Plum Red Stripe. This is the only available capture.');
+ for(const lang of ['en','ko','es','fr','de','ja','zh']){
+  const msg=logic.onlyCaptureText('m2-4','m2-2',lang,'A','B');
+  assert.ok(msg.length>12&&msg.length<135,lang);
+  assert.doesNotMatch(msg,/3.Stripe|3-Stripe|three stripe|godori/i);
+ }
+});
+test('do not claim only capture when there are two legal hand options or two floor targets',()=>{
+ const handChoice={hand:['m2-1','m2-4'],floor:['m2-2']};
+ const floorChoice={hand:['m2-4'],floor:['m2-2','m2-3']};
+ assert.equal(logic.onlyCaptureOption(handChoice),null);
+ assert.equal(logic.onlyCaptureOption(floorChoice),null);
+ assert.equal(logic.onlyCaptureOption({hand:['m4-4'],floor:['m1-1']}),null);
+ assert.equal(logic.onlyCaptureOption({hand:[],floor:['m2-2']}),null);
+});

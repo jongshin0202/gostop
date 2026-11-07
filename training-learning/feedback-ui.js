@@ -161,9 +161,9 @@ const WEIGHT_COPY={
   trainNow:n=>n+' confirmed judgment'+(n===1?'':'s')+' from this review will train server-side weights when you press Finish. Separately confirmed opening feedback may also train.',
   trainNone:'No confirmed disagreement judgments remain in this review. Other confirmed opening feedback may still train on Finish.',
   activation:'When updated weights become active',
-  activationRule:'On the DEVELOPMENT learning server after 20 completed games, or 10 consecutive disagreement-free games after a previous disagreement. New confirmed weights must exist. No production deployment occurs.',
+  activationRule:'On the DEVELOPMENT learning server after 10 completed games, or 5 consecutive disagreement-free games after a previous disagreement. New confirmed weights must exist. No production deployment occurs.',
   countdown:'Games remaining after you press Finish',
-  twenty:n=>'20-game path: '+n+' more game'+(n===1?'':'s'),
+  ten:n=>'10-game path: '+n+' more game'+(n===1?'':'s'),
   clean:n=>'Clean-game path: '+n+' more consecutive disagreement-free game'+(n===1?'':'s'),
   unavailableClean:'Clean-game path starts after a disagreement has occurred since the previous activation.',
   due:'Activation threshold reached with this Finish, if new trained weights are available.',
@@ -183,9 +183,9 @@ const WEIGHT_COPY={
   trainNow:n=>'완료를 누르면 이 검토에서 확정된 판단 '+n+'건을 개발 서버에서 학습합니다. 별도로 확정된 시작 전략도 학습될 수 있습니다.',
   trainNone:'이 검토에 남은 확정 의견 차이 항목이 없습니다. 별도로 확정한 시작 전략은 완료할 때 학습될 수 있습니다.',
   activation:'새 가중치가 활성화되는 시점',
-  activationRule:'개발 학습 서버에서 20게임 완료 또는 이전 의견 차이 발생 후 연속 10게임 의견 차이 없음 조건을 충족하고 새 학습 가중치가 있을 때 적용합니다. 운영 서버는 변경되지 않습니다.',
+  activationRule:'개발 학습 서버에서 10게임 완료 또는 이전 의견 차이 발생 후 연속 5게임 의견 차이 없음 조건을 충족하고 새 학습 가중치가 있을 때 적용합니다. 운영 서버는 변경되지 않습니다.',
   countdown:'이번 게임 완료 후 남은 게임 수',
-  twenty:n=>'20게임 조건: '+n+'게임 남음',
+  ten:n=>'10게임 조건: '+n+'게임 남음',
   clean:n=>'연속 일치 조건: '+n+'게임 더 연속 일치 필요',
   unavailableClean:'이전 가중치 적용 이후 의견 차이가 발생해야 연속 일치 조건이 시작됩니다.',
   due:'이번 완료로 적용 조건에 도달합니다. 새 가중치가 있어야 활성화됩니다.',
@@ -205,9 +205,9 @@ const WEIGHT_COPY={
   trainNow:n=>n+' valoración(es) confirmada(s) de esta revisión se usarán al pulsar Finalizar. También puede incluirse la apertura confirmada por separado.',
   trainNone:'No quedan valoraciones confirmadas de desacuerdos. Otras aperturas confirmadas pueden entrenarse al finalizar.',
   activation:'Cuándo estarán activos los pesos nuevos',
-  activationRule:'Solo en el servidor de desarrollo: tras 20 partidas completas o 10 seguidas sin desacuerdos después de un desacuerdo anterior, siempre que existan pesos nuevos. Producción no cambia.',
+  activationRule:'Solo en el servidor de desarrollo: tras 10 partidas completas o 5 seguidas sin desacuerdos después de un desacuerdo anterior, siempre que existan pesos nuevos. Producción no cambia.',
   countdown:'Partidas pendientes después de Finalizar',
-  twenty:n=>'Regla de 20 partidas: faltan '+n,
+  ten:n=>'Regla de 10 partidas: faltan '+n,
   clean:n=>'Racha sin desacuerdos: faltan '+n+' partidas consecutivas',
   unavailableClean:'La racha requiere un desacuerdo desde la última activación.',
   due:'Al finalizar se cumplirá el umbral, siempre que existan pesos nuevos.',
@@ -227,9 +227,9 @@ const WEIGHT_COPY={
   trainNow:n=>n+' avis confirmé(s) de cette revue seront appris après Terminer. Les ouvertures confirmées séparément peuvent aussi être apprises.',
   trainNone:'Aucun désaccord confirmé dans cette revue. Une ouverture confirmée séparément peut encore être apprise.',
   activation:'Quand les nouveaux poids seront actifs',
-  activationRule:'Sur le serveur de développement uniquement : après 20 parties terminées ou 10 parties consécutives sans divergence après une divergence antérieure, si des poids nouveaux existent. Pas de déploiement en production.',
+  activationRule:'Sur le serveur de développement uniquement : après 10 parties terminées ou 5 parties consécutives sans divergence après une divergence antérieure, si des poids nouveaux existent. Pas de déploiement en production.',
   countdown:'Parties restantes après Terminer',
-  twenty:n=>'Seuil de 20 parties : '+n+' restante(s)',
+  ten:n=>'Seuil de 10 parties : '+n+' restante(s)',
   clean:n=>'Série sans divergence : '+n+' partie(s) consécutive(s) restante(s)',
   unavailableClean:'La série nécessite une divergence depuis la dernière activation.',
   due:'Seuil atteint en terminant, si de nouveaux poids sont disponibles.',
@@ -249,9 +249,9 @@ const WEIGHT_COPY={
   trainNow:n=>n+' bestätigte Bewertung(en) aus dieser Prüfung werden bei Fertig trainiert. Separat bestätigte Eröffnungen können hinzukommen.',
   trainNone:'Keine bestätigten Abweichungen übrig. Andere bestätigte Eröffnungen können dennoch trainiert werden.',
   activation:'Wann neue Gewichte aktiv werden',
-  activationRule:'Nur auf dem Entwicklungsserver: nach 20 abgeschlossenen Spielen oder 10 aufeinanderfolgenden Spielen ohne Abweichung nach einer früheren Abweichung, sofern neue Gewichte vorliegen. Keine Produktionsbereitstellung.',
+  activationRule:'Nur auf dem Entwicklungsserver: nach 10 abgeschlossenen Spielen oder 5 aufeinanderfolgenden Spielen ohne Abweichung nach einer früheren Abweichung, sofern neue Gewichte vorliegen. Keine Produktionsbereitstellung.',
   countdown:'Verbleibende Spiele nach Fertig',
-  twenty:n=>'20-Spiele-Regel: noch '+n,
+  ten:n=>'10-Spiele-Regel: noch '+n,
   clean:n=>'Serie ohne Abweichung: noch '+n+' Spiele in Folge',
   unavailableClean:'Die Serie beginnt erst nach einer Abweichung seit der letzten Aktivierung.',
   due:'Mit Fertig wird die Schwelle erreicht, sofern neue Gewichte vorliegen.',
@@ -271,9 +271,9 @@ const WEIGHT_COPY={
   trainNow:n=>'完了すると、この確認で確定した'+n+'件を開発サーバーで学習します。別途確定した開始戦略も対象になる場合があります。',
   trainNone:'この確認に確定済みの相違は残っていません。別途確定した開始戦略は学習される場合があります。',
   activation:'新しい重みが有効になるタイミング',
-  activationRule:'開発サーバーのみ。20ゲーム完了、または以前の相違の後に10ゲーム連続で相違なしの条件を満たし、新しい重みがある場合に有効化します。本番環境には反映しません。',
+  activationRule:'開発サーバーのみ。10ゲーム完了、または以前の相違の後に5ゲーム連続で相違なしの条件を満たし、新しい重みがある場合に有効化します。本番環境には反映しません。',
   countdown:'今回の完了後に必要なゲーム数',
-  twenty:n=>'20ゲーム条件：残り'+n+'ゲーム',
+  ten:n=>'10ゲーム条件：残り'+n+'ゲーム',
   clean:n=>'連続一致条件：残り'+n+'ゲーム連続で一致が必要',
   unavailableClean:'前回の有効化以降に相違が発生すると連続一致条件が始まります。',
   due:'完了すると条件に到達します。新しい重みが必要です。',
@@ -293,9 +293,9 @@ const WEIGHT_COPY={
   trainNow:n=>'点击完成后，本次审核确认的'+n+'项判断将在开发服务器训练。单独确认的开局策略也可能参与。',
   trainNone:'本次审核中没有保留已确认的分歧判断。其他已确认的开局策略仍可能参与训练。',
   activation:'新权重何时启用',
-  activationRule:'仅限开发学习服务器：完成20局，或在此前出现过分歧后连续10局无分歧，并且存在新训练权重时启用。不会部署到生产环境。',
+  activationRule:'仅限开发学习服务器：完成10局，或在此前出现过分歧后连续5局无分歧，并且存在新训练权重时启用。不会部署到生产环境。',
   countdown:'完成本局后还需的局数',
-  twenty:n=>'20局条件：还需'+n+'局',
+  ten:n=>'10局条件：还需'+n+'局',
   clean:n=>'连续无分歧条件：还需'+n+'局',
   unavailableClean:'上次启用之后出现分歧，才会启动连续无分歧条件。',
   due:'本局完成即可达到启用门槛，但必须有新权重。',
@@ -396,7 +396,7 @@ function trainingProgressPanel(items){
  line(t.activation,t.activationRule);
  const preview=currentProgress();
  if(preview){
-  line(t.countdown,t.twenty(preview.remaining20));
+  line(t.countdown,t.ten(preview.remaining10));
   const clean=document.createElement('p');clean.id='trainingCleanCountdown';
   clean.textContent=preview.remainingClean===null?
    t.unavailableClean:t.clean(preview.remainingClean);
@@ -437,7 +437,7 @@ function showTrainingCompletion(result){
   line(t.noActivation);
   if(serverWeightState&&weightProgress?.progress){
    const next=weightProgress.progress(serverWeightState);
-   line(t.twenty(next.remaining20));
+   line(t.ten(next.remaining10));
    line(next.remainingClean===null?t.unavailableClean:t.clean(next.remainingClean));
   }else line(t.unavailable);
  }

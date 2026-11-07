@@ -72,7 +72,7 @@ test('Plum discard with all four cards accounted for shows short and accurate sa
  await expect(page.locator('#trainingCoachText')).toHaveText(
   'Discard Plum Red Stripe. You hold the only matching card, so you can take it back.');
 });
-test('text only removes unsupported hand-card sentence while retaining correct recommendation',async({page})=>{
+test('only available matching move uses sole-capture reason instead of irrelevant Stripe strategy',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{
   document.getElementById('playerHand').innerHTML='<button class="hand-card matchable" data-card-id="m2-2" title="Plum Red Stripe">Plum Red Stripe</button>';
@@ -81,7 +81,7 @@ test('text only removes unsupported hand-card sentence while retaining correct r
   document.getElementById('trainingCoachTitle').textContent='Recommended Move';
   document.getElementById('trainingCoachText').textContent='Play Plum Red Stripe onto Plum Single. This uses the higher-value hand card.';
  });
- await expect(page.locator('#trainingCoachText')).toHaveText('Play Plum Red Stripe onto Plum Single.');
+ await expect(page.locator('#trainingCoachText')).toHaveText('Play Plum Red Stripe onto Plum Single. This is the only available capture.');
  await expect(page.locator('#floor [data-card-id="m2-4"]')).not.toHaveClass(/dev-drawn-target-recommended/);
 });
 test('non-training Solo UI stays unchanged',async({page})=>{
@@ -137,4 +137,21 @@ test('context correction and recommendation preservation settle without freezing
   setTimeout(()=>resolve(true),40)));
  expect(responsive).toBe(true);
  expect((await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus())).locked).toBe(true);
+});
+
+test('two potential captures do not falsely claim only option',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{
+  document.getElementById('playerHand').innerHTML=
+   '<button class="hand-card matchable" data-card-id="m2-2" title="Plum Red Stripe">Plum Red Stripe</button>'+
+   '<button class="hand-card" data-card-id="m2-1" title="Plum Bright">Plum Bright</button>';
+  document.getElementById('floor').innerHTML='<div class="floor-card" data-card-id="m2-4">Plum Single</div>';
+  document.getElementById('trainingCoachPanel').hidden=false;
+  document.getElementById('trainingCoachTitle').textContent='Recommended Move';
+  document.getElementById('trainingCoachText').textContent=
+   'Play Plum Red Stripe onto Plum Single. Choose the stronger set card.';
+ });
+ await page.waitForTimeout(120);
+ await expect(page.locator('#trainingCoachText')).toHaveText(
+  'Play Plum Red Stripe onto Plum Single. Choose the stronger set card.');
 });

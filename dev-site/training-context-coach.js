@@ -94,8 +94,16 @@ function updateCopy(){
  const handId=rec.hand||hand.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
  const current=deck.find(c=>c.id===handId);
  const v=visible(),floorMatch=!!current&&v.floor.some(id=>logic.monthOf(id)===current.month);
- if(handId&&!floorMatch&&rec.floor==null&&
-   /^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim())){
+ const normalMove=/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim());
+ const forced=logic.onlyCaptureOption?.(v);
+ if(normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
+  // When the expert has exactly one possible capture, the reason is the
+  // absence of an alternative, not a speculative Stripe-set strategy.
+  next=logic.onlyCaptureText(forced.handId,forced.floorId,locale(),
+   cardName(forced.handId),cardName(forced.floorId));
+ }
+
+ if(handId&&!floorMatch&&rec.floor==null&&normalMove){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
  }
