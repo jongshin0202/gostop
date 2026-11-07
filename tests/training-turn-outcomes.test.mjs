@@ -93,3 +93,17 @@ test('computer chooses GO if opponent cannot immediately finish and own 5-BIRDIE
  assert.equal(result.risk.ownCanScore,true);
  assert.equal(result.decision,'go');
 });
+
+test('Hill two Singles progress is explained against a reserved Rose Stripe capture',()=>{
+ const visible={
+  hand:['m8-4','m6-2'],floor:['m8-3','m6-3'],
+  humanCaptured:['m8-1','m8-2','m6-1','m6-4'],computerCaptured:[]
+ };
+ const c=logic.captureComparison(visible,'m8-4','m8-3',engine.masterDeck,engine.scorePlayer);
+ assert.ok(c);
+ assert.equal(c.selected.secured,true);
+ assert.equal(c.alternative.secured,true);
+ assert.equal(c.preferNow,true);
+ assert.match(logic.captureComparisonCopy('Hill Single','Rose Blue Stripe',c,'en'),
+  /build Singles sooner/);
+});
