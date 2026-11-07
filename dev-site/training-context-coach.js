@@ -98,7 +98,24 @@ function updateCopy(){
  // that safer selected card and its explanatory reason across render cycles.
  if((rec.riskOverride||rec.bombBlankOverride)&&rec.text)next=rec.text;
  const normalMove=/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim());
+ // Count all same-family matches visible on the table, including reserved
+ // captures that the native strategic scorer may temporarily deprioritize.
+ const captureOptions=logic.captureOptions?.(v)||[];
+ const multipleCaptures=captureOptions.length>1;
  const forced=logic.onlyCaptureOption?.(v);
+ if(normalMove&&multipleCaptures&&!rec.riskOverride&&!rec.bombBlankOverride){
+  for(const re of [
+   /\s*This is the only available capture\./gi,
+   /\s*This is the only card in your hand that can capture a card from the table\./gi,
+   /\s*지금 먹을 수 있는 유일한 선택입니다\./g,
+   /\s*Es la única captura disponible\./gi,
+   /\s*C’est la seule prise possible\./gi,
+   /\s*Das ist der einzige mögliche Fangzug\./gi,
+   /\s*今取れる唯一の組み合わせです。/g,
+   /\s*这是目前唯一能收牌的组合。/g
+  ])next=next.replace(re,'');
+  next=next.trim();
+ }
  if(!rec.bombBlankOverride&&normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
   // When the expert has exactly one possible capture, the reason is the
   // absence of an alternative, not a speculative Stripe-set strategy.
@@ -110,14 +127,16 @@ function updateCopy(){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
  }
- if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&handId&&rec.floor&&floorMatch&&
+ const matchingHandChoices=captureOptions.filter(c=>c.handId===handId);
+ const possibleFloor=rec.floor||(matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
+ if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&handId&&possibleFloor&&floorMatch&&
     logic.captureComparison&&logic.captureComparisonCopy){
-  const result=logic.captureComparison(v,handId,rec.floor,deck,globalThis.GoStopEngine?.scorePlayer);
+  const result=logic.captureComparison(v,handId,possibleFloor,deck,globalThis.GoStopEngine?.scorePlayer);
   if(result){
    const other=result.alternative;
    const moveLabel=(h,f)=>cardName(h)===cardName(f)?cardName(h):cardName(h)+' onto '+cardName(f);
    const more=logic.captureComparisonCopy(
-    moveLabel(handId,rec.floor),moveLabel(other.h,other.f),result,locale());
+    moveLabel(handId,possibleFloor),moveLabel(other.h,other.f),result,locale());
    // Appending the same sentence repeatedly would create an observer loop.
    if(more&&!next.includes(more))next=(next+' '+more).trim();
   }
