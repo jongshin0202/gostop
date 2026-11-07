@@ -81,6 +81,11 @@ function enumerateTurn({deck=[],floorIds=[],actingCapturedIds=[],otherCapturedId
  for(const play of plays){
   // A known acting hand card is never also a possible next deck draw.
   const draws=reserve.filter(card=>card.id!==play.id);
+  // With no deck draw available, a playable hand card can still capture.
+  if(!draws.length){
+   for(const p of pairsFromFloor(floor,play))addResult(p.capture,p.transfer,p.kind,[play.id],p.remaining.length);
+   continue;
+  }
   for(const drawn of draws){
    const playOptions=pairsFromFloor(floor,play);
    for(const p of playOptions){
