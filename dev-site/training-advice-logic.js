@@ -61,14 +61,18 @@ const T={
 // Only claim a forced capture if there is exactly ONE legal hand-card/table
 // target pair. A single matching hand card with two table targets is a choice,
 // not a forced capture. No unseen cards or future draw assumptions.
-function onlyCaptureOption({hand=[],floor=[]}={}){
- const options=[];
+function captureOptions({hand=[],floor=[]}={}){
+ const captures=[];
  for(const h of unique(hand)){
   const hm=monthOf(h);
   if(!Number.isInteger(hm)||hm<1||hm>12)continue;
-  for(const f of unique(floor))if(monthOf(f)===hm)options.push({handId:h,floorId:f});
+  for(const f of unique(floor))if(monthOf(f)===hm)captures.push({handId:h,floorId:f});
  }
- return options.length===1?options[0]:null;
+ return captures;
+}
+function onlyCaptureOption(visible={}){
+ const captures=captureOptions(visible);
+ return captures.length===1?captures[0]:null;
 }
 const onlyCaptureCopy={
  en:(h,f)=>'Play '+h+' onto '+f+'. This is the only available capture.',
@@ -252,7 +256,7 @@ function discardText(cardId,visible,deck,locale='en',name=''){
  if(sameHand.length>=2)return fn.paired(label);
  return fn.noMatch(label);
 }
-const api=Object.freeze({monthOf,securedDiscard,drawTargetScore,recommendDrawTarget,stripePotential,onlyCaptureOption,onlyCaptureText,discardDanger,safestDiscard,riskyDiscardCopy,captureComparison,captureComparisonCopy,discardText,recommendBombBlank,bombBlankText,T,options,cardsFor});
+const api=Object.freeze({monthOf,securedDiscard,drawTargetScore,recommendDrawTarget,stripePotential,captureOptions,onlyCaptureOption,onlyCaptureText,discardDanger,safestDiscard,riskyDiscardCopy,captureComparison,captureComparisonCopy,discardText,recommendBombBlank,bombBlankText,T,options,cardsFor});
 root.GoStopDevTrainingAdviceLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
