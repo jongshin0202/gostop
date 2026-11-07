@@ -96,21 +96,21 @@ function updateCopy(){
  const v=visible(),floorMatch=!!current&&v.floor.some(id=>logic.monthOf(id)===current.month);
  // The dev recommendation guard can replace a dangerous discard. Preserve
  // that safer selected card and its explanatory reason across render cycles.
- if(rec.riskOverride&&rec.text)next=rec.text;
+ if((rec.riskOverride||rec.bombBlankOverride)&&rec.text)next=rec.text;
  const normalMove=/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim());
  const forced=logic.onlyCaptureOption?.(v);
- if(normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
+ if(!rec.bombBlankOverride&&normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
   // When the expert has exactly one possible capture, the reason is the
   // absence of an alternative, not a speculative Stripe-set strategy.
   next=logic.onlyCaptureText(forced.handId,forced.floorId,locale(),
    cardName(forced.handId),cardName(forced.floorId));
  }
 
- if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride){
+ if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride&&!rec.bombBlankOverride){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
  }
- if(normalMove&&!rec.riskOverride&&handId&&rec.floor&&floorMatch&&
+ if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&handId&&rec.floor&&floorMatch&&
     logic.captureComparison&&logic.captureComparisonCopy){
   const result=logic.captureComparison(v,handId,rec.floor,deck,globalThis.GoStopEngine?.scorePlayer);
   if(result){
