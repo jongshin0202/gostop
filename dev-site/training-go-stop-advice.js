@@ -219,7 +219,7 @@ if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(
 const $=id=>document.getElementById(id);
 const dialog=$('decisionDialog');
 if(!dialog)return;
-let activeModel=null;
+let activeModel=null,lastRisk=null;
 const score=id=>{
  const match=String($(id)?.textContent||'').match(/\d+/);
  return match?Number(match[0]):null;
@@ -265,17 +265,33 @@ function adjust(){
   deck:engine.masterDeck,...snapshot,opponentScore:context.opponentScore,
   scorePlayer:engine.scorePlayer
  }):null;
+ const evidence=engine?.scorePlayer?publicGoStopRisk({
+  deck:engine.masterDeck,...snapshot,opponentScore:context.opponentScore,
+  playerScore:context.playerScore,opponentHandSize:context.hand.length,
+  scorePlayer:engine.scorePlayer
+ }):null;
+ lastRisk=evidence;
+ const fromRisk=!checked.urgentThreat?
+  riskDecision(evidence,{goCount:context.goCount,opponentScore:context.opponentScore}):null;
  const verifiedSafe=checked.hasMatch&&context.hand.length>0&&
   Number.isInteger(maximum)&&maximum<7&&context.goCount<=1&&!checked.urgentThreat;
- const result=verifiedSafe?'go':checked.lowRisk?'go':
-   !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original;
- if(result===original)return;
- go.classList.toggle('training-choice-recommended',result==='go');
- stop.classList.toggle('training-choice-recommended',result==='stop');
- if(verifiedSafe||checked.lowRisk){
-  const locale=document.documentElement.lang;
-  const text=$('trainingCoachText');
-  if(text)text.textContent=verifiedSafe?
+ const result=fromRisk||
+  (evidence?original:verifiedSafe?'go':checked.lowRisk?'go':
+   !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original);
+ if(result!==original){
+  go.classList.toggle('training-choice-recommended',result==='go');
+  stop.classList.toggle('training-choice-recommended',result==='stop');
+ }
+ const coachText=$('trainingCoachText');
+ const locale=document.documentElement.lang;
+ const riskText=riskCopy[locale]||riskCopy.en;
+ if(coachText&&fromRisk&&evidence){
+  const why=result==='go'?(evidence.opponentCeiling<7?
+   riskText.safe(evidence.opponentCeiling):riskText.favorable(evidence.opponentCeiling)):
+   riskText.caution(evidence.opponentCeiling);
+  if(coachText.textContent!==why)coachText.textContent=why;
+ }else if(result!==original&&(verifiedSafe||checked.lowRisk)&&coachText){
+  coachText.textContent=verifiedSafe?
    (safeCopy[locale]||safeCopy.en)(maximum):copy[locale]||copy.en;
  }
 }
@@ -288,5 +304,5 @@ document.addEventListener('click',event=>{
   activeModel=state?.activeGoStopModel||null;
  }).catch(()=>{activeModel=null;});
 },{capture:true});
-root.GoStopDevGoStopAdvice=Object.freeze({getStatus:()=>({activeModelExamples:activeModel?.examples||0})});
+root.GoStopDevGoStopAdvice=Object.freeze({getStatus:()=>({activeModelExamples:activeModel?.examples||0,lastRisk})});
 })(typeof globalThis!=='undefined'?globalThis:this);
