@@ -651,7 +651,7 @@ function enqueue(p){if(!p)return;queue.push(p);showNext();}
 // frozen game removes .matchable when a move begins and may temporarily
 // highlight a different target during a two-target selection. We must compare
 // against the first recommendation, not the interim target-choice advice.
-let observedRecommendation=null,previousActivation=null;
+let observedRecommendation=null,previousActivation=null,pointerSnapshot=null;
 const handSignature=()=>[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')]
  .map(el=>el.dataset.cardId).filter(Boolean).sort().join('|');
 function captureRecommendation(){
@@ -661,14 +661,19 @@ function captureRecommendation(){
  // A Bomb blank is a deck-only action, not a physical-card candidate.
  // Do not cache a stale native real-card hint as a false training choice.
  if(locked?.bombBlankOverride){observedRecommendation=null;return null;}
- const approved=locked?.locked&&locked?.hand&&locked?.floor&&hand.split('|').includes(locked.hand);
+ const approved=locked?.locked&&locked?.hand&&hand.split('|').includes(locked.hand);
  const rec=(approved?locked.hand:null)||$('playerHand')?.querySelector('.hand-card.matchable[data-card-id]')?.dataset.cardId;
  if(rec){
   const original=(approved?locked.floor:null)||$('floor')?.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId||null;
-  if(!observedRecommendation||observedRecommendation.handSignature!==hand||
-     observedRecommendation.hand!==rec||observedRecommendation.target!==original){
+  // Keep the FIRST advice for this exact hand. Previewing another card or
+  // choosing a secondary table target is not a new recommendation.
+  if(!observedRecommendation||observedRecommendation.handSignature!==hand){
    observedRecommendation={handSignature:hand,hand:rec,target:original};
-  }else if(!observedRecommendation.target&&original){
+  }else if(approved&&observedRecommendation.hand!==locked.hand){
+   // When ready, the dev Training presentation lock wins over transient
+   // native highlights (including the previous build's touch preview).
+   observedRecommendation={handSignature:hand,hand:locked.hand,target:locked.floor||null};
+  }else if(!observedRecommendation.target&&original&&observedRecommendation.hand===rec){
    observedRecommendation.target=original;
   }
  }
@@ -703,8 +708,10 @@ function onHandActivation(cardId,source='click'){
  const now=Date.now();
  if(previousActivation?.cardId===cardId&&now-previousActivation.at<250)return;
  previousActivation={cardId,at:now,source};
- const observed=snapshot();
- const recommendation=captureRecommendation();
+ const earlier=pointerSnapshot?.cardId===cardId&&now-pointerSnapshot.at<2000?pointerSnapshot:null;
+ pointerSnapshot=null;
+ const observed=earlier?.observed||snapshot();
+ const recommendation=earlier?.recommendation||captureRecommendation();
  if(!recommendation||!observed.handIds.includes(recommendation.hand))return;
  const rec=recommendation.hand,recFloor=recommendation.target;
  const current=cardId;
@@ -718,6 +725,16 @@ function onHandActivation(cardId,source='click'){
  window.setTimeout(()=>{if(active)beginDisagreement({hand:rec,target:originalTarget},
   {hand:current,target:actualTarget},observed);},200);
 }
+// Capture stable public information at the START of a tap/flick, before the
+// native preview can replace the visual recommendation. Never block input.
+document.addEventListener('pointerdown',event=>{
+ if(!active||!enabled()||modal.open)return;
+ const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]:not(:disabled)');
+ if(!el)return;
+ const observed=snapshot(),recommendation=captureRecommendation();
+ if(recommendation&&observed.handIds.includes(recommendation.hand))
+  pointerSnapshot={cardId:el.dataset.cardId,observed,recommendation,at:Date.now()};
+},{capture:true});
 function onHand(event){
  const el=event.target?.closest?.('#playerHand .hand-card[data-card-id]');
  if(el)onHandActivation(el.dataset.cardId);
@@ -810,16 +827,16 @@ function onGoStopDecision(event){
 }
 document.addEventListener('click',event=>{
  const t=event.target;
- if(t?.closest?.('#trainingModeBtn')){$('trainingModelCompletionNotice')?.remove();active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;observedRecommendation=null;previousActivation=null;hadDisagreement=false;ensureGame();void checkAccount();}
+ if(t?.closest?.('#trainingModeBtn')){$('trainingModelCompletionNotice')?.remove();active=true;gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;observedRecommendation=null;previousActivation=null;pointerSnapshot=null;hadDisagreement=false;ensureGame();void checkAccount();}
  else if(t?.closest?.('#playAgainBtn,#newGameYesBtn')&&active){
   $('trainingModelCompletionNotice')?.remove();
   // A Training replay is a NEW completed-game sample with its own opening
   // strategy review. Never reuse the prior game's feedback/identity.
   gameId=null;confirmedCount=0;alreadyCompleted=false;reviewing=false;reviewState=null;removedReviews.clear();lastHand=null;
-  observedRecommendation=null;previousActivation=null;hadDisagreement=false;
+  observedRecommendation=null;previousActivation=null;pointerSnapshot=null;hadDisagreement=false;
   ensureGame();void checkAccount();
  }
- else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;gameId=null;hadDisagreement=false;reviewing=false;reviewState=null;removedReviews.clear();}
+ else if(t?.closest?.('#playSoloBtn, #quitYesBtn')){active=false;approvedEmail=null;confirmedCount=0;lastHand=null;observedRecommendation=null;previousActivation=null;pointerSnapshot=null;gameId=null;hadDisagreement=false;reviewing=false;reviewState=null;removedReviews.clear();}
  if(t?.closest?.('#playerHand'))onHand(event);
  if(t?.closest?.('#floor'))onTarget(event);
  if(t?.closest?.('#shakeDialog,#bombDialog'))onSpecialDecision(event);
