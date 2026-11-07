@@ -55,7 +55,7 @@ test('Training explains two secured capture choices without a false only-option 
    '<div class="captured-mini" data-card-id="m6-2"></div>';
   document.getElementById('trainingCoachText').textContent='Play Hill Single onto Hill Single.';
  });
- await expect(page.locator('#trainingCoachText')).toContainText('Both Hill Single onto Hill Single and Rose Single onto Rose Single');
+ await expect(page.locator('#trainingCoachText')).toContainText('Both Hill Single and Rose Single are secured');
  await expect(page.locator('#trainingCoachText')).not.toContainText('only available capture');
 });
 test('Training STOP warns about Godori completing a winning seven-point hand',async({page})=>{
