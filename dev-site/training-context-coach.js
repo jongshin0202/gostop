@@ -114,9 +114,10 @@ function updateCopy(){
     logic.captureComparison&&logic.captureComparisonCopy){
   const result=logic.captureComparison(v,handId,rec.floor,deck,globalThis.GoStopEngine?.scorePlayer);
   if(result){
-   const other=result.alternative,more=logic.captureComparisonCopy(
-    cardName(handId)+' onto '+cardName(rec.floor),
-    cardName(other.h)+' onto '+cardName(other.f),result,locale());
+   const other=result.alternative;
+   const moveLabel=(h,f)=>cardName(h)===cardName(f)?cardName(h):cardName(h)+' onto '+cardName(f);
+   const more=logic.captureComparisonCopy(
+    moveLabel(handId,rec.floor),moveLabel(other.h,other.f),result,locale());
    // Appending the same sentence repeatedly would create an observer loop.
    if(more&&!next.includes(more))next=(next+' '+more).trim();
   }
