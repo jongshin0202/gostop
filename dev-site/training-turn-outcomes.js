@@ -142,11 +142,24 @@ function assessTwoSides({deck=[],floorIds=[],ownHandIds=[],ownCapturedIds=[],
   otherCapturedIds:opponentCapturedIds,actingHandIds:ownHandIds,
   knownHandIds:ownHandIds,currentScore:ownScore,scorePlayer,threshold:ownScore+1});
  if(!enemy||!self)return null;
+ const byId=new Map(deck.map(c=>[c.id,c]));
+ const publicSet=new Set([...floorIds,...ownHandIds,...ownCapturedIds,...opponentCapturedIds]);
+ const floorCards=distinctCards(floorIds,byId),handCards=distinctCards(ownHandIds,byId),
+  captured=distinctCards(ownCapturedIds,byId);
+ const base=scoreBest(scorePlayer,captured);
+ let ownProtectedScoring=false;
+ for(const handCard of handCards)for(const target of floorCards){
+  if(handCard.month!==target.month)continue;
+  if(deck.filter(c=>c.month===handCard.month).some(c=>!publicSet.has(c.id)))continue;
+  const bundle=floorCards.filter(c=>c.month===target.month).length===3?
+   floorCards.filter(c=>c.month===target.month):[target];
+  if(scoreBest(scorePlayer,[...captured,handCard,...bundle])>base)ownProtectedScoring=true;
+ }
  return Object.freeze({opponentCeiling:enemy.ceiling,
   opponentCanFinish:enemy.possibleFinish,
   opponentWinChance:enemy.estimatedFinishChance,
   ownCanScore:!!self.possibleScore,ownScoreChance:self.estimatedGainChance,
-  ownCeiling:self.ceiling,opponentBest:enemy.best,ownBest:self.best,
+  ownCeiling:self.ceiling,ownProtectedScoring,opponentBest:enemy.best,ownBest:self.best,
   opponentScenarios:enemy.scenarios,ownScenarios:self.scenarios});
 }
 const api=Object.freeze({enumerateTurn,assessTwoSides,pairsFromFloor,scoreBest,idMonth});
