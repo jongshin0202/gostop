@@ -1,0 +1,20 @@
+/* Development Training only. Replace the unreliable native AI Go callout
+ * with a fixed-position accessible GO! attached to the computer zone. */
+html.dev-training-cpu-go-monitor #goCallout.go-callout-ai.show{
+ visibility:hidden!important;
+}
+.dev-training-cpu-go-announce{
+ position:fixed;z-index:9500;transform:translate(-50%,-50%);
+ color:#5cff7a;font:900 clamp(54px,14vw,102px)/1 Impact,"Arial Black",system-ui,sans-serif;
+ letter-spacing:-.04em;-webkit-text-stroke:3px #07591b;
+ text-shadow:0 5px 0 #063c17,0 10px 22px #000a,0 0 24px #65ff79;
+ pointer-events:none;text-align:center;
+}
+.dev-training-cpu-go-announce[hidden]{display:none!important}
+.dev-training-cpu-go-announce.animate{animation:devTrainingCpuGo 1.5s ease-out both}
+@keyframes devTrainingCpuGo{
+ 0%{opacity:0;transform:translate(-50%,-50%) scale(.7)}
+ 17%{opacity:1;transform:translate(-50%,-50%) scale(1.12)}
+ 65%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+ 100%{opacity:0;transform:translate(-50%,-65%) scale(.96)}
+}

@@ -12,6 +12,7 @@ const panel=$('trainingCoachPanel'),title=$('trainingCoachTitle'),text=$('traini
 const hand=$('playerHand'),floor=$('floor');
 const ppeok=globalThis.GoStopDevReservedPpeokPriority;
 const shaken=globalThis.GoStopDevShakenPriority;
+const family=globalThis.GoStopDevTrainingFamilyCapture;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
 let trainingActive=false,lock=null,suppressed=false;
@@ -19,6 +20,7 @@ const handSignature=()=>[
  ...[...hand.querySelectorAll('.hand-card[data-card-id]')].map(node=>node.dataset.cardId).filter(Boolean),
  ...[...hand.querySelectorAll('.blank-turn-card')].map((_,i)=>'bomb-blank-'+i)
 ].sort().join('|');
+const floorSignature=()=>cardIds('#floor .floor-card[data-card-id]').sort().join('|');
 const specialIsOpen=()=>!!document.querySelector('#shakeDialog[open],#bombDialog[open],#gukjinDialog[open],#decisionDialog[open],#resultDialog[open]');
 
 const cardIds=selector=>[...document.querySelectorAll(selector)].map(el=>el.dataset.cardId).filter(Boolean);
@@ -97,6 +99,32 @@ function bombBlankOverride(currentFloorId,originalTitle){
  }))return null;
  return {blankOverride:true,text:logic.bombBlankText(document.documentElement.lang||'en')};
 }
+const familyCopy={
+ en:(h,f)=>'Play '+h+' onto '+f+' first. Two cards in your hand share this family with a card on the table. Secure that capture before an unrelated 2x Single.',
+ ko:(h,f)=>h+'을 '+f+'에 먼저 내세요. 손에 같은 월 패가 두 장 있고 바닥에도 한 장 있으므로 별개 월의 쌍피보다 이 패를 먼저 먹으세요.',
+ es:(h,f)=>'Juega '+h+' sobre '+f+' primero. Tienes dos cartas de esta familia en la mano y una en la mesa. Asegura esta captura antes que un doble simple distinto.',
+ fr:(h,f)=>'Jouez d’abord '+h+' sur '+f+'. Vous avez deux cartes de cette famille en main et une sur la table. Assurez cette prise avant un double simple distinct.',
+ de:(h,f)=>'Spiele zuerst '+h+' auf '+f+'. Zwei Handkarten dieser Familie passen zur Tischkarte. Sichere diesen Fang vor einer anderen Doppel-Einzelkarte.',
+ ja:(h,f)=>'まず'+h+'を'+f+'に出しましょう。同じ月が手札に2枚、場に1枚あります。別の二枚カスよりこの組を先に取ってください。',
+ zh:(h,f)=>'先用'+h+'配对'+f+'。手里有两张同月牌，桌面还有一张。先确保收取这一组，而不是先收其他双散牌。'
+};
+function familyCaptureOverride(currentHandId,currentFloorId){
+ const deck=globalThis.GoStopEngine?.masterDeck||[];
+ const picked=family?.select?.({
+  handIds:cardIds('#playerHand .hand-card[data-card-id]'),
+  floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  deck,recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+ });
+ if(!picked||!hand.querySelector('.hand-card[data-card-id="'+picked.handId+'"]')||
+   !floor.querySelector('.floor-card[data-card-id="'+picked.floorId+'"]'))return null;
+ const lang=document.documentElement.lang||'en';
+ const label=id=>{
+  const c=deck.find(v=>v.id===id);
+  const el=hand.querySelector('[data-card-id="'+id+'"]')||floor.querySelector('[data-card-id="'+id+'"]');
+  return (c&&globalThis.GoStopTrainingLocales?.cardName?.(lang,c))||el?.title||id;
+ };
+ return {...picked,familyPriority:true,text:(familyCopy[lang]||familyCopy.en)(label(picked.handId),label(picked.floorId))};
+}
 function saferDiscardOverride(currentHandId,currentFloorId){
  if(currentFloorId||!currentHandId)return null;
  const logic=globalThis.GoStopDevTrainingAdviceLogic,engine=globalThis.GoStopEngine;
@@ -132,8 +160,8 @@ function sync(){
   if(lock){reset();suppressed=true;}
   return;
  }
- const sig=handSignature();
- if(lock&&(!sig||sig!==lock.handSignature||!hand.querySelector('[data-card-id="'+lock.hand+'"]')||lock.blankOverride&&!hand.querySelector('.blank-turn-card:not(:disabled)'))){
+ const sig=handSignature(),tableSig=floorSignature();
+ if(lock&&(!sig||sig!==lock.handSignature||tableSig!==lock.floorSignature||!hand.querySelector('[data-card-id="'+lock.hand+'"]')||lock.blankOverride&&!hand.querySelector('.blank-turn-card:not(:disabled)'))){
   // The played card has left the hand. Do not immediately re-capture the old
   // glowing hint while a frozen-game render is still in progress.
   reset();suppressed=true;
@@ -149,10 +177,11 @@ function sync(){
    const corrective=bombBlankOverride(recommendedFloor?.dataset.cardId||null,originalTitle)||
     reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
+    familyCaptureOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     saferDiscardOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
-   lock={handSignature:sig,hand:corrective?.handId||recommendation.dataset.cardId,
+   lock={handSignature:sig,floorSignature:tableSig,hand:corrective?.handId||recommendation.dataset.cardId,
     floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride};
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride&&!corrective.familyPriority),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride,familyPriority:!!corrective?.familyPriority};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -166,7 +195,7 @@ function sync(){
   // Accept that correction into our preserved snapshot instead of writing
   // the old text back and causing two observers to fight indefinitely.
   const corrected=globalThis.GoStopDevTrainingContextCoach?.getStatus?.()?.lastAppliedCopy;
-  if(corrected&&text.textContent===corrected){
+  if(corrected&&text.textContent===corrected&&!lock.familyPriority&&!lock.blankOverride&&!lock.ppeokOverride&&!lock.shakenOverride&&!lock.riskOverride){
    lock.text=corrected;
   }else{
    text.textContent=lock.text;
@@ -206,6 +235,6 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
   hand:lock?.blankOverride?null:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride}), // diagnostic only, not local persistence
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride,familyPriority:!!lock?.familyPriority}), // diagnostic only, not local persistence
 }),configurable:true});
 })();
