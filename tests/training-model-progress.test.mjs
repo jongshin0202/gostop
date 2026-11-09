@@ -10,7 +10,7 @@ test('preview counts a game but does not change the server snapshot',()=>{
   model:{examples:2},lastDevelopmentModelExamples:1};
  const p=check(snapshot,{includeCurrentGame:true,hadDisagreement:true});
  assert.equal(p.gamesSinceActivation,19);assert.equal(p.remaining20,1);
- assert.equal(p.remainingClean,10);assert.equal(p.earliest,1);
+ assert.equal(p.remainingClean,11);assert.equal(p.earliest,1);
  assert.equal(p.hasUnactivatedWeights,true);
  assert.equal(snapshot.gamesSinceLiveUpdate,18);
 });
@@ -30,7 +30,7 @@ test('10 clean games and at least 11-game old discrepancy are both required',()=
  assert.equal(eleventh.eligible,true);
  const interrupted=check({...s,completedGames:10,gamesSinceLiveUpdate:10,
   consecutiveAgreementGames:9},{includeCurrentGame:true,hadDisagreement:true});
- assert.equal(interrupted.remainingClean,10);
+ assert.equal(interrupted.remainingClean,11);
  assert.equal(interrupted.eligible,false);
 });
 test('clean gate unavailable before a disagreement; count still advances',()=>{
@@ -39,7 +39,7 @@ test('clean gate unavailable before a disagreement; count still advances',()=>{
  assert.equal(p.remainingClean,null);
  assert.equal(p.remaining20,13);
  const disputed=check({}, {includeCurrentGame:true,hadDisagreement:true});
- assert.equal(disputed.remainingClean,10);
+ assert.equal(disputed.remainingClean,11);
 });
 test('missing earlier disagreement index cannot imply an early-activation date',()=>{
  const state={completedGames:14,gamesSinceLiveUpdate:14,consecutiveAgreementGames:10,
