@@ -41,6 +41,28 @@ test('learning Worker rejects production origins and unauthenticated requests',a
   assert.equal((await t.request('/api/training/state')).status,401);
  }finally{t.restore();}
 });
+test('learning server publishes only versioned activated weights, never draft weights',async()=>{
+ const t=fixture();try{
+  const initial=await(await t.request('/api/training/state')).json();
+  assert.equal(initial.activeCardModel,null);
+  const draftWeights=Array(16).fill(0);draftWeights[2]=5;
+  const activeWeights=Array(16).fill(0);activeWeights[11]=2;
+  t.store.set('model',{weights:draftWeights,examples:22,games:[]});
+  t.store.set('activeCardModel',{weights:activeWeights,examples:8,games:[]});
+  // Until the server acknowledges the active version, no inference is allowed.
+  const before=await(await t.request('/api/training/state')).json();
+  assert.equal(before.activeCardModel,null);
+  t.store.set('summary',{developmentModelVersion:7,lastDevelopmentModelExamples:8});
+  const ready=await(await t.request('/api/training/state')).json();
+  assert.deepEqual(ready.activeCardModel,{version:7,examples:8,weights:activeWeights});
+  assert.equal(ready.model.examples,22);
+  assert.notDeepEqual(ready.activeCardModel.weights,ready.model.weights);
+  const broken=Array(16).fill(0);broken[5]=Infinity;
+  t.store.set('activeCardModel',{weights:broken,examples:8});
+  const failClosed=await(await t.request('/api/training/state')).json();
+  assert.equal(failClosed.activeCardModel,null);
+ }finally{t.restore();}
+});
 test('expert confirmed feedback persists across sessions and trains only at completion',async()=>{
  const t=fixture();try{
   const initial=await(await t.request('/api/training/state')).json();
