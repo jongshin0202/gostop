@@ -1,65 +1,57 @@
+'use strict';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
-const {progress}=require('../dev-site/training-model-progress.js');
-
-test('development countdown previews current game and does not mutate the server counter',()=>{
- const server={gamesSinceLiveUpdate:8,completedGames:53,consecutiveAgreementGames:0,
-  disagreementObservedAfterUpdate:true,model:{examples:2},lastDevelopmentModelExamples:1};
- const preview=progress(server,{includeCurrentGame:true,hadDisagreement:true});
- assert.equal(preview.gamesSinceActivation,9);
- assert.equal(preview.remaining10,1);
- assert.equal(preview.remainingClean,5);
- assert.equal(preview.earliest,1);
- assert.equal(preview.hasUnactivatedWeights,true);
- assert.equal(server.gamesSinceLiveUpdate,8);
+const {progress:check}=require('../dev-site/training-model-progress.js');
+test('preview counts a game but does not change the server snapshot',()=>{
+ const snapshot={gamesSinceLiveUpdate:18,consecutiveAgreementGames:0,disagreementObservedAfterUpdate:true,
+  model:{examples:2},lastDevelopmentModelExamples:1};
+ const p=check(snapshot,{includeCurrentGame:true,hadDisagreement:true});
+ assert.equal(p.gamesSinceActivation,19);assert.equal(p.remaining20,1);
+ assert.equal(p.remainingClean,10);assert.equal(p.earliest,1);
+ assert.equal(p.hasUnactivatedWeights,true);
+ assert.equal(snapshot.gamesSinceLiveUpdate,18);
 });
-test('five disagreement-free games after an earlier disagreement qualify early',()=>{
- const s={gamesSinceLiveUpdate:3,consecutiveAgreementGames:3,disagreementObservedAfterUpdate:true};
- const clean=progress(s,{includeCurrentGame:true,hadDisagreement:false});
- assert.equal(clean.remainingClean,1);
- assert.equal(clean.remaining10,6);
- assert.equal(clean.eligible,false);
- const last=progress({...s,consecutiveAgreementGames:4},{includeCurrentGame:true,hadDisagreement:false});
- assert.equal(last.remainingClean,0);
- assert.equal(last.eligible,true);
- const interrupted=progress({...s,consecutiveAgreementGames:4},{includeCurrentGame:true,hadDisagreement:true});
- assert.equal(interrupted.remainingClean,5);
+test('10 clean games after disagreement trigger only at tenth',()=>{
+ const s={gamesSinceLiveUpdate:9,consecutiveAgreementGames:8,disagreementObservedAfterUpdate:true};
+ const ninth=check(s,{includeCurrentGame:true});
+ assert.equal(ninth.remainingClean,1);
+ assert.equal(ninth.eligible,false);
+ const tenth=check({...s,consecutiveAgreementGames:9},{includeCurrentGame:true});
+ assert.equal(tenth.remainingClean,0);
+ assert.equal(tenth.eligible,true);
+ const interrupted=check({...s,consecutiveAgreementGames:9},{includeCurrentGame:true,hadDisagreement:true});
+ assert.equal(interrupted.remainingClean,10);
  assert.equal(interrupted.eligible,false);
 });
-test('clean-game shortcut is unavailable before a disagreement in the current activation window',()=>{
- const a=progress({gamesSinceLiveUpdate:5,consecutiveAgreementGames:5,
-  disagreementObservedAfterUpdate:false},{includeCurrentGame:true,hadDisagreement:false});
- assert.equal(a.remainingClean,null);
- assert.equal(a.remaining10,4);
- const b=progress({gamesSinceLiveUpdate:0},{includeCurrentGame:true,hadDisagreement:true});
- assert.equal(b.remainingClean,5);
+test('clean gate unavailable before a disagreement; count still advances',()=>{
+ const p=check({gamesSinceLiveUpdate:6,consecutiveAgreementGames:6,
+  disagreementObservedAfterUpdate:false},{includeCurrentGame:true});
+ assert.equal(p.remainingClean,null);
+ assert.equal(p.remaining20,13);
+ const disputed=check({}, {includeCurrentGame:true,hadDisagreement:true});
+ assert.equal(disputed.remainingClean,10);
 });
-test('threshold alone does not claim new active weights without changed examples',()=>{
- const p=progress({gamesSinceLiveUpdate:9,model:{examples:3},
-  lastDevelopmentModelExamples:3},{includeCurrentGame:true,hadDisagreement:false});
- assert.equal(p.eligible,true);
- assert.equal(p.remaining10,0);
+test('threshold does not activate weights unless new confirmed examples exist',()=>{
+ const p=check({gamesSinceLiveUpdate:19,model:{examples:3},lastDevelopmentModelExamples:3},
+  {includeCurrentGame:true});
+ assert.equal(p.eligible,true);assert.equal(p.remaining20,0);
  assert.equal(p.hasUnactivatedWeights,false);
- const changed=progress({gamesSinceLiveUpdate:9,goStopModel:{examples:2},
-  lastDevelopmentGoStopModelExamples:1},{includeCurrentGame:true,hadDisagreement:true});
+ const changed=check({gamesSinceLiveUpdate:19,goStopModel:{examples:2},
+  lastDevelopmentGoStopModelExamples:1},{includeCurrentGame:true});
  assert.equal(changed.hasUnactivatedWeights,true);
 });
-test('successful activation resets counters and preserves version and date',()=>{
+test('new activation preserves version and resets counters',()=>{
  const at='2026-11-01T17:00:00.000Z';
- const p=progress({developmentModelVersion:4,lastDevelopmentModelUpdateAt:at,
+ const p=check({developmentModelVersion:4,lastDevelopmentModelUpdateAt:at,
   gamesSinceLiveUpdate:0,consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false});
- assert.equal(p.developmentModelVersion,4);
- assert.equal(p.lastActivationAt,at);
- assert.equal(p.remaining10,10);
- assert.equal(p.remainingClean,null);
+ assert.equal(p.developmentModelVersion,4);assert.equal(p.lastActivationAt,at);
+ assert.equal(p.remaining20,20);assert.equal(p.remainingClean,null);
 });
-test('invalid and missing server fields do not invent weights',()=>{
- const a=progress({gamesSinceLiveUpdate:-9,consecutiveAgreementGames:NaN,model:{examples:NaN}});
- assert.equal(a.remaining10,10);
- assert.equal(a.remainingClean,null);
- assert.equal(a.hasUnactivatedWeights,false);
- assert.equal(a.lastActivationAt,null);
+test('unusable server data never invents trained weights or activation',()=>{
+ const a=check({gamesSinceLiveUpdate:-9,consecutiveAgreementGames:NaN,model:{examples:NaN}});
+ assert.equal(a.remaining20,20);assert.equal(a.remainingClean,null);
+ assert.equal(a.hasUnactivatedWeights,false);assert.equal(a.lastActivationAt,null);
  assert.equal(a.developmentModelVersion,0);
 });
