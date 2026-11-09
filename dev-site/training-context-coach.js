@@ -96,14 +96,14 @@ function updateCopy(){
  const v=visible(),floorMatch=!!current&&v.floor.some(id=>logic.monthOf(id)===current.month);
  // The dev recommendation guard can replace a dangerous discard. Preserve
  // that safer selected card and its explanatory reason across render cycles.
- if((rec.riskOverride||rec.bombBlankOverride)&&rec.text)next=rec.text;
+ if((rec.riskOverride||rec.bombBlankOverride||rec.familyPriority)&&rec.text)next=rec.text;
  const normalMove=/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim());
  // Count all same-family matches visible on the table, including reserved
  // captures that the native strategic scorer may temporarily deprioritize.
  const captureOptions=logic.captureOptions?.(v)||[];
  const multipleCaptures=captureOptions.length>1;
  const forced=logic.onlyCaptureOption?.(v);
- if(normalMove&&multipleCaptures&&!rec.riskOverride&&!rec.bombBlankOverride){
+ if(normalMove&&multipleCaptures&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority){
   for(const re of [
    /\s*This is the only available capture\./gi,
    /\s*This is the only card in your hand that can capture a card from the table\./gi,
@@ -116,20 +116,20 @@ function updateCopy(){
   ])next=next.replace(re,'');
   next=next.trim();
  }
- if(!rec.bombBlankOverride&&normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
+ if(!rec.bombBlankOverride&&!rec.familyPriority&&normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
   // When the expert has exactly one possible capture, the reason is the
   // absence of an alternative, not a speculative Stripe-set strategy.
   next=logic.onlyCaptureText(forced.handId,forced.floorId,locale(),
    cardName(forced.handId),cardName(forced.floorId));
  }
 
- if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride&&!rec.bombBlankOverride){
+ if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
  }
  const matchingHandChoices=captureOptions.filter(c=>c.handId===handId);
  const possibleFloor=rec.floor||(matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
- if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&handId&&possibleFloor&&floorMatch&&
+ if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&handId&&possibleFloor&&floorMatch&&
     logic.captureComparison&&logic.captureComparisonCopy){
   const result=logic.captureComparison(v,handId,possibleFloor,deck,globalThis.GoStopEngine?.scorePlayer);
   if(result){
