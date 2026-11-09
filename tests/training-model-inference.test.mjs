@@ -32,6 +32,19 @@ test('only versioned active server weights are usable',()=>{
  assert.equal(activeSnapshot({...response,activeCardModel:{...active,examples:0}}),null);
  assert.equal(activeSnapshot({...response,ok:false}),null);
 });
+test('legacy development Worker is safe only while trained weights exactly match last activated examples',()=>{
+ const active=model(11,2);
+ const state={ok:true,developmentModelVersion:4,
+  lastDevelopmentModelUpdateAt:'2026-11-08T18:00:00Z',
+  lastDevelopmentModelExamples:5,model:{weights:active.weights,examples:5}};
+ assert.deepEqual(activeSnapshot(state),active);
+ assert.equal(activeSnapshot({...state,model:{...state.model,examples:6}}),null,
+  'unactivated draft card weight updates must never be used for recommendations');
+ assert.equal(activeSnapshot({...state,lastDevelopmentModelExamples:4}),null);
+ assert.equal(activeSnapshot({...state,lastDevelopmentModelUpdateAt:null}),null);
+ assert.equal(activeSnapshot({...state,activeCardModel:null}),null,
+  'a modern Worker expressly reporting no active card model must stay disabled');
+});
 test('client features match original 16-dimensional server card model schema',()=>{
  const x=features({type:'pi',flags:['doublePi']},{type:'animal',flags:['godori']});
  assert.equal(x.length,16);
