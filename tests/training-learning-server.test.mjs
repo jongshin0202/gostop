@@ -509,7 +509,7 @@ test('GO STOP endpoint rejects fabricated contexts and conflicting card evidence
   })).status,401);
  }finally{t.restore();}
 });
-test('GO STOP expert learning enters active DEVELOPMENT model after five clean games',async()=>{
+test('GO STOP expert learning enters active DEVELOPMENT model after ten clean games',async()=>{
  const t=fixture();try{
   const first=goStopEntry('go-stop-promotion');
   await t.request('/api/training/go-stop-feedback',{method:'POST',body:first});
@@ -518,10 +518,10 @@ test('GO STOP expert learning enters active DEVELOPMENT model after five clean g
    gameId:first.gameId,reviewVersion:review.reviewVersion,
    keptFeedbackIds:review.items.map(x=>x.id)
   }});
-  for(let i=1;i<=4;i++)
+  for(let i=1;i<=9;i++)
    await t.request('/api/training/complete',{method:'POST',body:{gameId:'go-stop-clean-'+i}});
   const final=await(await t.request('/api/training/complete',{method:'POST',
-   body:{gameId:'go-stop-clean-5'}})).json();
+   body:{gameId:'go-stop-clean-10'}})).json();
   assert.equal(final.developmentModelUpdated,true);
   assert.equal(final.publishedToLive,false);
   const state=await(await t.request('/api/training/state')).json();
