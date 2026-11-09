@@ -3,8 +3,9 @@ import {test,expect} from '@playwright/test';
 function fakeCloud(initialProgress={}){
   const items=[];const finished=new Set();
   let learned=0,specialLearned=0,goStopLearned=0,announceDevelopmentActivation=false;
-  const counters={gamesSinceLiveUpdate:0,consecutiveAgreementGames:0,
-   disagreementObservedAfterUpdate:false,developmentModelVersion:0,...initialProgress};
+  const counters={completedGames:0,gamesSinceLiveUpdate:0,consecutiveAgreementGames:0,
+   disagreementObservedAfterUpdate:false,lastDisagreementCompletedGame:null,
+   developmentModelVersion:0,...initialProgress};
   const kind=x=>x.context?.kind==='go-stop'?'go-stop':x.context?'special':'card';
   return {items,completedCount:()=>finished.size,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
     handle:async route=>{
@@ -53,15 +54,17 @@ function fakeCloud(initialProgress={}){
               items.splice(i,1);
           }
           finished.add(gameId);
-          counters.gamesSinceLiveUpdate++;
+          counters.completedGames++;counters.gamesSinceLiveUpdate++;
           if(original.length){counters.consecutiveAgreementGames=0;
-           counters.disagreementObservedAfterUpdate=true;}
+           counters.disagreementObservedAfterUpdate=true;
+           counters.lastDisagreementCompletedGame=counters.completedGames;}
           else counters.consecutiveAgreementGames++;
         }
         const update=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
         if(update){counters.gamesSinceLiveUpdate=0;counters.consecutiveAgreementGames=0;
-         counters.disagreementObservedAfterUpdate=false;counters.developmentModelVersion=2;}
+         counters.disagreementObservedAfterUpdate=false;counters.lastDisagreementCompletedGame=null;
+         counters.developmentModelVersion=2;}
         return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,
           modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,
           publishedToLive:false,developmentModelUpdated:update,
@@ -619,9 +622,9 @@ test('one opponent point with maximum next-turn table capture below seven and a 
  expect(server.items).toHaveLength(0);
 });
 
-test('final review describes immediate training and shows server-backed 10-game and 5-clean countdowns',async({page})=>{
- const server=fakeCloud({gamesSinceLiveUpdate:8,consecutiveAgreementGames:4,
-  disagreementObservedAfterUpdate:true,developmentModelVersion:3});
+test('final review describes immediate training and server-backed 20-game and age-aware clean countdowns',async({page})=>{
+ const server=fakeCloud({completedGames:8,gamesSinceLiveUpdate:8,consecutiveAgreementGames:4,
+  disagreementObservedAfterUpdate:true,lastDisagreementCompletedGame:4,developmentModelVersion:3});
  await setup(page,'expert@example.test',server);
  await page.locator('#alternate').click();
  await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
@@ -629,34 +632,35 @@ test('final review describes immediate training and shows server-backed 10-game 
  const section=review.locator('#trainingModelProgressPanel');
  await expect(section).toContainText('Training and weight activation');
  await expect(section).toContainText('1 confirmed judgment from this review will train server-side weights when you press Finish');
- await expect(section).toContainText('10-game path: 1 more game');
- await expect(section.locator('#trainingCleanCountdown')).toContainText('5 more consecutive disagreement-free games');
+ await expect(section).toContainText('20-game path: 11 more games');
+ await expect(section.locator('#trainingCleanCountdown')).toContainText('17 more consecutive disagreement-free gamess');
  await expect(section).toContainText('No production deployment');
  expect(server.completedCount()).toBe(0,'reviewing does not train weights or complete the game');
  await review.getByRole('button',{name:'Finish'}).click();
  await expect(review).toBeHidden();
  const completion=page.locator('#trainingModelCompletionNotice');
  await expect(completion).toContainText('confirmed judgment trained on the development server');
- await expect(completion).toContainText('10-game path: 1 more game');
+ await expect(completion).toContainText('20-game path: 11 more games');
  await expect(completion).toContainText('Updated weights were not activated this game');
 });
 test('clean-game streak countdown shows earliest path without claiming activation before threshold',async({page})=>{
- const server=fakeCloud({gamesSinceLiveUpdate:4,consecutiveAgreementGames:3,
-  disagreementObservedAfterUpdate:true});
+ const server=fakeCloud({completedGames:4,gamesSinceLiveUpdate:4,consecutiveAgreementGames:3,
+  disagreementObservedAfterUpdate:true,lastDisagreementCompletedGame:1});
  await setup(page,'expert@example.test',server);
  const review=await showFinalReview(page);
  await expect(review).toContainText('No disagreements to review');
  const p=review.locator('#trainingModelProgressPanel');
  await expect(p).toContainText('No confirmed disagreement judgments remain in this review');
- await expect(p).toContainText('10-game path: 5 more games');
- await expect(p.locator('#trainingCleanCountdown')).toContainText('1 more consecutive disagreement-free game');
+ await expect(p).toContainText('20-game path: 15 more games');
+ await expect(p.locator('#trainingCleanCountdown')).toContainText('7 more consecutive disagreement-free games');
  await review.getByRole('button',{name:'Finish'}).click();
  await expect(review).toBeHidden();
  await expect(page.locator('#trainingModelCompletionNotice')).toContainText('No judgments trained this game');
- await expect(page.locator('#trainingModelCompletionNotice')).toContainText('1 more consecutive disagreement-free game');
+ await expect(page.locator('#trainingModelCompletionNotice')).toContainText('7 more consecutive disagreement-free games');
 });
 test('removing judgments updates training disclosure but not historical disagreement counters',async({page})=>{
- const server=fakeCloud({gamesSinceLiveUpdate:7,disagreementObservedAfterUpdate:true});
+ const server=fakeCloud({completedGames:7,gamesSinceLiveUpdate:7,
+  disagreementObservedAfterUpdate:true,lastDisagreementCompletedGame:1});
  await setup(page,'expert@example.test',server);
  await page.locator('#alternate').click();
  await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
@@ -666,19 +670,19 @@ test('removing judgments updates training disclosure but not historical disagree
  await review.locator('.training-final-row').getByRole('button',{name:'Remove'}).click();
  await page.locator('#trainingReviewRemoveConfirm').getByRole('button',{name:'Yes'}).click();
  await expect(panel).toContainText('No confirmed disagreement judgments remain in this review');
- await expect(panel).toContainText('10-game path: 2 more games');
- await expect(panel.locator('#trainingCleanCountdown')).toContainText('5 more consecutive');
+ await expect(panel).toContainText('20-game path: 12 more games');
+ await expect(panel.locator('#trainingCleanCountdown')).toContainText('11 more consecutive');
 });
 test('acknowledged development activation displays deployment timing and version, never production',async({page})=>{
- const server=fakeCloud({gamesSinceLiveUpdate:9,consecutiveAgreementGames:0,
-  disagreementObservedAfterUpdate:true});
+ const server=fakeCloud({completedGames:19,gamesSinceLiveUpdate:19,consecutiveAgreementGames:0,
+  disagreementObservedAfterUpdate:true,lastDisagreementCompletedGame:10});
  await setup(page,'expert@example.test',server);
  await page.locator('#alternate').click();
  await page.locator('#trainingFeedbackDialog').getByRole('button',{name:'My move was better'}).click();
  server.confirmNextDevelopmentActivation();
  const review=await showFinalReview(page);
  const panel=review.locator('#trainingModelProgressPanel');
- await expect(panel).toContainText('10-game path: 0 more games');
+ await expect(panel).toContainText('20-game path: 0 more games');
  await expect(panel.locator('#trainingActivationDue')).toContainText('Activation threshold reached with this Finish');
  await review.getByRole('button',{name:'Finish'}).click();
  await expect(review).toBeHidden();
@@ -700,5 +704,5 @@ test('unknown server progress never fabricates game countdown',async({page})=>{
  }));
  const review=await showFinalReview(page);
  await expect(review.locator('#trainingCountdownUnavailable')).toContainText('countdown is unavailable');
- await expect(review.locator('#trainingModelProgressPanel')).not.toContainText('10-game path:');
+ await expect(review.locator('#trainingModelProgressPanel')).not.toContainText('20-game path:');
 });
