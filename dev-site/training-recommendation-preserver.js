@@ -13,6 +13,7 @@ const hand=$('playerHand'),floor=$('floor');
 const ppeok=globalThis.GoStopDevReservedPpeokPriority;
 const shaken=globalThis.GoStopDevShakenPriority;
 const family=globalThis.GoStopDevTrainingFamilyCapture;
+const modelInference=globalThis.GoStopDevTrainingModelInference;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
 let trainingActive=false,lock=null,suppressed=false;
@@ -126,6 +127,45 @@ function familyCaptureOverride(currentHandId,currentFloorId){
  };
  return {...picked,familyPriority:true,text:(familyCopy[lang]||familyCopy.en)(label(picked.handId),label(picked.floorId))};
 }
+const modelCopy={
+ en:(h,f,v)=>'Play '+h+' onto '+f+'. These legal captures have equivalent protected strategy priority; activated Training model v'+v+' favors this choice from confirmed expert feedback.',
+ ko:(h,f,v)=>h+'을 '+f+'에 내세요. 보호된 전략 우선순위가 같은 수 중에서 확정된 전문가 피드백을 반영한 개발 훈련 모델 v'+v+'이 이 선택을 추천합니다.',
+ es:(h,f,v)=>'Juega '+h+' sobre '+f+'. Entre capturas de igual prioridad estratégica, el modelo de entrenamiento v'+v+' prefiere esta opción según opiniones confirmadas.',
+ fr:(h,f,v)=>'Jouez '+h+' sur '+f+'. Parmi les prises de même priorité protégée, le modèle v'+v+' privilégie ce choix selon les avis confirmés.',
+ de:(h,f,v)=>'Spiele '+h+' auf '+f+'. Bei gleichrangigen sicheren Zügen bevorzugt das Trainingsmodell v'+v+' diese bestätigte Expertenwahl.',
+ ja:(h,f,v)=>h+'を'+f+'に出してください。固定戦略上同じ優先度の合法手から、確定した指導内容を学んだモデルv'+v+'が選びました。',
+ zh:(h,f,v)=>'先用'+h+'配对'+f+'。在同等受保护战略优先级的合法走法中，训练模型v'+v+'根据确认的专家反馈推荐此选择。'
+};
+function modelOverride(currentHandId,currentFloorId){
+ if(!currentHandId||!currentFloorId||!modelInference?.choose)return null;
+ // Already revealed opponent Shake families take precedence over learned
+ // weights even when the native recommendation already targets that family.
+ const revealed=shaken?.getStatus?.()?.revealedMonths||[];
+ const handIds=cardIds('#playerHand .hand-card[data-card-id]');
+ const floorIds=cardIds('#floor .floor-card[data-card-id]');
+ const month=id=>Number(/^m(\d{1,2})-/.exec(id)?.[1]||0);
+ if(revealed.some(m=>handIds.some(id=>month(id)===m)&&floorIds.some(id=>month(id)===m)))
+  return null;
+ const deck=globalThis.GoStopEngine?.masterDeck||[];
+ const picked=modelInference.choose({
+  handIds:cardIds('#playerHand .hand-card[data-card-id]'),
+  floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  opponentCapturedIds:cardIds('#aiCaptured .captured-mini[data-card-id]'),
+  deck,scorePlayer:globalThis.GoStopEngine?.scorePlayer,
+  recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+ });
+ if(!picked||!hand.querySelector('.hand-card[data-card-id="'+picked.handId+'"]')||
+  !floor.querySelector('.floor-card[data-card-id="'+picked.floorId+'"]'))return null;
+ const lang=document.documentElement.lang||'en';
+ const label=id=>{
+  const c=deck.find(v=>v.id===id),el=document.querySelector('[data-card-id="'+id+'"]');
+  return (c&&globalThis.GoStopTrainingLocales?.cardName?.(lang,c))||
+   el?.title||id;
+ };
+ return {...picked,modelPriority:true,text:(modelCopy[lang]||modelCopy.en)(
+  label(picked.handId),label(picked.floorId),picked.version)};
+}
 function saferDiscardOverride(currentHandId,currentFloorId){
  if(currentFloorId||!currentHandId)return null;
  const logic=globalThis.GoStopDevTrainingAdviceLogic,engine=globalThis.GoStopEngine;
@@ -179,10 +219,11 @@ function sync(){
     reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     familyCaptureOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
-    saferDiscardOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
+    saferDiscardOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
+    modelOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
    lock={handSignature:sig,floorSignature:tableSig,hand:corrective?.handId||recommendation.dataset.cardId,
     floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride&&!corrective.familyPriority),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride,familyPriority:!!corrective?.familyPriority};
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride&&!corrective.familyPriority&&!corrective.modelPriority),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride,familyPriority:!!corrective?.familyPriority,modelPriority:!!corrective?.modelPriority};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -196,7 +237,7 @@ function sync(){
   // Accept that correction into our preserved snapshot instead of writing
   // the old text back and causing two observers to fight indefinitely.
   const corrected=globalThis.GoStopDevTrainingContextCoach?.getStatus?.()?.lastAppliedCopy;
-  if(corrected&&text.textContent===corrected&&!lock.familyPriority&&!lock.blankOverride&&!lock.ppeokOverride&&!lock.shakenOverride&&!lock.riskOverride){
+  if(corrected&&text.textContent===corrected&&!lock.familyPriority&&!lock.blankOverride&&!lock.ppeokOverride&&!lock.shakenOverride&&!lock.riskOverride&&!lock.modelPriority){
    lock.text=corrected;
   }else{
    text.textContent=lock.text;
@@ -236,6 +277,6 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
   hand:lock?.blankOverride?null:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride,familyPriority:!!lock?.familyPriority}), // diagnostic only, not local persistence
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride,familyPriority:!!lock?.familyPriority,modelPriority:!!lock?.modelPriority}), // diagnostic only, not local persistence
 }),configurable:true});
 })();
