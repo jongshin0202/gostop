@@ -8,8 +8,24 @@
 const validWeights=w=>Array.isArray(w)&&w.length===16&&w.every(v=>
  typeof v==='number'&&Number.isFinite(v)&&v>=-8&&v<=8);
 function activeSnapshot(response){
- const m=response?.activeCardModel,v=m?.version;
- if(response?.ok!==true||!Number.isSafeInteger(v)||v<1||
+ if(response?.ok!==true)return null;
+ let m=response.activeCardModel,v=m?.version;
+ // The deployed legacy Worker does not expose activeCardModel yet, but it
+ // reports the active card example count. Its draft card weights are identical
+ // to activated weights ONLY until the next completed card-training decision.
+ // Fail closed whenever any new unactivated card example exists. A modern
+ // Worker explicitly returning activeCardModel:null must not use this fallback.
+ if(!Object.prototype.hasOwnProperty.call(response,'activeCardModel')){
+  const examples=response.model?.examples;
+  const acknowledged=response.lastDevelopmentModelExamples;
+  if(typeof response.lastDevelopmentModelUpdateAt!=='string'||
+    !Number.isSafeInteger(examples)||examples<1||
+    !Number.isSafeInteger(acknowledged)||examples!==acknowledged)
+   return null;
+  m={version:response.developmentModelVersion,examples,weights:response.model?.weights};
+  v=m.version;
+ }
+ if(!Number.isSafeInteger(v)||v<1||
   v!==response.developmentModelVersion||
   !Number.isSafeInteger(m?.examples)||m.examples<1||!validWeights(m.weights))
   return null;
