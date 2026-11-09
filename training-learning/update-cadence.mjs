@@ -7,9 +7,9 @@ export function recordCompletedTrainingGame(previous={},hadDisagreement=false){
   const completedGames=count(previous.completedGames)+1;
   const consecutiveAgreementGames=hadDisagreement?0:count(previous.consecutiveAgreementGames)+1;
   const disagreementObservedAfterUpdate=Boolean(previous.disagreementObservedAfterUpdate)||hadDisagreement;
-  const eligibilityReason=gamesSinceLiveUpdate>=10?'10-completed-games':
-    disagreementObservedAfterUpdate&&consecutiveAgreementGames>=5?
-      '5-agreement-games-after-disagreement':null;
+  const eligibilityReason=gamesSinceLiveUpdate>=20?'20-completed-games':
+    disagreementObservedAfterUpdate&&consecutiveAgreementGames>=10?
+      '10-agreement-games-after-disagreement':null;
   return {...previous,completedGames,gamesSinceLiveUpdate,consecutiveAgreementGames,
     disagreementObservedAfterUpdate,eligibilityReason};
 }
