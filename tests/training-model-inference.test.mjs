@@ -93,6 +93,23 @@ test('ambiguous dual table targets and no-match discards remain native decisions
   recommendedHandId:'m5-3',recommendedFloorId:'m12-3',model:model(11,2)
  }),null);
 });
+test('an immediate seven-point finishing capture cannot be sacrificed to model weights',()=>{
+ const scorer=({captured})=>({total:captured.some(c=>c.id==='m5-1')?7:0});
+ const result=evaluate({
+  handIds:['m2-3','m5-3'],floorIds:['m2-1','m5-1'],deck,
+  recommendedHandId:'m5-3',recommendedFloorId:'m5-1',model:model(11,8),
+  scorePlayer:scorer
+ });
+ assert.equal(result,null);
+});
+test('failed or uncertain score calculations fail closed rather than trusting learned rankings',()=>{
+ const result=evaluate({
+  handIds:['m2-3','m5-3'],floorIds:['m2-1','m5-1'],deck,
+  recommendedHandId:'m5-3',recommendedFloorId:'m5-1',model:model(11,8),
+  scorePlayer:()=>{throw Error('unavailable');}
+ });
+ assert.equal(result,null);
+});
 test('invalid or draft-only models cannot activate locally',()=>{
  const input={
   handIds:['m2-3','m5-3'],floorIds:['m2-1','m5-1'],deck,
