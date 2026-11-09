@@ -50,7 +50,7 @@ function features(card,target,move={}){
 }
 const dot=(a,b)=>a.reduce((n,v,i)=>n+v*b[i],0);
 function evaluate({handIds=[],floorIds=[],ownCapturedIds=[],opponentCapturedIds=[],
- deck=[],recommendedHandId,recommendedFloorId,model}={}){
+ deck=[],recommendedHandId,recommendedFloorId,model,scorePlayer=null}={}){
  if(!model||!validWeights(model.weights)||!Number.isSafeInteger(model.version)||model.version<1)return null;
  const hand=unique(handIds),floor=unique(floorIds);
  if(hand.length<2||!floor.length||!hand.includes(recommendedHandId)||
@@ -106,6 +106,27 @@ function evaluate({handIds=[],floorIds=[],ownCapturedIds=[],opponentCapturedIds=
  peers.sort((a,b)=>b.score-a.score||a.handId.localeCompare(b.handId)||a.floorId.localeCompare(b.floorId));
  const best=peers[0];
  if(best.handId===native.handId&&best.floorId===native.floorId||best.score-native.score<=0.02)return null;
+ // A scoring finish or better immediate points must never be traded for
+ // a weight preference, even when two candidates share the same card tier.
+ if(typeof scorePlayer==='function'){
+  const score=cards=>{
+   const totals=[];
+   for(const gukjinMode of ['animal','pi']){
+    try{
+     const n=scorePlayer({captured:cards,gukjinMode})?.total;
+     if(!Number.isFinite(n))return null;
+     totals.push(n);
+    }catch{return null;}
+   }
+   return Math.max(...totals);
+  };
+  const before=score(mine);
+  const nativeAfter=score([...mine,native.card,native.target]);
+  const bestAfter=score([...mine,best.card,best.target]);
+  if(before===null||nativeAfter===null||bestAfter===null||bestAfter<nativeAfter)
+   return null;
+  if(before<7&&nativeAfter>=7&&bestAfter<7)return null;
+ }
  return Object.freeze({handId:best.handId,floorId:best.floorId,
   version:model.version,examples:model.examples,confidenceDelta:best.score-native.score,
   alternativeHandId:native.handId,alternativeFloorId:native.floorId});
