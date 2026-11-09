@@ -113,6 +113,7 @@ function familyCaptureOverride(currentHandId,currentFloorId){
  const picked=family?.select?.({
   handIds:cardIds('#playerHand .hand-card[data-card-id]'),
   floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
   deck,recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
  });
  if(!picked||!hand.querySelector('.hand-card[data-card-id="'+picked.handId+'"]')||
