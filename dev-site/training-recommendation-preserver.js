@@ -195,7 +195,7 @@ function sync(){
   // Accept that correction into our preserved snapshot instead of writing
   // the old text back and causing two observers to fight indefinitely.
   const corrected=globalThis.GoStopDevTrainingContextCoach?.getStatus?.()?.lastAppliedCopy;
-  if(corrected&&text.textContent===corrected){
+  if(corrected&&text.textContent===corrected&&!lock.familyPriority&&!lock.blankOverride&&!lock.ppeokOverride&&!lock.shakenOverride&&!lock.riskOverride){
    lock.text=corrected;
   }else{
    text.textContent=lock.text;
