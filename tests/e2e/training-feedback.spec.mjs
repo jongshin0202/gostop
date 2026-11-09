@@ -633,7 +633,7 @@ test('final review describes immediate training and server-backed 20-game and ag
  await expect(section).toContainText('Training and weight activation');
  await expect(section).toContainText('1 confirmed judgment from this review will train server-side weights when you press Finish');
  await expect(section).toContainText('20-game path: 11 more games');
- await expect(section.locator('#trainingCleanCountdown')).toContainText('17 more consecutive disagreement-free gamess');
+ await expect(section.locator('#trainingCleanCountdown')).toContainText('11 more consecutive disagreement-free games');
  await expect(section).toContainText('No production deployment');
  expect(server.completedCount()).toBe(0,'reviewing does not train weights or complete the game');
  await review.getByRole('button',{name:'Finish'}).click();
