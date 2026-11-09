@@ -113,7 +113,7 @@ test('every completed Training game counts exactly once even without feedback',a
   assert.equal((await(await t.request('/api/training/state')).json()).completedGames,20);
  }finally{t.restore();}
 });
-test('a disagreement followed by ten clean games stages a versioned candidate without claiming live deployment',async()=>{
+test('ten clean games and an 11-game-old disagreement stage weights without live deployment',async()=>{
  const t=fixture();try{
   await t.request('/api/training/feedback',{method:'POST',body:feedback('dispute-game-1')});
   const first=await(await t.request('/api/training/complete',{
@@ -126,16 +126,21 @@ test('a disagreement followed by ten clean games stages a versioned candidate wi
    })).json();
    assert.equal(r.promotionPending,false);
   }
-  const fifth=await(await t.request('/api/training/complete',{
+  const tenth=await(await t.request('/api/training/complete',{
     method:'POST',body:{gameId:'agreement-10',hadDisagreement:false}
   })).json();
-  assert.equal(fifth.promotionPending,true);
-  assert.equal(fifth.updateTrigger,'10-agreement-games-after-disagreement');
-  assert.equal(fifth.publishedToLive,false);
-  assert.equal(fifth.developmentModelUpdated,true);
-  assert.equal(fifth.developmentModelVersion,1);
+  assert.equal(tenth.promotionPending,false);
+  assert.equal(tenth.developmentModelUpdated,false);
+  const eleventh=await(await t.request('/api/training/complete',{
+    method:'POST',body:{gameId:'agreement-11',hadDisagreement:false}
+  })).json();
+  assert.equal(eleventh.promotionPending,true);
+  assert.equal(eleventh.updateTrigger,'10-agreement-games-after-disagreement');
+  assert.equal(eleventh.publishedToLive,false);
+  assert.equal(eleventh.developmentModelUpdated,true);
+  assert.equal(eleventh.developmentModelVersion,1);
   const state=await(await t.request('/api/training/state')).json();
-  assert.equal(state.completedGames,11);
+  assert.equal(state.completedGames,12);
   assert.equal(state.pendingLiveUpdate.modelExamples,1);
   assert.equal(state.gamesSinceLiveUpdate,0,'cadence resets after acknowledged dev activation');
   assert.equal(state.developmentModelVersion,1);
@@ -231,7 +236,9 @@ test('special-only learning is included in staged weights after the update thres
    const r=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-'+n}})).json();
    assert.equal(r.promotionPending,false);
   }
-  const last=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-10'}})).json();
+  const tenth=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-10'}})).json();
+  assert.equal(tenth.promotionPending,false);
+  const last=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'special-clean-11'}})).json();
   assert.equal(last.updateTrigger,'10-agreement-games-after-disagreement');
   assert.equal(last.promotionPending,true);
   assert.equal(last.publishedToLive,false);
@@ -312,7 +319,9 @@ test('ten agreement games after an opening-strategy correction stage separate op
    const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-'+n}})).json();
    assert.equal(result.promotionPending,false);
   }
-  const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-10'}})).json();
+  const tenth=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-10'}})).json();
+  assert.equal(tenth.promotionPending,false);
+  const result=await(await t.request('/api/training/complete',{method:'POST',body:{gameId:'opening-clean-11'}})).json();
   assert.equal(result.updateTrigger,'10-agreement-games-after-disagreement');
   assert.equal(result.publishedToLive,false);
   assert.equal(result.developmentModelUpdated,true);
@@ -520,8 +529,11 @@ test('GO STOP expert learning enters active DEVELOPMENT model after ten clean ga
   }});
   for(let i=1;i<=9;i++)
    await t.request('/api/training/complete',{method:'POST',body:{gameId:'go-stop-clean-'+i}});
-  const final=await(await t.request('/api/training/complete',{method:'POST',
+  const tenth=await(await t.request('/api/training/complete',{method:'POST',
    body:{gameId:'go-stop-clean-10'}})).json();
+  assert.equal(tenth.developmentModelUpdated,false);
+  const final=await(await t.request('/api/training/complete',{method:'POST',
+   body:{gameId:'go-stop-clean-11'}})).json();
   assert.equal(final.developmentModelUpdated,true);
   assert.equal(final.publishedToLive,false);
   const state=await(await t.request('/api/training/state')).json();
