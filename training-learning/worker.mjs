@@ -106,7 +106,20 @@ export class TrainingLearningStore{
       const goStopModel=await this.ctx.storage.get('goStopModel')||new GoStopDecisionRanker().export();
       const activeOpeningModel=await this.ctx.storage.get('activeOpeningModel')||null;
       const activeGoStopModel=await this.ctx.storage.get('activeGoStopModel')||null;
-      return json({ok:true,...state,model,specialModel,openingModel,goStopModel,activeOpeningModel,activeGoStopModel});
+      const activeCard=await this.ctx.storage.get('activeCardModel')||null;
+      // Only publish an activated, versioned snapshot. Draft weights remain
+      // trainable on the server but cannot become live recommendations.
+      const validActive=Number.isSafeInteger(state.developmentModelVersion)&&
+        state.developmentModelVersion>0&&Number.isSafeInteger(activeCard?.examples)&&
+        activeCard.examples>0&&Array.isArray(activeCard?.weights)&&
+        activeCard.weights.length===16&&activeCard.weights.every(w=>
+          typeof w==='number'&&Number.isFinite(w)&&w>=-8&&w<=8);
+      const activeCardModel=validActive?{
+        version:state.developmentModelVersion,examples:activeCard.examples,
+        weights:activeCard.weights
+      }:null;
+      return json({ok:true,...state,model,specialModel,openingModel,goStopModel,
+        activeCardModel,activeOpeningModel,activeGoStopModel});
     }
     if(request.method==='GET'&&path==='/history')return json({ok:true,feedback:await this.ctx.storage.get('history')||[]});
     if(request.method==='GET'&&path==='/review'){
