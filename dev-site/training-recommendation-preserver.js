@@ -138,13 +138,22 @@ const modelCopy={
 };
 function modelOverride(currentHandId,currentFloorId){
  if(!currentHandId||!currentFloorId||!modelInference?.choose)return null;
+ // Already revealed opponent Shake families take precedence over learned
+ // weights even when the native recommendation already targets that family.
+ const revealed=shaken?.getStatus?.()?.revealedMonths||[];
+ const handIds=cardIds('#playerHand .hand-card[data-card-id]');
+ const floorIds=cardIds('#floor .floor-card[data-card-id]');
+ const month=id=>Number(/^m(\d{1,2})-/.exec(id)?.[1]||0);
+ if(revealed.some(m=>handIds.some(id=>month(id)===m)&&floorIds.some(id=>month(id)===m)))
+  return null;
  const deck=globalThis.GoStopEngine?.masterDeck||[];
  const picked=modelInference.choose({
   handIds:cardIds('#playerHand .hand-card[data-card-id]'),
   floorIds:cardIds('#floor .floor-card[data-card-id]'),
   ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
   opponentCapturedIds:cardIds('#aiCaptured .captured-mini[data-card-id]'),
-  deck,recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+  deck,scorePlayer:globalThis.GoStopEngine?.scorePlayer,
+  recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
  });
  if(!picked||!hand.querySelector('.hand-card[data-card-id="'+picked.handId+'"]')||
   !floor.querySelector('.floor-card[data-card-id="'+picked.floorId+'"]'))return null;
