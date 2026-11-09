@@ -17,11 +17,22 @@ const cardPriority=c=>c?.type==='bright'?600:
  c?.flags?.includes('godori')?420:
  c?.type==='pi'?350:
  c?.type==='animal'?300:0;
-function select({handIds=[],floorIds=[],deck=[],
+function select({handIds=[],floorIds=[],ownCapturedIds=[],deck=[],
  recommendedHandId=null,recommendedFloorId=null}={}){
  const hand=unique(handIds),floor=unique(floorIds);
  if(!hand.length||!floor.length||!Array.isArray(deck))return null;
  const byId=new Map(deck.map(c=>[c.id,c]));
+ const recHand=byId.get(recommendedHandId),recTarget=byId.get(recommendedFloorId);
+ if(!recHand||!recTarget)return null;
+ // Protect immediate scoring goals from the family-lock correction.
+ // Bright capture, live 5-BIRDIES birdie and completion of a third same-set
+ // Stripe are strategic hard priorities and must not be displaced.
+ if(recTarget.type==='bright'||recTarget.flags?.includes('godori'))return null;
+ if(recTarget.type==='ribbon'&&recTarget.ribbonSet){
+  const already=unique(ownCapturedIds).map(id=>byId.get(id)).filter(c=>
+   c?.type==='ribbon'&&c.ribbonSet===recTarget.ribbonSet).length;
+  if(already>=2)return null;
+ }
  const picks=[];
  for(let m=1;m<=12;m++){
   const holding=hand.filter(id=>month(id)===m);
@@ -38,9 +49,10 @@ function select({handIds=[],floorIds=[],deck=[],
  }
  picks.sort((a,b)=>b.weight-a.weight||a.month-b.month||a.handId.localeCompare(b.handId));
  const chosen=picks[0];
- return chosen?{...chosen,
-  changed:recommendedHandId!==chosen.handId||recommendedFloorId!==chosen.floorId,
-  alternativeHandId:recommendedHandId,alternativeFloorId:recommendedFloorId}:null;
+ if(!chosen||recommendedHandId===chosen.handId&&recommendedFloorId===chosen.floorId)
+  return null; // Native advice already obeyed the family priority.
+ return {...chosen,changed:true,
+  alternativeHandId:recommendedHandId,alternativeFloorId:recommendedFloorId};
 }
 const api=Object.freeze({select,month,cardPriority});
 root.GoStopDevTrainingFamilyCapture=api;
