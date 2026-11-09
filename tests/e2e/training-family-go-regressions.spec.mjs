@@ -46,6 +46,15 @@ test('table state change clears old locked family suggestion',async({page})=>{
  await page.locator('#floor [data-card-id="m5-3"]').evaluate(el=>el.remove());
  await expect.poll(()=>page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus().locked)).toBe(false);
 });
+test('stale context rewrite must not replace family priority recommendation',async({page})=>{
+ await familyFixture(page);
+ const original=await page.locator('#trainingCoachText').textContent();
+ await page.evaluate(()=>{
+  globalThis.GoStopDevTrainingContextCoach={getStatus:()=>({lastAppliedCopy:'Stale native Willow hint'})};
+  document.getElementById('trainingCoachText').textContent='Stale native Willow hint';
+ });
+ await expect(page.locator('#trainingCoachText')).toHaveText(original);
+});
 test('family override does not activate in ordinary Solo play',async({page})=>{
  await familyFixture(page);
  await page.locator('#playSoloBtn').click();
