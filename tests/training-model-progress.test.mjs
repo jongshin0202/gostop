@@ -5,7 +5,8 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {progress:check}=require('../dev-site/training-model-progress.js');
 test('preview counts a game but does not change the server snapshot',()=>{
- const snapshot={gamesSinceLiveUpdate:18,consecutiveAgreementGames:0,disagreementObservedAfterUpdate:true,
+ const snapshot={completedGames:51,gamesSinceLiveUpdate:18,consecutiveAgreementGames:0,
+  disagreementObservedAfterUpdate:true,lastDisagreementCompletedGame:42,
   model:{examples:2},lastDevelopmentModelExamples:1};
  const p=check(snapshot,{includeCurrentGame:true,hadDisagreement:true});
  assert.equal(p.gamesSinceActivation,19);assert.equal(p.remaining20,1);
@@ -13,15 +14,22 @@ test('preview counts a game but does not change the server snapshot',()=>{
  assert.equal(p.hasUnactivatedWeights,true);
  assert.equal(snapshot.gamesSinceLiveUpdate,18);
 });
-test('10 clean games after disagreement trigger only at tenth',()=>{
- const s={gamesSinceLiveUpdate:9,consecutiveAgreementGames:8,disagreementObservedAfterUpdate:true};
+test('10 clean games and at least 11-game old discrepancy are both required',()=>{
+ const s={completedGames:9,gamesSinceLiveUpdate:9,
+  consecutiveAgreementGames:8,disagreementObservedAfterUpdate:true,lastDisagreementCompletedGame:1};
  const ninth=check(s,{includeCurrentGame:true});
- assert.equal(ninth.remainingClean,1);
+ assert.equal(ninth.remainingClean,2);
  assert.equal(ninth.eligible,false);
- const tenth=check({...s,consecutiveAgreementGames:9},{includeCurrentGame:true});
- assert.equal(tenth.remainingClean,0);
- assert.equal(tenth.eligible,true);
- const interrupted=check({...s,consecutiveAgreementGames:9},{includeCurrentGame:true,hadDisagreement:true});
+ const tenth=check({...s,completedGames:10,gamesSinceLiveUpdate:10,
+  consecutiveAgreementGames:9},{includeCurrentGame:true});
+ assert.equal(tenth.remainingClean,1);
+ assert.equal(tenth.eligible,false);
+ const eleventh=check({...s,completedGames:11,gamesSinceLiveUpdate:11,
+  consecutiveAgreementGames:10},{includeCurrentGame:true});
+ assert.equal(eleventh.remainingClean,0);
+ assert.equal(eleventh.eligible,true);
+ const interrupted=check({...s,completedGames:10,gamesSinceLiveUpdate:10,
+  consecutiveAgreementGames:9},{includeCurrentGame:true,hadDisagreement:true});
  assert.equal(interrupted.remainingClean,10);
  assert.equal(interrupted.eligible,false);
 });
@@ -32,6 +40,14 @@ test('clean gate unavailable before a disagreement; count still advances',()=>{
  assert.equal(p.remaining20,13);
  const disputed=check({}, {includeCurrentGame:true,hadDisagreement:true});
  assert.equal(disputed.remainingClean,10);
+});
+test('missing earlier disagreement index cannot imply an early-activation date',()=>{
+ const state={completedGames:14,gamesSinceLiveUpdate:14,consecutiveAgreementGames:10,
+  disagreementObservedAfterUpdate:true};
+ const p=check(state);
+ assert.equal(p.remainingClean,null);
+ assert.equal(p.remaining20,6);
+ assert.equal(p.eligible,false);
 });
 test('threshold does not activate weights unless new confirmed examples exist',()=>{
  const p=check({gamesSinceLiveUpdate:19,model:{examples:3},lastDevelopmentModelExamples:3},
