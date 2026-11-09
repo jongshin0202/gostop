@@ -1,52 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recordCompletedTrainingGame,recordSuccessfulLiveUpdate} from '../training-learning/update-cadence.mjs';
+import {recordCompletedTrainingGame,recordSuccessfulLiveUpdate,
+ recordSuccessfulDevelopmentModelUpdate} from '../training-learning/update-cadence.mjs';
 const add=(state,disagreement=false)=>recordCompletedTrainingGame(state,disagreement);
-
-test('ten completed games qualifies even without any disagreement',()=>{
- let state={};
- for(let n=1;n<=9;n++){state=add(state);assert.equal(state.eligibilityReason,null);}
- state=add(state);
- assert.equal(state.eligibilityReason,'10-completed-games');
- assert.equal(state.completedGames,10);
+test('20 completed games qualify without a disagreement',()=>{
+ let s={};
+ for(let n=1;n<20;n++){s=add(s);assert.equal(s.eligibilityReason,null);}
+ s=add(s);
+ assert.equal(s.completedGames,20);
+ assert.equal(s.eligibilityReason,'20-completed-games');
 });
-
-test('five consecutive clean games require an earlier disagreement after activation',()=>{
- let state=add({},true);
- for(let n=1;n<=4;n++){state=add(state,false);assert.equal(state.eligibilityReason,null);}
- state=add(state,false);
- assert.equal(state.consecutiveAgreementGames,5);
- assert.equal(state.eligibilityReason,'5-agreement-games-after-disagreement');
- assert.equal(state.completedGames,6);
+test('10 clean games also require a differing game at least 11 games earlier',()=>{
+ let s=add({},true);
+ assert.equal(s.lastDisagreementCompletedGame,1);
+ for(let n=1;n<=10;n++){s=add(s);assert.equal(s.eligibilityReason,null);}
+ assert.equal(s.completedGames,11);
+ assert.equal(s.consecutiveAgreementGames,10);
+ s=add(s);
+ assert.equal(s.completedGames,12);
+ assert.equal(s.eligibilityReason,'10-agreement-games-after-disagreement');
 });
-
-test('a subsequent disagreement restarts the five-clean-game early gate',()=>{
- let state=add({},true);
- for(let i=0;i<3;i++)state=add(state,false);
- state=add(state,true);
- assert.equal(state.consecutiveAgreementGames,0);
- for(let i=0;i<4;i++){state=add(state,false);assert.equal(state.eligibilityReason,null);}
- state=add(state,false);
- assert.equal(state.completedGames,10);
- assert.equal(state.eligibilityReason,'10-completed-games');
+test('a subsequent disagreement resets the full 10-clean-game streak',()=>{
+ let s=add({},true);
+ for(let n=0;n<8;n++)s=add(s);
+ s=add(s,true);
+ assert.equal(s.consecutiveAgreementGames,0);
+ for(let n=0;n<9;n++){s=add(s);assert.equal(s.eligibilityReason,null);}
+ s=add(s);
+ assert.equal(s.eligibilityReason,'20-completed-games');
 });
-
-test('successful development weight update resets cadence window, not lifetime games',()=>{
- let state=add({},true);
- for(let i=0;i<5;i++)state=add(state,false);
- state=recordSuccessfulLiveUpdate(state,1);
- assert.equal(state.completedGames,6);
- assert.equal(state.gamesSinceLiveUpdate,0);
- assert.equal(state.disagreementObservedAfterUpdate,false);
- assert.equal(state.eligibilityReason,null);
- for(let i=0;i<9;i++)state=add(state,false);
- assert.equal(state.eligibilityReason,null);
- state=add(state,false);
- assert.equal(state.eligibilityReason,'10-completed-games');
+test('successful dev-only weight activation resets window, not lifetime count',()=>{
+ let s=add({},true);
+ for(let n=0;n<11;n++)s=add(s);
+ s=recordSuccessfulDevelopmentModelUpdate(s,1);
+ assert.equal(s.completedGames,12);
+ assert.equal(s.lastDisagreementCompletedGame,null);
+ assert.equal(s.gamesSinceLiveUpdate,0);
+ assert.equal(s.disagreementObservedAfterUpdate,false);
+ for(let n=0;n<19;n++){s=add(s);assert.equal(s.eligibilityReason,null);}
+ s=add(s);
+ assert.equal(s.eligibilityReason,'20-completed-games');
 });
-
-test('missing feedback and invalid model publication fail closed',()=>{
- assert.throws(()=>add({},'no'),/boolean/);
+test('legacy state without a recorded discrepancy age never activates the early gate',()=>{
+ let s={completedGames:9,gamesSinceLiveUpdate:9,consecutiveAgreementGames:9,
+  disagreementObservedAfterUpdate:true};
+ s=add(s);
+ assert.equal(s.consecutiveAgreementGames,10);
+ assert.equal(s.eligibilityReason,null);
+ assert.equal(s.lastDisagreementCompletedGame,null);
+});
+test('invalid feedback and premature update fail closed',()=>{
+ assert.throws(()=>add({},'not-boolean'),/boolean/);
  assert.throws(()=>recordSuccessfulLiveUpdate({},1),/No validated/);
- assert.throws(()=>recordSuccessfulLiveUpdate({eligibilityReason:'10-completed-games'},0),/Invalid model/);
+ assert.throws(()=>recordSuccessfulDevelopmentModelUpdate({},1),/No validated/);
+ assert.throws(()=>recordSuccessfulDevelopmentModelUpdate({eligibilityReason:'20-completed-games'},0),/Invalid/);
 });

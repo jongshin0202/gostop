@@ -7,18 +7,27 @@ export function recordCompletedTrainingGame(previous={},hadDisagreement=false){
   const completedGames=count(previous.completedGames)+1;
   const consecutiveAgreementGames=hadDisagreement?0:count(previous.consecutiveAgreementGames)+1;
   const disagreementObservedAfterUpdate=Boolean(previous.disagreementObservedAfterUpdate)||hadDisagreement;
-  const eligibilityReason=gamesSinceLiveUpdate>=10?'10-completed-games':
-    disagreementObservedAfterUpdate&&consecutiveAgreementGames>=5?
-      '5-agreement-games-after-disagreement':null;
+  // The original expert requirement is conjunctive: 10 consecutive clean
+  // completed games AND a prior differing game at least 11 games earlier.
+  // Legacy summaries without a recorded difference index fail closed on
+  // the early gate. The 20-completed-game path remains unaffected.
+  const lastDisagreementCompletedGame=hadDisagreement?completedGames:
+    (Number.isSafeInteger(previous.lastDisagreementCompletedGame)&&previous.lastDisagreementCompletedGame>0
+      ?previous.lastDisagreementCompletedGame:null);
+  const discrepancyOldEnough=lastDisagreementCompletedGame!==null&&
+    completedGames-lastDisagreementCompletedGame>=11;
+  const eligibilityReason=gamesSinceLiveUpdate>=20?'20-completed-games':
+    disagreementObservedAfterUpdate&&consecutiveAgreementGames>=10&&discrepancyOldEnough?
+      '10-agreement-games-after-disagreement':null;
   return {...previous,completedGames,gamesSinceLiveUpdate,consecutiveAgreementGames,
-    disagreementObservedAfterUpdate,eligibilityReason};
+    disagreementObservedAfterUpdate,lastDisagreementCompletedGame,eligibilityReason};
 }
 export function recordSuccessfulLiveUpdate(previous={},modelVersion){
   if(!Number.isSafeInteger(modelVersion)||modelVersion<1)throw new TypeError('Invalid model version');
   if(!previous.eligibilityReason)throw new Error('No validated update trigger');
   return {...previous,liveModelVersion:modelVersion,lastLiveUpdateAt:new Date().toISOString(),
     lastLiveUpdateAtGame:count(previous.completedGames),gamesSinceLiveUpdate:0,
-    consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false,eligibilityReason:null};
+    consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false,lastDisagreementCompletedGame:null,eligibilityReason:null};
 }
 
 /**
@@ -31,5 +40,5 @@ export function recordSuccessfulDevelopmentModelUpdate(previous={},version){
   if(!previous.eligibilityReason)throw new Error('No validated update trigger');
   return {...previous,developmentModelVersion:version,lastDevelopmentModelUpdateAt:new Date().toISOString(),
     lastDevelopmentModelUpdateAtGame:count(previous.completedGames),gamesSinceLiveUpdate:0,
-    consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false,eligibilityReason:null};
+    consecutiveAgreementGames:0,disagreementObservedAfterUpdate:false,lastDisagreementCompletedGame:null,eligibilityReason:null};
 }

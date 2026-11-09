@@ -83,7 +83,7 @@ const rankedDevScript='<script src="ranked-client.js?v=20261008-8"></script>';
 if(!html.includes(rankedDevScript))throw new Error('Missing ranked-client script for isolated Friendly invite patch');
 html=html.replace(rankedDevScript,
  '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="dev-competitive-join-proof.js?v=20261102-safe-1"></script>\n  <script src="ranked-client.js?v=20261102-invite-lifecycle-1"></script>');
-const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261107-cadence-1"></script>\n  <script src="training-learning-feedback.js?v=20261107-disagreement-1"></script>';
+const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261108-20-10-1"></script>\n  <script src="training-learning-feedback.js?v=20261108-20-10-1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>',
   '<script src="dev-competitive-solo-peer-sync.js?v=20261101-peer-1"></script>\n  <script src="app.js?v=20261107-training-ai-1"></script>\n  '+feedbackScripts);
