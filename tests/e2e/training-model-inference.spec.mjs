@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 const weights=()=>{const w=Array(16).fill(0);w[11]=2;return w;};
-async function fixture(page,{active=true,bright=false,delayed=false}={}){
+async function fixture(page,{active=true,bright=false,delayed=false,legacy=false}={}){
  await page.goto('/',{waitUntil:'domcontentloaded'});
  await page.setContent([
  '<!doctype html><html lang="en"><body>',
@@ -20,8 +20,12 @@ async function fixture(page,{active=true,bright=false,delayed=false}={}){
  '<dialog id="gukjinDialog"></dialog><dialog id="decisionDialog"></dialog>',
  '<dialog id="resultDialog"></dialog></body></html>'
  ].join(''));
- const state={ok:true,developmentModelVersion:4,
-  activeCardModel:active?{version:4,examples:5,weights:weights()}:null};
+ const state=legacy?{ok:true,developmentModelVersion:4,
+  lastDevelopmentModelUpdateAt:'2026-11-08T22:00:00.000Z',
+  lastDevelopmentModelExamples:5,
+  model:{examples:active?5:6,weights:weights()}}:
+  {ok:true,developmentModelVersion:4,
+   activeCardModel:active?{version:4,examples:5,weights:weights()}:null};
  await page.evaluate(({state,delayed})=>{
   globalThis.GoStopEngine={masterDeck:[
    {id:'m2-1',month:2,type:'animal',flags:['godori']},
@@ -69,6 +73,18 @@ test('unactivated model never overrides native recommendation',async({page})=>{
  const s=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
  expect(s.modelPriority).toBe(false);
  expect(s.hand).toBe('m5-3');expect(s.floor).toBe('m5-1');
+});
+test('legacy development Worker can only use previously activated, unmodified card weights',async({page})=>{
+ await fixture(page,{legacy:true});
+ const s=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
+ expect(s.modelPriority).toBe(true);
+ expect(s.hand).toBe('m2-3');
+});
+test('legacy Worker unactivated card examples cannot alter recommendations',async({page})=>{
+ await fixture(page,{legacy:true,active:false});
+ const s=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
+ expect(s.modelPriority).toBe(false);
+ expect(s.hand).toBe('m5-3');
 });
 test('Bright capture remains protected despite learned birdie preference',async({page})=>{
  await fixture(page,{bright:true});
