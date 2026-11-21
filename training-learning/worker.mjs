@@ -456,7 +456,9 @@ export default {
     const origin=request.headers.get('origin')||'';
     if(!allowed(origin))return fail('ORIGIN_NOT_ALLOWED',403);
     const url=new URL(request.url);
-    const responseHeaders=cors(origin);
+    // Public, non-sensitive version marker lets the post-deploy smoke test
+    // prove the running *development* Worker has the corrected activation gate.
+    const responseHeaders={...cors(origin),'x-gostop-training-cadence':'20-10-11'};
     if(request.method==='OPTIONS'){
       const method=request.headers.get('access-control-request-method');
       const headers=(request.headers.get('access-control-request-headers')||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
