@@ -36,7 +36,9 @@ function fixture(){
 test('learning Worker rejects production origins and unauthenticated requests',async()=>{
  const t=fixture();try{
   assert.equal((await t.request('/api/training/state',{origin:'https://gostoplive.com'})).status,403);
-  assert.equal((await t.request('/api/training/state',{authorization:''})).status,401);
+  const denied=await t.request('/api/training/state',{authorization:''});
+  assert.equal(denied.status,401);
+  assert.equal(denied.headers.get('x-gostop-training-cadence'),'20-10-11');
   t.setEmail('other@example.com');
   assert.equal((await t.request('/api/training/state')).status,401);
  }finally{t.restore();}
