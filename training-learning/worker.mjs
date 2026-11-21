@@ -469,7 +469,9 @@ export default {
     const origin=request.headers.get('origin')||'';
     if(!allowed(origin))return fail('ORIGIN_NOT_ALLOWED',403);
     const url=new URL(request.url);
-    const responseHeaders=cors(origin);
+    // Non-sensitive release marker for the existing development-only deployment smoke.
+    // The November 7 expert rule is 10 completed games or 5 clean games.
+    const responseHeaders={...cors(origin),'x-gostop-training-cadence':'10-5'};
     if(request.method==='OPTIONS'){
       const method=request.headers.get('access-control-request-method');
       const headers=(request.headers.get('access-control-request-headers')||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
