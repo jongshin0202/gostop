@@ -5,6 +5,9 @@ const opts={headers:{Origin:dev},signal:AbortSignal.timeout(12000)};
 const auth=await fetch(endpoint+'/api/training/state',opts);
 if(auth.status!==401||auth.headers.get('access-control-allow-origin')!==dev)
   throw new Error('Unauthenticated development learning API must return 401 with development-only CORS. Got '+auth.status);
+if(auth.headers.get('x-gostop-training-cadence')!=='20-10-11')
+  throw new Error('Development learning Worker has not activated the 20/10/11 cadence release. Got '+auth.headers.get('x-gostop-training-cadence'));
+console.log('PASS live development learning Worker reports the new 20/10/11 model activation policy');
 console.log('PASS training learning storage rejects unauthenticated access');
 const prod=await fetch(endpoint+'/api/training/state',{headers:{Origin:'https://gostoplive.com'},signal:AbortSignal.timeout(12000)});
 if(prod.status!==403||prod.headers.has('access-control-allow-origin'))
