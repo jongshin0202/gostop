@@ -183,6 +183,15 @@ function modelOverride(currentHandId,currentFloorId){
  });
  if(!picked||!hand.querySelector('.hand-card[data-card-id="'+picked.handId+'"]')||
   !floor.querySelector('.floor-card[data-card-id="'+picked.floorId+'"]'))return null;
+ const deferred=safeTwo?.eligible?.({
+  handIds,floorIds,
+  ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  opponentCapturedIds:cardIds('#aiCaptured .captured-mini[data-card-id]'),
+  deck,scorePlayer:globalThis.GoStopEngine?.scorePlayer
+ })||[];
+ if(deferred.some(x=>x.handId===picked.handId&&x.floorIds.includes(picked.floorId))&&
+  !deferred.some(x=>x.handId===currentHandId&&x.floorIds.includes(currentFloorId)))
+  return null;
  const lang=document.documentElement.lang||'en';
  const label=id=>{
   const c=deck.find(v=>v.id===id),el=document.querySelector('[data-card-id="'+id+'"]');
@@ -246,10 +255,11 @@ function sync(){
     shakenOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     familyCaptureOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     saferDiscardOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
+    safeTwoTableOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
     modelOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null);
    lock={handSignature:sig,floorSignature:tableSig,hand:corrective?.handId||recommendation.dataset.cardId,
     floor:corrective?.floorId||recommendedFloor?.dataset.cardId||null,
-    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride&&!corrective.familyPriority&&!corrective.modelPriority),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride,familyPriority:!!corrective?.familyPriority,modelPriority:!!corrective?.modelPriority};
+    title:originalTitle,text:corrective?.text||originalText,ppeokOverride:!!corrective?.stackCardIds,shakenOverride:!!(corrective&&!corrective.stackCardIds&&!corrective.riskOverride&&!corrective.blankOverride&&!corrective.familyPriority&&!corrective.safeTwoPriority&&!corrective.modelPriority),riskOverride:!!corrective?.riskOverride,blankOverride:!!corrective?.blankOverride,familyPriority:!!corrective?.familyPriority,safeTwoPriority:!!corrective?.safeTwoPriority,modelPriority:!!corrective?.modelPriority};
    document.documentElement.classList.add(SCOPE);
   }
  }
@@ -263,7 +273,7 @@ function sync(){
   // Accept that correction into our preserved snapshot instead of writing
   // the old text back and causing two observers to fight indefinitely.
   const corrected=globalThis.GoStopDevTrainingContextCoach?.getStatus?.()?.lastAppliedCopy;
-  if(corrected&&text.textContent===corrected&&!lock.familyPriority&&!lock.blankOverride&&!lock.ppeokOverride&&!lock.shakenOverride&&!lock.riskOverride&&!lock.modelPriority){
+  if(corrected&&text.textContent===corrected&&!lock.familyPriority&&!lock.blankOverride&&!lock.ppeokOverride&&!lock.shakenOverride&&!lock.riskOverride&&!lock.safeTwoPriority&&!lock.modelPriority){
    lock.text=corrected;
   }else{
    text.textContent=lock.text;
@@ -303,6 +313,6 @@ document.addEventListener('click',event=>{
 Object.defineProperty(globalThis,'GoStopTrainingRecommendationDev',{value:Object.freeze({
  getStatus:()=>({active:trainingActive,locked:!!lock,
   hand:lock?.blankOverride?null:lock?.hand||null,floor:lock?.floor||null,
-  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride,familyPriority:!!lock?.familyPriority,modelPriority:!!lock?.modelPriority}), // diagnostic only, not local persistence
+  text:lock?.text||null,ppeokOverride:!!lock?.ppeokOverride,riskOverride:!!lock?.riskOverride,bombBlankOverride:!!lock?.blankOverride,familyPriority:!!lock?.familyPriority,safeTwoPriority:!!lock?.safeTwoPriority,modelPriority:!!lock?.modelPriority}), // diagnostic only, not local persistence
 }),configurable:true});
 })();
