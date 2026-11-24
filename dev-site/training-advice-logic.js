@@ -233,7 +233,7 @@ const COMPARE_COPY={
  en:(first,other,result)=>{
   if(result.alternative.secured&&!result.selected.secured){
    const family=lockedName(result);
-   return family+' is locked in. All four '+family+' cards are accounted for, so the opponent cannot take its table card. Capture the unlocked '+first+' first; '+family+' can wait.';
+   return family+' is locked in: all four '+family+' cards are accounted for, so the opponent cannot take its table card. Take the unlocked capture first; '+family+' can wait.';
   }
   if(result.selected.secured&&result.alternative.secured){
    if(result.preferNow)return 'Both '+first+' and '+other+' are secured. Take '+first+
