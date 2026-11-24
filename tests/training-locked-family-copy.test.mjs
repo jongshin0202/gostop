@@ -22,7 +22,7 @@ test('Rose first: Willow locked, Rose still at risk, nine Singles become ten',()
  const explanation=logic.captureComparisonCopy('Rose Picture onto Rose Single',
   'Willow Picture onto Willow Stripe',c,'en');
  assert.match(explanation,/Willow is locked in/);
- assert.match(explanation,/Capture the unlocked Rose Picture onto Rose Single first/);
+ assert.match(explanation,/Take the unlocked capture first/);
  assert.match(explanation,/Willow can wait/);
  assert.doesNotMatch(explanation,/advances your score more than/);
 });
