@@ -27,7 +27,9 @@ function fakeCloud(initialProgress={}){
             ...(type!=='card'?{recommendedAction:x.recommendedAction,
               playedAction:x.playedAction,context:x.context}:{
               recommendedId:x.recommended.hand+'|'+(x.recommended.target||'-'),
-              playedId:x.played.hand+'|'+(x.played.target||'-')})};
+              playedId:x.played.hand+'|'+(x.played.target||'-'),
+              recommendedMove:x.legalMoves?.find(m=>m.moveId===x.recommended.hand+'|'+(x.recommended.target||'-'))||null,
+              playedMove:x.legalMoves?.find(m=>m.moveId===x.played.hand+'|'+(x.played.target||'-'))||null})};
         });
         return reply(200,{ok:true,gameId,items:rows,
           complete:finished.has(gameId),reviewVersion:'fixture-review-version'});
@@ -135,6 +137,43 @@ async function finishFinalReview(page){
  await dialog.getByRole('button',{name:'Finish'}).click();
  await expect(dialog).toBeHidden({timeout:5000});
 }
+test('legacy M2-10 review shows the real saved card name and target',async({page})=>{
+ const server=await setup(page);
+ const gameId=await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().gameId);
+ server.items.push({
+  gameId,feedbackId:'old-opaque-card-name',choice:'mine',
+  recommended:{hand:'M2-10',target:'m2-2'},
+  played:{hand:'m2-4',target:'m2-2'},
+  legalMoves:[
+   {moveId:'M2-10|m2-2',
+    card:{id:'M2-10',month:2,type:'animal',flags:['godori']},
+    target:{id:'m2-2',month:2,type:'ribbon',ribbonSet:'red',flags:[]}},
+   {moveId:'m2-4|m2-2',
+    card:{id:'m2-4',month:2,type:'pi',flags:[]},
+    target:{id:'m2-2',month:2,type:'ribbon',ribbonSet:'red',flags:[]}}
+  ]
+ });
+ const review=await showFinalReview(page);
+ await expect(review).toContainText('Plum Bird Picture');
+ await expect(review).toContainText('Plum Single');
+ await expect(review).toContainText('Plum Red Stripe');
+ await expect(review).not.toContainText('M2-10');
+ await review.getByRole('button',{name:'Finish'}).click();
+ await expect(review).toBeHidden();
+ expect(server.completedCount()).toBe(1);
+});
+test('legacy review without stored card descriptors still avoids raw M2-10',async({page})=>{
+ const server=await setup(page);
+ const gameId=await page.evaluate(()=>globalThis.GoStopTrainingFeedbackDev.getStatus().gameId);
+ server.items.push({
+  gameId,feedbackId:'legacy-missing-descriptor',choice:'mine',
+  recommended:{hand:'M2-10',target:'m6-2'},
+  played:{hand:'m6-3',target:'m6-2'}
+ });
+ const review=await showFinalReview(page);
+ await expect(review).toContainText('Plum card');
+ await expect(review).not.toContainText('M2-10');
+});
 test('confirmed disagreement syncs to cloud and trains only after game completion',async({page})=>{
   const server=await setup(page);
   await page.locator('#alternate').click();
