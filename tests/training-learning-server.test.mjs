@@ -65,6 +65,33 @@ test('learning server publishes only versioned activated weights, never draft we
   assert.equal(failClosed.activeCardModel,null);
  }finally{t.restore();}
 });
+test('review returns readable card descriptors even for legacy opaque move identifiers',async()=>{
+ const t=fixture();try{
+  const entry={gameId:'legacy-review-card-label',feedbackId:'opaque-feedback-1',
+   choice:'mine',reviewRequired:true,
+   recommended:{hand:'M2-10',target:'m2-2'},
+   played:{hand:'m2-4',target:'m2-2'},
+   legalMoves:[
+    {card:{id:'M2-10',month:2,type:'animal',flags:['godori']},
+     target:{id:'m2-2',month:2,type:'ribbon',ribbonSet:'red'}},
+    {card:{id:'m2-4',month:2,type:'pi',flags:[]},
+     target:{id:'m2-2',month:2,type:'ribbon',ribbonSet:'red'}}
+   ]};
+  assert.equal((await t.request('/api/training/feedback',{method:'POST',body:entry})).status,200);
+  const review=await(await t.request('/api/training/review?gameId='+entry.gameId)).json();
+  assert.equal(review.items.length,1);
+  assert.equal(review.items[0].recommendedId,'M2-10|m2-2');
+  assert.deepEqual(review.items[0].recommendedMove.card,
+   {id:'M2-10',month:2,type:'animal',flags:['godori']});
+  assert.equal(review.items[0].recommendedMove.target.ribbonSet,'red');
+  assert.equal(review.items[0].playedMove.card.type,'pi');
+  assert.equal(review.items[0].legalMoves,undefined,'do not expose every candidate to the review UI');
+  const done=await(await t.request('/api/training/finalize',{method:'POST',
+   body:{gameId:entry.gameId,reviewVersion:review.reviewVersion,
+    keptFeedbackIds:review.items.map(x=>x.id),hadDisagreement:true}})).json();
+  assert.equal(done.ok,true);assert.equal(done.trained,1);
+ }finally{t.restore();}
+});
 test('expert confirmed feedback persists across sessions and trains only at completion',async()=>{
  const t=fixture();try{
   const initial=await(await t.request('/api/training/state')).json();
