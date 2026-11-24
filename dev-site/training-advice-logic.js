@@ -219,8 +219,11 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
   return {...a,bonus,pi,secured,month:monthOf(a.h)};
  };
  const selected=details(rec);
- const alternative=others.map(details)
-  .sort((a,b)=>b.bonus-a.bonus||b.pi-a.pi||a.h.localeCompare(b.h))[0];
+ const alternatives=others.map(details)
+  .sort((a,b)=>b.bonus-a.bonus||b.pi-a.pi||a.h.localeCompare(b.h));
+ // A fully secured alternative is more relevant to the user's timing choice
+ // than a generic comparison of immediate points.
+ const alternative=(!selected.secured&&alternatives.find(a=>a.secured))||alternatives[0];
  return {selected,alternative,preferNow:selected.bonus>alternative.bonus||
   (selected.bonus===alternative.bonus&&selected.pi>alternative.pi)};
 }
