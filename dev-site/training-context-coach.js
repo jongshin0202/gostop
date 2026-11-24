@@ -137,8 +137,13 @@ function updateCopy(){
    const moveLabel=(h,f)=>cardName(h)===cardName(f)?cardName(h):cardName(h)+' onto '+cardName(f);
    const more=logic.captureComparisonCopy(
     moveLabel(handId,possibleFloor),moveLabel(other.h,other.f),result,locale());
-   // Appending the same sentence repeatedly would create an observer loop.
-   if(more&&!next.includes(more))next=(next+' '+more).trim();
+   // For secured Willow, keep genuine scoring thresholds (e.g. Rose
+   // reaching 10 Singles) but replace the redundant immediate-score
+   // comparison with the reason Willow can safely wait.
+   if(more&&result.alternative.secured&&!result.selected.secured){
+    next=next.replace(/\s*Take [^.]+ now; it advances your score more than [^.]+\.$/i,'');
+    if(!next.includes(more))next=(next+' '+more).trim();
+   }else if(more&&!next.includes(more))next=(next+' '+more).trim();
   }
  }
  if(next!==source){
