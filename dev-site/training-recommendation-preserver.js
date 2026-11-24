@@ -13,6 +13,7 @@ const hand=$('playerHand'),floor=$('floor');
 const ppeok=globalThis.GoStopDevReservedPpeokPriority;
 const shaken=globalThis.GoStopDevShakenPriority;
 const family=globalThis.GoStopDevTrainingFamilyCapture;
+const safeTwo=globalThis.GoStopDevTrainingSafeTwoTable;
 const modelInference=globalThis.GoStopDevTrainingModelInference;
 if(!panel||!title||!text||!hand||!floor)return;
 const SCOPE='dev-training-recommendation-lock';
@@ -126,6 +127,31 @@ function familyCaptureOverride(currentHandId,currentFloorId){
   return (c&&globalThis.GoStopTrainingLocales?.cardName?.(lang,c))||el?.title||id;
  };
  return {...picked,familyPriority:true,text:(familyCopy[lang]||familyCopy.en)(label(picked.handId),label(picked.floorId))};
+}
+function safeTwoTableOverride(currentHandId,currentFloorId){
+ if(!currentHandId||!currentFloorId||!safeTwo?.select)return null;
+ const deck=globalThis.GoStopEngine?.masterDeck||[];
+ const chosen=safeTwo.select({
+  handIds:cardIds('#playerHand .hand-card[data-card-id]'),
+  floorIds:cardIds('#floor .floor-card[data-card-id]'),
+  ownCapturedIds:cardIds('#playerCaptured .captured-mini[data-card-id]'),
+  opponentCapturedIds:cardIds('#aiCaptured .captured-mini[data-card-id]'),
+  deck,scorePlayer:globalThis.GoStopEngine?.scorePlayer,
+  recommendedHandId:currentHandId,recommendedFloorId:currentFloorId
+ });
+ if(!chosen||!hand.querySelector('.hand-card[data-card-id="'+chosen.handId+'"]')||
+  !floor.querySelector('.floor-card[data-card-id="'+chosen.floorId+'"]'))return null;
+ const lang=document.documentElement.lang||'en';
+ const label=id=>{
+  const card=deck.find(x=>x.id===id);
+  const el=hand.querySelector('[data-card-id="'+id+'"]')||
+   floor.querySelector('[data-card-id="'+id+'"]');
+  return globalThis.GoStopTrainingLocales?.cardName?.(lang,card)||
+   el?.title||el?.querySelector('img')?.alt||id;
+ };
+ const action=lang==='en'?'Play '+label(chosen.handId)+' onto '+
+  label(chosen.floorId)+'. ':label(chosen.handId)+' → '+label(chosen.floorId)+'. ';
+ return {...chosen,safeTwoPriority:true,text:action+safeTwo.explain(chosen.deferredMonth,lang)};
 }
 const modelCopy={
  en:(h,f,v)=>'Play '+h+' onto '+f+'. These legal captures have equivalent protected strategy priority; activated Training model v'+v+' favors this choice from confirmed expert feedback.',
