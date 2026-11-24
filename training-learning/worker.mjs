@@ -62,6 +62,12 @@ function openingChanged(opening){
   opening.selected.some(x=>!opening.suggested.includes(x))
  );
 }
+// All move details were previously validated and observed by the player.
+// Include only the recommended/played public card descriptions for display.
+function reviewMove(entry,id){
+ const move=Array.isArray(entry.legalMoves)?entry.legalMoves.find(m=>m?.moveId===id):null;
+ return move?.card?{card:move.card,target:move.target||null}:null;
+}
 function reviewItems(game={}){
  const items=[];
  const opening=game.openingFeedback;
@@ -72,7 +78,9 @@ function reviewItems(game={}){
  for(const [index,entry] of (game.decisions||[]).entries())items.push({
   id:'card:'+(entry.feedbackId||'legacy-'+index),kind:'card',
   choice:entry.choice||(entry.chosenId?'mine':'unsure'),
-  recommendedId:entry.recommendedId||'',playedId:entry.playedId||''
+  recommendedId:entry.recommendedId||'',playedId:entry.playedId||'',
+  recommendedMove:reviewMove(entry,entry.recommendedId),
+  playedMove:reviewMove(entry,entry.playedId)
  });
  for(const [index,entry] of (game.goStopDecisions||[]).entries())items.push({
   id:'go-stop:'+(entry.feedbackId||'legacy-'+index),kind:'go-stop',

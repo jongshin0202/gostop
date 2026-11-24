@@ -83,21 +83,32 @@ const card=id=>deck.get(id)||null;
 const onTable=()=>[...document.querySelectorAll('#floor [data-card-id]')].map(el=>el.dataset.cardId).filter(Boolean);
 const inHand=()=>[...document.querySelectorAll('#playerHand .hand-card[data-card-id]')].filter(el=>!el.disabled).map(el=>el.dataset.cardId).filter(Boolean);
 const captured=selector=>[...document.querySelectorAll(selector+' [data-card-id]')].map(el=>el.dataset.cardId).filter(Boolean);
-const picture=id=>{
- if(!id)return '—';
- const c=card(id);
- const name=c?globalThis.GoStopTrainingLocales?.cardName?.(document.documentElement.lang,c):null;
- // The judge dialog must remain understandable even when a locale helper or
- // card image is unavailable; never show raw m4-4 / m6-2 identifiers.
+const CARD_MONTH_NAMES=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
+// The review includes only the already-visible card descriptors sent with
+// expert feedback. Saved IDs are machine keys, never user-facing card names.
+const picture=(id,saved=null)=>{
+ if(!id||id==='-')return '—';
+ const trustedSaved=saved&&saved.id===id&&Number.isInteger(saved.month)&&
+  saved.month>=1&&saved.month<=12&&['bright','animal','ribbon','pi'].includes(saved.type)?
+  saved:null;
+ const c=card(id)||trustedSaved;
+ const localized=c?globalThis.GoStopTrainingLocales?.cardName?.(document.documentElement.lang,c):null;
  const node=document.querySelector('[data-card-id="'+id+'"]');
  const visibleName=node?.getAttribute('title')||node?.getAttribute('aria-label')||
   node?.querySelector('img')?.alt||null;
- const months=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
- const type=c?(c.type==='ribbon'?'Stripe':c.type==='bright'?'Bright':
+ const type=c?(c.type==='ribbon'?
+  ({red:'Red',blue:'Blue',grass:'Plain'}[c.ribbonSet]||'')+' Stripe':
+  c.type==='bright'?'Bright':
   c.type==='pi'?(c.flags?.includes('doublePi')?'2x Single':'Single'):
   c.flags?.includes('godori')?'Bird Picture':'Picture'):'';
- const fallback=c?months[c.month-1]+' '+type:null;
- return name||visibleName||fallback||id;
+ const known=c?CARD_MONTH_NAMES[c.month-1]+' '+type:null;
+ // Some legacy feedback used identifiers like M2-10 not present in the
+ // current 48-card deck. When metadata is absent, infer only the month,
+ // never invent the unknown card type or expose the raw internal ID.
+ const legacyMonth=Number(/^m(\d{1,2})-\d+$/i.exec(String(id))?.[1]||0);
+ const readableLegacy=legacyMonth>=1&&legacyMonth<=12?
+  CARD_MONTH_NAMES[legacyMonth-1]+' card':null;
+ return localized||visibleName||known||readableLegacy||'Unknown card';
 };
 const moveId=(h,t)=>h+'|'+(t||'-');
 // The native engine treats a three-card floor stack as ONE automatic target.
@@ -364,8 +375,9 @@ let reviewState=null,removedReviews=new Set(),reviewBusy=false,reviewServerState
 function reviewDetail(entry){
  const text=reviewCopy();
  const cards=id=>String(id||'').split('|').filter(Boolean);
- const move=id=>{const [handId,targetId]=cards(id);
-  return picture(handId)+(targetId&&targetId!=='-'?' → '+picture(targetId):'');};
+ const move=(id,details)=>{const [handId,targetId]=cards(id);
+  return picture(handId,details?.card)+(targetId&&targetId!=='-'?
+   ' → '+picture(targetId,details?.target):'');};
  if(entry.kind==='opening')return [
   text.recommend+': '+(entry.suggested||[]).join(', '),
   text.played+': '+(entry.selected||[]).join(', ')
@@ -374,8 +386,8 @@ function reviewDetail(entry){
   text.recommend+': '+specialActionLabel(entry.recommendedAction,entry.context),
   text.played+': '+specialActionLabel(entry.playedAction,entry.context)
  ];
- return [text.recommend+': '+move(entry.recommendedId),
-  text.played+': '+move(entry.playedId)];
+ return [text.recommend+': '+move(entry.recommendedId,entry.recommendedMove),
+  text.played+': '+move(entry.playedId,entry.playedMove)];
 }
 function reviewJudgment(choice){
  const copy=locale();
