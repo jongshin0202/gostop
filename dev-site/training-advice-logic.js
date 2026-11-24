@@ -211,7 +211,12 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
   const pi=pair.reduce((n,c)=>n+(c.type==='pi'?(c.flags?.includes('doublePi')?2:1):0),0);
   const visible=new Set([...hand,...floor,...humanCaptured,...computerCaptured]
    .filter(id=>monthOf(id)===monthOf(a.h)));
-  return {...a,bonus,pi,secured:visible.size===4};
+  // Locked-in means that all four actual cards in this month are already
+  // visible (in hand, on the table, or captured by either side).
+  // No unknown matching card can remain in the opponent's hand.
+  const family=deck.filter(c=>c.month===monthOf(a.h));
+  const secured=family.length===4&&family.every(c=>visible.has(c.id));
+  return {...a,bonus,pi,secured,month:monthOf(a.h)};
  };
  const selected=details(rec);
  const alternative=others.map(details)
@@ -219,8 +224,14 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
  return {selected,alternative,preferNow:selected.bonus>alternative.bonus||
   (selected.bonus===alternative.bonus&&selected.pi>alternative.pi)};
 }
+const CAPTURE_FAMILIES=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
+const lockedName=r=>CAPTURE_FAMILIES[r.alternative.month-1]||'the other family';
 const COMPARE_COPY={
  en:(first,other,result)=>{
+  if(result.alternative.secured&&!result.selected.secured){
+   const family=lockedName(result);
+   return family+' is locked in. All four '+family+' cards are accounted for, so the opponent cannot take its table card. Capture the unlocked '+first+' first; '+family+' can wait.';
+  }
   if(result.selected.secured&&result.alternative.secured){
    if(result.preferNow)return 'Both '+first+' and '+other+' are secured. Take '+first+
     ' first to build '+(result.selected.pi>result.alternative.pi?'Singles':'points')+
@@ -231,14 +242,26 @@ const COMPARE_COPY={
   if(result.preferNow)return 'Take '+first+' now; it advances your score more than '+other+'.';
   return other+' is also possible, with no demonstrated immediate scoring advantage for '+first+'.';
  },
- ko:(a,b,r)=>r.selected.secured&&r.alternative.secured?
+ ko:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
+  lockedName(r)+' 패는 이미 확보되어 있습니다. 같은 월의 네 장이 모두 공개된 상태라 상대가 바닥의 패를 빼앗아 갈 수 없습니다. 확보되지 않은 '+a+'을 먼저 먹고 '+lockedName(r)+' 패는 나중에 먹으세요.':
+  r.selected.secured&&r.alternative.secured?
   '두 패 모두 확보 가능한 수입니다. '+a+'을 먼저 먹고 '+b+'은 다음에 먹을 수 있습니다.':
   a+'과 '+b+'을 비교하면 '+(r.preferNow?a+'의 즉시 점수 기여가 더 큽니다.':'지금 정보만으로 우위를 단정할 수 없습니다.'),
- es:(a,b,r)=>'También puedes capturar '+b+'. '+(r.preferNow?a+' ofrece más progreso inmediato.':'No hay ventaja de puntuación inmediata demostrada.'),
- fr:(a,b,r)=>b+' est aussi disponible. '+(r.preferNow?a+' fait progresser davantage vos points immédiats.':'Aucun avantage de points immédiats certain.'),
- de:(a,b,r)=>b+' ist ebenfalls möglich. '+(r.preferNow?a+' bringt sofort mehr Punktefortschritt.':'Ein klarer sofortiger Punktevorteil ist nicht belegt.'),
- ja:(a,b,r)=>b+'も取れます。'+(r.preferNow?a+'の方が今すぐ得点につながります。':'今の情報では即時得点の優劣は確定できません。'),
- zh:(a,b,r)=>b+'也能收。'+(r.preferNow?a+'能更快增加分数。':'目前无法确定哪一手立即得分更高。')
+ es:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
+  lockedName(r)+' está asegurada: las cuatro cartas de esa familia son visibles. Captura primero '+a+'; '+lockedName(r)+' puede esperar.':
+  'También puedes capturar '+b+'. '+(r.preferNow?a+' ofrece más progreso inmediato.':'No hay ventaja de puntuación inmediata demostrada.'),
+ fr:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
+  lockedName(r)+' est assurée : les quatre cartes de cette famille sont visibles. Prenez d’abord '+a+' ; '+lockedName(r)+' peut attendre.':
+  b+' est aussi disponible. '+(r.preferNow?a+' fait progresser davantage vos points immédiats.':'Aucun avantage de points immédiats certain.'),
+ de:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
+  lockedName(r)+' ist gesichert: Alle vier Karten dieser Familie sind sichtbar. Fang zuerst '+a+'; '+lockedName(r)+' kann warten.':
+  b+' ist ebenfalls möglich. '+(r.preferNow?a+' bringt sofort mehr Punktefortschritt.':'Ein klarer sofortiger Punktevorteil ist nicht belegt.'),
+ ja:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
+  lockedName(r)+'は確保されています。同じ月の4枚はすべて公開されているので、先に確保されていない'+a+'を取り、'+lockedName(r)+'は後で取りましょう。':
+  b+'も取れます。'+(r.preferNow?a+'の方が今すぐ得点につながります。':'今の情報では即時得点の優劣は確定できません。'),
+ zh:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
+  lockedName(r)+'已经锁定：这一月的四张牌全部可见。先收尚未锁定的'+a+'，'+lockedName(r)+'可以稍后再收。':
+  b+'也能收。'+(r.preferNow?a+'能更快增加分数。':'目前无法确定哪一手立即得分更高。')
 };
 function captureComparisonCopy(firstName,otherName,result,locale='en'){
  if(!result)return null;
