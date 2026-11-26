@@ -222,16 +222,23 @@ function saferDiscardOverride(currentHandId,currentFloorId){
  };
  const ranked=logic.safestDiscard(visible,deck,engine.scorePlayer);
  const best=ranked?.choice,original=logic.discardDanger?.(currentHandId,visible,deck,engine.scorePlayer);
- if(!best||!original||best.cardId===currentHandId||
+ if(!best||!original||!original.evidence||best.cardId===currentHandId||
    best.maximumGain>=original.maximumGain)return null;
  const lang=document.documentElement.lang||'en';
  const label=id=>{
   const card=deck.find(c=>c.id===id),element=hand.querySelector('[data-card-id="'+id+'"]');
+  const month=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'][card?.month-1]||'';
+  const type=card?(card.type==='ribbon'?'Stripe':card.type==='bright'?'Bright':
+   card.type==='pi'?(card.flags?.includes('doublePi')?'2x Single':'Single'):
+   card.flags?.includes('godori')?'Bird Picture':'Picture'):'card';
   return globalThis.GoStopTrainingLocales?.cardName?.(lang,card)||
-   element?.title||element?.querySelector('img')?.alt||id;
+   element?.title||element?.querySelector('img')?.alt||
+   (month?month+' '+type:'matching card');
  };
- return {handId:best.cardId,floorId:null,riskOverride:true,
-  text:logic.riskyDiscardCopy(label(best.cardId),label(currentHandId),original,lang)};
+ const copy=logic.riskyDiscardCopy(label(best.cardId),label(currentHandId),original,
+  lang,label(original.evidence.matchingId));
+ if(!copy)return null;
+ return {handId:best.cardId,floorId:null,riskOverride:true,text:copy};
 }
 
 function reset(){

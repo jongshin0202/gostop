@@ -114,24 +114,44 @@ function bombBlankText(locale='en'){return BOMB_BLANK_COPY[locale]||BOMB_BLANK_C
 // never a claim about what is in the opponent's concealed hand.
 function discardDanger(cardId,visible={},deck=[],scorePlayer=null){
  const candidate=deck.find(c=>c.id===cardId);
- if(!candidate||typeof scorePlayer!=='function')return {cardId,maximumGain:0,reachable:false};
- const publicIds=new Set([
-  ...(visible.hand||[]),...(visible.floor||[]),
-  ...(visible.humanCaptured||[]),...(visible.computerCaptured||[])
- ]);
+ const empty={cardId,maximumGain:0,reachable:false,critical:false,bonus:null,evidence:null};
+ if(!candidate||typeof scorePlayer!=='function')return empty;
+ const publicIds=new Set([...(visible.hand||[]),...(visible.floor||[]),
+  ...(visible.humanCaptured||[]),...(visible.computerCaptured||[])]);
  const possible=deck.filter(c=>c.month===candidate.month&&!publicIds.has(c.id));
  const caught=cardsFor(visible.computerCaptured||[],deck);
- if(!possible.length)return {cardId,maximumGain:0,reachable:false};
- const maxScore=cards=>Math.max(...['animal','pi'].map(gukjinMode=>{
-  const value=scorePlayer({captured:cards,gukjinMode});
-  return Number.isFinite(value?.total)?value.total:0;
- }));
- const before=maxScore(caught);
- let maximumGain=0;
+ if(!possible.length)return empty;
+ // The opponent's Gukjin conversion is unknown. Compare BOTH valid modes
+ // against its best current mode, rather than inventing new score points.
+ const scored=cards=>['animal','pi'].map(gukjinMode=>{
+  const raw=scorePlayer({captured:cards,gukjinMode});
+  if(!raw||!['total','piCount','animals','ribbons','bright',
+   'piPts','animalPts','ribbonPts','brightPts'].every(k=>Number.isFinite(raw[k])))
+   return null;
+  return {...raw,gukjinMode};
+ }).filter(Boolean).sort((a,b)=>b.total-a.total)[0]||null;
+ const before=scored(caught);
+ if(!before)return empty;
+ const categories=[
+  ['singles','piPts','piCount'],['pictures','animalPts','animals'],
+  ['stripes','ribbonPts','ribbons'],['brights','brightPts','bright']
+ ];
+ let maximumGain=0,evidence=null;
  for(const matching of possible){
-  const after=maxScore([...caught,candidate,matching]);
-  maximumGain=Math.max(maximumGain,after-before);
+  const after=scored([...caught,candidate,matching]);
+  if(!after)continue;
+  const gain=Math.max(0,after.total-before.total);
+  if(gain<=maximumGain)continue;
+  maximumGain=gain;
+  const [category,pointKey,countKey]=categories.find(([,pts])=>
+   after[pts]>before[pts])||['other','total','total'];
+  evidence={matchingId:matching.id,category,afterCount:after[countKey],
+   beforeCount:before[countKey],pointsGained:gain,
+   opponentScoringMode:after.gukjinMode};
  }
+ // A warning requires a reproducible scoring path: one concrete possible
+ // matching card and a positive difference with the real game's scorer.
+ if(!evidence||maximumGain<=0)return {...empty,reachable:true};
  const blue=candidate.ribbonSet==='blue'&&caught.filter(c=>c.ribbonSet==='blue').length>=2;
  const red=candidate.ribbonSet==='red'&&caught.filter(c=>c.ribbonSet==='red').length>=2;
  const grass=candidate.ribbonSet==='grass'&&caught.filter(c=>c.ribbonSet==='grass').length>=2;
@@ -140,7 +160,8 @@ function discardDanger(cardId,visible={},deck=[],scorePlayer=null){
  const bright=candidate.type==='bright'&&caught.filter(c=>c.type==='bright').length>=2;
  return {cardId,maximumGain,reachable:true,
   critical:blue||red||grass||birds||bright||maximumGain>=3,
-  bonus:blue?'blue':red?'red':grass?'grass':birds?'godori':bright?'bright':null};
+  bonus:blue?'blue':red?'red':grass?'grass':birds?'godori':bright?'bright':null,
+  evidence};
 }
 function safestDiscard(visible={},deck=[],scorePlayer=null){
  const hand=unique(visible.hand);
@@ -185,9 +206,38 @@ const DANGER_COPY={
   godori:'五鸟的5分',bright:'三张光牌',other:n=>n+'分',
   explanation:(a,b,c)=>'建议改弃'+a+'。弃'+b+'可能让对手获得'+c+'。'}
 };
-function riskyDiscardCopy(chosenName,rejectedName,risk={},locale='en'){
+// Never tell an expert that the opponent will gain "1 immediate points".
+ // Explain the conditional card and real threshold, or omit the warning.
+const RISK_LABELS={
+ en:{singles:'effective Singles',pictures:'Pictures',stripes:'Stripes',brights:'Brights',
+  format:(a,b,m,reason)=>'Discard '+a+' instead. If the computer has '+m+
+   ', capturing '+b+' would reach '+reason+'.'},
+ ko:{singles:'피',pictures:'열끗',stripes:'띠',brights:'광',
+  format:(a,b,m,r)=>a+'을 버리세요. 상대가 '+m+'을 가지고 있다면 '+b+'을 먹어 '+r+'에 도달할 수 있습니다.'},
+ es:{singles:'cartas simples efectivas',pictures:'imágenes',stripes:'cintas',brights:'brillantes',
+  format:(a,b,m,r)=>'Descarta '+a+'. Si el rival tiene '+m+', capturar '+b+' alcanzaría '+r+'.'},
+ fr:{singles:'cartes simples effectives',pictures:'images',stripes:'rubans',brights:'lumières',
+  format:(a,b,m,r)=>'Défaussez '+a+'. Si le rival détient '+m+', capturer '+b+' atteindrait '+r+'.'},
+ de:{singles:'wirksame Einzelkarten',pictures:'Bildkarten',stripes:'Bänder',brights:'Lichtkarten',
+  format:(a,b,m,r)=>'Wirf '+a+' ab. Falls der Gegner '+m+' hält, könnte das Fangen von '+b+' '+r+' erreichen.'},
+ ja:{singles:'カス札',pictures:'タネ札',stripes:'短冊',brights:'光札',
+  format:(a,b,m,r)=>a+'を捨てましょう。相手が'+m+'を持っていれば、'+b+'を取って'+r+'に到達できます。'},
+ zh:{singles:'散牌',pictures:'图牌',stripes:'短册',brights:'光牌',
+  format:(a,b,m,r)=>'改弃'+a+'。如果对手持有'+m+'，收取'+b+'后可能达到'+r+'。'}
+};
+function riskyDiscardCopy(chosenName,rejectedName,risk={},locale='en',matchingName=''){
+ const e=risk?.evidence;
+ if(!e||!Number.isFinite(risk.maximumGain)||risk.maximumGain<=0||
+  !Number.isFinite(e.afterCount)||!e.category)return null;
  const t=DANGER_COPY[locale]||DANGER_COPY.en;
- return t.explanation(chosenName,rejectedName,t[risk.bonus]||t.other(risk.maximumGain));
+ const local=RISK_LABELS[locale]||RISK_LABELS.en;
+ const points=risk.maximumGain===1?'1 point':risk.maximumGain+' points';
+ const reason=t[risk.bonus]||
+  (e.category==='other'?null:e.afterCount+' '+(local[e.category]||e.category)+
+   (locale==='en'?' for '+points:' ('+points+')'));
+ if(!reason)return null;
+ const source=matchingName||(locale==='en'?'a matching card':rejectedName);
+ return local.format(chosenName,rejectedName,source,reason);
 }
 // A second legal capture deserves a comparison, not a generic label.
 function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[]},
