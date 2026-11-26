@@ -243,8 +243,12 @@ const COMPARE_COPY={
    const family=lockedName(r);
    return family+' is locked in: all four '+family+' cards are accounted for, so the opponent cannot take its table card. Take the unlocked capture first; '+family+' can wait.';
   }
-  if(r.selected.secured&&r.alternative.secured)
-   return 'Both captures are secured and can be taken later.';
+  if(r.selected.secured&&r.alternative.secured){
+   if(r.preferNow)return 'Both '+first+' and '+other+' are secured. Take '+first+
+    ' first to build '+(r.selected.pi>r.alternative.pi?'Singles':'points')+
+    ' sooner; '+other+' remains available.';
+   return 'Both '+first+' and '+other+' are secured. Either capture can wait.';
+  }
   // The native recommendation already includes any real scoring milestone.
   // Generic "no scoring advantage" and "more points" phrases add nothing.
   return '';
