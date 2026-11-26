@@ -39,7 +39,16 @@ const removedReasons=[
  /\s*Jouez la carte de main de plus grande valeur\./g,
  /\s*Spiele die höherwertige Handkarte\./g,
  /\s*価値の高い手札を先に使います。/g,
- /\s*优先打出价值更高的手牌。/g
+ /\s*优先打出价值更高的手牌。/g,
+ // Remove meaningless unquantified scoring comparisons in all Training text.
+ /\s*[^.!?]*no (?:demonstrated |clear |meaningful |immediate )*(?:immediate )?scoring advantage[^.!?]*[.!?]/gi,
+ /\s*Take [^.]+ now; it advances your score more than [^.]+\./gi,
+ /\s*[^.!?]*No hay ventaja de puntuación inmediata[^.!?]*\./gi,
+ /\s*[^.!?]*Aucun avantage de points immédiats[^.!?]*\./gi,
+ /\s*[^.!?]*Punktevorteil ist nicht belegt[^.!?]*\./gi,
+ /\s*지금 정보만으로 우위를 단정할 수 없습니다\./g,
+ /\s*今の情報では即時得点の優劣は確定できません。/g,
+ /\s*目前无法确定哪一手立即得分更高。/g
 ];
 let drawPanel=null;
 function ensureDrawPanel(){
@@ -96,14 +105,14 @@ function updateCopy(){
  const v=visible(),floorMatch=!!current&&v.floor.some(id=>logic.monthOf(id)===current.month);
  // The dev recommendation guard can replace a dangerous discard. Preserve
  // that safer selected card and its explanatory reason across render cycles.
- if((rec.riskOverride||rec.bombBlankOverride||rec.familyPriority)&&rec.text)next=rec.text;
+ if((rec.riskOverride||rec.bombBlankOverride||rec.familyPriority||rec.safeTwoPriority)&&rec.text)next=rec.text;
  const normalMove=/^(Recommended Move|추천 수|Jugada recomendada|Coup conseillé|Empfohlener Zug|おすすめの一手|推荐出牌)$/i.test(title.textContent.trim());
  // Count all same-family matches visible on the table, including reserved
  // captures that the native strategic scorer may temporarily deprioritize.
  const captureOptions=logic.captureOptions?.(v)||[];
  const multipleCaptures=captureOptions.length>1;
  const forced=logic.onlyCaptureOption?.(v);
- if(normalMove&&multipleCaptures&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority){
+ if(normalMove&&multipleCaptures&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&!rec.safeTwoPriority){
   for(const re of [
    /\s*This is the only available capture\./gi,
    /\s*This is the only card in your hand that can capture a card from the table\./gi,
@@ -116,20 +125,20 @@ function updateCopy(){
   ])next=next.replace(re,'');
   next=next.trim();
  }
- if(!rec.bombBlankOverride&&!rec.familyPriority&&normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
+ if(!rec.bombBlankOverride&&!rec.familyPriority&&!rec.safeTwoPriority&&normalMove&&forced&&handId===forced.handId&&(!rec.floor||rec.floor===forced.floorId)){
   // When the expert has exactly one possible capture, the reason is the
   // absence of an alternative, not a speculative Stripe-set strategy.
   next=logic.onlyCaptureText(forced.handId,forced.floorId,locale(),
    cardName(forced.handId),cardName(forced.floorId));
  }
 
- if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority){
+ if(handId&&!floorMatch&&rec.floor==null&&normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&!rec.safeTwoPriority){
   const action=logic.discardText(handId,v,deck,locale(),cardName(handId));
   if(action)next=action;
  }
  const matchingHandChoices=captureOptions.filter(c=>c.handId===handId);
  const possibleFloor=rec.floor||(matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
- if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&handId&&possibleFloor&&floorMatch&&
+ if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&!rec.safeTwoPriority&&handId&&possibleFloor&&floorMatch&&
     logic.captureComparison&&logic.captureComparisonCopy){
   const result=logic.captureComparison(v,handId,possibleFloor,deck,globalThis.GoStopEngine?.scorePlayer);
   if(result){

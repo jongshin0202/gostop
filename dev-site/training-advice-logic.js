@@ -205,6 +205,10 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
  const score=cards=>Math.max(...['animal','pi'].map(gukjinMode=>
   scorePlayer({captured:cards,gukjinMode})?.total||0));
  const before=score(captured);
+ const deferred=globalThis.GoStopDevTrainingSafeTwoTable?.eligible?.({
+  handIds:hand,floorIds:floor,ownCapturedIds:humanCaptured,
+  opponentCapturedIds:computerCaptured,deck,scorePlayer
+ })||[];
  const details=a=>{
   const pair=[byId.get(a.h),byId.get(a.f)].filter(Boolean);
   const bonus=score([...captured,...pair])-before;
@@ -216,55 +220,99 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
   // No unknown matching card can remain in the opponent's hand.
   const family=deck.filter(c=>c.month===monthOf(a.h));
   const secured=family.length===4&&family.every(c=>visible.has(c.id));
-  return {...a,bonus,pi,secured,month:monthOf(a.h)};
+  const safeToWait=deferred.some(x=>x.handId===a.h&&x.floorIds.includes(a.f));
+  // A bird capture is strategically distinguishable only when no opponent
+  // has already captured one of the three required Godori bird cards.
+  const birdieOpportunity=!!byId.get(a.f)?.flags?.includes('godori')&&
+   !computerCaptured.some(id=>byId.get(id)?.flags?.includes('godori'));
+  return {...a,bonus,pi,secured,safeToWait,birdieOpportunity,month:monthOf(a.h)};
  };
  const selected=details(rec);
  const alternatives=others.map(details)
   .sort((a,b)=>b.bonus-a.bonus||b.pi-a.pi||a.h.localeCompare(b.h));
  // A fully secured alternative is more relevant to the user's timing choice
  // than a generic comparison of immediate points.
- const alternative=(!selected.secured&&alternatives.find(a=>a.secured))||alternatives[0];
+ const alternative=(!selected.secured&&alternatives.find(a=>a.secured))||
+  (!selected.safeToWait&&alternatives.find(a=>a.safeToWait))||alternatives[0];
  return {selected,alternative,preferNow:selected.bonus>alternative.bonus||
   (selected.bonus===alternative.bonus&&selected.pi>alternative.pi)};
 }
 const CAPTURE_FAMILIES=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
 const lockedName=r=>CAPTURE_FAMILIES[r.alternative.month-1]||'the other family';
 const COMPARE_COPY={
- en:(first,other,result)=>{
-  if(result.alternative.secured&&!result.selected.secured){
-   const family=lockedName(result);
+ en:(first,other,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'en')||'';
+  if(r.alternative.secured&&!r.selected.secured){
+   const family=lockedName(r);
    return family+' is locked in: all four '+family+' cards are accounted for, so the opponent cannot take its table card. Take the unlocked capture first; '+family+' can wait.';
   }
-  if(result.selected.secured&&result.alternative.secured){
-   if(result.preferNow)return 'Both '+first+' and '+other+' are secured. Take '+first+
-    ' first to build '+(result.selected.pi>result.alternative.pi?'Singles':'points')+
+  if(r.selected.secured&&r.alternative.secured){
+   if(r.preferNow)return 'Both '+first+' and '+other+' are secured. Take '+first+
+    ' first to build '+(r.selected.pi>r.alternative.pi?'Singles':'points')+
     ' sooner; '+other+' remains available.';
-   return 'Both '+first+' and '+other+' are secured. '+other+
-    ' remains available; their immediate scoring value is similar.';
+   return 'Both '+first+' and '+other+' are secured. Either capture can wait.';
   }
-  if(result.preferNow)return 'Take '+first+' now; it advances your score more than '+other+'.';
-  return other+' is also possible, with no demonstrated immediate scoring advantage for '+first+'.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)
+   return 'Capture the Bird Picture to preserve a possible 5-BIRDIES set; '+other+' can wait.';
+  // The native recommendation already includes any real scoring milestone.
+  // Generic "no scoring advantage" and "more points" phrases add nothing.
+  return '';
  },
- ko:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
-  lockedName(r)+' 패는 이미 확보되어 있습니다. 같은 월의 네 장이 모두 공개된 상태라 상대가 바닥의 패를 빼앗아 갈 수 없습니다. 확보되지 않은 '+a+'을 먼저 먹고 '+lockedName(r)+' 패는 나중에 먹으세요.':
-  r.selected.secured&&r.alternative.secured?
-  '두 패 모두 확보 가능한 수입니다. '+a+'을 먼저 먹고 '+b+'은 다음에 먹을 수 있습니다.':
-  a+'과 '+b+'을 비교하면 '+(r.preferNow?a+'의 즉시 점수 기여가 더 큽니다.':'지금 정보만으로 우위를 단정할 수 없습니다.'),
- es:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
-  lockedName(r)+' está asegurada: las cuatro cartas de esa familia son visibles. Captura primero '+a+'; '+lockedName(r)+' puede esperar.':
-  'También puedes capturar '+b+'. '+(r.preferNow?a+' ofrece más progreso inmediato.':'No hay ventaja de puntuación inmediata demostrada.'),
- fr:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
-  lockedName(r)+' est assurée : les quatre cartes de cette famille sont visibles. Prenez d’abord '+a+' ; '+lockedName(r)+' peut attendre.':
-  b+' est aussi disponible. '+(r.preferNow?a+' fait progresser davantage vos points immédiats.':'Aucun avantage de points immédiats certain.'),
- de:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
-  lockedName(r)+' ist gesichert: Alle vier Karten dieser Familie sind sichtbar. Fang zuerst '+a+'; '+lockedName(r)+' kann warten.':
-  b+' ist ebenfalls möglich. '+(r.preferNow?a+' bringt sofort mehr Punktefortschritt.':'Ein klarer sofortiger Punktevorteil ist nicht belegt.'),
- ja:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
-  lockedName(r)+'は確保されています。同じ月の4枚はすべて公開されているので、先に確保されていない'+a+'を取り、'+lockedName(r)+'は後で取りましょう。':
-  b+'も取れます。'+(r.preferNow?a+'の方が今すぐ得点につながります。':'今の情報では即時得点の優劣は確定できません。'),
- zh:(a,b,r)=>r.alternative.secured&&!r.selected.secured?
-  lockedName(r)+'已经锁定：这一月的四张牌全部可见。先收尚未锁定的'+a+'，'+lockedName(r)+'可以稍后再收。':
-  b+'也能收。'+(r.preferNow?a+'能更快增加分数。':'目前无法确定哪一手立即得分更高。')
+ ko:(a,b,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'ko')||'';
+  if(r.alternative.secured&&!r.selected.secured)
+   return lockedName(r)+' 패는 이미 확보되어 있습니다. 같은 월 네 장이 모두 공개된 상태라 상대가 바닥패를 빼앗아 갈 수 없습니다. 확보되지 않은 패를 먼저 먹고 '+lockedName(r)+' 패는 나중에 먹으세요.';
+  if(r.selected.secured&&r.alternative.secured)return '두 패 모두 확보된 상태이므로 나중에도 먹을 수 있습니다.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return '고도리 5점을 노릴 수 있는 새 그림패를 먼저 먹으세요. '+b+'는 나중에 먹을 수 있습니다.';
+  return '';
+ },
+ es:(a,b,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'es')||'';
+  if(r.alternative.secured&&!r.selected.secured)
+   return lockedName(r)+' está asegurada: las cuatro cartas de su familia están visibles. Captura la carta no asegurada primero; '+lockedName(r)+' puede esperar.';
+  if(r.selected.secured&&r.alternative.secured)return 'Ambas capturas están aseguradas y pueden esperar.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return 'Captura primero el pájaro para conservar la opción de 5-BIRDIES; '+b+' puede esperar.';
+  return '';
+ },
+ fr:(a,b,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'fr')||'';
+  if(r.alternative.secured&&!r.selected.secured)
+   return lockedName(r)+' est assurée : les quatre cartes sont visibles. Prenez la capture non assurée d’abord ; '+lockedName(r)+' peut attendre.';
+  if(r.selected.secured&&r.alternative.secured)return 'Les deux prises sont assurées et peuvent attendre.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return 'Prenez l’oiseau pour conserver la possibilité des 5-BIRDIES ; '+b+' peut attendre.';
+  return '';
+ },
+ de:(a,b,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'de')||'';
+  if(r.alternative.secured&&!r.selected.secured)
+   return lockedName(r)+' ist gesichert: Alle vier Karten sind sichtbar. Nimm zuerst die ungesicherte Karte; '+lockedName(r)+' kann warten.';
+  if(r.selected.secured&&r.alternative.secured)return 'Beide Fänge sind gesichert und können warten.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return 'Sichere zuerst den Vogel, um die Möglichkeit auf 5-BIRDIES zu behalten; '+b+' kann warten.';
+  return '';
+ },
+ ja:(a,b,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'ja')||'';
+  if(r.alternative.secured&&!r.selected.secured)
+   return lockedName(r)+'は確保されています。同じ月の4枚がすべて公開されているので未確保の札を先に取り、'+lockedName(r)+'は後回しにできます。';
+  if(r.selected.secured&&r.alternative.secured)return 'どちらの組も確保されているので後から取れます。';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return '五鳥（5-BIRDIES）の可能性を残すため鳥の札を先に取りましょう。'+b+'は後回しにできます。';
+  return '';
+ },
+ zh:(a,b,r)=>{
+  if(r.alternative.safeToWait&&!r.selected.safeToWait)
+   return globalThis.GoStopDevTrainingSafeTwoTable?.explain?.(r.alternative.month,'zh')||'';
+  if(r.alternative.secured&&!r.selected.secured)
+   return lockedName(r)+'已锁定：同月的四张牌全部可见。先收未锁定的牌，'+lockedName(r)+'可以稍后再收。';
+  if(r.selected.secured&&r.alternative.secured)return '两组牌都已锁定，可以稍后再收。';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return '先收鸟牌，保留凑成 5-BIRDIES 的机会；'+b+'可以稍后再收。';
+  return '';
+ }
 };
 function captureComparisonCopy(firstName,otherName,result,locale='en'){
  if(!result)return null;
