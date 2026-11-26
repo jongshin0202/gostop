@@ -1,0 +1,37 @@
+name: Sync Tested Development Aliases (Never Production)
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: gostop-development-alias-sync
+  cancel-in-progress: true
+
+jobs:
+  sync-dev-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact development commit
+        uses: actions/checkout@v4
+      - name: Configure Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test fail-closed release selection
+        run: node --test tests/sync-development-aliases.test.mjs
+      - name: Sync only after successful exact-SHA CI and READY preview
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo '::warning::VERCEL_TOKEN secret missing; auto-sync not active. Set a development-scoped token in GitHub Actions to activate.'
+            exit 0
+          fi
+          node scripts/sync-development-aliases.mjs
