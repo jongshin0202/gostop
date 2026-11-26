@@ -75,3 +75,24 @@ test('unsecured comparison with no proven strategic distinction generates no fil
  if(r&&!r.alternative.secured&&!r.alternative.safeToWait)
   assert.equal(logic.captureComparisonCopy('Willow Picture','Rose Stripe',r,'en'),'');
 });
+
+test('Vine Bird Picture vs Rose Stripe retains an evidence-based 5-BIRDIES explanation',()=>{
+ const v={hand:['m4-4','m6-2'],floor:['m4-1','m6-3'],
+  humanCaptured:[],computerCaptured:[]};
+ const choice=logic.captureComparison(v,'m4-4','m4-1',deck,engine.scorePlayer);
+ assert.equal(choice?.selected.birdieOpportunity,true);
+ const explanation=logic.captureComparisonCopy('Vine Single onto Vine Bird Picture',
+  'Rose Stripe onto Rose Single',choice,'en');
+ assert.match(explanation,/5-BIRDIES/);
+ assert.match(explanation,/Rose/);
+ assert.doesNotMatch(explanation,/no demonstrated immediate scoring advantage/i);
+});
+test('do not promise a 5-BIRDIES route once the opponent captured another required bird',()=>{
+ const v={hand:['m4-4','m6-2'],floor:['m4-1','m6-3'],
+  humanCaptured:[],computerCaptured:['m2-1']};
+ const choice=logic.captureComparison(v,'m4-4','m4-1',deck,engine.scorePlayer);
+ assert.equal(choice?.selected.birdieOpportunity,false);
+ const explanation=logic.captureComparisonCopy('Vine Single onto Vine Bird Picture',
+  'Rose Stripe onto Rose Single',choice,'en');
+ assert.doesNotMatch(explanation,/5-BIRDIES/);
+});
