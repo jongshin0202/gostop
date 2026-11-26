@@ -130,6 +130,14 @@ function familyCaptureOverride(currentHandId,currentFloorId){
 }
 function safeTwoTableOverride(currentHandId,currentFloorId){
  if(!currentHandId||!currentFloorId||!safeTwo?.select)return null;
+ // Opponent's publicly revealed Shake is a protected immediate capture.
+ // Never postpone it merely because this family's two table cards could
+ // otherwise support a later capture.
+ const revealed=shaken?.getStatus?.()?.revealedMonths||[];
+ const month=id=>Number(/^m(\d{1,2})-[1-4]$/.exec(id)?.[1]||0);
+ if(revealed.some(m=>
+  cardIds('#playerHand .hand-card[data-card-id]').some(id=>month(id)===m)&&
+  cardIds('#floor .floor-card[data-card-id]').some(id=>month(id)===m)))return null;
  const deck=globalThis.GoStopEngine?.masterDeck||[];
  const chosen=safeTwo.select({
   handIds:cardIds('#playerHand .hand-card[data-card-id]'),
