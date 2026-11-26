@@ -114,24 +114,44 @@ function bombBlankText(locale='en'){return BOMB_BLANK_COPY[locale]||BOMB_BLANK_C
 // never a claim about what is in the opponent's concealed hand.
 function discardDanger(cardId,visible={},deck=[],scorePlayer=null){
  const candidate=deck.find(c=>c.id===cardId);
- if(!candidate||typeof scorePlayer!=='function')return {cardId,maximumGain:0,reachable:false};
- const publicIds=new Set([
-  ...(visible.hand||[]),...(visible.floor||[]),
-  ...(visible.humanCaptured||[]),...(visible.computerCaptured||[])
- ]);
+ const empty={cardId,maximumGain:0,reachable:false,critical:false,bonus:null,evidence:null};
+ if(!candidate||typeof scorePlayer!=='function')return empty;
+ const publicIds=new Set([...(visible.hand||[]),...(visible.floor||[]),
+  ...(visible.humanCaptured||[]),...(visible.computerCaptured||[])]);
  const possible=deck.filter(c=>c.month===candidate.month&&!publicIds.has(c.id));
  const caught=cardsFor(visible.computerCaptured||[],deck);
- if(!possible.length)return {cardId,maximumGain:0,reachable:false};
- const maxScore=cards=>Math.max(...['animal','pi'].map(gukjinMode=>{
-  const value=scorePlayer({captured:cards,gukjinMode});
-  return Number.isFinite(value?.total)?value.total:0;
- }));
- const before=maxScore(caught);
- let maximumGain=0;
+ if(!possible.length)return empty;
+ // The opponent's Gukjin conversion is unknown. Compare BOTH valid modes
+ // against its best current mode, rather than inventing new score points.
+ const scored=cards=>['animal','pi'].map(gukjinMode=>{
+  const raw=scorePlayer({captured:cards,gukjinMode});
+  if(!raw||!['total','piCount','animals','ribbons','bright',
+   'piPts','animalPts','ribbonPts','brightPts'].every(k=>Number.isFinite(raw[k])))
+   return null;
+  return {...raw,gukjinMode};
+ }).filter(Boolean).sort((a,b)=>b.total-a.total)[0]||null;
+ const before=scored(caught);
+ if(!before)return empty;
+ const categories=[
+  ['singles','piPts','piCount'],['pictures','animalPts','animals'],
+  ['stripes','ribbonPts','ribbons'],['brights','brightPts','bright']
+ ];
+ let maximumGain=0,evidence=null;
  for(const matching of possible){
-  const after=maxScore([...caught,candidate,matching]);
-  maximumGain=Math.max(maximumGain,after-before);
+  const after=scored([...caught,candidate,matching]);
+  if(!after)continue;
+  const gain=Math.max(0,after.total-before.total);
+  if(gain<=maximumGain)continue;
+  maximumGain=gain;
+  const [category,pointKey,countKey]=categories.find(([,pts])=>
+   after[pts]>before[pts])||['other','total','total'];
+  evidence={matchingId:matching.id,category,afterCount:after[countKey],
+   beforeCount:before[countKey],pointsGained:gain,
+   opponentScoringMode:after.gukjinMode};
  }
+ // A warning requires a reproducible scoring path: one concrete possible
+ // matching card and a positive difference with the real game's scorer.
+ if(!evidence||maximumGain<=0)return {...empty,reachable:true};
  const blue=candidate.ribbonSet==='blue'&&caught.filter(c=>c.ribbonSet==='blue').length>=2;
  const red=candidate.ribbonSet==='red'&&caught.filter(c=>c.ribbonSet==='red').length>=2;
  const grass=candidate.ribbonSet==='grass'&&caught.filter(c=>c.ribbonSet==='grass').length>=2;
@@ -140,7 +160,8 @@ function discardDanger(cardId,visible={},deck=[],scorePlayer=null){
  const bright=candidate.type==='bright'&&caught.filter(c=>c.type==='bright').length>=2;
  return {cardId,maximumGain,reachable:true,
   critical:blue||red||grass||birds||bright||maximumGain>=3,
-  bonus:blue?'blue':red?'red':grass?'grass':birds?'godori':bright?'bright':null};
+  bonus:blue?'blue':red?'red':grass?'grass':birds?'godori':bright?'bright':null,
+  evidence};
 }
 function safestDiscard(visible={},deck=[],scorePlayer=null){
  const hand=unique(visible.hand);
