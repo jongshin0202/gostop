@@ -221,7 +221,11 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
   const family=deck.filter(c=>c.month===monthOf(a.h));
   const secured=family.length===4&&family.every(c=>visible.has(c.id));
   const safeToWait=deferred.some(x=>x.handId===a.h&&x.floorIds.includes(a.f));
-  return {...a,bonus,pi,secured,safeToWait,month:monthOf(a.h)};
+  // A bird capture is strategically distinguishable only when no opponent
+  // has already captured one of the three required Godori bird cards.
+  const birdieOpportunity=!!byId.get(a.f)?.flags?.includes('godori')&&
+   !computerCaptured.some(id=>byId.get(id)?.flags?.includes('godori'));
+  return {...a,bonus,pi,secured,safeToWait,birdieOpportunity,month:monthOf(a.h)};
  };
  const selected=details(rec);
  const alternatives=others.map(details)
@@ -249,6 +253,8 @@ const COMPARE_COPY={
     ' sooner; '+other+' remains available.';
    return 'Both '+first+' and '+other+' are secured. Either capture can wait.';
   }
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)
+   return 'Capture the Bird Picture to preserve a possible 5-BIRDIES set; '+other+' can wait.';
   // The native recommendation already includes any real scoring milestone.
   // Generic "no scoring advantage" and "more points" phrases add nothing.
   return '';
@@ -259,6 +265,7 @@ const COMPARE_COPY={
   if(r.alternative.secured&&!r.selected.secured)
    return lockedName(r)+' 패는 이미 확보되어 있습니다. 같은 월 네 장이 모두 공개된 상태라 상대가 바닥패를 빼앗아 갈 수 없습니다. 확보되지 않은 패를 먼저 먹고 '+lockedName(r)+' 패는 나중에 먹으세요.';
   if(r.selected.secured&&r.alternative.secured)return '두 패 모두 확보된 상태이므로 나중에도 먹을 수 있습니다.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return '고도리 5점을 노릴 수 있는 새 그림패를 먼저 먹으세요. '+b+'는 나중에 먹을 수 있습니다.';
   return '';
  },
  es:(a,b,r)=>{
@@ -267,6 +274,7 @@ const COMPARE_COPY={
   if(r.alternative.secured&&!r.selected.secured)
    return lockedName(r)+' está asegurada: las cuatro cartas de su familia están visibles. Captura la carta no asegurada primero; '+lockedName(r)+' puede esperar.';
   if(r.selected.secured&&r.alternative.secured)return 'Ambas capturas están aseguradas y pueden esperar.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return 'Captura primero el pájaro para conservar la opción de 5-BIRDIES; '+b+' puede esperar.';
   return '';
  },
  fr:(a,b,r)=>{
@@ -275,6 +283,7 @@ const COMPARE_COPY={
   if(r.alternative.secured&&!r.selected.secured)
    return lockedName(r)+' est assurée : les quatre cartes sont visibles. Prenez la capture non assurée d’abord ; '+lockedName(r)+' peut attendre.';
   if(r.selected.secured&&r.alternative.secured)return 'Les deux prises sont assurées et peuvent attendre.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return 'Prenez l’oiseau pour conserver la possibilité des 5-BIRDIES ; '+b+' peut attendre.';
   return '';
  },
  de:(a,b,r)=>{
@@ -283,6 +292,7 @@ const COMPARE_COPY={
   if(r.alternative.secured&&!r.selected.secured)
    return lockedName(r)+' ist gesichert: Alle vier Karten sind sichtbar. Nimm zuerst die ungesicherte Karte; '+lockedName(r)+' kann warten.';
   if(r.selected.secured&&r.alternative.secured)return 'Beide Fänge sind gesichert und können warten.';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return 'Sichere zuerst den Vogel, um die Möglichkeit auf 5-BIRDIES zu behalten; '+b+' kann warten.';
   return '';
  },
  ja:(a,b,r)=>{
@@ -291,6 +301,7 @@ const COMPARE_COPY={
   if(r.alternative.secured&&!r.selected.secured)
    return lockedName(r)+'は確保されています。同じ月の4枚がすべて公開されているので未確保の札を先に取り、'+lockedName(r)+'は後回しにできます。';
   if(r.selected.secured&&r.alternative.secured)return 'どちらの組も確保されているので後から取れます。';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return '五鳥（5-BIRDIES）の可能性を残すため鳥の札を先に取りましょう。'+b+'は後回しにできます。';
   return '';
  },
  zh:(a,b,r)=>{
@@ -299,6 +310,7 @@ const COMPARE_COPY={
   if(r.alternative.secured&&!r.selected.secured)
    return lockedName(r)+'已锁定：同月的四张牌全部可见。先收未锁定的牌，'+lockedName(r)+'可以稍后再收。';
   if(r.selected.secured&&r.alternative.secured)return '两组牌都已锁定，可以稍后再收。';
+  if(r.selected.birdieOpportunity&&!r.alternative.birdieOpportunity)return '先收鸟牌，保留凑成 5-BIRDIES 的机会；'+b+'可以稍后再收。';
   return '';
  }
 };
