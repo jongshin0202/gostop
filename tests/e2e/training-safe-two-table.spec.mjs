@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-async function setup(page,{nativeStar=false,thirdBlue=false,onlyStar=false}={}){
+async function setup(page,{nativeStar=false,thirdBlue=false,onlyStar=false,shaken=false}={}){
  await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
  await page.setContent([
  '<!doctype html><html lang="en"><body>',
@@ -22,6 +22,9 @@ async function setup(page,{nativeStar=false,thirdBlue=false,onlyStar=false}={}){
  await page.addScriptTag({path:'dev-site/training-safe-two-table.js'});
  await page.addScriptTag({path:'dev-site/training-advice-logic.js'});
  await page.addScriptTag({path:'dev-site/training-context-coach.js'});
+ if(shaken)await page.evaluate(()=>{
+  globalThis.GoStopDevShakenPriority={getStatus:()=>({revealedMonths:[10]})};
+ });
  await page.addScriptTag({path:'dev-site/training-recommendation-preserver.js'});
  await page.locator('#trainingModeBtn').click();
  await page.evaluate(({nativeStar,onlyStar})=>{
@@ -64,6 +67,12 @@ test('only Star available: no invented alternative',async({page})=>{
 });
 test('third Blue Stripe threat prevents deferred Star recommendation',async({page})=>{
  await setup(page,{nativeStar:true,thirdBlue:true});
+ const s=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
+ expect(s.safeTwoPriority).toBe(false);
+ expect(s.hand).toBe('m10-3');
+});
+test('publicly revealed opponent Shake Star is never deferred even with two floor Stars',async({page})=>{
+ await setup(page,{nativeStar:true,shaken:true});
  const s=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
  expect(s.safeTwoPriority).toBe(false);
  expect(s.hand).toBe('m10-3');
