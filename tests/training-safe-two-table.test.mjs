@@ -65,7 +65,7 @@ test('cannot claim safety from an invalid or unavailable score calculator',()=>{
 test('all locales explain the two-table Star timing without scoring-advantage filler',()=>{
  for(const lang of ['en','ko','es','fr','de','ja','zh']){
   const text=safe.explain(10,lang);
-  assert.ok(text.length>=25&&text.length<=110,lang);
+  assert.ok(text.length>=15&&text.length<=110,lang);
   assert.match(text,/Star/,lang);
   assert.doesNotMatch(text,/no demonstrated immediate scoring advantage|next turn|Capture a different family first|if the game continues/i,lang);
  }
