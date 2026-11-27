@@ -102,7 +102,12 @@ function createPanel(layer){
   displayedSuggestions=lang==='en'?helper.strategiesFromEnglishCoach(coachText):null,
   expertBirdies=helper.godoriExpertCase(vis,deck),
   needsBirdieAddition=expertBirdies.viable&&!expertBirdies.frozenViable,
-  review={...baseReview,suggested:needsBirdieAddition?nativeSuggestions:
+  // A frozen opening recommendation can mistake multiple cards of one birdie
+  // month for different birdie families; correct the visible dev coach too.
+  needsBirdieCorrection=!expertBirdies.viable&&
+    (lang==='en'?!!displayedSuggestions?.includes('godori'):coachText.includes(names.godori)),
+  needsBirdieAlignment=needsBirdieAddition||needsBirdieCorrection,
+  review={...baseReview,suggested:needsBirdieAlignment?nativeSuggestions:
     (displayedSuggestions||nativeSuggestions)};
  // Never apply shadow learner weights to an answer that the frozen game coach
  // has not actually made; confirmed labels must match the player's screen.
@@ -122,7 +127,7 @@ function createPanel(layer){
   ja:'準備ができたら画面をタップしてください。',
   zh:'准备好后点击屏幕继续。'
  };
- if(coach&&needsBirdieAddition){
+ if(coach&&needsBirdieAlignment){
   // Keep the recommendation in the real Training coach and the expert
   // confirmation dialog identical. This adjusts only development text.
   const selected=review.suggested.map(strategy=>names[strategy]);

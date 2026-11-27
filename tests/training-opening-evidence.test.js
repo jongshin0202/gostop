@@ -23,12 +23,12 @@ test('blocked red stripe route is not suggested',()=>{
  assert.equal(r.info['red-stripes'].lost,1);
  assert.ok(!r.suggested.includes('red-stripes'));
 });
-test('full stripe routes, godori and Shake are listed as distinct choices',()=>{
+test('opening does not turn one actual bird plus an unreachable other bird into a complete 5-BIRDIES route',()=>{
  const r=helper.evaluate({hand:['m2-3','m2-2','m6-2','m9-2','m9-4','m9-1'],
  floor:['m4-3'],humanCaptured:[],computerCaptured:[]},[
  ...deck,{id:'m9-1',month:9,type:'animal',flags:['switchPi']}
  ]);
- assert.ok(r.suggested.includes('godori'));
+ assert.ok(!r.suggested.includes('godori'),'birdie family coverage is incomplete');
  assert.ok(r.suggested.includes('red-stripes'));
  assert.ok(r.suggested.includes('blue-stripes'));
  assert.ok(r.suggested.includes('shake-bomb'));
@@ -180,10 +180,39 @@ test('two held birdie pictures, three family cards, or one birdie plus two suppo
   assert.equal(x.reason,expectedReason);
   assert.ok(helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
   const line=helper.openingLocationLines(v,realDeck,['godori'],'en')[0];
-  assert.match(line,/birdie cards in hand/);
-  assert.match(line,/Supporting cards are not birdies/);
+  assert.match(line,/of 3 birdie families represented in your hand/);
+  assert.match(line,/actual Bird Pictures/);
  }
 });
+test('multiple cards from two birdie families do not count as three families or trigger 5-BIRDIES',()=>{
+ const v=realVisible(['m2-2','m2-3','m2-4','m4-2']);
+ const expert=helper.godoriExpertCase(v,realDeck);
+ assert.equal(expert.birdieFamiliesInHand,2);
+ assert.equal(expert.relatedFamilyCardsInHand,4);
+ assert.equal(expert.relatedSupportFamiliesInHand,2);
+ assert.equal(expert.viable,false);
+ assert.ok(!helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
+ const base=helper.evaluate(v,realDeck);
+ assert.equal(base.info.godori.viable,false);
+ assert.ok(!base.suggested.includes('godori'));
+ const copy=helper.openingLocationLines(v,realDeck,['godori'],'en')[0];
+ assert.match(copy,/2 of 3 birdie families represented in your hand/);
+ assert.match(copy,/0 actual Bird Pictures/);
+ assert.doesNotMatch(copy,/4 supporting cards|3 birdie families covered/i);
+ const weights=Array.from({length:8},()=>Array(12).fill(0));
+ weights[1][0]=99;
+ const learned=helper.withLearnedWeights(base,{examples:25,weights});
+ assert.ok(!learned.suggested.includes('godori'),'learned weights cannot resurrect an impossible birdie opening');
+});
+test('a real bird with multiple matching family cards still counts one represented month',()=>{
+ const v=realVisible(['m2-1','m2-2','m2-3','m4-2']);
+ const expert=helper.godoriExpertCase(v,realDeck);
+ assert.equal(expert.birdieFamiliesInHand,2);
+ assert.equal(expert.actualBirdiesInHand,1);
+ assert.equal(expert.viable,false);
+ assert.ok(!helper.nativeOpeningStrategies(v,realDeck).includes('godori'));
+});
+
 test('opponent already captured a required birdie blocks the set even if two other birdies are claimable',()=>{
  const v=realVisible(['m2-2','m4-2'],['m2-1','m4-1'],[],['m8-2']);
  assert.equal(helper.godoriExpertCase(v,realDeck).viable,false);
