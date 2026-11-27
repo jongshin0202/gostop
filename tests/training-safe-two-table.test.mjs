@@ -32,8 +32,9 @@ test('native Willow is preserved and comparison explains why Star can wait',()=>
  assert.equal(advice.selected.safeToWait,false);
  const copy=logic.captureComparisonCopy('Willow Picture onto Willow Stripe','Star Picture onto Star Single',advice,'en');
  assert.match(copy,/Star can wait/);
- assert.match(copy,/two Star cards are on the table/);
- assert.match(copy,/other remains/);
+ assert.match(copy,/one Star card in your hand and two on the table/);
+ assert.ok(copy.length<95);
+ assert.doesNotMatch(copy,/Even if|next turn|Capture a different family first/i);
  assert.doesNotMatch(copy,/no (?:demonstrated|clear).*scoring advantage/i);
 });
 test('Star is not postponed if it is the only available capture',()=>{
@@ -64,11 +65,16 @@ test('cannot claim safety from an invalid or unavailable score calculator',()=>{
 test('all locales explain the two-table Star timing without scoring-advantage filler',()=>{
  for(const lang of ['en','ko','es','fr','de','ja','zh']){
   const text=safe.explain(10,lang);
-  assert.ok(text.length>=35,lang);
+  assert.ok(text.length>=25&&text.length<=110,lang);
   assert.match(text,/Star/,lang);
-  assert.doesNotMatch(text,/no demonstrated immediate scoring advantage/i);
+  assert.doesNotMatch(text,/no demonstrated immediate scoring advantage|next turn|Capture a different family first|if the game continues/i,lang);
  }
 });
+test('concise Berry advice preserves the one-in-hand/two-on-table reason without extra instructions',()=>{
+ const copy=safe.explain(11,'en');
+ assert.equal(copy,'Berry can wait: one Berry card in your hand and two on the table.');
+});
+
 test('unsecured comparison with no proven strategic distinction generates no filler',()=>{
  const v={...visible,hand:['m12-4','m6-2'],floor:['m12-3','m6-3']};
  const r=logic.captureComparison(v,'m12-4','m12-3',deck,engine.scorePlayer);
