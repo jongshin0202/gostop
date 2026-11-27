@@ -3,6 +3,7 @@ const cards=[
  ...[1,3,8,11,12].map(month=>({id:'m'+month+'-1',month,type:'bright',flags:[]})),
  ...[[1,'red'],[2,'red'],[3,'red'],[6,'blue'],[9,'blue'],[10,'blue'],[4,'grass'],[5,'grass'],[7,'grass']].map(([month,ribbonSet])=>({id:'m'+month+'-2',month,type:'ribbon',ribbonSet,flags:[]})),
  ...[2,4,8].map(month=>({id:'m'+month+'-3',month,type:'animal',flags:['godori']})),
+ {id:'m2-4',month:2,type:'pi',flags:[]},
  ...[4,5,6,7,8].map(month=>({id:'m'+month+'-4',month,type:'pi',flags:[]}))
 ];
 async function setup(page,{authorized=true,locale='en',scenario=null}={}){
@@ -242,3 +243,27 @@ test('two related-family nonbird cards without reachable birdies do not invent 5
  await expect(review.locator('.dev-opening-review-recommendation')).toContainText('Singles');
  await expect(review.locator('.dev-opening-review-recommendation')).not.toContainText('5-BIRDIES');
 });
+
+
+for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android portrait',width:390,height:844}]){
+ test('repeated cards from two birdie families never create a false opening recommendation ('+viewport.name+')',async({page})=>{
+  await page.setViewportSize(viewport);
+  await setup(page,{scenario:{
+   hand:['m2-2','m2-3','m2-4','m4-2'],floor:[],
+   coachText:'Best strategy: 5-BIRDIES. Three related family cards make it viable.'
+  }});
+  const review=page.locator('#devOpeningReview');
+  await expect(review.locator('.dev-opening-review-recommendation')).toContainText('Singles');
+  await expect(review.locator('.dev-opening-review-recommendation')).not.toContainText('5-BIRDIES');
+  await expect(page.locator('#trainingCoachText')).toContainText('Best strategy: Singles.');
+  await expect(page.locator('#trainingCoachText')).not.toContainText('Three related family cards');
+  await review.getByRole('button',{name:'No, change strategies'}).click();
+  const birdieOption=review.locator('.dev-opening-review-option').filter({has:review.locator('input[value="godori"]')});
+  await expect(birdieOption).toContainText('2 of 3 birdie families represented in your hand');
+  await expect(birdieOption).toContainText('1 actual Bird Pictures');
+  await review.getByRole('button',{name:'Back'}).click();
+  await review.getByRole('button',{name:'Yes, I agree'}).click();
+  const sent=await page.evaluate(()=>globalThis.__sent);
+  expect(sent[0]?.suggested).not.toContain('godori');
+ });
+}
