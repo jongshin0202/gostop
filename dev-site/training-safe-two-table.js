@@ -79,14 +79,13 @@ function select({handIds=[],floorIds=[],ownCapturedIds=[],opponentCapturedIds=[]
   deferredMonth:delayed.month,changed:true}):null;
 }
 const wording={
- en:(m)=>m+' can wait. You hold one '+m+' card while two '+m+
-  ' cards are on the table. Even if the computer takes one, the other remains to match on your next turn if the game continues. Capture a different family first.',
- ko:m=>m+' 패는 지금 먹지 않아도 됩니다. 손에 '+m+' 한 장이 있고 바닥에 두 장이 있어 상대가 한 장을 먹더라도 게임이 계속된다면 다음 차례에 나머지 한 장을 먹을 수 있습니다. 다른 월의 패를 먼저 먹으세요.',
- es:m=>'Puedes dejar '+m+' para después: tienes una carta en mano y dos en la mesa. Aunque el rival tome una, quedará otra para tu siguiente turno si la partida continúa. Captura otra familia primero.',
- fr:m=>m+' peut attendre : vous avez une carte de cette famille en main et deux sur la table. Même si le rival en prend une, l’autre restera au prochain tour si la partie continue. Prenez une autre famille d’abord.',
- de:m=>m+' kann warten: Du hältst eine Karte dieser Familie und zwei liegen auf dem Tisch. Selbst wenn der Gegner eine nimmt, bleibt eine für deinen nächsten Zug, falls das Spiel weitergeht. Sichere zuerst eine andere Familie.',
- ja:m=>m+'は後回しにできます。手札に1枚、場に2枚あり、相手が1枚取っても対局が続けば次の自分の番に残りを取れます。別の月の札を先に取りましょう。',
- zh:m=>m+'可以稍后再收。你手里有一张，桌面有两张。即使对手收走其中一张，只要本局继续，下一回合仍有另一张可配对。先收其他月份的牌。'
+ en:m=>m+' can wait: one '+m+' card in your hand and two on the table.',
+ ko:m=>m+' 패는 나중에 먹어도 됩니다. 손에 한 장, 바닥에 두 장이 있습니다.',
+ es:m=>m+' puede esperar: tienes una carta en mano y dos en la mesa.',
+ fr:m=>m+' peut attendre : vous en avez une en main et deux sur la table.',
+ de:m=>m+' kann warten: eine Karte auf der Hand, zwei auf dem Tisch.',
+ ja:m=>m+'は後回しにできます。手札に1枚、場に2枚あります。',
+ zh:m=>m+'可以稍后再收：手里一张，桌上两张。'
 };
 const explain=(month,lang='en')=>(wording[lang]||wording.en)(monthNames[month-1]||'This family');
 const api=Object.freeze({eligible,select,explain});

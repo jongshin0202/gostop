@@ -41,7 +41,9 @@ for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android portrait
   await setup(page);
   const copy=page.locator('#trainingCoachText');
   await expect(copy).toContainText('Star can wait');
-  await expect(copy).toContainText('two Star cards are on the table');
+  await expect(copy).toContainText('one Star card in your hand and two on the table');
+  await expect(copy).not.toContainText('Even if');
+  await expect(copy).not.toContainText('Capture a different family first');
   await expect(copy).not.toContainText('No demonstrated immediate scoring advantage');
   const s=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
   expect(s.hand).toBe('m12-4');expect(s.floor).toBe('m12-3');
