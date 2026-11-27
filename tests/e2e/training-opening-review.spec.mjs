@@ -258,7 +258,7 @@ for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android portrait
   await expect(page.locator('#trainingCoachText')).toContainText('Best strategy: Singles.');
   await expect(page.locator('#trainingCoachText')).not.toContainText('Three related family cards');
   await review.getByRole('button',{name:'No, change strategies'}).click();
-  const birdieOption=review.locator('.dev-opening-review-option').filter({has:review.locator('input[value="godori"]')});
+  const birdieOption=review.locator('label.dev-opening-review-option:has(input[value="godori"])');
   await expect(birdieOption).toContainText('2 of 3 birdie families represented in your hand');
   await expect(birdieOption).toContainText('1 actual Bird Pictures');
   await review.getByRole('button',{name:'Back'}).click();
