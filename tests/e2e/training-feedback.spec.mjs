@@ -2,11 +2,11 @@ import {test,expect} from '@playwright/test';
 
 function fakeCloud(initialProgress={}){
   const items=[];const finished=new Set();
-  let learned=0,specialLearned=0,goStopLearned=0,announceDevelopmentActivation=false;
+  let learned=0,specialLearned=0,goStopLearned=0,announceDevelopmentActivation=false,finalizeCalls=0;
   const counters={gamesSinceLiveUpdate:0,consecutiveAgreementGames:0,
    disagreementObservedAfterUpdate:false,developmentModelVersion:0,...initialProgress};
   const kind=x=>x.context?.kind==='go-stop'?'go-stop':x.context?'special':'card';
-  return {items,completedCount:()=>finished.size,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
+  return {items,completedCount:()=>finished.size,finalizeCount:()=>finalizeCalls,confirmNextDevelopmentActivation:()=>{announceDevelopmentActivation=true;},
     handle:async route=>{
       const request=route.request(),path=new URL(request.url()).pathname;
       const reply=(status,obj)=>route.fulfill({status,contentType:'application/json',
@@ -14,7 +14,13 @@ function fakeCloud(initialProgress={}){
         body:JSON.stringify(obj)});
       if(request.headers()['authorization']!=='Bearer e2e-demo-token')return reply(401,{ok:false,error:'AUTH_REQUIRED'});
       if(path.endsWith('/state'))return reply(200,{ok:true,...counters,feedbackCount:items.length,
-        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},specialModel:{examples:specialLearned},goStopModel:{examples:goStopLearned}});
+        confirmedCount:items.filter(x=>x.choice!=='unsure').length,model:{examples:learned},
+        specialModel:{examples:specialLearned},goStopModel:{examples:goStopLearned},
+        activeCardModel:counters.developmentModelVersion>0&&learned>0?
+         {version:counters.developmentModelVersion,examples:learned,weights:Array(16).fill(0)}:null,
+        activeGoStopModel:counters.developmentModelVersion>0&&goStopLearned>0?
+         {examples:goStopLearned,weights:Array(16).fill(0)}:null,
+        activeOpeningModel:null});
       if(path.endsWith('/history'))return reply(200,{ok:true,feedback:items.map(x=>x.context?{gameId:x.gameId,kind:kind(x),choice:x.choice,recommendedAction:x.recommendedAction,playedAction:x.playedAction}:{gameId:x.gameId,choice:x.choice,recommendedId:x.recommended.hand+'|'+x.recommended.target,playedId:x.played.hand+'|'+x.played.target})});
       if(path.endsWith('/feedback')||path.endsWith('/special-feedback')||path.endsWith('/go-stop-feedback')){
         const x=request.postDataJSON();items.push(x);return reply(200,{ok:true,confirmed:x.choice!=='unsure',feedbackCount:items.length});
@@ -35,6 +41,7 @@ function fakeCloud(initialProgress={}){
           complete:finished.has(gameId),reviewVersion:'fixture-review-version'});
       }
       if(path.endsWith('/finalize')){
+        finalizeCalls++;
         const body=request.postDataJSON(),gameId=body.gameId;
         if(body.reviewVersion!=='fixture-review-version')
           return reply(409,{ok:false,error:'REVIEW_CHANGED'});
@@ -63,7 +70,11 @@ function fakeCloud(initialProgress={}){
         const update=announceDevelopmentActivation;
         announceDevelopmentActivation=false;
         if(update){counters.gamesSinceLiveUpdate=0;counters.consecutiveAgreementGames=0;
-         counters.disagreementObservedAfterUpdate=false;counters.developmentModelVersion=2;}
+         counters.disagreementObservedAfterUpdate=false;counters.developmentModelVersion=2;
+         counters.lastDevelopmentModelUpdateAt='2026-11-27T20:00:00Z';
+         counters.lastDevelopmentModelExamples=learned;
+         counters.lastDevelopmentSpecialModelExamples=specialLearned;
+         counters.lastDevelopmentGoStopModelExamples=goStopLearned;}
         return reply(200,{ok:true,trained:learned+specialLearned+goStopLearned,
           modelExamples:learned,specialModelExamples:specialLearned,goStopModelExamples:goStopLearned,
           publishedToLive:false,developmentModelUpdated:update,
@@ -248,6 +259,42 @@ test('ordinary completed Training game never shows a false live-update dialog',a
  await expect.poll(()=>server.completedCount()).toBe(1);
  await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
 });
+test('Finish requires authenticated server readback before claiming activated weights',async({page})=>{
+ const server=fakeCloud();
+ let returnStaleVersion=false;
+ const base=server.handle;
+ server.handle=route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(returnStaleVersion&&path.endsWith('/state')&&server.completedCount()>0)
+   return route.fulfill({status:200,contentType:'application/json',
+    headers:{'access-control-allow-origin':'http://127.0.0.1:4173',
+     'access-control-allow-headers':'authorization,content-type'},
+    body:JSON.stringify({ok:true,developmentModelVersion:0,
+     lastDevelopmentModelUpdateAt:null})});
+  return base(route);
+ };
+ await setup(page,'expert@example.test',server);
+ await page.locator('#alternate').click();
+ const feedback=page.locator('#trainingFeedbackDialog');
+ await expect(feedback).toBeVisible();
+ await feedback.getByRole('button',{name:'My move was better'}).click();
+ await expect(feedback).toBeHidden();
+ server.confirmNextDevelopmentActivation();
+ returnStaleVersion=true;
+ await finishFinalReview(page);
+ const notice=page.locator('#trainingModelCompletionNotice');
+ await expect(notice).toContainText('server readback could not be verified');
+ await expect(page.getByRole('dialog',{name:'Training model update'})).toHaveCount(0);
+ expect(server.finalizeCount()).toBe(1);
+ returnStaleVersion=false;
+ await notice.getByRole('button',{name:'Verify saved review'}).click();
+ await expect(notice).toContainText('Final review verified on the development learning server.');
+ const update=page.getByRole('dialog',{name:'Training model update'});
+ await expect(update).toBeVisible();
+ await expect(update).toContainText('Update was made');
+ expect(server.finalizeCount()).toBe(1,'verification retry must only GET, never train again');
+});
+
 test('acknowledged development-only server activation permits update OK dialog',async({page})=>{
  const server=await setup(page);
  server.confirmNextDevelopmentActivation();
