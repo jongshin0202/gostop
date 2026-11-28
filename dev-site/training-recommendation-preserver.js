@@ -30,6 +30,8 @@ const cardIds=selector=>[...document.querySelectorAll(selector)].map(el=>el.data
 const monthNames=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
 function cardLabel(id){
  const lang=document.documentElement.lang||'en',deck=globalThis.GoStopEngine?.masterDeck||[];
+ const canonical=globalThis.GoStopDevTrainingCardLabels?.label?.(id,deck,lang);
+ if(canonical)return canonical;
  const card=Array.isArray(deck)?deck.find(c=>c.id===id):null;
  const localized=card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card);
  if(localized)return localized;
@@ -44,7 +46,11 @@ function cardLabel(id){
  }
  const el=hand.querySelector('[data-card-id="'+id+'"]')||floor.querySelector('[data-card-id="'+id+'"]');
  const candidate=el?.title||el?.querySelector('img')?.alt||'';
- return candidate&&!/^m\d{1,2}-[1-4]$/i.test(candidate)?candidate:id;
+ const safe=globalThis.GoStopDevTrainingCardLabels?.sanitize?.(candidate,deck,lang);
+ if(safe&&safe!==candidate)return safe;
+ const family=monthNames[Number(/^m(\d{1,2})-/i.exec(String(id))?.[1]||0)-1];
+ return candidate&&!/\bm\d{1,2}-\d+\b/i.test(candidate)?candidate:
+  family?family+' card':'Card';
 }
 const pileText={
  en:name=>'Play '+name+' onto the three-card pile first. Capture all four cards and take one Single from the computer.',
@@ -230,16 +236,7 @@ function saferDiscardOverride(currentHandId,currentFloorId){
  if(!best||!original||!original.evidence||best.cardId===currentHandId||
    best.maximumGain>=original.maximumGain)return null;
  const lang=document.documentElement.lang||'en';
- const label=id=>{
-  const card=deck.find(c=>c.id===id),element=hand.querySelector('[data-card-id="'+id+'"]');
-  const month=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'][card?.month-1]||'';
-  const type=card?(card.type==='ribbon'?'Stripe':card.type==='bright'?'Bright':
-   card.type==='pi'?(card.flags?.includes('doublePi')?'2x Single':'Single'):
-   card.flags?.includes('godori')?'Bird Picture':'Picture'):'card';
-  return globalThis.GoStopTrainingLocales?.cardName?.(lang,card)||
-   element?.title||element?.querySelector('img')?.alt||
-   (month?month+' '+type:'matching card');
- };
+ const label=cardLabel;
  const copy=logic.riskyDiscardCopy(label(best.cardId),label(currentHandId),original,
   lang,label(original.evidence.matchingId));
  if(!copy)return null;
@@ -268,7 +265,10 @@ function sync(){
  if(suppressed&&!recommendation)suppressed=false;
  if(!lock&&!suppressed&&recommendation&&!panel.hidden){
   const recommendedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]');
-  const originalTitle=title.textContent?.trim()||'',originalText=text.textContent?.trim()||'';
+  const originalTitle=title.textContent?.trim()||'';
+  const sourceText=text.textContent?.trim()||'';
+  const originalText=globalThis.GoStopDevTrainingCardLabels?.sanitize?.(sourceText)||
+   sourceText;
   if(originalText){
    const corrective=bombBlankOverride(recommendedFloor?.dataset.cardId||null,originalTitle)||
     reservedPileOverride(recommendation.dataset.cardId,recommendedFloor?.dataset.cardId||null)||
