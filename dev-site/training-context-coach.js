@@ -24,13 +24,19 @@ function visible(){return {
 };}
 function cardName(id){
  const card=deck.find(c=>c.id===id),lang=locale();
+ const canonical=globalThis.GoStopDevTrainingCardLabels?.label?.(id,deck,lang);
+ if(canonical)return canonical;
  if(lang!=='en'){
   const name=globalThis.GoStopTrainingLocales?.cardName(lang,card);
   if(name)return name;
  }
  const el=floor.querySelector('[data-card-id="'+id+'"]')||hand.querySelector('[data-card-id="'+id+'"]');
- return el?.title||el?.querySelector('img')?.alt||
-  (card?(['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'][card.month-1]||'Card')+' '+(card.type==='ribbon'?'Stripe':card.type==='bright'?'Bright':card.type==='pi'?'Single':'Picture'):id);
+ const candidate=el?.title||el?.querySelector('img')?.alt||'';
+ const readable=globalThis.GoStopDevTrainingCardLabels?.sanitize?.(candidate,deck,lang)||candidate;
+ if(readable&&!/\bm\d{1,2}-\d+\b/i.test(readable))return readable;
+ const family=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'][Number(/^m(\d{1,2})-/i.exec(String(id))?.[1]||0)-1];
+ return card?((family||'Card')+' '+(card.type==='ribbon'?'Stripe':card.type==='bright'?'Bright':card.type==='pi'?'Single':'Picture')):
+  family?family+' card':'Card';
 }
 const removedReasons=[
  /\s*This uses the higher-value hand card\./g,
@@ -164,6 +170,7 @@ function updateCopy(){
    }else if(more&&!next.includes(more))next=(next+' '+more).trim();
   }
  }
+ next=globalThis.GoStopDevTrainingCardLabels?.sanitize?.(next)||next;
  if(next!==source){
   // Advertise the deliberate copy correction to the presentation preserver.
   // Otherwise independent MutationObservers can restore and rewrite the
