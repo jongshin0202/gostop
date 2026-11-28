@@ -6,7 +6,11 @@ const cards=[
  {id:'m2-4',month:2,type:'pi',flags:[]},
  {id:'m1-1',month:1,type:'bright',flags:[]},
  {id:'m4-4',month:4,type:'pi',flags:['doublePi']},
- {id:'m4-2',month:4,type:'animal',flags:[]}
+ {id:'m4-2',month:4,type:'animal',flags:[]},
+ {id:'m6-1',month:6,type:'animal',flags:[]},
+ {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
+ {id:'m6-3',month:6,type:'pi',flags:[]},
+ {id:'m6-4',month:6,type:'pi',flags:[]}
 ];
 async function setup(page){
  await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
@@ -155,3 +159,31 @@ test('two potential captures do not falsely claim only option',async({page})=>{
  await expect(page.locator('#trainingCoachText')).toHaveText(
   'Play Plum Red Stripe onto Plum Single. Choose the stronger set card.');
 });
+
+
+for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android portrait',width:390,height:844}]){
+ test('one Rose card in hand and two Rose table targets gets short, accurate capture advice on '+viewport.name,async({page})=>{
+  await page.setViewportSize(viewport);
+  await setup(page);
+  await page.evaluate(()=>{
+   globalThis.GoStopEngine.scorePlayer=p=>({total:Math.max(0,p.captured.filter(c=>c.type==='pi').length-9)});
+   document.getElementById('playerHand').innerHTML=
+    '<button class="hand-card matchable" data-card-id="m6-3">Rose Single</button>'+
+    '<button class="hand-card" data-card-id="m1-1">Pine Bright</button>';
+   document.getElementById('floor').innerHTML=
+    '<button class="floor-card training-recommended" data-card-id="m6-4">Rose Single</button>'+
+    '<button class="floor-card" data-card-id="m6-2">Rose Blue Stripe</button>';
+   document.getElementById('aiCaptured').innerHTML=
+    '<img class="captured-mini" data-card-id="m6-1">';
+   document.getElementById('trainingCoachText').textContent=
+    'Play Rose Single onto Rose Single. Both Rose Single and Rose Single onto Rose Blue Stripe are secured. Take Rose Single first to build Singles sooner; Rose Blue Stripe remains available.';
+   document.getElementById('trainingCoachPanel').hidden=false;
+  });
+  const copy=page.locator('#trainingCoachText');
+  await expect(copy).toHaveText(
+   'Play Rose Single onto Rose Single. This is your only matching hand card; take the Single rather than the Stripe.');
+  await expect(copy).not.toContainText('remains available');
+  await page.waitForTimeout(180);
+  await expect(copy).not.toContainText('Both Rose');
+ });
+}

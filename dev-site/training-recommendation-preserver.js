@@ -26,6 +26,26 @@ const floorSignature=()=>cardIds('#floor .floor-card[data-card-id]').sort().join
 const specialIsOpen=()=>!!document.querySelector('#shakeDialog[open],#bombDialog[open],#gukjinDialog[open],#decisionDialog[open],#resultDialog[open]');
 
 const cardIds=selector=>[...document.querySelectorAll(selector)].map(el=>el.dataset.cardId).filter(Boolean);
+// Dev-only English fallback: production cardName() has no 'en' DATA entry.
+const monthNames=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
+function cardLabel(id){
+ const lang=document.documentElement.lang||'en',deck=globalThis.GoStopEngine?.masterDeck||[];
+ const card=Array.isArray(deck)?deck.find(c=>c.id===id):null;
+ const localized=card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card);
+ if(localized)return localized;
+ if(lang==='en'&&card){
+  const family=monthNames[card.month-1];
+  const kind=card.flags?.includes('doublePi')?'2x Single':
+   card.type==='bright'?'Bright':
+   card.type==='ribbon'?(card.ribbonSet==='red'?'Red ':card.ribbonSet==='blue'?'Blue ':'Plain ')+'Stripe':
+   card.flags?.includes('godori')?'Bird Picture':
+   card.type==='animal'?'Picture':card.type==='pi'?'Single':null;
+  if(family&&kind)return family+' '+kind;
+ }
+ const el=hand.querySelector('[data-card-id="'+id+'"]')||floor.querySelector('[data-card-id="'+id+'"]');
+ const candidate=el?.title||el?.querySelector('img')?.alt||'';
+ return candidate&&!/^m\d{1,2}-[1-4]$/i.test(candidate)?candidate:id;
+}
 const pileText={
  en:name=>'Play '+name+' onto the three-card pile first. Capture all four cards and take one Single from the computer.',
  ko:name=>'손에 있는 '+name+'을 세 장이 쌓인 바닥패에 먼저 내세요. 같은 종류의 네 장을 모두 먹고 상대 피 한 장도 가져옵니다.',
@@ -54,8 +74,7 @@ function reservedPileOverride(currentHandId,currentFloorId){
  const lang=document.documentElement.lang||'en';
  const deck=globalThis.GoStopEngine?.masterDeck||[];
  const card=Array.isArray(deck)?deck.find(item=>item.id===chosen.handId):null;
- const name=(card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card))||
-  el.title||chosen.handId;
+ const name=cardLabel(chosen.handId);
  return {...chosen,text:(pileText[lang]||pileText.en)(name)};
 }
 
@@ -85,7 +104,7 @@ function shakenOverride(currentHandId,currentFloorId){
  if(!el||!floor.querySelector('.floor-card[data-card-id="'+choice.floorId+'"]'))return null;
  const lang=document.documentElement.lang||'en';
  const card=deck.find(x=>x.id===choice.handId);
- const name=(card&&globalThis.GoStopTrainingLocales?.cardName?.(lang,card))||el.title||choice.handId;
+ const name=cardLabel(choice.handId);
  return {...choice,text:(shakenCopy[lang]||shakenCopy.en)(name)};
 }
 
@@ -102,13 +121,13 @@ function bombBlankOverride(currentFloorId,originalTitle){
  return {blankOverride:true,text:logic.bombBlankText(document.documentElement.lang||'en')};
 }
 const familyCopy={
- en:(h,f)=>'Play '+h+' onto '+f+' first. Two cards in your hand share this family with a card on the table. Secure that capture before an unrelated 2x Single.',
- ko:(h,f)=>h+'을 '+f+'에 먼저 내세요. 손에 같은 월 패가 두 장 있고 바닥에도 한 장 있으므로 별개 월의 쌍피보다 이 패를 먼저 먹으세요.',
- es:(h,f)=>'Juega '+h+' sobre '+f+' primero. Tienes dos cartas de esta familia en la mano y una en la mesa. Asegura esta captura antes que un doble simple distinto.',
- fr:(h,f)=>'Jouez d’abord '+h+' sur '+f+'. Vous avez deux cartes de cette famille en main et une sur la table. Assurez cette prise avant un double simple distinct.',
- de:(h,f)=>'Spiele zuerst '+h+' auf '+f+'. Zwei Handkarten dieser Familie passen zur Tischkarte. Sichere diesen Fang vor einer anderen Doppel-Einzelkarte.',
- ja:(h,f)=>'まず'+h+'を'+f+'に出しましょう。同じ月が手札に2枚、場に1枚あります。別の二枚カスよりこの組を先に取ってください。',
- zh:(h,f)=>'先用'+h+'配对'+f+'。手里有两张同月牌，桌面还有一张。先确保收取这一组，而不是先收其他双散牌。'
+ en:(h,f)=>'Play '+h+' onto '+f+'. You hold two cards of this family; capture it first.',
+ ko:(h,f)=>h+'을 '+f+'에 내세요. 손에 같은 월 패가 두 장 있으므로 이 패부터 먹으세요.',
+ es:(h,f)=>'Juega '+h+' sobre '+f+'. Tienes dos cartas de esta familia; captúrala primero.',
+ fr:(h,f)=>'Jouez '+h+' sur '+f+'. Vous avez deux cartes de cette famille ; prenez-la d’abord.',
+ de:(h,f)=>'Spiele '+h+' auf '+f+'. Du hast zwei Karten dieser Familie; fange sie zuerst.',
+ ja:(h,f)=>h+'を'+f+'に出しましょう。同じ月の手札が2枚あるので先に取りましょう。',
+ zh:(h,f)=>'用'+h+'配对'+f+'。手中有两张同月牌，先收这一组。'
 };
 function familyCaptureOverride(currentHandId,currentFloorId){
  const deck=globalThis.GoStopEngine?.masterDeck||[];
@@ -121,12 +140,8 @@ function familyCaptureOverride(currentHandId,currentFloorId){
  if(!picked||!hand.querySelector('.hand-card[data-card-id="'+picked.handId+'"]')||
    !floor.querySelector('.floor-card[data-card-id="'+picked.floorId+'"]'))return null;
  const lang=document.documentElement.lang||'en';
- const label=id=>{
-  const c=deck.find(v=>v.id===id);
-  const el=hand.querySelector('[data-card-id="'+id+'"]')||floor.querySelector('[data-card-id="'+id+'"]');
-  return (c&&globalThis.GoStopTrainingLocales?.cardName?.(lang,c))||el?.title||id;
- };
- return {...picked,familyPriority:true,text:(familyCopy[lang]||familyCopy.en)(label(picked.handId),label(picked.floorId))};
+ return {...picked,familyPriority:true,text:(familyCopy[lang]||familyCopy.en)(
+  cardLabel(picked.handId),cardLabel(picked.floorId))};
 }
 function safeTwoTableOverride(currentHandId,currentFloorId){
  if(!currentHandId||!currentFloorId||!safeTwo?.select)return null;
@@ -150,13 +165,7 @@ function safeTwoTableOverride(currentHandId,currentFloorId){
  if(!chosen||!hand.querySelector('.hand-card[data-card-id="'+chosen.handId+'"]')||
   !floor.querySelector('.floor-card[data-card-id="'+chosen.floorId+'"]'))return null;
  const lang=document.documentElement.lang||'en';
- const label=id=>{
-  const card=deck.find(x=>x.id===id);
-  const el=hand.querySelector('[data-card-id="'+id+'"]')||
-   floor.querySelector('[data-card-id="'+id+'"]');
-  return globalThis.GoStopTrainingLocales?.cardName?.(lang,card)||
-   el?.title||el?.querySelector('img')?.alt||id;
- };
+ const label=cardLabel;
  const action=lang==='en'?'Play '+label(chosen.handId)+' onto '+
   label(chosen.floorId)+'. ':label(chosen.handId)+' → '+label(chosen.floorId)+'. ';
  return {...chosen,safeTwoPriority:true,text:action+safeTwo.explain(chosen.deferredMonth,lang)};
@@ -201,11 +210,7 @@ function modelOverride(currentHandId,currentFloorId){
   !deferred.some(x=>x.handId===currentHandId&&x.floorIds.includes(currentFloorId)))
   return null;
  const lang=document.documentElement.lang||'en';
- const label=id=>{
-  const c=deck.find(v=>v.id===id),el=document.querySelector('[data-card-id="'+id+'"]');
-  return (c&&globalThis.GoStopTrainingLocales?.cardName?.(lang,c))||
-   el?.title||id;
- };
+ const label=cardLabel;
  return {...picked,modelPriority:true,text:(modelCopy[lang]||modelCopy.en)(
   label(picked.handId),label(picked.floorId),picked.version)};
 }

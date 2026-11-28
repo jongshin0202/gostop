@@ -137,7 +137,9 @@ function updateCopy(){
   if(action)next=action;
  }
  const matchingHandChoices=captureOptions.filter(c=>c.handId===handId);
- const possibleFloor=rec.floor||(matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
+ const highlightedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId;
+ const possibleFloor=rec.floor||highlightedFloor||
+  (matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
  if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&!rec.safeTwoPriority&&handId&&possibleFloor&&floorMatch&&
     logic.captureComparison&&logic.captureComparisonCopy){
   const result=logic.captureComparison(v,handId,possibleFloor,deck,globalThis.GoStopEngine?.scorePlayer);
@@ -149,7 +151,14 @@ function updateCopy(){
    // For secured Willow, keep genuine scoring thresholds (e.g. Rose
    // reaching 10 Singles) but replace the redundant immediate-score
    // comparison with the reason Willow can safely wait.
-   if(more&&result.alternative.secured&&!result.selected.secured){
+   if(more&&result.matchingHandCount===1&&result.selected.h===result.alternative.h&&
+      result.selected.f!==result.alternative.f){
+    // One hand card with two table targets is NOT two secured future captures.
+    // Retain the action, replace generic target-comparison paragraphs.
+    const action=next.match(/^[^.!?。]+[.!?。]/)?.[0]||'';
+    next=(action||'Play '+cardName(handId)+' onto '+cardName(possibleFloor)+'.')+
+     ' '+more;
+   }else if(more&&result.alternative.secured&&!result.selected.secured){
     next=next.replace(/\s*Take [^.]+ now; it advances your score more than [^.]+\.$/i,'');
     if(!next.includes(more))next=(next+' '+more).trim();
    }else if(more&&!next.includes(more))next=(next+' '+more).trim();

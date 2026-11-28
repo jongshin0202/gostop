@@ -38,7 +38,7 @@ for(const viewport of [{name:'PC',width:1480,height:980},{name:'Android portrait
   await expect(page.locator('#playerHand [data-card-id="m5-4"]')).toHaveClass(/matchable/);
   await expect(page.locator('#playerHand [data-card-id="m12-4"]')).not.toHaveClass(/matchable/);
   await expect(page.locator('#floor [data-card-id="m5-3"]')).toHaveClass(/training-recommended/);
-  await expect(page.locator('#trainingCoachText')).toContainText('Two cards in your hand');
+  await expect(page.locator('#trainingCoachText')).toContainText('You hold two cards of this family');
  });
 }
 test('table state change clears old locked family suggestion',async({page})=>{
@@ -100,3 +100,56 @@ test('ordinary Solo game never displays development GO overlay',async({page})=>{
  await page.waitForTimeout(120);
  await expect(page.locator('#devTrainingCpuGo')).toHaveCount(0);
 });
+
+
+async function idFallbackFixture(page,{handIds,floorIds,recommendedHand,recommendedFloor}){
+ await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
+ await page.setContent(`<!doctype html><html lang="en"><body>
+ <button id="trainingModeBtn">Training</button><button id="playSoloBtn">Solo</button>
+ <aside id="trainingCoachPanel" hidden><strong id="trainingCoachTitle">RECOMMENDED MOVE</strong>
+ <p id="trainingCoachText">Original recommendation.</p></aside>
+ <div id="playerHand"></div><div id="floor"></div>
+ <div id="playerCaptured"></div><div id="aiCaptured"></div>
+ <dialog id="shakeDialog"></dialog><dialog id="bombDialog"></dialog>
+ <dialog id="gukjinDialog"></dialog><dialog id="decisionDialog"></dialog>
+ <dialog id="resultDialog"></dialog></body></html>`);
+ await page.evaluate(({handIds,floorIds})=>{
+  document.getElementById('playerHand').innerHTML=handIds.map(id=>
+   '<button class="hand-card" data-card-id="'+id+'"></button>').join('');
+  document.getElementById('floor').innerHTML=floorIds.map(id=>
+   '<button class="floor-card" data-card-id="'+id+'"></button>').join('');
+ },{handIds,floorIds});
+ await page.addScriptTag({path:'game-engine.js'});
+ await page.addScriptTag({path:'dev-site/training-family-capture-priority.js'});
+ await page.addScriptTag({path:'dev-site/training-recommendation-preserver.js'});
+ await page.locator('#trainingModeBtn').click();
+ await page.evaluate(({recommendedHand,recommendedFloor})=>{
+  document.querySelector('#playerHand [data-card-id="'+recommendedHand+'"]').classList.add('matchable');
+  document.querySelector('#floor [data-card-id="'+recommendedFloor+'"]').classList.add('training-recommended');
+  document.getElementById('trainingCoachPanel').hidden=false;
+ },{recommendedHand,recommendedFloor});
+ await expect.poll(()=>page.evaluate(()=>
+  globalThis.GoStopTrainingRecommendationDev.getStatus().familyPriority)).toBe(true);
+}
+for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android',width:390,height:844}]){
+ for(const scenario of [
+  {name:'Willow Bright',handIds:['m12-1','m12-4','m11-3'],
+   floorIds:['m12-2','m11-2'],recommendedHand:'m11-3',recommendedFloor:'m11-2',
+   expectedHand:'m12-1',expectedFloor:'m12-2',expected:'Play Willow Bright onto Willow Picture.'},
+  {name:'Vine Plain Stripe',handIds:['m4-2','m4-4','m11-3'],
+   floorIds:['m4-3','m11-2'],recommendedHand:'m11-3',recommendedFloor:'m11-2',
+   expectedHand:'m4-2',expectedFloor:'m4-3',expected:'Play Vine Plain Stripe onto Vine Single.'}
+ ]){
+  test('never show opaque '+scenario.expectedHand+' in Training '+scenario.name+' on '+viewport.name,async({page})=>{
+   await page.setViewportSize({width:viewport.width,height:viewport.height});
+   await idFallbackFixture(page,scenario);
+   const copy=page.locator('#trainingCoachText');
+   await expect(copy).toContainText(scenario.expected);
+   await expect(copy).toContainText('You hold two cards of this family');
+   await expect(copy).not.toContainText(/m12-1|m4-2|unrelated 2x Single/);
+   const status=await page.evaluate(()=>globalThis.GoStopTrainingRecommendationDev.getStatus());
+   expect(status.hand).toBe(scenario.expectedHand);
+   expect(status.floor).toBe(scenario.expectedFloor);
+  });
+ }
+}

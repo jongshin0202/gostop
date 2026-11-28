@@ -27,6 +27,27 @@ const copy={
  ja:'ゴーを勧めます。相手は0点で、最後の手札が場札と同じ月です。獲得の好機ですが、次の自分の番より先に相手が打ちます。',
  zh:'建议继续。对手为0分，你最后一张手牌与桌面的一张牌同月。有收牌机会，但下次轮到你前，对手会先出牌。'
 };
+// First Poop's +7 is a settlement bonus, not a captured-set point.
+// The normal immediate-next-turn model can say STOP at the very start of
+// the hand despite many turns remaining. Use only the public dialog and
+// scoreboard; never inspect the computer's concealed cards or game state.
+function firstPoopEarlyGo({formula='',remainingDeck=0,remainingHand=0,
+ opponentScore=0,goCount=0,opponentCanFinish=false}={}){
+ return /First (?:Poop|Ppeok)\s*\+\s*7\b/i.test(String(formula))&&
+  Number.isInteger(remainingDeck)&&remainingDeck>=10&&
+  Number.isInteger(remainingHand)&&remainingHand>=4&&
+  goCount===0&&Number.isFinite(opponentScore)&&opponentScore<=2&&
+  opponentCanFinish!==true;
+}
+const firstPoopCopy={
+ en:'GO. First Poop earns 7 points, many turns remain, and the computer has no immediate winning route.',
+ ko:'고를 추천합니다. 첫 뻑으로 7점을 얻었고 남은 차례가 많으며 상대의 즉시 승리 가능성이 없습니다.',
+ es:'GO. El primer Poop da 7 puntos, quedan muchos turnos y el rival no tiene victoria inmediata.',
+ fr:'GO. Le premier Poop donne 7 points, il reste de nombreux tours et l’adversaire ne peut pas gagner immédiatement.',
+ de:'GO. Erster Poop bringt 7 Punkte, viele Züge bleiben und der Gegner kann nicht sofort gewinnen.',
+ ja:'ゴー。最初のポップで7点を得ており、残り手番が多く、相手に即勝利の筋はありません。',
+ zh:'继续。首次碰牌获得7分，剩余回合还很多，对手没有立即获胜的路径。'
+};
 const feature=(c,action)=>{
  const index=action==='go'?0:1,w=Array(16).fill(0);
  [1,Number(c.opponentScore===0),Number(c.opponentScore>=5),
@@ -246,7 +267,7 @@ const modelChoice=(model,context)=>{
  const delta=score('go')-score('stop');
  return Math.abs(delta)>=.45?(delta>0?'go':'stop'):null;
 };
-const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling,publicGoStopRisk,riskDecision,probabilityNoMatch,decideEnumerated,enumeratedReason});
+const api=Object.freeze({evaluate,modelChoice,matches,opponentNextTurnCeiling,publicGoStopRisk,riskDecision,probabilityNoMatch,decideEnumerated,enumeratedReason,firstPoopEarlyGo});
 root.GoStopDevGoStopLogic=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 if(!/^(?:gostop-dev(?:-[a-z0-9-]+)?\.vercel\.app|localhost|127\.0\.0\.1)$/.test(root.location?.hostname||''))return;
@@ -315,12 +336,20 @@ function adjust(){
   ownCapturedIds:snapshot.ownCapturedIds,opponentCapturedIds:snapshot.opponentCapturedIds
  });
  lastRisk=enumerated||evidence;
+ const firstPoopGo=firstPoopEarlyGo({
+  formula:$('decisionText')?.textContent||'',
+  remainingDeck:Number(String($('deckCount')?.textContent||$('deckCountTop')?.textContent||'').match(/\d+/)?.[0]||0),
+  remainingHand:context.hand.length,goCount:context.goCount,
+  opponentScore:context.opponentScore,
+  opponentCanFinish:enumerated?.opponentCanFinish===true||
+   (Number.isFinite(evidence?.opponentCeiling)&&evidence.opponentCeiling>=7)
+ });
  const fromEnumerated=decideEnumerated(enumerated,{goCount:context.goCount});
  const fromRisk=fromEnumerated||(!checked.urgentThreat?
   riskDecision(evidence,{goCount:context.goCount,opponentScore:context.opponentScore}):null);
  const verifiedSafe=checked.hasMatch&&context.hand.length>0&&
   Number.isInteger(maximum)&&maximum<7&&context.goCount<=1&&!checked.urgentThreat;
- const result=fromRisk||
+ const result=(firstPoopGo?'go':null)||fromRisk||
   (evidence?original:verifiedSafe?'go':checked.lowRisk?'go':
    !checked.urgentThreat&&context.opponentScore<=2&&context.goCount<=1&&learned?learned:original);
  if(result!==original){
@@ -330,7 +359,10 @@ function adjust(){
  const coachText=$('trainingCoachText');
  const locale=document.documentElement.lang;
  const riskText=riskCopy[locale]||riskCopy.en;
- if(coachText&&fromEnumerated&&enumerated){
+ if(coachText&&firstPoopGo){
+  const explanation=firstPoopCopy[locale]||firstPoopCopy.en;
+  if(coachText.textContent!==explanation)coachText.textContent=explanation;
+ }else if(coachText&&fromEnumerated&&enumerated){
   const explanation=enumeratedReason(enumerated,fromEnumerated,snapshot.opponentCapturedIds,engine.masterDeck);
   if(coachText.textContent!==explanation)coachText.textContent=explanation;
  }else if(coachText&&fromRisk&&evidence){
