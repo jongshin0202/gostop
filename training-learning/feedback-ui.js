@@ -437,7 +437,61 @@ function trainingProgressPanel(items){
  }
  return section;
 }
-function showTrainingCompletion(result){
+// Confirm the saved review and active version through the authenticated
+// DEVELOPMENT Worker before announcing that an update is active.
+const COMPLETION_PROOF_COPY={
+ en:{saved:'Final review verified on the development learning server.',
+  pending:'Finish was acknowledged, but its server readback could not be verified. The model-update notice is withheld.',
+  retry:'Verify saved review'},
+ ko:{saved:'개발 학습 서버에서 최종 검토 저장을 확인했습니다.',
+  pending:'완료 응답은 받았지만 서버 저장 재확인은 실패했습니다. 모델 업데이트 알림을 보류합니다.',
+  retry:'저장 여부 다시 확인'},
+ es:{saved:'Revisión final verificada en el servidor de desarrollo.',
+  pending:'Finalizar fue aceptado, pero falta verificar la lectura del servidor. Se retiene el aviso de actualización.',
+  retry:'Verificar revisión guardada'},
+ fr:{saved:'Révision finale vérifiée sur le serveur de développement.',
+  pending:'La validation a été acceptée, mais la relecture serveur reste non vérifiée. Aucun avis d’activation n’est affiché.',
+  retry:'Vérifier la révision enregistrée'},
+ de:{saved:'Abschlussprüfung auf dem Entwicklungsserver bestätigt.',
+  pending:'Fertig wurde bestätigt, aber die Speicherung konnte nicht erneut geprüft werden. Die Update-Meldung wird zurückgehalten.',
+  retry:'Gespeicherte Prüfung verifizieren'},
+ ja:{saved:'開発学習サーバーで最終確認の保存を検証しました。',
+  pending:'完了は受け付けられましたが、サーバーでの再確認ができていません。更新通知を保留します。',
+  retry:'保存結果を再確認'},
+ zh:{saved:'已在开发学习服务器验证最终审核。',
+  pending:'完成请求已获确认，但服务器读取验证失败。暂不显示模型更新通知。',
+  retry:'验证已保存的审核'}
+};
+async function verifyFinalizationReadback(finishedGameId,result){
+ if(!cloud?.review||!cloud?.state)throw new Error('READBACK_UNAVAILABLE');
+ const [review,state]=await Promise.all([cloud.review(finishedGameId),cloud.state()]);
+ if(!review?.ok||review.gameId!==finishedGameId||review.complete!==true||!state?.ok)
+  throw new Error('FINALIZED_REVIEW_NOT_CONFIRMED');
+ if(result.developmentModelUpdated===true){
+  const version=result.developmentModelVersion;
+  if(!Number.isSafeInteger(version)||version<1||
+   state.developmentModelVersion!==version||
+   typeof state.lastDevelopmentModelUpdateAt!=='string'||
+   !state.lastDevelopmentModelUpdateAt)
+   throw new Error('ACTIVE_MODEL_VERSION_NOT_CONFIRMED');
+  // Read back exactly those model families with actual trained examples.
+  if(result.modelExamples>0&&
+   (state.activeCardModel?.version!==version||
+    state.activeCardModel?.examples!==result.modelExamples))
+   throw new Error('ACTIVE_CARD_WEIGHTS_NOT_CONFIRMED');
+  if(result.openingModelExamples>0&&
+   state.activeOpeningModel?.examples!==result.openingModelExamples)
+   throw new Error('ACTIVE_OPENING_WEIGHTS_NOT_CONFIRMED');
+  if(result.goStopModelExamples>0&&
+   state.activeGoStopModel?.examples!==result.goStopModelExamples)
+   throw new Error('ACTIVE_GO_STOP_WEIGHTS_NOT_CONFIRMED');
+  if(result.specialModelExamples>0&&
+   state.lastDevelopmentSpecialModelExamples!==result.specialModelExamples)
+   throw new Error('ACTIVE_SPECIAL_WEIGHTS_NOT_CONFIRMED');
+ }
+ return state;
+}
+function showTrainingCompletion(result,{verified=false,onRetry=null}={}){
  const t=weightCopy();
  const dialog=$('resultDialog');
  const card=dialog?.querySelector('.dialog-card')||dialog;
@@ -451,6 +505,18 @@ function showTrainingCompletion(result){
  }
  notice.replaceChildren();
  const line=value=>{const p=document.createElement('p');p.textContent=value;notice.append(p);};
+ const proof=COMPLETION_PROOF_COPY[document.documentElement.lang]||COMPLETION_PROOF_COPY.en;
+ if(!verified){
+  line(proof.pending);
+  if(typeof onRetry==='function'){
+   const retry=document.createElement('button');
+   retry.type='button';retry.id='trainingVerifyFinalReview';retry.textContent=proof.retry;
+   retry.addEventListener('click',()=>{retry.disabled=true;void onRetry();});
+   notice.append(retry);
+  }
+  return;
+ }
+ line(proof.saved);
  const trained=Number.isSafeInteger(result.trained)?result.trained:0;
  line(trained>0?t.doneTraining(trained):t.noTraining);
  if(result.developmentModelUpdated===true){
@@ -523,15 +589,31 @@ function renderReview(){
   try{
    const keptFeedbackIds=reviewState.items.filter(item=>!removedReviews.has(item.id))
     .map(item=>item.id);
-   const result=await cloud.finalize(gameId,{
+   const finishedGameId=gameId;
+   const result=await cloud.finalize(finishedGameId,{
     reviewVersion:reviewState.reviewVersion,keptFeedbackIds,hadDisagreement
    });
    if(!result?.ok)throw new Error('Finalization not acknowledged.');
    alreadyCompleted=true;reviewing=false;gameId=null;confirmedCount=0;hadDisagreement=false;
    reviewModal.close();reviewState=null;removedReviews.clear();reviewServerState=null;
-   await syncStatus();
-   showTrainingCompletion(result);
-   if(result.developmentModelUpdated===true)showUpdateMade(result);
+   // Never replay Finish after a successful acknowledgement. A transient
+   // readback failure is retried as GET only and cannot double-train weights.
+   const verifySaved=async()=>{
+    try{
+     const state=await verifyFinalizationReadback(finishedGameId,result);
+     serverWeightState=state;serverReady=true;lastError=null;
+     serverFeedbackCount=state.feedbackCount||0;
+     serverModelExamples=state.model?.examples||0;
+     serverSpecialExamples=state.specialModel?.examples||0;
+     serverGoStopExamples=state.goStopModel?.examples||0;
+     showTrainingCompletion(result,{verified:true});
+     if(result.developmentModelUpdated===true)showUpdateMade(result);
+    }catch(error){
+     lastError=String(error.message||error);serverReady=false;
+     showTrainingCompletion(result,{onRetry:verifySaved});
+    }
+   };
+   await verifySaved();
   }catch(error){
    lastError=String(error.message||error);serverReady=false;
    status.textContent=t.failed+' '+lastError;
