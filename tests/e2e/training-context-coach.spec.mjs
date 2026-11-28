@@ -6,7 +6,11 @@ const cards=[
  {id:'m2-4',month:2,type:'pi',flags:[]},
  {id:'m1-1',month:1,type:'bright',flags:[]},
  {id:'m4-4',month:4,type:'pi',flags:['doublePi']},
- {id:'m4-2',month:4,type:'animal',flags:[]}
+ {id:'m4-2',month:4,type:'animal',flags:[]},
+ {id:'m6-1',month:6,type:'animal',flags:[]},
+ {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
+ {id:'m6-3',month:6,type:'pi',flags:[]},
+ {id:'m6-4',month:6,type:'pi',flags:[]}
 ];
 async function setup(page){
  await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
@@ -162,12 +166,6 @@ for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android portrait
   await page.setViewportSize(viewport);
   await setup(page);
   await page.evaluate(()=>{
-   globalThis.GoStopEngine.masterDeck=[
-    {id:'m6-1',month:6,type:'animal',flags:[]},
-    {id:'m6-2',month:6,type:'ribbon',ribbonSet:'blue',flags:[]},
-    {id:'m6-3',month:6,type:'pi',flags:[]},
-    {id:'m6-4',month:6,type:'pi',flags:[]}
-   ];
    globalThis.GoStopEngine.scorePlayer=p=>({total:Math.max(0,p.captured.filter(c=>c.type==='pi').length-9)});
    document.getElementById('playerHand').innerHTML=
     '<button class="hand-card matchable" data-card-id="m6-3">Rose Single</button>'+
