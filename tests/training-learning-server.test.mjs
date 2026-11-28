@@ -164,6 +164,88 @@ test('every completed Training game counts exactly once even without feedback',a
   assert.equal((await(await t.request('/api/training/state')).json()).completedGames,10);
  }finally{t.restore();}
 });
+test('confirmed final review trains draft, activates after five clean games, and the next dev recommendation uses those exact active weights',async()=>{
+ const {createRequire}=await import('node:module');
+ const require=createRequire(import.meta.url);
+ const {activeSnapshot,evaluate}=require('../dev-site/training-model-inference.js');
+ const t=fixture();try{
+  const gameId='full-lifecycle-expert-review';
+  const deck=[
+   card('m2-3',2,'pi'),card('m2-1',2,'animal',['godori']),
+   card('m5-3',5,'pi'),card('m5-1',5,'animal')
+  ];
+  const legalMoves=[
+   {card:deck[2],target:deck[3],moveId:'m5-3|m5-1'},
+   {card:deck[0],target:deck[1],moveId:'m2-3|m2-1'}
+  ];
+  const dispute={
+   gameId,feedbackId:'expert-birdie-preference-1',choice:'mine',
+   recommended:{hand:'m5-3',target:'m5-1'},
+   played:{hand:'m2-3',target:'m2-1'},legalMoves,reviewRequired:true,
+   visible:{hand:['m2-3','m5-3'],floor:['m2-1','m5-1'],
+    humanCaptured:[],computerCaptured:[]}
+  };
+  assert.equal((await t.request('/api/training/feedback',
+   {method:'POST',body:dispute})).status,200);
+  const before=await(await t.request('/api/training/state')).json();
+  assert.equal(before.model.examples,0);
+  assert.equal(activeSnapshot(before),null);
+  const pending=await(await t.request('/api/training/review?gameId='+gameId)).json();
+  assert.equal(pending.complete,false);
+  assert.deepEqual(pending.items.map(i=>i.id),['card:expert-birdie-preference-1']);
+  const finalized=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId,reviewVersion:pending.reviewVersion,keptFeedbackIds:pending.items.map(i=>i.id),
+   hadDisagreement:true
+  }})).json();
+  assert.equal(finalized.ok,true);
+  assert.equal(finalized.reviewFinalized,true);
+  assert.equal(finalized.trained,1);
+  assert.equal(finalized.developmentModelUpdated,false);
+  assert.equal((await(await t.request('/api/training/review?gameId='+gameId)).json()).complete,true);
+  const draft=await(await t.request('/api/training/state')).json();
+  assert.equal(draft.model.examples,1);
+  assert.equal(activeSnapshot(draft),null,'draft weights cannot guide a live Training recommendation');
+  for(let n=1;n<=4;n++){
+   const finish=await(await t.request('/api/training/complete',
+    {method:'POST',body:{gameId:'full-lifecycle-clean-'+n,hadDisagreement:false}})).json();
+   assert.equal(finish.developmentModelUpdated,false,'four clean games are insufficient');
+  }
+  const activation=await(await t.request('/api/training/complete',
+   {method:'POST',body:{gameId:'full-lifecycle-clean-5',hadDisagreement:false}})).json();
+  assert.equal(activation.developmentModelUpdated,true);
+  assert.equal(activation.developmentModelVersion,1);
+  assert.equal(activation.publishedToLive,false);
+  const active=await(await t.request('/api/training/state')).json();
+  assert.equal(active.developmentModelVersion,1);
+  assert.equal(active.activeCardModel.version,1);
+  assert.equal(active.activeCardModel.examples,1);
+  const result=evaluate({
+   deck,handIds:['m2-3','m5-3'],floorIds:['m2-1','m5-1'],
+   recommendedHandId:'m5-3',recommendedFloorId:'m5-1',
+   model:activeSnapshot(active)
+  });
+  assert.equal(result?.handId,'m2-3');
+  assert.equal(result?.floorId,'m2-1');
+  assert.equal(result?.version,1);
+  // A new confirmed judgment can update draft weights but must NOT alter
+  // the currently active recommendation until another completed-game gate.
+  const nextId='full-lifecycle-next-draft';
+  const next={...dispute,gameId:nextId,feedbackId:'another-judgment',choice:'recommended'};
+  assert.equal((await t.request('/api/training/feedback',{method:'POST',body:next})).status,200);
+  const nextReview=await(await t.request('/api/training/review?gameId='+nextId)).json();
+  const nextFinish=await(await t.request('/api/training/finalize',{method:'POST',body:{
+   gameId:nextId,reviewVersion:nextReview.reviewVersion,
+   keptFeedbackIds:nextReview.items.map(i=>i.id),hadDisagreement:true
+  }})).json();
+  assert.equal(nextFinish.developmentModelUpdated,false);
+  const future=await(await t.request('/api/training/state')).json();
+  assert.equal(future.model.examples,2);
+  assert.deepEqual(future.activeCardModel,active.activeCardModel);
+  assert.equal(future.developmentModelVersion,1);
+  assert.equal((await(await t.request('/api/training/history')).json()).feedback.length,2);
+ }finally{t.restore();}
+});
+
 test('a disagreement followed by five clean games stages a versioned candidate without claiming live deployment',async()=>{
  const t=fixture();try{
   await t.request('/api/training/feedback',{method:'POST',body:feedback('dispute-game-1')});
