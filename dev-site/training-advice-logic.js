@@ -275,7 +275,8 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
   // has already captured one of the three required Godori bird cards.
   const birdieOpportunity=!!byId.get(a.f)?.flags?.includes('godori')&&
    !computerCaptured.some(id=>byId.get(id)?.flags?.includes('godori'));
-  return {...a,bonus,pi,secured,safeToWait,birdieOpportunity,month:monthOf(a.h)};
+  return {...a,bonus,pi,secured,safeToWait,birdieOpportunity,month:monthOf(a.h),
+   targetType:byId.get(a.f)?.type||null};
  };
  const selected=details(rec);
  const alternatives=others.map(details)
@@ -284,7 +285,8 @@ function captureComparison({hand=[],floor=[],humanCaptured=[],computerCaptured=[
  // than a generic comparison of immediate points.
  const alternative=(!selected.secured&&alternatives.find(a=>a.secured))||
   (!selected.safeToWait&&alternatives.find(a=>a.safeToWait))||alternatives[0];
- return {selected,alternative,preferNow:selected.bonus>alternative.bonus||
+ return {selected,alternative,matchingHandCount:new Set(actions.map(a=>a.h)).size,
+  preferNow:selected.bonus>alternative.bonus||
   (selected.bonus===alternative.bonus&&selected.pi>alternative.pi)};
 }
 const CAPTURE_FAMILIES=['Pine','Plum','Cherry','Vine','Iris','Rose','Bush','Hill','Daisy','Star','Berry','Willow'];
@@ -364,8 +366,34 @@ const COMPARE_COPY={
   return '';
  }
 };
+const oneHandChoiceCopy={
+ en:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  'This is your only matching hand card; take the Single rather than the Stripe.':
+  'This is your only matching hand card; choose the highlighted table card.',
+ ko:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  '지금 먹을 수 있는 유일한 손패입니다. 띠보다 피를 먼저 먹으세요.':
+  '지금 먹을 수 있는 유일한 손패입니다. 표시된 바닥패를 선택하세요.',
+ es:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  'Es tu única carta en mano que puede capturar; toma el Simple antes que la Cinta.':
+  'Es tu única carta en mano que puede capturar; elige la carta marcada.',
+ fr:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  'Seule cette carte en main peut capturer ; prenez le Simple plutôt que le Ruban.':
+  'Seule cette carte en main peut capturer ; choisissez la carte indiquée.',
+ de:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  'Nur diese Handkarte kann fangen; nimm die Einzelkarte statt des Bandes.':
+  'Nur diese Handkarte kann fangen; wähle die markierte Tischkarte.',
+ ja:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  '取れる手札はこの一枚だけです。短冊よりカス札を取ります。':
+  '取れる手札はこの一枚だけです。強調された場札を選びます。',
+ zh:r=>r.selected.targetType==='pi'&&r.alternative.targetType==='ribbon'?
+  '只有这张手牌能收牌；先取普通牌，而不是彩带牌。':
+  '只有这张手牌能收牌；选择高亮的桌牌。'
+};
 function captureComparisonCopy(firstName,otherName,result,locale='en'){
  if(!result)return null;
+ if(result.matchingHandCount===1&&result.selected.h===result.alternative.h&&
+    result.selected.f!==result.alternative.f)
+  return (oneHandChoiceCopy[locale]||oneHandChoiceCopy.en)(result);
  return (COMPARE_COPY[locale]||COMPARE_COPY.en)(firstName,otherName,result);
 }
 function discardText(cardId,visible,deck,locale='en',name=''){
