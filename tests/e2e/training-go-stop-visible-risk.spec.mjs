@@ -46,3 +46,51 @@ test('Training GO becomes STOP when opponent can reach seven and user has no sco
  await expect(page.locator('#trainingCoachText')).toContainText('STOP.');
  await expect(page.locator('#trainingCoachText')).toContainText('reach');
 });
+
+
+async function earlyPoopFixture(page,{firstPoop=true,deckCount=18,oppScore=0}={}){
+ await page.goto('/training-learning/test-fixture.html',{waitUntil:'domcontentloaded'});
+ await page.setContent(`<!doctype html><html lang="en"><body>
+ <button id="trainingModeBtn">Training</button>
+ <aside id="trainingCoachPanel"><b id="trainingCoachTitle">GO / STOP ADVICE</b>
+ <p id="trainingCoachText">STOP. The computer has no modeled immediate route to 7, but your next-turn card combinations do not currently offer a meaningful chance to add one point.</p></aside>
+ <div id="playerHand"></div><div id="floor"></div>
+ <div id="playerCaptured"></div><div id="aiCaptured"></div><div id="aiHand"></div>
+ <span id="playerScore">0</span><span id="aiScore">${oppScore}</span>
+ <span id="goCount">0</span><span id="deckCount">${deckCount}</span>
+ <p id="decisionText">${firstPoop?'Current: 0 Go. Base 0 → First Poop +7 → Final 7.':'Current: 0 Go. Base 7 → Final 7.'}</p>
+ <dialog id="decisionDialog"><button id="goBtn">GO</button>
+ <button id="stopBtn" class="training-choice-recommended">STOP</button></dialog>
+ </body></html>`);
+ await page.addScriptTag({path:'game-engine.js'});
+ await page.evaluate(()=>{
+  document.getElementById('playerHand').innerHTML=
+   ['m1-2','m2-2','m3-2','m4-2','m5-2','m6-2','m7-2','m8-3'].map(id=>
+    '<button class="hand-card" data-card-id="'+id+'"></button>').join('');
+  document.getElementById('floor').innerHTML=
+   ['m9-3','m10-3','m11-4','m12-4'].map(id=>
+    '<button class="floor-card" data-card-id="'+id+'"></button>').join('');
+  document.getElementById('aiHand').innerHTML='<span class="mini-back"></span>'.repeat(8);
+  globalThis.GoStopTrainingFeedbackDev={getStatus:()=>({active:true})};
+ });
+ await page.addScriptTag({path:'dev-site/training-go-stop-advice.js'});
+ await page.locator('#decisionDialog').evaluate(el=>el.showModal());
+}
+for(const viewport of [{name:'PC',width:1440,height:900},{name:'Android portrait',width:390,height:844}]){
+ test('first-turn Poop +7 with 18 deck remaining recommends GO on '+viewport.name,async({page})=>{
+  await page.setViewportSize(viewport);
+  await earlyPoopFixture(page);
+  await expect(page.locator('#goBtn')).toHaveClass(/training-choice-recommended/);
+  await expect(page.locator('#stopBtn')).not.toHaveClass(/training-choice-recommended/);
+  await expect(page.locator('#trainingCoachText')).toContainText('GO. First Poop earns 7 points');
+  await expect(page.locator('#trainingCoachText')).not.toContainText('next-turn card combinations');
+ });
+}
+test('ordinary seven-point Go/Stop decision does not trigger first-Poop override',async({page})=>{
+ await earlyPoopFixture(page,{firstPoop:false});
+ await expect(page.locator('#trainingCoachText')).not.toContainText('First Poop earns');
+});
+test('late Poop does not override an existing STOP recommendation solely due to the bonus',async({page})=>{
+ await earlyPoopFixture(page,{deckCount:5});
+ await expect(page.locator('#trainingCoachText')).not.toContainText('First Poop earns');
+});
