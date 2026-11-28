@@ -110,7 +110,7 @@ const picture=(id,saved=null)=>{
   CARD_MONTH_NAMES[legacyMonth-1]+' card':null;
  const safeVisible=visibleName&&!/^\s*m\d{1,2}-\d+\s*$/i.test(visibleName)?
   globalThis.GoStopDevTrainingCardLabels?.sanitize?.(visibleName)||visibleName:null;
- return localized||known||safeVisible||readableLegacy||'Unknown card';
+ return localized||safeVisible||known||readableLegacy||'Unknown card';
 };
 const moveId=(h,t)=>h+'|'+(t||'-');
 // The native engine treats a three-card floor stack as ONE automatic target.
