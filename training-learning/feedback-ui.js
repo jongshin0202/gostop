@@ -108,7 +108,9 @@ const picture=(id,saved=null)=>{
  const legacyMonth=Number(/^m(\d{1,2})-\d+$/i.exec(String(id))?.[1]||0);
  const readableLegacy=legacyMonth>=1&&legacyMonth<=12?
   CARD_MONTH_NAMES[legacyMonth-1]+' card':null;
- return localized||visibleName||known||readableLegacy||'Unknown card';
+ const safeVisible=visibleName&&!/^\s*m\d{1,2}-\d+\s*$/i.test(visibleName)?
+  globalThis.GoStopDevTrainingCardLabels?.sanitize?.(visibleName)||visibleName:null;
+ return localized||safeVisible||known||readableLegacy||'Unknown card';
 };
 const moveId=(h,t)=>h+'|'+(t||'-');
 // The native engine treats a three-card floor stack as ONE automatic target.
