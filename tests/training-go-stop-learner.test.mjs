@@ -9,6 +9,18 @@ const scene={hand:['m3-4'],floor:['m3-2','m8-1'],playerScore:8,
  opponentScore:0,goCount:0,nativeDecision:'stop',
  nativeReason:'STOP. Only one scoring turn remains.'};
 
+test('early first-Poop +7 with many turns left favors GO unless opponent has an immediate win route',()=>{
+ const v={formula:'Current: 0 Go. Base 0 → First Poop +7 → Final 7.',
+  remainingDeck:18,remainingHand:8,opponentScore:0,goCount:0};
+ assert.equal(advice.firstPoopEarlyGo(v),true);
+ assert.equal(advice.firstPoopEarlyGo({...v,opponentCanFinish:true}),false);
+ assert.equal(advice.firstPoopEarlyGo({...v,opponentScore:5}),false);
+ assert.equal(advice.firstPoopEarlyGo({...v,remainingDeck:5}),false);
+ assert.equal(advice.firstPoopEarlyGo({...v,remainingHand:2}),false);
+ assert.equal(advice.firstPoopEarlyGo({...v,goCount:1}),false);
+ assert.equal(advice.firstPoopEarlyGo({...v,formula:'Current: 0 Go. Base 7 → Final 7.'}),false);
+});
+
 test('one last hand card matching floor against 0-point opponent favors GO over generic last-turn STOP',()=>{
  const result=advice.evaluate(scene);
  assert.equal(result.oneCard,true);assert.equal(result.hasMatch,true);
