@@ -149,7 +149,14 @@ function updateCopy(){
    // For secured Willow, keep genuine scoring thresholds (e.g. Rose
    // reaching 10 Singles) but replace the redundant immediate-score
    // comparison with the reason Willow can safely wait.
-   if(more&&result.alternative.secured&&!result.selected.secured){
+   if(more&&result.matchingHandCount===1&&result.selected.h===result.alternative.h&&
+      result.selected.f!==result.alternative.f){
+    // One hand card with two table targets is NOT two secured future captures.
+    // Retain the action, replace generic target-comparison paragraphs.
+    const action=next.match(/^[^.!?。]+[.!?。]/)?.[0]||'';
+    next=(action||'Play '+cardName(handId)+' onto '+cardName(possibleFloor)+'.')+
+     ' '+more;
+   }else if(more&&result.alternative.secured&&!result.selected.secured){
     next=next.replace(/\s*Take [^.]+ now; it advances your score more than [^.]+\.$/i,'');
     if(!next.includes(more))next=(next+' '+more).trim();
    }else if(more&&!next.includes(more))next=(next+' '+more).trim();
