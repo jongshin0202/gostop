@@ -36,6 +36,7 @@ const devI18nPath=join(output,'i18n.js');
 await writeFile(devI18nPath,instrumentDevOpponentEndedCopy(await readFile(devI18nPath,'utf8')));
 // Removable, development-only Training feedback; not included in public game builds.
 await copyFile(join(root,'training-learning/cloud-client.js'),join(output,'training-learning-cloud.js'));
+await copyFile(join(root,'dev-site/training-card-labels.js'),join(output,'dev-training-card-labels.js'));
 await copyFile(join(root,'training-learning/feedback-ui.js'),join(output,'training-learning-feedback.js'));
 await copyFile(join(root,'dev-site/training-model-progress.js'),join(output,'dev-training-model-progress.js'));
 // Isolated dev-only guard for existing login form hiding and local Quit return.
@@ -84,7 +85,7 @@ const rankedDevScript='<script src="ranked-client.js?v=20261008-8"></script>';
 if(!html.includes(rankedDevScript))throw new Error('Missing ranked-client script for isolated Friendly invite patch');
 html=html.replace(rankedDevScript,
  '<script src="dev-friendly-invite-ux.js?v=20261101-invite-1"></script>\n  <script src="dev-competitive-join-proof.js?v=20261102-safe-1"></script>\n  <script src="ranked-client.js?v=20261102-invite-lifecycle-1"></script>');
-const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-model-progress.js?v=20261107-cadence-1"></script>\n  <script src="training-learning-feedback.js?v=20261124-readable-review-1"></script>';
+const feedbackScripts='<script src="training-learning-cloud.js?v=20261101-go-stop-1"></script>\n  <script src="dev-training-card-labels.js?v=20261127-complete1"></script>\n  <script src="dev-training-model-progress.js?v=20261107-cadence-1"></script>\n  <script src="training-learning-feedback.js?v=20261127-final-review1"></script>';
 if(!html.includes('<script src="app.js?v=20261028-7"></script>'))throw new Error('Missing frozen game script anchor');
 html=html.replace('<script src="app.js?v=20261028-7"></script>',
   '<script src="dev-competitive-solo-peer-sync.js?v=20261101-peer-1"></script>\n  <script src="app.js?v=20261107-training-ai-1"></script>\n  '+feedbackScripts);
