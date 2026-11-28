@@ -137,7 +137,9 @@ function updateCopy(){
   if(action)next=action;
  }
  const matchingHandChoices=captureOptions.filter(c=>c.handId===handId);
- const possibleFloor=rec.floor||(matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
+ const highlightedFloor=floor.querySelector('.floor-card.training-recommended[data-card-id]')?.dataset.cardId;
+ const possibleFloor=rec.floor||highlightedFloor||
+  (matchingHandChoices.length===1?matchingHandChoices[0].floorId:null);
  if(normalMove&&!rec.riskOverride&&!rec.bombBlankOverride&&!rec.familyPriority&&!rec.safeTwoPriority&&handId&&possibleFloor&&floorMatch&&
     logic.captureComparison&&logic.captureComparisonCopy){
   const result=logic.captureComparison(v,handId,possibleFloor,deck,globalThis.GoStopEngine?.scorePlayer);
